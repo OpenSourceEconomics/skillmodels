@@ -1,6 +1,7 @@
 from nose.tools import assert_equal, assert_raises, assert_almost_equal
 from unittest.mock import Mock, call, patch
-from skillmodels.estimation.chs_model import CHSModel as chs
+# from skillmodels.estimation.chs_model import CHSModel as chs
+from skillmodels import CHSModel as chs
 import numpy as np
 from pandas import DataFrame
 from numpy.testing import assert_array_equal as aae

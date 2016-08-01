@@ -34,7 +34,7 @@ class CHSModel(GenericLikelihoodModel):
 
     def __init__(self, model_name, dataset_name, model_dict, dataset):
         """Initialize the CHSModel class and set attributes."""
-        specs = ModelSpecProcessor(model_name, dataset_name)
+        specs = ModelSpecProcessor(model_name, dataset_name, model_dict, dataset)
         self.__dict__.update(specs.public_attribute_dict())
 
         data = DataProcessor(model_name, dataset_name, model_dict, dataset)
