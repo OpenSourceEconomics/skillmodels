@@ -69,7 +69,7 @@ def update(square_root_filters, update_type, update_args):
     """Select and call the correct update function.
 
     The actual update functions are implemented in several modules in
-    :ref:`library`
+    :ref:`fast_routines`
 
     """
     if square_root_filters is True:
@@ -88,7 +88,7 @@ def predict(stage, square_root_filters, predict_args):
     """Select and call the correct predict function.
 
     The actual predict functions are implemented in several modules in
-    :ref:`library`
+    :ref:`fast_routines`
 
     """
     if square_root_filters is True:
