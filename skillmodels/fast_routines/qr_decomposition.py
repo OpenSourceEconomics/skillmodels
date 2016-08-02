@@ -2,12 +2,12 @@ from numba import jit
 
 
 @jit
-def numba_array_qr(arr, make_first_positive=False, make_unique=False):
+def array_qr(arr):
     """Calculate R of a QR decomposition for matrices in an array.
 
     args:
         arr (np.ndarray): 3d array of [nemf * nind, m, n], where m >= n.
-        Arr is overwritten wtih the  R of the QR decomposition.
+            It is overwritten wtih the  R of the QR decomposition.
 
     The algorithm uses Givens Rotations for the triangularization and fully
     exploits the sparseness of the Rotation Matrices.
@@ -84,16 +84,4 @@ def numba_array_qr(arr, make_first_positive=False, make_unique=False):
                         arr[u, i - 1, k] = c * helper1 + s * helper2
                         arr[u, i, k] = -s * helper1 + c * helper2
 
-    if make_first_positive is True:
-        for u in range(long_side):
-            if arr[u, 0, 0] < 0:
-                for k in range(n):
-                    arr[u, 0, k] *= -1
-
-    if make_unique is True:
-        for u in range(long_side):
-            for j in range(n):
-                if arr[u, j, j] < 0:
-                    for k in range(n):
-                        arr[u, j, k] *= -1
     return arr

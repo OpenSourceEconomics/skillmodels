@@ -1,6 +1,6 @@
 package:
   name: skillmodels
-  version: "0.0.0007"
+  version: "0.0.0016"
 
 source:
   path: ../skillmodels
@@ -19,12 +19,11 @@ requirements:
 
 test:
   files:
-    - tests/fast_routines/numba_kalman_filters_test.py
+    - tests/fast_routines/kalman_filters_test.py
     - tests/fast_routines/choldate_test.py
     - tests/fast_routines/qr_decomposition_test.py
     - tests/fast_routines/sigma_points_test.py
     - tests/fast_routines/sigma_points_from_filterpy.json
-    - tests/fast_routines/numpy_kalman_filters_test.py
     - tests/model_functions/transition_functions_test.py
     - tests/pre_processing/model_spec_processor_test.py
     - tests/pre_processing/data_processor_test.py

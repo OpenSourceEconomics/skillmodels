@@ -1,14 +1,11 @@
 from os import system
 
 if __name__ == '__main__':
-    system('python numba_kalman_filters_test.py')
-    system('python choldate_test.py')
-    system('python qr_decomposition_test.py')
-    system('python sigma_points_test.py')
-    system('python transition_functions_test.py')
-    system('python numpy_kalman_filters_test.py')
-    system('python model_spec_processor_test.py')
-    system('python data_processor_test.py')
-    system('python parse_params_test.py')
-    system('python chs_model_test.py')
+    to_run = [
+        'kalman_filters_test.py', 'choldate_test.py',
+        'qr_decomposition_test.py', 'sigma_points_test.py',
+        'transition_functions_test.py', 'model_spec_processor_test.py',
+        'data_processor_test.py', 'parse_params_test.py', 'chs_model_test.py']
 
+    for file in to_run:
+        system('python {}'.format(file))

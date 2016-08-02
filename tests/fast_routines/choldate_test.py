@@ -1,5 +1,5 @@
 from numpy.testing import assert_array_almost_equal as aaae
-from skillmodels.fast_routines.choldate import numba_array_choldate
+from skillmodels.fast_routines.choldate import array_choldate
 from numpy.core.umath_tests import matrix_multiply
 import numpy as np
 from numpy.linalg import cholesky
@@ -30,13 +30,13 @@ def setup_(weight):
 def test_numba_choldate_with_positive_weight():
     w = 0.8
     tu, uw, er = setup_(weight=w)
-    aaae(numba_array_choldate(to_update=tu, update_with=uw, weight=w), er)
+    aaae(array_choldate(to_update=tu, update_with=uw, weight=w), er)
 
 
 def test_numba_choldate_with_negative_weight():
     w = -0.1
     tu, uw, er = setup_(weight=w)
-    aaae(numba_array_choldate(to_update=tu, update_with=uw, weight=w), er)
+    aaae(array_choldate(to_update=tu, update_with=uw, weight=w), er)
 
 
 if __name__ == '__main__':

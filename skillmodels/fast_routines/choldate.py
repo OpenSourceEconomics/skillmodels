@@ -3,21 +3,20 @@ import numpy as np
 
 
 @jit
-def numba_array_choldate(to_update, update_with, weight):
+def array_choldate(to_update, update_with, weight):
     """Make a cholesky up- or downdate on all matrices in a numpy array.
 
-    args
-    to_update: [nemf * nind, nfac, nfac]
-    update_with: [nemf * nind, nfac]
-    weight: a scalar
+    args:
+        to_update: [nemf * nind, nfac, nfac]
+        update_with: [nemf * nind, nfac]
+        weight: a scalar
 
     The square matrices in to_update have to be UPPER TRIANGULAR
     cholesky factors.
 
     The function is based on the Matlab code from the article on cholesky
     decomposition on Wikipedia but all slicing is replaced by explicit
-    for loops in order to use nopython mode in numba. Numba makes the code
-    about 400 times faster.
+    for loops in order to use nopython mode in numba.
 
     Original Matlab code::
 

@@ -3,10 +3,16 @@ import numpy as np
 
 def calculate_sigma_points(states, flat_covs, scaling_factor, out,
                            square_root_filters):
-    """Array of sigma_points for the unscented transform.
+    """Calculate the array of sigma_points for the unscented transform.
 
     Args:
-
+        states (np.ndarray): numpy array of (nind, nemf, nfac)
+        flat_covs (np.ndarray): numpy array of (nind * nemf, nfac, nfac)
+        scaling_factor (float): a constant scaling factor for sigma points that
+            depends on the sigma_point algorithm chosen.
+        out (np.ndarray): numpy array of (nemf * nind, nsigma, nfac) with
+            sigma_points.
+        square_root_filters (bool): indicates if square-root filters are used.
 
     """
     if square_root_filters is True:

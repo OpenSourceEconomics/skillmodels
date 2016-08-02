@@ -18,7 +18,7 @@ class CHSModel(GenericLikelihoodModel):
     CHSModel is a subclass of GenericLikelihoodModel from statsmodels and
     inherits many useful methods such as statistical tests and the calculation
     of standard errors from its parent class. Its usage is described in
-    :ref:`analysis`.
+    :ref:`basic_usage`.
 
     When initialized, all public attributes of ModelSpecProcessor and the
     arrays with c_data and y_data from DataProcessor are set as attributes.
