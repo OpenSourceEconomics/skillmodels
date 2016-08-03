@@ -1,47 +1,53 @@
-from src.model_code.model_spec_processor import ModelSpecProcessor
-from src.model_code.data_cleaner import DataCleaner
-from src.model_code.likelihood_function import log_likelihood_per_individual
+from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
+from skillmodels.pre_processing.data_processor import DataProcessor
+from skillmodels.estimation.likelihood_function import \
+    log_likelihood_per_individual
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
-from src.model_code.chs_model_results import CHSModelResults
+from skillmodels.estimation.skill_model_results import SkillModelResults
 import numpy as np
-import pandas as pd
-import src.model_code.transition_functions as tf
-import src.model_code.parse_params as pp
+import skillmodels.model_functions.transition_functions as tf
+import skillmodels.estimation.parse_params as pp
 from itertools import product
 from scipy.optimize import minimize
-from bld.project_paths import project_paths_join as ppj
 from statsmodels.tools.numdiff import approx_hess, approx_fprime
 
 
-class CHSModel(GenericLikelihoodModel):
+class SkillModel(GenericLikelihoodModel):
     """Estimate dynamic nonlinear latent factor models with maximum likelihood.
 
-    CHSModel is a subclass of GenericLikelihoodModel from statsmodels and
+    SkillModel is a subclass of GenericLikelihoodModel from statsmodels and
     inherits many useful methods such as statistical tests and the calculation
     of standard errors from its parent class. Its usage is described in
-    :ref:`analysis`.
+    :ref:`basic_usage`.
 
     When initialized, all public attributes of ModelSpecProcessor and the
-    arrays with c_data and y_data from DataCleaner are set as class attributes.
+    arrays with c_data and y_data from DataProcessor are set as attributes.
     Moreover update_info(), enough_measurements_array() and new_trans_coeffs()
     from ModelSpecCleaner are set as attributes.
 
-    In addition to the methods inherited from GenericLikelihoodModel, CHSModel
-    contains methods to determine how the params vector has to be
+    In addition to the methods inherited from GenericLikelihoodModel,
+    SkillModel contains methods to determine how the params vector has to be
     parsed and methods to construct argument dictionaries for the likelihood
     function.
 
     """
 
-    def __init__(self, model_name, dataset_name):
+    def __init__(
+            self, model_name, dataset_name, model_dict, dataset, estimator):
         """Initialize the CHSModel class and set attributes."""
-        specs = ModelSpecProcessor(model_name, dataset_name)
+        specs = ModelSpecProcessor(
+            model_name, dataset_name, model_dict, dataset)
         self.__dict__.update(specs.public_attribute_dict())
 
-        data = DataCleaner(model_name, dataset_name)
+        data = DataProcessor(model_name, dataset_name, model_dict, dataset)
         self.c_data = data.c_data()
         self.y_data = data.y_data()
+
+        self.estimator = estimator
+        if self.estimator != 'chs':
+            raise NotImplementedError(
+                'Currently only the CHS estimator is implemented.')
 
         self.update_info = specs.update_info()
         self.enough_measurements_array = specs.enough_measurements_array()
@@ -497,7 +503,7 @@ class CHSModel(GenericLikelihoodModel):
         """Set lower bounds for parameters mapped to diagonal of P_zero."""
         param_indices = np.arange(10000)[params_slice]
         nr_matrices = 1 if self.restrict_P_zeros is True else self.nemf
-        params_per_matrix = 0.5 * self.nfac * (self.nfac + 1)
+        params_per_matrix = int(0.5 * self.nfac * (self.nfac + 1))
 
         assert len(param_indices) == nr_matrices * params_per_matrix, (
             'You specified an invalid params_slice in _set_bounds_for_P_zero',
@@ -744,7 +750,7 @@ class CHSModel(GenericLikelihoodModel):
                             start[sl] = vals[quant]
 
             nr_matrices = 1 if self.restrict_P_zeros is True else self.nemf
-            params_per_matrix = 0.5 * self.nfac * (self.nfac + 1)
+            params_per_matrix = int(0.5 * self.nfac * (self.nfac + 1))
             p = start[slices['P_zero']].reshape(nr_matrices, params_per_matrix)
 
             p[:] = vals['P_zero_off_diags']
@@ -1034,7 +1040,7 @@ class CHSModel(GenericLikelihoodModel):
 
             mlefit = LikelihoodModelResults(self, params, cov)
 
-        chsmlefit = CHSModelResults(self, mlefit, optimize_dict)
+        chsmlefit = SkillModelResults(self, mlefit, optimize_dict)
         return chsmlefit
 
     def score(self, params, args):
@@ -1042,8 +1048,8 @@ class CHSModel(GenericLikelihoodModel):
             params, self.loglike, args=(args, ), centered=True).ravel()
 
     def score_obs(self, params, args):
-        return approx_fprime(params, self.loglikeobs, args=(args, ), centered=True)
+        return approx_fprime(params, self.loglikeobs, args=(args, ),
+                             centered=True)
 
     def hessian(self, params, args):
         return approx_hess(params, self.loglike, args=(args, ))
-

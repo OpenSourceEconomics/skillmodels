@@ -1,1 +1,1 @@
-from skillmodels.estimation.chs_model import CHSModel
+from skillmodels.estimation.skill_model import SkillModel

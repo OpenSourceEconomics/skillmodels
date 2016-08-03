@@ -6,28 +6,29 @@ Basic Usage
 
 Fitting models is very similar to fitting models in `Statsmodels`_
 
-The main object a user interacts with is ``CHSModel`` (see :ref:`estimation`) which is a subclass of Statsmodels `GenericLikelihoodModel`_. To create an instance of this class just type:
+The main object a user interacts with is ``SkillModel`` (see :ref:`estimation`) which is a subclass of Statsmodels `GenericLikelihoodModel`_. To create an instance of this class just type:
 
-.. Note:: This class will be renamed as it will support more estimators than CHS in the future.
-    The estimator used will then be an argument of the class.
 
 .. code::
 
-    from skillmodels import CHSModel
-    mod = CHSModel('model_name', 'dataset_name', model_dict, dataset)
+    from skillmodels import SkillModel
+    mod = SkillModel('model_name', 'dataset_name', model_dict, dataset, estimator)
 
 * 'model_name' a string that is used in error messages to clearly identify where the errors occured and as names of directories for the storage of intermediate results.
 * 'dataset_name' is used for the same purpose
-* 'model_dict' is the actual model dictionary (usually loaded from a json file)
-* 'dataset' is a pandas dataframe in long format. It has to contain a variable named 'period' that indicates the period starting with 0 and incrementing in steps of 1.
+* model_dict is the actual model dictionary (usually loaded from a json file)
+* dataset is a pandas dataframe in long format. It has to contain a variable named 'period' that indicates the period starting with 0 and incrementing in steps of 1.
+* estimator is a string that can take the values 'wa' (Wiswall Agostinelli Estimator and 'chs' (Cunha, Heckman, Schennach estimator).
 
-Using the fit() method of ``CHSModel`` like so:
+.. Note:: Currently only the CHS estimator is implemented.
+
+Using the fit() method of ``SkillModel`` like so:
 
 .. code::
 
     res = mod.fit()
 
-will return an instance of ``CHSModelResults`` which is a subclass of ``GenericLikelihoodModelResults`` and has (or will have) most of the usual attributes and methods described `here`_. For example you can:
+will return an instance of ``SkillModelResults`` which is a subclass of ``GenericLikelihoodModelResults`` and has (or will have) most of the usual attributes and methods described `here`_. For example you can:
 
 .. code::
 

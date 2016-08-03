@@ -21,8 +21,8 @@ The parse_params module
     :members:
 
 
-The CHSModel Class
-******************
+The SkillModel Class
+********************
 
-.. automodule:: skillmodels.estimation.chs_model
+.. automodule:: skillmodels.estimation.skill_model
     :members:

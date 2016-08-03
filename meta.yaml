@@ -1,6 +1,6 @@
 package:
   name: skillmodels
-  version: "0.0.0020"
+  version: "0.0.0023"
 
 source:
   path: ../skillmodels
@@ -14,8 +14,6 @@ requirements:
     - numba 0.27.0
     - statsmodels 0.6.1
     - scipy 0.17.0
-    - matplotlib 1.5.1
-    - seaborn 0.7.0
 
 test:
   files:
@@ -28,7 +26,7 @@ test:
     - tests/pre_processing/model_spec_processor_test.py
     - tests/pre_processing/data_processor_test.py
     - tests/estimation/parse_params_test.py
-    - tests/estimation/chs_model_test.py
+    - tests/estimation/skill_model_test.py
   requires:
     - nose
     - numpy

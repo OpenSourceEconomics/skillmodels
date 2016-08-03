@@ -2,7 +2,7 @@ from statsmodels.base.model import GenericLikelihoodModelResults
 from statsmodels.tools.decorators import resettable_cache, cache_readonly
 
 
-class CHSModelResults(GenericLikelihoodModelResults):
+class SkillModelResults(GenericLikelihoodModelResults):
     def __init__(self, model, mlefit, optimize_dict):
         self.model = model
         self.optimize_dict = optimize_dict

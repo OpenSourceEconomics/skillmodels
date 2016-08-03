@@ -1,7 +1,6 @@
 from nose.tools import assert_equal, assert_raises, assert_almost_equal
 from unittest.mock import Mock, call, patch
-# from skillmodels.estimation.chs_model import CHSModel as chs
-from skillmodels import CHSModel as chs
+from skillmodels import SkillModel as smo
 import numpy as np
 from pandas import DataFrame
 from numpy.testing import assert_array_equal as aae
@@ -13,14 +12,14 @@ class TestGeneralParamsSlice:
         self.param_counter = 10
 
     def test_general_params_slice(self):
-        assert_equal(chs._general_params_slice(self, 10), slice(10, 20))
+        assert_equal(smo._general_params_slice(self, 10), slice(10, 20))
 
     def test_general_params_slice_via_usage(self):
-        sl = chs._general_params_slice(self, 10)
+        sl = smo._general_params_slice(self, 10)
         aae(np.arange(20)[sl], np.arange(10) + 10)
 
     def test_side_effect_of_general_params_slice_on_param_counter(self):
-        sl = chs._general_params_slice(self, 10) # noqa
+        sl = smo._general_params_slice(self, 10) # noqa
         assert_equal(self.param_counter, 20)
 
 
@@ -42,14 +41,14 @@ class TestDeltasRelatedMethods:
     def test_initial_deltas_without_adding_constants(self):
         self.add_constant = False
         expected = [np.zeros((6, 2)), np.zeros((3, 3)), np.zeros((4, 2))]
-        calculated = chs._initial_deltas(self)
+        calculated = smo._initial_deltas(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
     def test_initial_deltas_with_adding_constants(self):
         self.add_constant = True
         expected = [np.zeros((6, 3)), np.zeros((3, 4)), np.zeros((4, 3))]
-        calculated = chs._initial_deltas(self)
+        calculated = smo._initial_deltas(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
@@ -59,7 +58,7 @@ class TestDeltasRelatedMethods:
         expected = [np.ones((6, 2), dtype=bool), np.ones((3, 3), dtype=bool),
                     np.ones((4, 2), dtype=bool)]
 
-        calculated = chs._deltas_bool(self)
+        calculated = smo._deltas_bool(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
@@ -76,7 +75,7 @@ class TestDeltasRelatedMethods:
         arr2[(2, 3), 0] = False
         expected = [arr0, arr1, arr2]
 
-        calculated = chs._deltas_bool(self)
+        calculated = smo._deltas_bool(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
@@ -92,7 +91,7 @@ class TestDeltasRelatedMethods:
         arr2[(2, 3), 0] = False
         expected = [arr0, arr1, arr2]
 
-        calculated = chs._deltas_bool(self)
+        calculated = smo._deltas_bool(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
@@ -102,7 +101,7 @@ class TestDeltasRelatedMethods:
         arr1[(0, 1), :] = 0
         self._deltas_bool = Mock(return_value=[arr0, arr1, arr0])
         self._general_params_slice = Mock()
-        chs._params_slice_for_deltas(self, 'short')
+        smo._params_slice_for_deltas(self, 'short')
         self._general_params_slice.assert_has_calls(
             [call(8), call(12), call(8)])
 
@@ -130,7 +129,7 @@ class TestDeltasRelatedMethods:
              fs.format(2, 'm11', 'c3'), fs.format(2, 'm11', 'c4'),
              fs.format(2, 'm12', 'c3'), fs.format(2, 'm12', 'c4')]
 
-        assert_equal(chs._deltas_names(self, params_type='short'),
+        assert_equal(smo._deltas_names(self, params_type='short'),
                      expected_names)
 
     def test_deltas_names_with_constant(self):
@@ -168,7 +167,7 @@ class TestDeltasRelatedMethods:
              fs.format(2, 'm12', 'constant'), fs.format(2, 'm12', 'c3'),
              fs.format(2, 'm12', 'c4')]
 
-        assert_equal(chs._deltas_names(self, params_type='short'),
+        assert_equal(smo._deltas_names(self, params_type='short'),
                      expected_names)
 
 
@@ -179,18 +178,18 @@ class TestPsiRelatedMethods:
         self.endog_factor = 'f3'
 
     def test_initial_psi(self):
-        aae(chs._initial_psi(self), np.ones(3))
+        aae(smo._initial_psi(self), np.ones(3))
 
     def test_psi_bool(self):
-        aae(chs._psi_bool(self), np.array([True, True, False]))
+        aae(smo._psi_bool(self), np.array([True, True, False]))
 
     def test_params_slice_for_psi(self):
         self._general_params_slice = Mock()
-        chs._params_slice_for_psi(self, params_type='short')
+        smo._params_slice_for_psi(self, params_type='short')
         self._general_params_slice.assert_has_calls([call(2)])
 
     def test_psi_names(self):
-        assert_equal(chs._psi_names(self, params_type='short'),
+        assert_equal(smo._psi_names(self, params_type='short'),
                      ['psi__f1', 'psi__f2'])
 
 
@@ -208,22 +207,22 @@ class TestTauRelatedMethods:
         self.res_bool = res
 
     def test_initial_tau(self):
-        aae(chs._initial_tau(self), np.zeros((2, 4)))
+        aae(smo._initial_tau(self), np.zeros((2, 4)))
 
     def test_tau_bool(self):
         self._initial_tau = Mock(return_value=np.zeros((2, 4)))
-        aae(chs._tau_bool(self), self.res_bool)
+        aae(smo._tau_bool(self), self.res_bool)
 
     def test_params_slice_for_tau(self):
         self._tau_bool = Mock(return_value=self.res_bool)
         self._general_params_slice = Mock()
-        chs._params_slice_for_tau(self, params_type='short')
+        smo._params_slice_for_tau(self, params_type='short')
         self._general_params_slice.assert_has_calls([call(4)])
 
     def test_tau_names(self):
         self._tau_bool = Mock(return_value=self.res_bool)
         res = ['tau__0__f2', 'tau__0__f4', 'tau__1__f2', 'tau__1__f4']
-        assert_equal(chs._tau_names(self, params_type='short'), res)
+        assert_equal(smo._tau_names(self, params_type='short'), res)
 
 
 class TestHRelatedMethods:
@@ -250,16 +249,16 @@ class TestHRelatedMethods:
         self.update_info = df
 
     def test_initial_H(self):
-        aae(chs._initial_H(self), self.exp_init_H)
+        aae(smo._initial_H(self), self.exp_init_H)
 
     def test_H_bool(self):
         self._initial_H = Mock(return_value=self.exp_init_H)
-        aae(chs._H_bool(self), self.res_bool)
+        aae(smo._H_bool(self), self.res_bool)
 
     def test_params_slice_for_H(self):
         self._H_bool = Mock(return_value=self.res_bool)
         self._general_params_slice = Mock()
-        chs._params_slice_for_H(self, params_type='short')
+        smo._params_slice_for_H(self, params_type='short')
         self._general_params_slice.assert_has_calls([call(9)])
 
     def test_helpers_for_h_transformation(self):
@@ -271,7 +270,7 @@ class TestHRelatedMethods:
         res2 = np.zeros((7, 1))
         res3 = np.zeros((7, 2))
 
-        calc1, calc2, calc3 = chs._helpers_for_H_transformation_with_psi(self)
+        calc1, calc2, calc3 = smo._helpers_for_H_transformation_with_psi(self)
         aae(calc1, res1)
         aae(calc2, res2)
         aae(calc3, res3)
@@ -297,7 +296,7 @@ class TestHRelatedMethods:
             fs.format(1, 'f1', 'm3'), fs.format(1, 'f2', 'm3'),
             fs.format(1, 'f2', 'm4')]
 
-        assert_equal(chs._H_names(self, params_type='short'), expected_names)
+        assert_equal(smo._H_names(self, params_type='short'), expected_names)
 
 
 class TestRRelatedMethods:
@@ -315,11 +314,11 @@ class TestRRelatedMethods:
         self.lower_bound[:] = None
 
     def test_initial_R(self):
-        aae(chs._initial_R(self), np.zeros(12))
+        aae(smo._initial_R(self), np.zeros(12))
 
     def test_params_slice_for_R(self):
         self._general_params_slice = Mock()
-        chs._params_slice_for_R(self, params_type='short')
+        smo._params_slice_for_R(self, params_type='short')
         self._general_params_slice.assert_has_calls([call(12)])
 
     def test_set_bounds_for_R_not_robust(self):
@@ -327,7 +326,7 @@ class TestRRelatedMethods:
         expected = np.zeros(100, dtype=object)
         expected[:] = None
         expected[10: 30] = 0.0
-        chs._set_bounds_for_R(self, slice(10, 30))
+        smo._set_bounds_for_R(self, slice(10, 30))
         aae(self.lower_bound, expected)
 
     def test_set_bounds_for_R_robust(self):
@@ -335,14 +334,14 @@ class TestRRelatedMethods:
         expected = np.zeros(100, dtype=object)
         expected[:] = None
         expected[10: 30] = 0.001
-        chs._set_bounds_for_R(self, slice(10, 30))
+        smo._set_bounds_for_R(self, slice(10, 30))
         aae(self.lower_bound, expected)
 
     def test_R_names(self):
         periods = [0] * 5 + [1] * 7
         names = ['m{}'.format(i) for i in range(12)]
         expected = ['R__{}__{}'.format(p, m) for p, m in zip(periods, names)]
-        assert_equal(chs._R_names(self, params_type='short'), expected)
+        assert_equal(smo._R_names(self, params_type='short'), expected)
 
 
 class TestQRelatedMethods:
@@ -366,32 +365,32 @@ class TestQRelatedMethods:
         self.lower_bound[:] = None
 
     def test_initial_q(self):
-        aae(chs._initial_Q(self), np.zeros((2, 5, 5)))
+        aae(smo._initial_Q(self), np.zeros((2, 5, 5)))
 
     def test_q_bool(self):
-        aae(chs._Q_bool(self), self.exp_bool)
+        aae(smo._Q_bool(self), self.exp_bool)
 
     def test_params_slice_for_q(self):
         self._Q_bool = Mock(return_value=self.exp_bool)
         self._general_params_slice = Mock()
-        chs._params_slice_for_Q(self, params_type='short')
+        smo._params_slice_for_Q(self, params_type='short')
         self._general_params_slice.assert_has_calls([call(6)])
 
     def test_q_replacements(self):
         expected = [[(1, 2, 2), (0, 2, 2)], [(1, 4, 4), (0, 4, 4)]]
-        assert_equal(chs._Q_replacements(self), expected)
+        assert_equal(smo._Q_replacements(self), expected)
 
     def test_q_names(self):
         expected = ['Q__0__f2', 'Q__0__f3', 'Q__0__f4', 'Q__0__f5',
                     'Q__1__f2', 'Q__1__f4']
-        assert_equal(chs._Q_names(self, params_type='short'), expected)
+        assert_equal(smo._Q_names(self, params_type='short'), expected)
 
     def test_set_bounds_for_Q_not_robust(self):
         self.robust_bounds = False
         expected = np.zeros(100, dtype=object)
         expected[:] = None
         expected[10: 30] = 0.0
-        chs._set_bounds_for_Q(self, slice(10, 30))
+        smo._set_bounds_for_Q(self, slice(10, 30))
         aae(self.lower_bound, expected)
 
     def test_set_bounds_for_Q_robust(self):
@@ -399,7 +398,7 @@ class TestQRelatedMethods:
         expected = np.zeros(100, dtype=object)
         expected[:] = None
         expected[10: 30] = 0.001
-        chs._set_bounds_for_Q(self, slice(10, 30))
+        smo._set_bounds_for_Q(self, slice(10, 30))
         aae(self.lower_bound, expected)
 
 
@@ -412,26 +411,26 @@ class TestXZeroRelatedMethods:
         self.factors = ['f1', 'f2', 'f3', 'f4']
 
     def test_initial_X_zero(self):
-        res1, res2 = chs._initial_X_zero(self)
+        res1, res2 = smo._initial_X_zero(self)
         aae(res1, np.zeros((100, 3, 4)))
         aae(res2, np.zeros((300, 4)))
 
     def test_that_initial_X_zeros_are_views_on_same_memory(self):
-        res1, res2 = chs._initial_X_zero(self)
+        res1, res2 = smo._initial_X_zero(self)
         res1[:] = 1
         aae(res2, np.ones((300, 4)))
 
     def test_X_zero_filler(self):
-        aae(chs._X_zero_filler(self), np.zeros((3, 4)))
+        aae(smo._X_zero_filler(self), np.zeros((3, 4)))
 
     def test_params_slice_for_X_zero(self):
         self._general_params_slice = Mock()
-        chs._params_slice_for_X_zero(self, params_type='short')
+        smo._params_slice_for_X_zero(self, params_type='short')
         self._general_params_slice.assert_has_calls([call(12)])
 
     def test_x_zero_replacements(self):
         expected = [[(1, 2), (0, 2)], [(2, 2), (1, 2)]]
-        assert_equal(chs._X_zero_replacements(self), expected)
+        assert_equal(smo._X_zero_replacements(self), expected)
 
     def test_set_bounds_for_X_zero(self):
         self.lower_bound = np.empty(100, dtype=object)
@@ -442,7 +441,7 @@ class TestXZeroRelatedMethods:
         expected = self.lower_bound.copy()
         expected[[16, 20]] = 0
 
-        chs._set_bounds_for_X_zero(self, params_slice=params_slice)
+        smo._set_bounds_for_X_zero(self, params_slice=params_slice)
 
         aae(self.lower_bound, expected)
 
@@ -453,14 +452,14 @@ class TestXZeroRelatedMethods:
             'X_zero__1__f4',
             'X_zero__2__f1', 'X_zero__2__f2', 'diff_X_zero__2__f3',
             'X_zero__2__f4']
-        assert_equal(chs._X_zero_names(self, params_type='short'), expected)
+        assert_equal(smo._X_zero_names(self, params_type='short'), expected)
 
     def test_x_zero_names_long_params(self):
         expected = [
             'X_zero__0__f1', 'X_zero__0__f2', 'X_zero__0__f3', 'X_zero__0__f4',
             'X_zero__1__f1', 'X_zero__1__f2', 'X_zero__1__f3', 'X_zero__1__f4',
             'X_zero__2__f1', 'X_zero__2__f2', 'X_zero__2__f3', 'X_zero__2__f4']
-        assert_equal(chs._X_zero_names(self, params_type='long'), expected)
+        assert_equal(smo._X_zero_names(self, params_type='long'), expected)
 
 
 class TestWZeroRelatedMethods:
@@ -469,17 +468,17 @@ class TestWZeroRelatedMethods:
         self.nobs = 100
 
     def test_initial_w_zero(self):
-        aae(chs._initial_W_zero(self),
+        aae(smo._initial_W_zero(self),
             np.ones((self.nobs, self.nemf)) / 4)
 
     def test_params_slice_w_zero(self):
         self._general_params_slice = Mock()
-        chs._params_slice_for_W_zero(self, params_type='short')
+        smo._params_slice_for_W_zero(self, params_type='short')
         self._general_params_slice.assert_has_calls([call(4)])
 
     def test_w_zero_names(self):
         expected = ['W_zero__0', 'W_zero__1', 'W_zero__2', 'W_zero__3']
-        assert_equal(chs._W_zero_names(self, params_type='short'), expected)
+        assert_equal(smo._W_zero_names(self, params_type='short'), expected)
 
 
 class TestPZeroRelatedMethods:
@@ -498,48 +497,48 @@ class TestPZeroRelatedMethods:
 
     def test_initial_P_zero_no_square_root_filters(self):
         self.square_root_filters = False
-        res1, res2 = chs._initial_P_zero(self)
+        res1, res2 = smo._initial_P_zero(self)
         aae(res1, np.zeros((100, 2, 4, 4)))
         aae(res2, np.zeros((200, 4, 4)))
 
     def test_initial_P_zero_square_root_filters(self):
         self.square_root_filters = True
-        res1, res2 = chs._initial_P_zero(self)
+        res1, res2 = smo._initial_P_zero(self)
         aae(res1, np.zeros((100, 2, 5, 5)))
         aae(res2, np.zeros((200, 5, 5)))
 
     def test_P_zero_filler_unrestricted_P_zeros(self):
         self.restrict_P_zeros = False
-        aae(chs._P_zero_filler(self), np.zeros((2, 4, 4)))
+        aae(smo._P_zero_filler(self), np.zeros((2, 4, 4)))
 
     def test_P_zero_filler_restricted_P_zeros(self):
         self.restrict_P_zeros = True
-        aae(chs._P_zero_filler(self), np.zeros((1, 4, 4)))
+        aae(smo._P_zero_filler(self), np.zeros((1, 4, 4)))
 
     def test_P_zero_filler_bool_unrestricted(self):
         self._P_zero_filler = Mock(return_value=np.zeros((2, 4, 4)))
         self.restrict_P_zeros = False
         expected = np.zeros((2, 4, 4), dtype=bool)
         expected[:] = self.helper
-        aae(chs._P_zero_bool(self), expected)
+        aae(smo._P_zero_bool(self), expected)
 
     def test_P_zero_filler_bool_restricted(self):
         self._P_zero_filler = Mock(return_value=np.zeros((1, 4, 4)))
         self.restrict_P_zeros = True
         expected = np.zeros((1, 4, 4), dtype=bool)
         expected[:] = self.helper
-        aae(chs._P_zero_bool(self), expected)
+        aae(smo._P_zero_bool(self), expected)
 
     def test_params_slice_P_zero_unrestricted(self):
         self.restrict_P_zeros = False
         self._general_params_slice = Mock()
-        chs._params_slice_for_P_zero(self, params_type='short')
+        smo._params_slice_for_P_zero(self, params_type='short')
         self._general_params_slice.assert_has_calls([call(20)])
 
     def test_params_slice_P_zero_restricted(self):
         self.restrict_P_zeros = True
         self._general_params_slice = Mock()
-        chs._params_slice_for_P_zero(self, params_type='short')
+        smo._params_slice_for_P_zero(self, params_type='short')
         self._general_params_slice.assert_has_calls([call(10)])
 
     def test_set_bounds_P_zero_unrestricted_not_robust(self):
@@ -548,7 +547,7 @@ class TestPZeroRelatedMethods:
         expected = np.zeros(100, dtype=object)
         expected[:] = None
         expected[self.bound_indices] = 0
-        chs._set_bounds_for_P_zero(self, slice(10, 30))
+        smo._set_bounds_for_P_zero(self, slice(10, 30))
         aae(self.lower_bound, expected)
 
     def test_set_bounds_P_zero_unrestricted_robust(self):
@@ -557,7 +556,7 @@ class TestPZeroRelatedMethods:
         expected = np.zeros(100, dtype=object)
         expected[:] = None
         expected[self.bound_indices] = 0.001
-        chs._set_bounds_for_P_zero(self, slice(10, 30))
+        smo._set_bounds_for_P_zero(self, slice(10, 30))
         aae(self.lower_bound, expected)
 
     def test_set_bounds_P_zero_restricted_not_robust(self):
@@ -566,14 +565,14 @@ class TestPZeroRelatedMethods:
         expected = np.zeros(100, dtype=object)
         expected[:] = None
         expected[self.bound_indices[:4]] = 0.0
-        chs._set_bounds_for_P_zero(self, slice(10, 20))
+        smo._set_bounds_for_P_zero(self, slice(10, 20))
         aae(self.lower_bound, expected)
 
     def test_set_bounds_P_zero_invalid_params_slice(self):
         self.robust_bounds = False
         self.restrict_P_zeros = False
         assert_raises(
-            AssertionError, chs._set_bounds_for_P_zero, self, slice(10, 15))
+            AssertionError, smo._set_bounds_for_P_zero, self, slice(10, 15))
 
     def test_P_zero_names_short(self):
         self.nemf = 1
@@ -586,7 +585,7 @@ class TestPZeroRelatedMethods:
                     fs.format('f1', 'f3'), fs.format('f2', 'f2'),
                     fs.format('f2', 'f3'), fs.format('f3', 'f3')]
 
-        assert_equal(chs._P_zero_names(self, params_type='short'), expected)
+        assert_equal(smo._P_zero_names(self, params_type='short'), expected)
 
     def test_P_zero_names_long(self):
         self.nemf = 1
@@ -598,7 +597,7 @@ class TestPZeroRelatedMethods:
         expected = [fs.format('f1', 'f1'), fs.format('f1', 'f2'),
                     fs.format('f1', 'f3'), fs.format('f2', 'f2'),
                     fs.format('f2', 'f3'), fs.format('f3', 'f3')]
-        assert_equal(chs._P_zero_names(self, params_type='long'), expected)
+        assert_equal(smo._P_zero_names(self, params_type='long'), expected)
 
 
 class TestTransCoeffsRelatedMethods:
@@ -616,22 +615,22 @@ class TestTransCoeffsRelatedMethods:
         self.lower_bound[:] = None
         self.upper_bound = self.lower_bound.copy()
 
-    @patch('skillmodels.estimation.chs_model.tf')
+    @patch('skillmodels.estimation.skill_model.tf')
     def test_initial_trans_coeffs(self, mock_tf):
         mock_tf.nr_coeffs_first_func.return_value = 3
         mock_tf.nr_coeffs_second_func.return_value = 10
         expected = [np.zeros((2, 3)), np.zeros((2, 10))]
-        initials = chs._initial_trans_coeffs(self)
+        initials = smo._initial_trans_coeffs(self)
         for i, e in zip(initials, expected):
             aae(i, e)
 
-    @patch('skillmodels.estimation.chs_model.tf')
+    @patch('skillmodels.estimation.skill_model.tf')
     def test_params_slices_for_trans_coeffs(self, mock_tf):
         mock_tf.nr_coeffs_first_func.return_value = 3
         mock_tf.nr_coeffs_second_func.return_value = 10
         self._general_params_slice = Mock(
             side_effect=[slice(0, 3), slice(3, 13), slice(13, 23)])
-        res = chs._params_slice_for_trans_coeffs(self, params_type='short')
+        res = smo._params_slice_for_trans_coeffs(self, params_type='short')
         self._general_params_slice.assert_has_calls(
             [call(3), call(10), call(10)])
         mock_tf.nr_coeffs_first_func.assert_has_calls(
@@ -640,7 +639,7 @@ class TestTransCoeffsRelatedMethods:
             [call(included_factors=['f2'], params_type='short')] * 2)
         assert_equal([[slice(0, 3)] * 2, [slice(3, 13), slice(13, 23)]], res)
 
-    @patch('skillmodels.estimation.chs_model.tf')
+    @patch('skillmodels.estimation.skill_model.tf')
     def test_set_bounds_for_trans_coeffs(self, mock_tf):
         lb = np.array([0, None, None], dtype=object)
         ub = np.array([None, None, 1], dtype=object)
@@ -654,12 +653,12 @@ class TestTransCoeffsRelatedMethods:
         expected_ub = self.upper_bound.copy()
         expected_ub[2] = 1
 
-        chs._set_bounds_for_trans_coeffs(self, sl)
+        smo._set_bounds_for_trans_coeffs(self, sl)
 
         aae(self.lower_bound, expected_lb)
         aae(self.upper_bound, expected_ub)
 
-    @patch('skillmodels.estimation.chs_model.tf')
+    @patch('skillmodels.estimation.skill_model.tf')
     def test_trans_coeffs_names(self, mock_tf):
         mock_tf.nr_coeffs_second_func.return_value = 2
         mock_tf.coeff_names_first_func.return_value = ['epsilon', 'psi', 'pi']
@@ -669,7 +668,7 @@ class TestTransCoeffsRelatedMethods:
             'trans_coeff__0__f2__1', 'trans_coeff__1__f2__0',
             'trans_coeff__1__f2__1']
 
-        assert_equal(chs._trans_coeffs_names(self, params_type='short'),
+        assert_equal(smo._trans_coeffs_names(self, params_type='short'),
                      expected)
 
 
@@ -678,10 +677,10 @@ class TestTransformTransitionParamsFuncs:
         self.factors = ['f1', 'f2']
         self.transition_names = ['first_func', 'second_func']
 
-    @patch('skillmodels.estimation.chs_model.tf')
+    @patch('skillmodels.estimation.skill_model.tf')
     def test_transform_trans_coeffs_funcs(self, mock_tf):
         del mock_tf.transform_coeffs_second_func
-        assert_equal(chs._transform_trans_coeffs_funcs(self),
+        assert_equal(smo._transform_trans_coeffs_funcs(self),
                      ['transform_coeffs_first_func', None])
 
 
@@ -692,7 +691,7 @@ class TestParamsSlices:
         self._params_slice_for_b = Mock(return_value=slice(3, 5))
 
     def test_params_slices(self):
-        assert_equal(chs.params_slices(self, params_type='short'),
+        assert_equal(smo.params_slices(self, params_type='short'),
                      {'a': slice(0, 3), 'b': slice(3, 5)})
 
 
@@ -703,7 +702,7 @@ class TestLenParams:
             return_value={'a': slice(0, 3), 'b': slice(3, 5)})
 
     def test_len_params(self):
-        assert_equal(chs.len_params(self, params_type='short'), 5)
+        assert_equal(smo.len_params(self, params_type='short'), 5)
 
 
 class TestBoundsList:
@@ -721,7 +720,7 @@ class TestBoundsList:
 
     def test_bounds_list(self):
         expected = [(None, None)] * 3 + [(99, 100), (99, None)]
-        assert_equal(chs.bounds_list(self), expected)
+        assert_equal(smo.bounds_list(self), expected)
 
 
 class TestParamNames:
@@ -732,13 +731,13 @@ class TestParamNames:
         self.len_params = Mock(return_value=5)
 
     def test_param_names(self):
-        assert_equal(chs.param_names(self, params_type='short'),
+        assert_equal(smo.param_names(self, params_type='short'),
                      ['a1', 'a2', 'b1', 'b2', 'b3'])
 
     def test_param_names_invalid(self):
         self.len_params = Mock(return_value=6)
         assert_raises(
-            AssertionError, chs.param_names, self, params_type='short')
+            AssertionError, smo.param_names, self, params_type='short')
 
 
 class TestExpandparams:
@@ -772,13 +771,13 @@ class TestExpandparams:
         self._transform_trans_coeffs_funcs = Mock()
         self.included_factors = []
 
-    # @patch('src.model_code.chs_model.pp')
+    # @patch('src.model_code.skill_model.pp')
     # def test_expand_params(self, mock_pt):
     #     mock_pt.transform_params_for_X_zero.return_value = np.arange(3)
     #     mock_pt.transform_params_for_trans_coeffs.return_value = np.ones(9)
     #     mock_pt.transform_params_for_P_zero.return_value = np.ones(3) * 17
     #     expected = np.array([0] * 5 + [1] * 9 + [0, 1, 2] + [17] * 3)
-    #     aae(chs.expandparams(self, np.zeros(18)), expected)
+    #     aae(smo.expandparams(self, np.zeros(18)), expected)
 
 
 class TestGenerateStartParams:
@@ -802,12 +801,12 @@ class TestGenerateStartParams:
         self.params_slices = Mock(return_value=slices)
         self.len_params = Mock(return_value=20)
 
-    @patch('skillmodels.estimation.chs_model.tf')
+    @patch('skillmodels.estimation.skill_model.tf')
     def test_generate_start_params(self, mock_tf):
         mock_tf.start_values_some_func.return_value = np.ones(1) * 7.7
         expected = np.array(
             [5] * 4 + [0.5, 0, 0.5] * 3 + [1 / 3] * 3 + [7.7] * 4)
-        aae(chs.generate_start_params(self), expected)
+        aae(smo.generate_start_params(self), expected)
 
 
 class TestSigmaWeightsAndScalingFactor:
@@ -827,27 +826,27 @@ class TestSigmaWeightsAndScalingFactor:
     def test_julier_sigma_weight_construction(self):
         self.sigma_method = 'julier'
         expected_sws = self.fixtures['julier_wm']
-        aae(chs.sigma_weights(self)[0], expected_sws)
+        aae(smo.sigma_weights(self)[0], expected_sws)
 
     def test_merwe_sigma_weight_m_construction(self):
         self.sigma_method = 'van_merwe'
         expected_sws = self.fixtures['merwe_wm']
-        aae(chs.sigma_weights(self)[0], expected_sws)
+        aae(smo.sigma_weights(self)[0], expected_sws)
 
     def test_merwe_sigma_weight_c_construction(self):
         self.sigma_method = 'van_merwe'
         expected_sws = self.fixtures['merwe_wc']
-        aae(chs.sigma_weights(self)[1], expected_sws)
+        aae(smo.sigma_weights(self)[1], expected_sws)
 
     def test_merwe_scaling_factor(self):
         self.sigma_method = 'van_merwe'
         expected_sf = 0.23452078799
-        assert_almost_equal(chs.sigma_scaling_factor(self), expected_sf)
+        assert_almost_equal(smo.sigma_scaling_factor(self), expected_sf)
 
     def test_julier_scaling_factor(self):
         self.sigma_method = 'julier'
         expected_sf = 2.34520787991
-        assert_almost_equal(chs.sigma_scaling_factor(self), expected_sf)
+        assert_almost_equal(smo.sigma_scaling_factor(self), expected_sf)
 
 
 class TestLikelihoodArgumentsDict:
