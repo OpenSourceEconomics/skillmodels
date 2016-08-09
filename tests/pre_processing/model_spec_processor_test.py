@@ -5,7 +5,8 @@ import numpy as np
 from unittest.mock import Mock, call, patch    # noqa
 from itertools import cycle
 from numpy.testing import assert_array_equal as aae
-from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor as msc
+from skillmodels.pre_processing.model_spec_processor \
+    import ModelSpecProcessor as msp
 
 
 class TestTransitionEquationNames:
@@ -16,7 +17,7 @@ class TestTransitionEquationNames:
                         in zip(self.factors, names)}
 
     def test_transition_equation_names(self):
-        msc._transition_equation_names(self)
+        msp._transition_equation_names(self)
         assert_equal(self.transition_names, ['linear', 'ces', 'ar1'])
 
 
@@ -30,11 +31,11 @@ class TestTransitionEquationIncludedFactors:
         self.nfac = 2
 
     def test_transition_equation_included_factors(self):
-        msc._transition_equation_included_factors(self)
+        msp._transition_equation_included_factors(self)
         assert_equal(self.included_factors, [['f1', 'f2'], ['f2']])
 
     def test_transition_equation_included_factor_positions(self):
-        msc._transition_equation_included_factors(self)
+        msp._transition_equation_included_factors(self)
         assert_equal(self.included_positions,
                      [[0, 1], [1]])
 
@@ -52,33 +53,33 @@ class TestVariableCheckMethods:
         self.dataset_name = 'dataset'
 
     def test_present_where_true(self):
-        assert_equal(msc._present(self, 'var1', 0), True)
+        assert_equal(msp._present(self, 'var1', 0), True)
 
     def test_present_where_false_no_raise(self):
-        assert_equal(msc._present(self, 'var1', 1), False)
+        assert_equal(msp._present(self, 'var1', 1), False)
 
     def test_present_where_false__raise(self):
         self.missing_variables = 'raise_error'
-        assert_raises(KeyError, msc._present, self, 'var1', 1)
+        assert_raises(KeyError, msp._present, self, 'var1', 1)
 
     def test_is_dummy_where_true(self):
-        assert_equal(msc._is_dummy(self, 'var1', 0), True)
+        assert_equal(msp._is_dummy(self, 'var1', 0), True)
 
     def test_is_dummy_where_false_non_missing(self):
-        assert_equal(msc._is_dummy(self, 'var2', 1), False)
+        assert_equal(msp._is_dummy(self, 'var2', 1), False)
 
     def test_is_dummy_where_false_missing(self):
-        assert_equal(msc._is_dummy(self, 'var1', 1), False)
+        assert_equal(msp._is_dummy(self, 'var1', 1), False)
 
     def test_has_variance_where_true(self):
-        assert_equal(msc._has_variance(self, 'var1', 0), True)
+        assert_equal(msp._has_variance(self, 'var1', 0), True)
 
     def test_has_variance_where_false_non_missing(self):
         self._data.loc[1, 'var1'] = 0
-        assert_equal(msc._has_variance(self, 'var1', 0), False)
+        assert_equal(msp._has_variance(self, 'var1', 0), False)
 
     def test_has_variance_where_false_missing(self):
-        assert_equal(msc._has_variance(self, 'var2', 0), False)
+        assert_equal(msp._has_variance(self, 'var2', 0), False)
 
 
 class TestCleanMesaurementSpecifications:
@@ -96,7 +97,7 @@ class TestCleanMesaurementSpecifications:
         res = {}
         res['f1'] = self._facinf['f1']['measurements']
         res['f2'] = self._facinf['f2']['measurements']
-        msc._clean_measurement_specifications(self)
+        msp._clean_measurement_specifications(self)
         assert_equal(self.measurements, res)
 
     def test_clean_measurement_specifications_half_of_variables_missing(self):
@@ -105,7 +106,7 @@ class TestCleanMesaurementSpecifications:
         res = {}
         res['f1'] = [['m1', 'm3']] * 2
         res['f2'] = [['m5', 'm7']] * 2
-        msc._clean_measurement_specifications(self)
+        msp._clean_measurement_specifications(self)
         assert_equal(self.measurements, res)
 
     def test_clean_measurement_specs_half_of_variables_without_variance(self):
@@ -130,23 +131,24 @@ class TestCleanControlSpecifications:
         dat = np.zeros((10, 3))
         dat[5:, 0] = 1
         self._data = DataFrame(data=dat, columns=cols)
+        self.estimator = 'chs'
 
     def test_clean_control_specs_nothing_to_clean(self):
-        msc._clean_controls_specification(self)
+        msp._clean_controls_specification(self)
         res = [['c1', 'c2'], ['c1', 'c2']]
         assert_equal(self.controls, res)
         aae(self.obs_to_keep, np.ones(5, dtype=bool))
 
     def test_clean_control_specs_missing_variable(self):
         self._present = Mock(side_effect=[True, False, True, True])
-        msc._clean_controls_specification(self)
+        msp._clean_controls_specification(self)
         res = [['c1'], ['c1', 'c2']]
         assert_equal(self.controls, res)
         aae(self.obs_to_keep, np.ones(5, dtype=bool))
 
     def test_clean_control_specs_missing_observations_drop_variable(self):
         self._data.loc[2, 'c2'] = np.nan
-        msc._clean_controls_specification(self)
+        msp._clean_controls_specification(self)
         res = [['c1'], ['c1', 'c2']]
         assert_equal(self.controls, res)
         aae(self.obs_to_keep, np.ones(5, dtype=bool))
@@ -154,7 +156,7 @@ class TestCleanControlSpecifications:
     def test_clean_control_specs_missing_observation_drop_observation(self):
         self._data.loc[2, 'c2'] = np.nan
         self.controls_with_missings = 'drop_observations'
-        msc._clean_controls_specification(self)
+        msp._clean_controls_specification(self)
         res = [['c1', 'c2'], ['c1', 'c2']]
         assert_equal(self.controls, res)
         aae(self.obs_to_keep, np.array([True, True, False, True, True]))
@@ -162,14 +164,14 @@ class TestCleanControlSpecifications:
     def test_clean_control_specs_missing_observations_error(self):
         self._data.loc[2, 'c2'] = np.nan
         self.controls_with_missings = 'raise_error'
-        assert_raises(ValueError, msc._clean_controls_specification, self)
+        assert_raises(ValueError, msp._clean_controls_specification, self)
 
 
 class TestCheckNormalizations:
     def setup(self):
         self.periods = [0, 1]
         self._facinf = {'f1': {'measurements': [['m1', 'm2', 'm3', 'm4']] * 2}}
-        self._facinf['f1']['normalizations'] = [['m1', 1], ['m1', 1]]
+        self.f1_norm_list = [['m1', 1], ['m1', 1]]
         self.factors = sorted(list(self._facinf.keys()))
         self.measurements = {'f1': [['m1', 'm2', 'm3', 'm4']] * 2}
         self.model_name = 'model'
@@ -177,49 +179,175 @@ class TestCheckNormalizations:
         self.nperiods = len(self.periods)
 
     def test_check_normalizations_no_error(self):
-        assert_equal(msc._check_normalizations_list(self, 'f1'),
-                     self._facinf['f1']['normalizations'])
+        result = msp._check_normalizations_list(self, 'f1', self.f1_norm_list)
+        assert_equal(result, self.f1_norm_list)
 
     def test_check_normalizations_not_specified_error(self):
-        self._facinf['f1']['normalizations'] = [['m10', 1], ['m1', 1]]
-        assert_raises(KeyError, msc._check_normalizations_list, self, 'f1')
+        f1_norm_list = [['m10', 1], ['m1', 1]]
+        assert_raises(
+            KeyError, msp._check_normalizations_list, self, 'f1', f1_norm_list)
 
     def test_check_normalizations_dropped_error(self):
         self.measurements = {'f1': [['m2', 'm3', 'm4']] * 2}
-        assert_raises(KeyError, msc._check_normalizations_list, self, 'f1')
+        assert_raises(KeyError, msp._check_normalizations_list, self, 'f1',
+                      self.f1_norm_list)
 
     def test_check_normalizations_invalid_length_of_list(self):
-        self._facinf['f1']['normalizations'] = [['m1', 1]] * 3
         assert_raises(
-            AssertionError, msc._check_normalizations_list, self, 'f1')
+            AssertionError, msp._check_normalizations_list, self, 'f1',
+            self.f1_norm_list * 2)
 
     def test_check_normalizations_invalid_length_of_sublst(self):
-        self._facinf['f1']['normalizations'] = [['m1'], ['m1', 1]]
+        f1_norm_list = [['m1'], ['m1', 1]]
         assert_raises(
-            AssertionError, msc._check_normalizations_list, self, 'f1')
+            AssertionError, msp._check_normalizations_list, self, 'f1',
+            f1_norm_list)
 
 
 class TestGenerateNormalizationSpecifications:
     def setup(self):
-        pass
+        self.factors = ['fac1', 'fac2', 'fac3']
+        self.transition_names = ['ar1', 'log_ces', 'translog']
+        self.estimate_X_zeros = True
+        self.nperiods = 9
+        self.periods = list(range(self.nperiods))
+        self.stagemap = [0, 0, 0, 1, 1, 2, 3, 3, 3]
+        self.stages = [0, 1, 2, 3]
+        self.stage_length_list = [3, 2, 1, 3]
+
+    def test_has_fixed_start_period_list_loadings(self):
+        expected = [False, True, True, False]
+        calculated = msp._stage_has_fixed_start_period_list(self, 'loadings')
+        assert_equal(expected, calculated)
+
+    def test_has_fixed_start_period_list_intercepts_fixed_x_zeros(self):
+        expected = [True, True, True, False]
+        self.estimate_X_zeros = False
+        calculated = msp._stage_has_fixed_start_period_list(self, 'intercepts')
+        assert_equal(expected, calculated)
+
+    def test_has_fixed_start_period_list_intercepts_free_x_zeros(self):
+        expected = [False, True, True, False]
+        calculated = msp._stage_has_fixed_start_period_list(self, 'intercepts')
+        assert_equal(expected, calculated)
+
+    def test_is_first_period_in_stage_true(self):
+        assert_equal(msp._first_period_in_stage(self, 3), True)
+
+    def test_is_first_period_in_stage_false(self):
+        assert_equal(msp._first_period_in_stage(self, 4), False)
+
+    def test_needs_norm_ar1_case_for_loadings(self):
+        expected = [True, True, False, False, False,
+                    False, False, False, False]
+        result = msp.needs_normalization(self, 'fac1', 'loadings')
+        assert_equal(result, expected)
+
+    def test_needs_norm_ar1_case_for_intercept_fixed_x_zeros(self):
+        self.estimate_X_zeros = False
+        expected = [False, True, False, False, False,
+                    False, False, False, False]
+        result = msp.needs_normalization(self, 'fac1', 'intercepts')
+        assert_equal(result, expected)
+
+    def test_needs_norm_ar1_case_for_intercept_free_x_zeros(self):
+        expected = [True, True, False, False, False,
+                    False, False, False, False]
+        result = msp.needs_normalization(self, 'fac1', 'intercepts')
+        assert_equal(result, expected)
+
+    def test_needs_norm_log_ces_case_for_loadings(self):
+        expected = [True, False, False, False, False,
+                    False, False, False, False]
+        result = msp.needs_normalization(self, 'fac2', 'loadings')
+        assert_equal(result, expected)
+
+    def test_needs_norm_log_ces_case_for_intercepts_fixed_x_zeros(self):
+        expected = [False, False, False, False, False,
+                    False, False, False, False]
+        self.estimate_X_zeros = False
+        result = msp.needs_normalization(self, 'fac2', 'intercepts')
+        assert_equal(result, expected)
+
+    def test_needs_norm_log_ces_case_for_intercepts_free_x_zeros(self):
+        expected = [True, False, False, False, False,
+                    False, False, False, False]
+        result = msp.needs_normalization(self, 'fac2', 'intercepts')
+        assert_equal(result, expected)
+
+    def test_needs_norm_translog_case_for_loadings(self):
+        expected = [True, True, False, False, True, False, True, True, False]
+        self._stage_has_fixed_start_period_list = Mock(
+            return_value=[False, True, True, False])
+        self._first_period_in_stage = Mock(
+            side_effect=[False, True, False, False, True, False, True, True,
+                         True, False, True, False, False])
+        result = msp.needs_normalization(self, 'fac3', 'loadings')
+        assert_equal(result, expected)
+
+    def test_needs_norm_translog_case_for_intercepts_fixed_x_zeros(self):
+        expected = [False, True, False, False, True, False, True, True, False]
+        self.estimate_X_zeros = False
+        self._stage_has_fixed_start_period_list = Mock(
+            return_value=[True, True, True, False])
+        self._first_period_in_stage = Mock(
+            side_effect=[False, True, False, False, True, False, True, True,
+                         True, False, True, False, False])
+        result = msp.needs_normalization(self, 'fac3', 'intercepts')
+        assert_equal(result, expected)
+
+    def test_needs_norm_translog_case_for_intercepts_free_x_zeros(self):
+        expected = [True, True, False, False, True, False, True, True, False]
+        self._stage_has_fixed_start_period_list = Mock(
+            return_value=[False, True, True, False])
+        self._first_period_in_stage = Mock(
+            side_effect=[False, True, False, False, True, False, True, True,
+                         True, False, True, False, False])
+        result = msp.needs_normalization(self, 'fac3', 'intercepts')
+        assert_equal(result, expected)
+
+
+class TestGenerateNormalizationsList:
+    def setup(self):
+        self.measurements = {'f1': [['m1', 'm2'], ['m1', 'm2', 'm3'], ['m2'],
+                                    ['m4'], ['m4']]}
+        self.needs_normalization = Mock(
+            return_value=[True, True, False, False, True])
+        self.periods = list(range(5))
+
+    def test_generate_normalization_list_loadings(self):
+        expected = [['m1', 1], ['m1', 1], [], [], ['m4', 1]]
+        result = msp.generate_normalizations_list(self, 'f1', 'loadings')
+        assert_equal(result, expected)
+
+    def test_generate_normalization_list_intercepts(self):
+        expected = [['m1', 0], ['m1', 0], [], [], ['m4', 0]]
+        result = msp.generate_normalizations_list(self, 'f1', 'intercepts')
+        assert_equal(result, expected)
 
 
 class TestCheckOrGenerateNormalizationSpecifications:
     def setup(self):
         self._facinf = {
-            'f1': {'normalizations': [['a', 1], ['a', 1], ['a', 1]]},
+            'f1': {'normalizations':
+                   {'loadings': [['a', 1], ['a', 1], ['a', 1]],
+                    'intercepts': [['a', 1], ['a', 1], ['a', 1]]}},
             'f2': {}}
 
         self.factors = sorted(list(self._facinf.keys()))
         self._check_normalizations_list = Mock(
-            side_effect=lambda x: self._facinf[x]['normalizations'])
+            return_value=[['a', 1], ['a', 1], ['a', 1]])
         self.generate_normalizations_list = \
             Mock(return_value=[['b', 1], ['b', 1], ['b', 1]])
 
     def test_check_or_generate_normalization_specifications(self):
-        res = {'f1': [['a', 1], ['a', 1], ['a', 1]],
-               'f2': [['b', 1], ['b', 1], ['b', 1]]}
-        msc._check_or_generate_normalization_specification(self)
+        res = {'f1': {'loadings': [['a', 1], ['a', 1], ['a', 1]],
+                      'intercepts': [['a', 1], ['a', 1], ['a', 1]]},
+               'f2': {'loadings': [['b', 1], ['b', 1], ['b', 1]],
+                      'intercepts': [['b', 1], ['b', 1], ['b', 1]]}}
+        msp._check_or_generate_normalization_specification(self)
+        print('calc', '\n\n', self.normalizations)
+        print('exp', '\n\n', res)
 
         assert_equal(self.normalizations, res)
 
@@ -230,6 +358,7 @@ class TestUpdateInfoTable:
         self.periods = [0, 1, 2, 3]
         self.nperiods = len(self.periods)
         self.stagemap = [0, 0, 1, 1]
+        self.probit_measurements = True
 
         m = {}
         m['f1'] = [['m1', 'm2']] * 4
@@ -241,15 +370,21 @@ class TestUpdateInfoTable:
         self.anch_outcome = 'a'
         self.anchored_factors = ['f1', 'f3']
 
-        n = {}
-        n['f1'] = [['m1', 2]] * 4
-        n['f2'] = [['m3', 1], ['m3', 1], ['m3', 1], ['m5', 5]]
-        n['f3'] = [['m5', 4]] * 4
+        n = {'f1': {}, 'f2': {}, 'f3': {}}
+
+        n['f1']['loadings'] = [['m1', 2]] * 4
+        n['f2']['loadings'] = [['m3', 1], ['m3', 1], ['m3', 1], ['m5', 5]]
+        n['f3']['loadings'] = [['m5', 4]] * 4
+
+        n['f1']['intercepts'] = [['m1', 0]] * 4
+        n['f2']['intercepts'] = [['m3', 1], ['m3', 1], ['m3', 1], ['m5', 5]]
+        n['f3']['intercepts'] = [['m5', 4]] * 4
+
         self.normalizations = n
 
         self._is_dummy = Mock(side_effect=cycle([False, False, True]))
 
-        cols = self.factors + ['{}_norm_value'.format(f) for f in self.factors]
+        cols = self.factors + ['{}_loading_norm_value'.format(f) for f in self.factors]
         cols += ['stage', 'purpose', 'update_type']
 
         different_meas = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6']
@@ -270,10 +405,19 @@ class TestUpdateInfoTable:
                 for m in self.measurements[factor][0]:
                     df.loc[(t, m), factor] = 1
 
+        df['has_normalized_loading'] = False
         for factor in self.factors:
-            norm_col = '{}_norm_value'.format(factor)
-            for t, (n_meas, n_val) in enumerate(self.normalizations[factor]):
+            norm_col = '{}_loading_norm_value'.format(factor)
+            for t, (n_meas, n_val) in enumerate(self.normalizations[factor]['loadings']):
                 df.loc[(t, n_meas), norm_col] = n_val
+                df.loc[(t, n_meas), 'has_normalized_loading'] = True
+
+        df['has_normalized_intercept'] = False
+        df['intercept_norm_value'] = np.nan
+        for factor in self.factors:
+            for t, (n_meas, n_val) in enumerate(self.normalizations[factor]['intercepts']):
+                df.loc[(t, n_meas), 'intercept_norm_value'] = n_val
+                df.loc[(t, n_meas), 'has_normalized_intercept'] = True
 
         for t in self.periods:
             df.loc[t, 'stage'] = self.stagemap[t]
@@ -284,68 +428,57 @@ class TestUpdateInfoTable:
         df['purpose'] = np.array(['measurement'] * 24 + ['anchoring'])
 
         df.loc[(3, 'a'), ['f1', 'f3']] = 1
-        self.res = df
+        self.expected_res = df
+        self.calculated_res = msp.update_info(self)
 
-    def test_update_info_without_order(self):
-        calculated = msc.update_info(self).to_dict()
-        expected = self.res.to_dict()
-        assert_equal(calculated, expected)
+    def test_update_info_factor_columns(self):
+        calc = self.calculated_res[self.factors]
+        exp = self.expected_res[self.factors]
+        assert_equal(calc.to_dict(), exp.to_dict())
 
-    def test_that_anchoring_comes_list(self):
-        purposes = list(msc.update_info(self)['purpose'])
-        assert_equal(purposes, ['measurement'] * 24 + ['anchoring'])
+    def test_update_info_loading_normalization_columns(self):
+        normcols = ['{}_loading_norm_value'.format(f) for f in self.factors]
+        calc = self.calculated_res[normcols]
+        exp = self.expected_res[normcols]
+        assert_equal(calc.to_dict(), exp.to_dict())
 
+    def test_update_info_has_normalized_loading(self):
+        calc = self.calculated_res['has_normalized_loading']
+        exp = self.expected_res['has_normalized_loading']
+        assert_equal(calc.to_dict(), exp.to_dict())
 
-class TestEnoughMeasurementsArray:
-    def setup(self):
+    def test_update_info_intercept_norm_value(self):
+        calc = self.calculated_res['intercept_norm_value']
+        calc = calc[pd.notnull(calc)]
+        exp = self.expected_res['intercept_norm_value']
+        exp = exp[pd.notnull(exp)]
 
-        data = np.array([
-            [0, 1, 0, 0],
-            [0, 1, 0, 0],
-            [0, 1, 1, 0],
-            [0, 0, 1, 0],
+        assert_equal(calc.to_dict(), exp.to_dict())
 
-            [1, 1, 0, 1],
-            [1, 1, 0, 1],
-            [1, 1, 1, 1],
-            [1, 0, 1, 1],
+    def test_update_info_has_normalized_intercept(self):
+        calc = self.calculated_res['has_normalized_intercept']
+        exp = self.expected_res['has_normalized_intercept']
+        assert_equal(calc.to_dict(), exp.to_dict())
 
-            [2, 1, 1, 2],
-            [2, 1, 1, 2],
-            [2, 0, 1, 2],
+    def test_update_info_update_type(self):
+        calc = self.calculated_res['update_type']
+        exp = self.expected_res['update_type']
+        assert_equal(calc.to_dict(), exp.to_dict())
 
-            [3, 1, 1, 2],
-            [3, 1, 1, 2],
-            [4, 1, 0, 3],
-            [4, 0, 1, 3]])
-        df = DataFrame(data=data, columns=['period', 'f1', 'f2', 'stage'])
-        df['purpose'] = 'measurement'
-        df['variable'] = ['m_{}'.format(i) for i in range(len(data))]
-        df.set_index(['period', 'variable'], inplace=True)
+    def test_update_info_stage(self):
+        calc = self.calculated_res['stage']
+        exp = self.expected_res['stage']
+        assert_equal(calc.to_dict(), exp.to_dict())
 
-        self.update_info = Mock(return_value=df)
-        self.stagemap = [0, 1, 2, 2, 3]
-        self.factors = ['f1', 'f2']
-        self.periods = [0, 1, 2, 3, 4]
+    def test_update_info_purpose(self):
+        calc = self.calculated_res['purpose']
+        exp = self.expected_res['purpose']
+        assert_equal(calc.to_dict(), exp.to_dict())
 
-    def test_enough_measurements_array_no_special_transition_functions(self):
-        self.transition_names = ['ces', 'bla']
-        res = np.array([
-            [True, True],
-            [False, True],
-            [False, False],
-            [False, False]])
-        aae(msc.enough_measurements_array(self), res)
-
-    def test_enough_measurements_array_ar1_and_constant(self):
-        self.transition_names = ['ar1', 'constant']
-        res = np.array([[True, True]] * 4)
-        aae(msc.enough_measurements_array(self), res)
-
-    def test_type_of_enough_measurements_array(self):
-        self.transition_names = ['ces', 'bla']
-        calculated = msc.enough_measurements_array(self)
-        assert isinstance(calculated, np.ndarray)
+    def test_that_anchoring_comes_last(self):
+        calc = list(self.calculated_res['purpose'])
+        exp = ['measurement'] * 24 + ['anchoring']
+        assert_equal(calc, exp)
 
 
 class TestNewTransitionCoeffs:
@@ -362,22 +495,12 @@ class TestNewTransitionCoeffs:
             [1, 1, 0, 1, 1]], dtype=bool)
         self.enough_measurements_array = arr
 
-    def test_new_transition_parameters_with_merge(self):
-        self.check_enough_measurements = 'merge_stages'
-        res = np.array(
-            [[-1, 1, 1, 1, 1],
-             [-1, 0, 1, 1, 0],
-             [-1, 0, 0, 1, 1]])
-
-        aae(msc.new_trans_coeffs(self), res)
-
-    def test_new_transition_parameters_without_merge(self):
-        self.check_enough_measurements = 'no_check'
+    def test_new_transition_parameters(self):
         res = np.array(
             [[-1, 1, 1, 1, 1],
              [-1, 0, 1, 1, 1],
              [-1, 0, 1, 1, 1]])
-        aae(msc.new_trans_coeffs(self), res)
+        aae(msp.new_trans_coeffs(self), res)
 
 
 if __name__ == '__main__':

@@ -23,13 +23,18 @@ class ModelSpecProcessor:
 
     """
 
-    def __init__(self, model_name, dataset_name, model_dict, dataset):
+    def __init__(
+            self, model_name, dataset_name, model_dict, dataset, estimator):
 
         self.model_name = model_name
+        self.estimator = estimator
         self.dataset_name = dataset_name
         self._data = dataset
         self._model_dict = model_dict
-        self._timeinf = model_dict['time_specific']
+        if 'time_specific' in model_dict:
+            self._timeinf = model_dict['time_specific']
+        else:
+            self._timeinf = {}
         self._facinf = model_dict['factor_specific']
         self.factors = sorted(list(self._facinf.keys()))
         self.nfac = len(self.factors)
@@ -46,10 +51,8 @@ class ModelSpecProcessor:
              "missing_variables": "raise_error",
              "controls_with_missings": "raise_error",
              "variables_without_variance": "raise_error",
-             "check_enough_measurements": "no_check",
              "robust_bounds": False,
              "bounds_distance": 1e-200,
-             "add_constant": False,
              "estimate_X_zeros": False,
              "order_X_zeros": 0,
              "restrict_W_zeros": True,
@@ -89,9 +92,6 @@ class ModelSpecProcessor:
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
         self._nmeas_list()
-        # call functions that set the basic class attributes and call functions
-        if self.check_enough_measurements == 'raise_error':
-            self._check_enough_measurements()
 
     def _set_time_specific_attributes(self):
         """Set model specs related to periods and stages as attributes."""
@@ -106,6 +106,9 @@ class ModelSpecProcessor:
         self.periods = range(self.nperiods)
         self.stages = list(set(self.stagemap))
         self.nstages = len(self.stages)
+        self.stage_length_list = []
+        for stage in self.stages:
+            self.stage_length_list.append(np.in1d(self.stagemap, stage).sum())
 
         assert len(self.stagemap) == self.nperiods, (
             'You have to specify a list of length nperiods '
@@ -121,6 +124,10 @@ class ModelSpecProcessor:
             'The stages have to be numbered beginning with 0 and increase in '
             'steps of 1. Your stagemap in mode {} is invalid').format(
                 self.model_name)
+
+        if self.estimator == 'wa':
+            assert self.stagemap == list(self.periods), (
+                'For the WA estimator stages cannot span more than 1 period.')
 
         for factor in self.factors:
             length = len(self._facinf[factor]['measurements'])
@@ -336,12 +343,6 @@ class ModelSpecProcessor:
         as class attribute ``obs_to_keep``.
 
         """
-        present_controls = []
-        for t in self.periods:
-            present_controls.append(
-                [c for c in self._timeinf['controls'][t]
-                 if (self._present(c, t))])
-
         message = (
             'In model {} you use variable {} which has missing observations '
             'in period {} as control variable. You can either delete the '
@@ -350,21 +351,35 @@ class ModelSpecProcessor:
             'drop the variable (in period {}) or the missing observations '
             '(in all periods!), respectively')
 
-        controls = [[] for t in self.periods]
-        obs_to_keep = np.ones(len(self._data) // self.nperiods, dtype=bool)
+        self.uses_controls = 'controls' in self._timeinf
 
-        for t in self.periods:
-            df = self._data[self._data['period'] == t]
-            for c, control in enumerate(present_controls[t]):
-                if df[control].notnull().all():
-                    controls[t].append(control)
-                elif self.controls_with_missings == 'drop_observations':
-                    controls[t].append(control)
-                    obs_to_keep = np.logical_and(
-                        obs_to_keep, df[control].notnull().values)
-                elif self.controls_with_missings == 'raise_error':
-                    raise ValueError(message.format(
-                        self.model_name, control, t, t))
+        if self.estimator == 'wa':
+            assert self.uses_controls is False, (
+                'It is not possible to use control variables in the measure'
+                'ment equatiens with the wa estimator.')
+
+        obs_to_keep = np.ones(len(self._data) // self.nperiods, dtype=bool)
+        controls = [[] for t in self.periods]
+
+        if self.uses_controls:
+            present_controls = []
+            for t in self.periods:
+                present_controls.append(
+                    [c for c in self._timeinf['controls'][t]
+                     if (self._present(c, t))])
+
+            for t in self.periods:
+                df = self._data[self._data['period'] == t]
+                for c, control in enumerate(present_controls[t]):
+                    if df[control].notnull().all():
+                        controls[t].append(control)
+                    elif self.controls_with_missings == 'drop_observations':
+                        controls[t].append(control)
+                        obs_to_keep = np.logical_and(
+                            obs_to_keep, df[control].notnull().values)
+                    elif self.controls_with_missings == 'raise_error':
+                        raise ValueError(message.format(
+                            self.model_name, control, t, t))
 
         self.controls = controls
         self.obs_to_keep = obs_to_keep
@@ -387,7 +402,7 @@ class ModelSpecProcessor:
                 'but your anchoring outcome {} in model {} is a dummy '
                 'variable.').format(self.anch_outcmoe, self.model_name)
 
-    def _check_normalizations_list(self, factor):
+    def _check_normalizations_list(self, factor, norm_list):
         """Raise an error if invalid normalizations were specified.
 
         For the correct specification of a normalizations list refer to
@@ -420,14 +435,13 @@ class ModelSpecProcessor:
             'In model {} you use the variable {} to normalize factor {} in '
             'period {} but it is not included as measurement.')
 
-        normalizations = self._facinf[factor]['normalizations']
-        assert len(normalizations) == self.nperiods, (
+        assert len(norm_list) == self.nperiods, (
             'Normalizations lists must have one entry per period. In model {} '
             'you specify a normalizations list of length {} for factor {} '
             'but the model has {} periods').format(
-                self.model_name, len(normalizations), factor, self.nperiods)
+                self.model_name, len(norm_list), factor, self.nperiods)
 
-        for t, norminfo in enumerate(normalizations):
+        for t, norminfo in enumerate(norm_list):
             assert len(norminfo) in [0, 2], (
                 'The sublists in the lists of normalizations must be empty or '
                 'have a length of 2. In model {} in period {} you specify a '
@@ -445,43 +459,115 @@ class ModelSpecProcessor:
                         raise KeyError(was_not_specified_message.format(
                             self.model_name, normed_meas, factor, t))
 
-        return normalizations
+        return norm_list
 
-    def generate_normalizations_list(self, factor):
+    def _stage_has_fixed_start_period_list(self, norm_type):
+        """Map list of stages to list of boolean values.
+
+        The s_th entry in the resulting list is True if the location
+        (norm_type='intercept') or scale (norm_type='loadings') in the first
+        period of stage s is fixed through normalizations in previous stages
+        or normalization of initial values.
+        """
+        has_fixed = []
+        for s in self.stages:
+            if s == 0:
+                if norm_type == 'intercepts' and self.estimate_X_zeros is False:    # noqa
+                    has_fixed.append(True)
+                else:
+                    has_fixed.append(False)
+
+            elif self.stage_length_list[s - 1] == 1:
+                has_fixed.append(False)
+            else:
+                has_fixed.append(True)
+        return has_fixed
+
+    def _first_period_in_stage(self, period):
+        """Return True if period is the first period in its stage."""
+        if period == 0:
+            return True
+        elif self.stagemap[period] > self.stagemap[period - 1]:
+            return True
+        else:
+            return False
+
+    def needs_normalization(self, factor, norm_type):
+        """Boolean list of length nperiods.
+
+        The t_th entry is True if factor needs a normalization of norm_type
+        in period period t. Else it is False.
+        """
+        kls_functions = ['log_ces', 'constant']
+        non_kls_functions = ['linear', 'ar1', 'translog']
+
+        f = self.factors.index(factor)
+        transition_name = self.transition_names[f]
+
+        assert transition_name in kls_functions + non_kls_functions, (
+            'Automatic generation of normalizations only works for the '
+            'functions {}. You can generalize it for other functions.'.format(
+                kls_functions + non_kls_functions))
+
+        needs_normalization = []
+        # first period entry
+        if norm_type == 'loadings' or self.estimate_X_zeros is True:
+            needs_normalization.append(True)
+        else:
+            needs_normalization.append(False)
+
+        if transition_name in kls_functions:
+            needs_normalization += [False] * (self.nperiods - 1)
+
+        elif transition_name == 'ar1':
+            needs_normalization.append(True)
+            needs_normalization += [False] * (self.nperiods - 2)
+        else:
+            has_fixed = self._stage_has_fixed_start_period_list(norm_type)
+            for t in self.periods[1:]:
+                stage = self.stagemap[t]
+                if self._first_period_in_stage(t):
+                    if has_fixed[stage]:
+                        needs_normalization.append(False)
+                    else:
+                        needs_normalization.append(True)
+                # if it is the second period in stage s
+                elif self._first_period_in_stage(t - 1):
+                    needs_normalization.append(True)
+                else:
+                    needs_normalization.append(False)
+        return needs_normalization
+
+    def generate_normalizations_list(self, factor, norm_type):
         """Generate normalizations automatically.
 
-        This method automatically decides when a normalization is needed and
-        which factor loadings are normalized. The normalized value is always
-        one.
+        If factor needs a normalization of 'loadings' in period t the loading
+        of its first measurement in period t is normalized to 1.
 
-        There will be two modes to decide when a normalization is needed:
-
-            #. chs: one normalization per period per factor
-            #. parsimonious: based on my intuition less normalizations are
-               needed; Making all the normalizations that chs suggest is more
-               like making assumptions on equal scales of factors across
-               periods. However, chs version or manual normalizations should be
-               used if these assumptions are justified.
-
-        The method tries to reduce computations by normalizing loadings in
-        anchoring equations to one. This can make it unnecessary
-        to anchor sigma_points at all in the case of linear anchoring and
-        reduces the number of computations required for the anchoring in
-        the probability anchoring cases.
-
-        .. todo:: Write this function
+        If factor needs a normalization of 'intercepts' in period t the
+        intercept of its first measurement in period t is normalized
+        to 0.
 
         args:
             factor (str): name of factor for which normalizations are generated
+            norm_type (str): specifices the type of normalization. Takes the
+                values 'loadings' or 'intercepts'.
 
         Returns:
             list: a normalizations list that has the same form as manually
             specified counterparts (see description in :ref:`model_specs`)
 
         """
-        raise NotImplementedError(
-            'Automatic generation of the normalization specifications is not' +
-            'yet implemented.')
+        normalizations = []
+        needs_normalization = self.needs_normalization(factor, norm_type)
+        val = 0.0 if norm_type == 'intercepts' else 1.0
+        for t in self.periods:
+            if needs_normalization[t] is True:
+                meas = self.measurements[factor][t][0]
+                normalizations.append([meas, val])
+            else:
+                normalizations.append([])
+        return normalizations
 
     def _check_or_generate_normalization_specification(self):
         """Check the normalization specs or generate it for each factor.
@@ -490,11 +576,23 @@ class ModelSpecProcessor:
 
         """
         norm = {}
+
         for factor in self.factors:
-            if 'normalizations' in self._facinf[factor]:
-                norm[factor] = self._check_normalizations_list(factor)
-            else:
-                norm[factor] = self.generate_normalizations_list(factor)
+            norm[factor] = {}
+            for norm_type in ['loadings', 'intercepts']:
+                if 'normalizations' in self._facinf[factor]:
+                    norminfo = self._facinf[factor]['normalizations']
+                    if norm_type in norminfo:
+                        norm_list = norminfo[norm_type]
+                        norm[factor][norm_type] = \
+                            self._check_normalizations_list(factor, norm_list)
+                    else:
+                        norm[factor][norm_type] = \
+                            self.generate_normalizations_list(
+                                factor, norm_type)
+                else:
+                    norm[factor][norm_type] = \
+                        self.generate_normalizations_list(factor, norm_type)
         self.normalizations = norm
 
     def _nmeas_list(self):
@@ -531,14 +629,19 @@ class ModelSpecProcessor:
         The DataFrame has the following columns:
 
         * A column for each factor: df.loc[(t, meas), fac1] is 1 if meas is a
-          measurement for fac1 in period t, else it is 0.
-        * A column with the norm_value for each factor: df.loc[(t, meas), fac1]
-          is equal to the normalized value if meas is a measurement with
-          normalized factor loading for fac1 in period t. else it is 0.
+            measurement for fac1 in period t, else it is 0.
+        * A column with the loading_norm_values for each factor:
+            df.loc[(t, meas), fac1] is equal to the normalized value if meas is
+            a measurement with normalized factor loading for fac1 in period t.
+            else it is 0.
+        * intercept_norm_value: the value the intercept is normalized to or NaN
         * stage: maps updates to stages
         * purpose: takes one of the values in ['measurement', 'anchoring']
         * update_type: takes the value 'probit' if the measurement or
-          anchoring_outcome is a dummy variable, else 'linear'
+          anchoring_outcome is a dummy variable and self.probit_measurements
+          is True, else 'linear'
+        * has_normalized_loading: True if any loading is normalized
+        * has_normalized_intercept: True if the intercept is normalized
 
         The row order within one period is arbitrary except for the last
         period, where the row that corresponds to the anchoring update comes
@@ -553,19 +656,24 @@ class ModelSpecProcessor:
             levels=[[], []], labels=[[], []], names=['period', 'name'])
         df = DataFrame(data=None, index=index)
 
-        cols = self.factors + ['{}_norm_value'.format(f) for f in self.factors]
+        norm_cols = ['{}_loading_norm_value'.format(f) for f in self.factors]
+        cols = self.factors + norm_cols
 
         # append rows for each update that has to be performed
         for t, (f, factor) in product(self.periods, enumerate(self.factors)):
             stage = self.stagemap[t]
-            norm_column = '{}_norm_value'.format(factor)
+            load_norm_column = '{}_loading_norm_value'.format(factor)
             measurements = self.measurements[factor][t]
             if t == self.nperiods - 1 and factor in self.anchored_factors:
                 measurements.append(self.anch_outcome)
 
-            norminfo = self.normalizations[factor][t]
-            normed_meas, norm_value = \
-                norminfo if len(norminfo) == 2 else [None, None]
+            load_norminfo = self.normalizations[factor]['loadings'][t]
+            load_normed_meas, load_norm_value = \
+                load_norminfo if len(load_norminfo) == 2 else [None, None]
+
+            intercept_norminfo = self.normalizations[factor]['intercepts'][t]
+            intercept_normed_meas, intercept_norm_value = \
+                intercept_norminfo if len(intercept_norminfo) == 2 else [None, None]    # noqa
 
             for m, meas in enumerate(measurements):
                 # if meas is not the first measurement in period t
@@ -573,8 +681,12 @@ class ModelSpecProcessor:
                 if (f > 0 or m > 0) and meas in df.loc[t].index:
                     # change corresponding row of the DataFrame
                     df.loc[(t, meas), factor] = 1
-                    if meas == normed_meas:
-                        df.loc[(t, meas), norm_column] = norm_value
+                    if meas == load_normed_meas:
+                        df.loc[(t, meas), load_norm_column] = load_norm_value
+                    if meas == intercept_normed_meas:
+                        df.loc[(t, meas), 'intercept_norm_value'] = \
+                            intercept_norm_value
+
                 else:
                     # add a new row to the DataFrame
                     ind = pd.MultiIndex.from_tuples(
@@ -582,11 +694,21 @@ class ModelSpecProcessor:
                     dat = np.zeros((1, len(cols)))
                     df2 = DataFrame(data=dat, columns=cols, index=ind)
                     df2[factor] = 1
-                    if meas == normed_meas:
-                        df2[norm_column] = norm_value
+                    if meas == load_normed_meas:
+                        df2[load_norm_column] = load_norm_value
+                    if meas == intercept_normed_meas:
+                        df2['intercept_norm_value'] = intercept_norm_value
+                    else:
+                        df2['intercept_norm_value'] = np.nan
                     df2['stage'] = stage
 
                     df = df.append(df2)
+
+        # create the has_normalized_loading_column
+        df['has_normalized_loading'] = df[norm_cols].sum(axis=1).astype(bool)
+
+        # create the has_normalized_intercept_column
+        df['has_normalized_intercept'] = pd.notnull(df['intercept_norm_value'])
 
         # add the purpose_column
         df['purpose'] = 'measurement'
@@ -603,82 +725,10 @@ class ModelSpecProcessor:
         # add the update_type column
         df['update_type'] = 'linear'
         for t, variable in list(df.index):
-            if self._is_dummy(variable, t):
+            if self._is_dummy(variable, t) and self.probit_measurements is True:    # noqa
                 df.loc[(t, variable), 'update_type'] = 'probit'
 
         return df
-
-    def enough_measurements_array(self):
-        """Arr[s, f] is True if factor f has enough measurements in stage s.
-
-        To check if factor f has enough measurements to identify
-        its transition equation in stage s, a simple heuristic is used:
-
-        The heuristic is based on the concept of unproblematic periods:
-        period t is a unproblematic period for factor f if it has >= 2
-        measurements for f of which at least one only measures f and t + 1
-        fulfills the same condition. Last periods cannot be unproblematic.
-
-        A general transition equation for factor f in stage s is identified if
-        s has at least one unproblematic period for factor f.
-
-        Some transition equations need less: an ar1 transition equation
-        is identified if its factor has at least one unproblematic period
-        in any stage. Constant transition equations have no estimated parameter
-        and thus are always identified:
-
-        As it is only a heuristic, it is possible that models pass this
-        test but do not converge and the other way round. However, experience
-        suggests that the heuristic works pretty well.
-
-        """
-        df = self.update_info().copy(deep=True)
-        # drop what is not needed and discard info on normalized measurements
-        df = df[df['purpose'] == 'measurement'][self.factors].copy(deep=True)
-
-        # construct df that is True at row t and column f if factor f has at
-        # least two measurements in period t.
-        two_or_more = df.groupby(level='period').sum().replace(
-            {1: 0}).astype(bool)
-
-        # construct df that is True at row t and column f if factor f has at
-        # least 1 dedicated measurement in period t.
-        df[df.sum(axis=1) >= 2] = 0
-        one_or_more_dedicated = df.groupby(level='period').sum().astype(bool)
-
-        # a df where both previous conditions must be fulfilled
-        unproblematic = two_or_more & one_or_more_dedicated
-        # incorporate the condition on the next period
-        unproblematic.loc[:self.periods[-2]] &= unproblematic.loc[1:].values
-        unproblematic['stage'] = self.stagemap
-
-        # calculate the array of identified stages
-        enough_meas = unproblematic.groupby('stage').sum().values.astype(bool)
-
-        # handle the particularities of 'constant' and 'ar1' functions
-        for f, factor in enumerate(self.factors):
-            if self.transition_names[f] == 'constant':
-                enough_meas[:, f] = True
-            elif self.transition_names[f] == 'ar1' and enough_meas[:, f].any():
-                enough_meas[:, f] = True
-
-        return enough_meas
-
-    def _check_enough_measurements(self):
-        """Raise error if some factors have not enough measurements."""
-        assert_message = (
-            'Model {} with dataset {} has probably not enough measurements '
-            'to identify all transition equations. You have three options to '
-            'solve this: 1) ignore it by setting check_enough_measurements in '
-            'the model_specs general section to "no_check". 2) add '
-            'measurements to make the model identified (You can refer to the '
-            'documentation of the enough_measurements_array method '
-            'of the ModelParser class to understand in which periods you '
-            'should add measurements). 3) set check_enough_measurements to '
-            '"merge_stages" to automatically merge unidentified stages with '
-            'identified stages.')
-
-        assert self.enough_measurements_array().all() is True, assert_message
 
     def new_trans_coeffs(self):
         """Array that indicates if new parameters from params are needed.
@@ -690,13 +740,9 @@ class ModelSpecProcessor:
         * For an AR1 process only one parameter is taken from params in the
           first stage. Then it is reused in all other stages.
         * For a constant process no parameters are needed at all.
-        * If too few measurements are available for some factors and
-          *check_enough_measurements* is set to *merge_stages* the transition
-          equation of stage s reuses the parameters of stage s - 1 in order to
-          ensure identification.
 
         Returns:
-            boolean array of [nstages, nfac]. The s_th element in the
+            array of [nstages, nfac]. The s_th element in the
             f_th row is 1 if new parameters from params are used in stage s
             for the transition equation of factor f. It is 0 in the case
             of reuse and -1 if the transition equation doesn't take
@@ -704,41 +750,15 @@ class ModelSpecProcessor:
 
         """
         new_params = np.zeros((self.nstages, self.nfac))
-        enough = self.enough_measurements_array
-
-        if self.check_enough_measurements == 'merge_stages':
-            merge = True
-        else:
-            merge = False
 
         for f, factor in enumerate(self.factors):
             name = self.transition_names[f]
-
-            if merge is True:
-                assert enough[:, f].any(), (
-                    'Not enough measurements in model {} for factor {}.'
-                    'Merging stages can only help to identify the transition '
-                    'equation of a factor if this factor has an identified '
-                    'transition equation in at least one stage.').format(
-                        self.model_name, self.factor)
 
             if name == 'constant':
                 new_params[:, f] = -1
             elif name == 'ar1':
                 new_params[0, f] = 1
                 new_params[1:, f] = 0
-            elif merge is True:
-                next_needs = True
-                for s in self.stages:
-                    if next_needs is True:
-                        new_params[s, f] = 1
-                    else:
-                        new_params[s, f] = 0
-                    if s < self.stages[-1]:
-                        if enough[s, f] == True and enough[s + 1:, f].any():
-                            next_needs = True
-                        else:
-                            next_needs = False
             else:
                 new_params[:, f] = 1
 

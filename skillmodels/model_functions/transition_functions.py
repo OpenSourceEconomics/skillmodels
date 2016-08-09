@@ -54,7 +54,6 @@ def coeff_names_linear(included_factors, params_type, factor, stage):
     fs = 'lincoeff__{}__{}__{}'
     return [fs.format(stage, factor, i_fac) for i_fac in included_factors]
 
-
 # =============================================================================
 # constant
 # =============================================================================
@@ -66,6 +65,7 @@ def constant(sigma_points, coeffs, included_positions):
 
 def nr_coeffs_constant(included_factors, params_type):
     return 0
+
 
 # =============================================================================
 # ar1
@@ -82,7 +82,6 @@ def nr_coeffs_ar1(included_factors, params_type):
 
 def coeff_names_ar1(included_factors, params_type, factor, stage):
     return ['ar1_coeff__{}__{}__{}'.format(stage, factor, factor)]
-
 
 # =============================================================================
 # log_ces (KLS-Verion)

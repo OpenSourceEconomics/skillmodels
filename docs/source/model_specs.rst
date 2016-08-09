@@ -38,7 +38,7 @@ Before thinking about how to translate the above example into a model specificat
 
     #. What are the latent factors of the model and how are they related over time? (transition equations)
     #. What are the measurement variables of each factor in each period and how are measurements and factors related? (measurement equations)
-    #. Which factor loadings are normalized and to which value?
+    #. What are the normalizations of scale (normalized factor loadings) and location (normalized intercepts or means)?
     #. What are the control variables in each period?
     #. If development stages are used: Which periods belong to which stage?
     #. If anchoring is used: Which factors are anchored and what is the anchoring outcome?
@@ -50,14 +50,17 @@ Translate the example to a model dictionary
 The first three points have to be specified for each latent factor of the model. This is done by adding a subdictionary for each latent factor to the ``factor_specific`` key of the model dictionary. In the example model from the CHS `replication files`_ the dictionary for the first factor takes the following form:
 
 .. literalinclude:: test_model2.json
-    :lines: 2-24
+    :lines: 2-28
 
 The value that corresponds to the ``measurements`` key is a list of lists. It has one sublist for each period of the model. Each sublist consists of the measurement variables of ``fac1`` in the corresponding period. Note that in the example the measurement variables are the same in each period. However, this is extremely rare in actual models. If a measurement measures more than one latent factor, it simply is included in the ``measurements`` list of all factors it measures. As in the Fortran code by CHS it is currently only possible to estimate models with linear measurement system. I plan to add the possibility to incorporate binary variables in a way similar to a probit model but have currently no plans to support arbitrary nonlinear measurement systems.
 
-The value that corresponds to the ``normalizations`` key is a list of lists. It has one sublist for each period of the model. Each sublist has length 2. Its first entry is the name of the measurement whose factor loading is normalized. Its second entry is the value the loading is normalized to.
+The value that corresponds to the ``normalizations`` key is a dictionary in which the normalizations for factor loadings and intercepts are specified. Its values (for each type of normalization) are lits of lists with one sublist per period. Each sublist has length 2. Its first entry is the name of the measurement whose factor loading is normalized. Its second entry is the value the loading is normalized to. For loadings it is typical to normalize to one but in theory any non-zero value is ok. Intercepts are typically normalized to zero. The example model has no normalizations on intercepts and this is ok due to the known location and scale of the CES production function.
 
-.. Note:: Deciding how many factor loadings have to be normalized is not as easy as CHS
-    thought. Their recommendation of normalizing one factor loading per period and factor is only valid for sufficiently flexible transition functions. This was pointed out in a working paper by `Wiswall and Agostinelli <https://dl.dropboxusercontent.com/u/33774399/wiswall_webpage/agostinelli_wiswall_renormalizations.pdf>`_. In particular they show that for the class of transition functions with known (output) location and scale (KLS) it is sufficient to make normalizations in the initial period. The log_CES function used By CHS belongs to this class. I argue that this critique is correct but incomplete as it is also possible that a transition function has a known INPUT location and/or scale. The log_CES function is an example for a function with known input scale. In this case even the initial normalizations are unnecessary and additional parameters would have to be introduced to keep scales flexible in later periods. Having development stages that span more than one period also might reduce the number of normalizations needed. If this issue is sorted out I will write code that helps to find out how many normalizations are needed for a particular model.
+Specifying normalizations is optional. If none are specified, they are generated automatically. The automatic generation takes into account the critique of `Wiswall and Agostinelli <https://dl.dropboxusercontent.com/u/33774399/wiswall_webpage/agostinelli_wiswall_renormalizations.pdf>`_, i.e. uses less normalizations for production functions with known scale and location. Moreover, it uses less normalizations if development stages span more than one period, because the location and scale of the transition function can be identified from the first period of such a long stage and no further normalization is needed.
+
+.. Caution:: If you don't want to use normalizations you have to explicitly specify normalization lists with empty sublists (as in the example model). Simply not specifying normalizations triggers the automatic generation of normalization specifications.
+
+.. Note:: I argue that the Wiswall Agostinelli critique is incomplete as transition function can also have known INPUT locations and/or scales. The log_CES function is an example for a function with known input scale. In this case even the initial normalizations might be unnecessary but I haven't yet tried to show that the restrictions the log_CES function poses on the input scale and location is sufficient for identification. Therefore the automatic generation of normalizations simply treats the log_CES function as a KLS function. I would currently recommend to rather use the translog function that (probably) doesn't have this problem.
 
 .. Note:: The model shown below uses too many normalizations to make the results comparable with the
     parameters from the CHS replication files.
@@ -75,14 +78,14 @@ To see how new types of transition equations can be added see :ref:`model_functi
 The specification for fac2 is very similar and you can look it up in ``src.model_specs``. The specification for fac3 looks a bit different as this factor is only measured in the first period:
 
 .. literalinclude:: test_model2.json
-    :lines: 46-66
+    :lines: 54-77
 
 Here it is important to note that empty sublists have to be added to the ``measurements`` and ``normalizations`` key if no measurements are available in certain periods. Simply leaving the sublists out will result in an error.
 
 Points 4 and 5 are only specified once for all factors by adding entries to the ``time_specific`` key of the model dictionary:
 
 .. literalinclude:: test_model2.json
-    :lines: 68-82
+    :lines: 79-93
 
 The value that corresponds to ``controls`` is a list of lists analogous to the specification of measurements.
 
@@ -91,7 +94,7 @@ The value that corresponds to ``stagemap`` is a list of length nperiods. The t_t
 The anchoring equation is specified as follows:
 
 .. literalinclude:: test_model2.json
-    :lines: 83
+    :lines: 94
 
 Q1 is the anchoring outcome and the list contains all anchored factors. In the example this is just fac1.
 
@@ -117,14 +120,9 @@ Usually a research project comprises the estimation of more than one model and t
     * ``missing_variables``: Takes the values "raise_error" or "drop_variable" and specifies what happens if a variable is not in the dataset or has only missing values. Automatically dropping these variables is handy when the same model is estimated with several similar but not exactly equal datasets.
     * ``controls_with_missings``: Takes the values "raise_error", "drop_variable" or "drop_observations". Recall that measurement variables can have missing observations as long as they are missing at random and at least some observations are not missing. For control variables this is not the case and it is necessary to drop the missing observations or the contol variable.
     * ``variables_without_variance``: takes the same values as ``missing_variables`` and specifies what happens if a measurement or anchoring variable has no variance. Control variables without variance are not dropped as this would drop constants.
-    * ``check_enough_measurements``: takes the value "no_check", "raise_error" or "merge_stages" and specifies if a simple heuristic is used to check if the model has enough measurements to be identified. If set to "merge_stages" the development stages for some factors are merged until the model is identified.
     * ``robust_bounds``: takes the values true or false and refers to the bounds on some parameters during the maximization of the likelihood function. If true the lower bound for estimated variances is not set to zero but to ``bounds_distance``. This improves the stability of the estimator but is usually unnecessary if square-root filters are used.
     * ``bounds_distance``: a small number
-    * ``add_constant``: takes the values true and false. If true a constant is added in all measurement equations where no factor loading is normalized.
-
-    .. Note:: According to CHS constants can and should be estimated in all measurement equations. This is True for transition functions with known location if the start mean of the factors is normalized. For fully flexible transition functions one intercept per period and factor has to be normalized if the start mean of the factors are estimated. If the start means are normalized all intercepts of the initial period can be estimated. I would be happy to discuss this topic if anyone is interested.
-
-    * ``estimate_X_zeros``: takes the values true or false. If true the start mean of the factor distribution is estimated, else it is normalized to zero. If set to false and add_constant is true all measurement equations of the first period get constants. As long as nemf is equal to 1 either way is fine. If nemf > 1 you should set estimate_X_zeros to true.
+    * ``estimate_X_zeros``: takes the values true or false. If true the start mean of the factor distribution is estimated, else it is normalized to zero. This is an alternative normalization of location in the initial period. If set to False you have to specify less normalizations of intercepts that otherwise. The automatic generation of normalizations correctly handles this case. If nemf > 1 you have to set estimate_X_zeros to True.
     * ``order_X_zeros``: Takes an integer value between 0 and nfac - 1.  If ``estimate_X_zeros`` is true and nemf > 1 the model would not be identified without imposing an order on the start means. The value of order_X_zeros determines which factor (in the alphabetically ordered factor list) is used to impose this order.
     * ``restrict_W_zeros``: takes the values true or false. If true the start weights of the mixture distribution is not estimated but set to 1 / nemf for each factor.
     * ``restrict_P_zeros``: takes the values true or false. If true the covariance matrices of all elements in the mixture distribution of the factors is required to be the same. CHS use this because their models with nemf > 1 do not converge otherwise.

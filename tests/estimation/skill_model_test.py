@@ -28,68 +28,64 @@ class TestDeltasRelatedMethods:
         self.periods = [0, 1, 2]
         self.controls = [['c1', 'c2'], ['c1', 'c2', 'c3'], ['c3', 'c4']]
         self.factors = ['f1', 'f2']
-        cols = ['name', 'f1_norm_value', 'f2_norm_value']
+        cols = ['name', 'f1_loading_norm_value', 'f2_loading_norm_value']
         dat = np.zeros((13, 3))
         dat[(0, 6, 11), 1] = 5
         dat[(1, 8, 12), 2] = 3
         df = DataFrame(data=dat, columns=cols)
         df['period'] = [0] * 6 + [1] * 3 + [2] * 4
+        df['has_normalized_intercept'] = [
+            True, False, False, True, False, False, True, True, False, True,
+            False, False, False]
+        df['intercept_norm_value'] = [
+            3, np.nan, np.nan, 4, np.nan, np.nan, 5, 6, np.nan, 7, np.nan,
+            np.nan, np.nan]
+
         df['name'] = ['m{}'.format(number) for number in range(13)]
         df.set_index(['period', 'name'], inplace=True)
         self.update_info = df
 
-    def test_initial_deltas_without_adding_constants(self):
-        self.add_constant = False
-        expected = [np.zeros((6, 2)), np.zeros((3, 3)), np.zeros((4, 2))]
+    def test_initial_deltas_without_controls_besides_constant(self):
+        self.controls = [[], [], []]
+        exp1 = np.array([[3], [0], [0], [4], [0], [0]])
+        exp2 = np.array([[5], [6], [0]])
+        exp3 = np.array([[7], [0], [0], [0]])
+        expected = [exp1, exp2, exp3]
         calculated = smo._initial_deltas(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
-    def test_initial_deltas_with_adding_constants(self):
-        self.add_constant = True
-        expected = [np.zeros((6, 3)), np.zeros((3, 4)), np.zeros((4, 3))]
+    def test_initial_deltas_with_controls_and_constants(self):
+        exp1 = np.array([[3, 0, 0], [0, 0, 0], [0, 0, 0], [4, 0, 0], [0, 0, 0], [0, 0, 0]])
+        exp2 = np.array([[5, 0, 0, 0], [6, 0, 0, 0], [0, 0, 0, 0]])
+        exp3 = np.array([[7, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]])
+        expected = [exp1, exp2, exp3]
+
         calculated = smo._initial_deltas(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
-    def test_deltas_bool_without_adding_constants(self):
-        self.add_constant = False
-        self.estimate_X_zeros = True
-        expected = [np.ones((6, 2), dtype=bool), np.ones((3, 3), dtype=bool),
-                    np.ones((4, 2), dtype=bool)]
+    def test_deltas_bool_without_controls_besides_constants(self):
+        exp1 = np.array([False, True, True, False, True, True]).reshape(6, 1)
+        exp2 = np.array([False, False, True]).reshape(3, 1)
+        exp3 = np.array([False, True, True, True]).reshape(4, 1)
+        expected = [exp1, exp2, exp3]
+        self.controls = [[], [], []]
 
         calculated = smo._deltas_bool(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
-    def test_deltas_bool_with_adding_constants_estimating_X_zero(self):
-        self.add_constant = True
-        self.estimate_X_zeros = True
-        arr0 = np.ones((6, 3), dtype=bool)
-        arr0[(0, 1), 0] = False
+    def test_deltas_bool_with_controls_and_constant(self):
+        exp1 = np.ones((6, 3), dtype=bool)
+        exp1[(0, 3), 0] = False
 
-        arr1 = np.ones((3, 4), dtype=bool)
-        arr1[(0, 2), 0] = False
+        exp2 = np.ones((3, 4), dtype=bool)
+        exp2[(0, 1), 0] = False
 
-        arr2 = np.ones((4, 3), dtype=bool)
-        arr2[(2, 3), 0] = False
-        expected = [arr0, arr1, arr2]
-
-        calculated = smo._deltas_bool(self)
-        for calc, ex in zip(calculated, expected):
-            aae(calc, ex)
-
-    def test_deltas_bool_with_adding_constants_not_estimating_X_zero(self):
-        self.add_constant = True
-        self.estimate_X_zeros = False
-        arr0 = np.ones((6, 3), dtype=bool)
-
-        arr1 = np.ones((3, 4), dtype=bool)
-        arr1[(0, 2), 0] = False
-
-        arr2 = np.ones((4, 3), dtype=bool)
-        arr2[(2, 3), 0] = False
-        expected = [arr0, arr1, arr2]
+        exp3 = np.ones((4, 3), dtype=bool)
+        exp3[0, 0] = False
+        expected = [exp1, exp2, exp3]
 
         calculated = smo._deltas_bool(self)
         for calc, ex in zip(calculated, expected):
@@ -105,34 +101,32 @@ class TestDeltasRelatedMethods:
         self._general_params_slice.assert_has_calls(
             [call(8), call(12), call(8)])
 
-    def test_deltas_names_without_constant(self):
-        self.add_constant = False
-        d_boo = [np.ones((6, 2), dtype=bool), np.ones((3, 3), dtype=bool),
-                 np.ones((4, 2), dtype=bool)]
+    def test_deltas_names_without_controls_beside_constant(self):
+        self.controls = [[], [], []]
+        d_boo = [np.ones((6, 1), dtype=bool), np.ones((3, 1), dtype=bool),
+                 np.ones((4, 1), dtype=bool)]
         self._deltas_bool = Mock(return_value=d_boo)
         fs = 'delta__{}__{}__{}'
         expected_names = \
-            [fs.format(0, 'm0', 'c1'), fs.format(0, 'm0', 'c2'),
-             fs.format(0, 'm1', 'c1'), fs.format(0, 'm1', 'c2'),
-             fs.format(0, 'm2', 'c1'), fs.format(0, 'm2', 'c2'),
-             fs.format(0, 'm3', 'c1'), fs.format(0, 'm3', 'c2'),
-             fs.format(0, 'm4', 'c1'), fs.format(0, 'm4', 'c2'),
-             fs.format(0, 'm5', 'c1'), fs.format(0, 'm5', 'c2'),
-             fs.format(1, 'm6', 'c1'), fs.format(1, 'm6', 'c2'),
-             fs.format(1, 'm6', 'c3'),
-             fs.format(1, 'm7', 'c1'), fs.format(1, 'm7', 'c2'),
-             fs.format(1, 'm7', 'c3'),
-             fs.format(1, 'm8', 'c1'), fs.format(1, 'm8', 'c2'),
-             fs.format(1, 'm8', 'c3'),
-             fs.format(2, 'm9', 'c3'), fs.format(2, 'm9', 'c4'),
-             fs.format(2, 'm10', 'c3'), fs.format(2, 'm10', 'c4'),
-             fs.format(2, 'm11', 'c3'), fs.format(2, 'm11', 'c4'),
-             fs.format(2, 'm12', 'c3'), fs.format(2, 'm12', 'c4')]
+            expected_names = \
+            [fs.format(0, 'm0', 'constant'),
+             fs.format(0, 'm1', 'constant'),
+             fs.format(0, 'm2', 'constant'),
+             fs.format(0, 'm3', 'constant'),
+             fs.format(0, 'm4', 'constant'),
+             fs.format(0, 'm5', 'constant'),
+             fs.format(1, 'm6', 'constant'),
+             fs.format(1, 'm7', 'constant'),
+             fs.format(1, 'm8', 'constant'),
+             fs.format(2, 'm9', 'constant'),
+             fs.format(2, 'm10', 'constant'),
+             fs.format(2, 'm11', 'constant'),
+             fs.format(2, 'm12', 'constant')]
 
         assert_equal(smo._deltas_names(self, params_type='short'),
                      expected_names)
 
-    def test_deltas_names_with_constant(self):
+    def test_deltas_names_with_controls_and_constant(self):
         self.add_constant = True
 
         d_boo = [np.ones((6, 2), dtype=bool), np.ones((3, 3), dtype=bool),
@@ -228,7 +222,7 @@ class TestTauRelatedMethods:
 class TestHRelatedMethods:
     def setup(self):
         self.factors = ['f1', 'f2']
-        cols = self.factors + ['f1_norm_value', 'f2_norm_value']
+        cols = self.factors + ['f1_loading_norm_value', 'f2_loading_norm_value']
         self.nfac = 2
         dat = np.zeros((20, 4))
         dat[(0, 1, 6, 8, 11, 16, 18), 0] = 1

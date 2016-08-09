@@ -2,6 +2,7 @@ from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 from skillmodels.pre_processing.data_processor import DataProcessor
 from skillmodels.estimation.likelihood_function import \
     log_likelihood_per_individual
+from skillmodels.estimation.wa_functions import loadings_from_covs
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
 from skillmodels.estimation.skill_model_results import SkillModelResults
@@ -36,21 +37,18 @@ class SkillModel(GenericLikelihoodModel):
     def __init__(
             self, model_name, dataset_name, model_dict, dataset, estimator):
         """Initialize the CHSModel class and set attributes."""
+        self.estimator = estimator
         specs = ModelSpecProcessor(
-            model_name, dataset_name, model_dict, dataset)
+            model_name, dataset_name, model_dict, dataset, estimator)
         self.__dict__.update(specs.public_attribute_dict())
 
-        data = DataProcessor(model_name, dataset_name, model_dict, dataset)
-        self.c_data = data.c_data()
+        data = DataProcessor(
+            model_name, dataset_name, model_dict, dataset, estimator)
+
+        self.c_data = data.c_data() if self.estimator == 'chs' else None
         self.y_data = data.y_data()
 
-        self.estimator = estimator
-        if self.estimator != 'chs':
-            raise NotImplementedError(
-                'Currently only the CHS estimator is implemented.')
-
         self.update_info = specs.update_info()
-        self.enough_measurements_array = specs.enough_measurements_array()
         self.new_trans_coeffs = specs.new_trans_coeffs()
 
         # create a list of all quantities that depend from params vector
@@ -97,8 +95,10 @@ class SkillModel(GenericLikelihoodModel):
         deltas = []
         for t in self.periods:
             length = len(self.update_info.loc[t])
-            width = len(self.controls[t]) + self.add_constant
-            deltas.append(np.zeros((length, width)))
+            width = len(self.controls[t]) + 1
+            init = np.zeros((length, width))
+            init[:, 0] = self.update_info.loc[t]['intercept_norm_value'].fillna(0)
+            deltas.append(init)
         return deltas
 
     def _deltas_bool(self):
@@ -110,16 +110,12 @@ class SkillModel(GenericLikelihoodModel):
 
         """
         deltas_bool = []
-        norm_columns = ['{}_norm_value'.format(f) for f in self.factors]
-        df = self.update_info[norm_columns].copy(deep=True)
         for t in self.periods:
             length = len(self.update_info.loc[t])
-            width = len(self.controls[t]) + self.add_constant
-            has_normalized = df.loc[t].sum(axis=1).astype(bool).astype(int)
+            width = len(self.controls[t]) + 1
+            has_normalized = self.update_info.loc[t]['has_normalized_intercept'].astype(int)
             boo = np.ones((length, width))
-            if self.estimate_X_zeros is True or t >= 1:
-                if self.add_constant is True:
-                    boo[:, 0] -= has_normalized
+            boo[:, 0] -= has_normalized
             deltas_bool.append(boo.astype(bool))
         return deltas_bool
 
@@ -142,9 +138,9 @@ class SkillModel(GenericLikelihoodModel):
         deltas_bool = self._deltas_bool()
         deltas_names = []
         for t in self.periods:
-            update_names = list(self.update_info.loc[t].index)
-            for u, update in enumerate(update_names):
-                if self.add_constant is True and deltas_bool[t][u, 0] == True:
+            updates = list(self.update_info.loc[t].index)
+            for u, update in enumerate(updates):
+                if deltas_bool[t][u, 0] == True:
                     constant_list = ['constant']
                 else:
                     constant_list = []
@@ -230,7 +226,7 @@ class SkillModel(GenericLikelihoodModel):
         u is normalized to some value then arr[u, f] is equal to this value.
 
         """
-        column_list = ['{}_norm_value'.format(f) for f in self.factors]
+        column_list = ['{}_loading_norm_value'.format(f) for f in self.factors]
         df = self.update_info[column_list]
         return df.values
 
@@ -1042,6 +1038,25 @@ class SkillModel(GenericLikelihoodModel):
 
         chsmlefit = SkillModelResults(self, mlefit, optimize_dict)
         return chsmlefit
+
+    def fit_wa(self):
+        # *********************************************************************
+        # ****************************** Step 0 *******************************
+        # *********************************************************************
+
+        # estimate initial_factor_loadings and intercepts
+        # H_list = []
+        # intercept_list = []
+        # for factor in self.factors:
+        #     meas_list = self.measurements[factor][0]
+        #     data = self.y_data[0][meas_list]
+        #     norminfo = self.normalizations[factor][0]
+        #     H_list += loadings_from_covs(data, norminfo)
+        #     if self.estimate_X_zeros is False:
+        #         intercept_list += list(data.mean())
+        #     else:
+        # return H_list, intercept_list
+        pass
 
     def score(self, params, args):
         return approx_fprime(
