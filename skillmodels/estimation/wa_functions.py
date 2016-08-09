@@ -3,78 +3,74 @@
 import numpy as np
 
 
-def loadings_from_covs(data, normalization):
-    """Factor loadings of measurements of one factor in one period.
+def loadings_from_covs(data, normalization, storage_df):
+    """Factor loadings of measurements of one factor in the first.
 
-    Calculate the factor loadings of all measurements of one factor in one
-    period as average of ratios of covariances. For this to be possible, at
-    least three  measurement variables have to be available in the dataset.
+    Calculate the factor loadings of all measurements of one factor in the
+    first period as average of ratios of covariances. For this to be possible,
+    at least three  measurement variables have to be available in the dataset.
+    The result is stored in storage_df
 
     Args:
         data (DataFrame): pandas DataFrame with the measurement data for one
             factor in one period.
         normalization (list): The first value is the name of a normalized
             measurement, the second is the value it is normalized to.
-
-    Returns:
-        list of factor loadings in the order of measurements in the dataset.
+        storage_df (DataFrame): DataFrame in which the results are stored
 
     """
+    t = 0
     measurements = list(data.columns)
     nmeas = len(measurements)
     assert nmeas >= 3, (
         'For covariance based factor loading estimation 3 or more '
         'measurements are needed.')
 
-    correct_length = len(normalization) == 2
-    correct_types = type(normalization[0] == str) and \
-        type(normalization[1]) in (int, float)
-
-    assert correct_length and correct_types, (
-        'A valid normalization is a list of length two, the first entry is a '
-        'string and the second entry is a number.')
-
     cov = data.cov()
     load_norm, load_norm_val = normalization
 
-    loadings = []
-    long_loadings = []
-
     for m in measurements:
-        if m == load_norm:
-            long_loadings.append(load_norm_val)
-        else:
+        if m != load_norm:
             estimates = []
             for m_prime in measurements:
                 if m_prime not in [m, load_norm]:
                     nominator = cov.loc[m, m_prime]
                     denominator = load_norm_val * cov.loc[load_norm, m_prime]
                     estimates.append(nominator / denominator)
-            loadings.append(np.mean(estimates))
-            long_loadings.append(np.meant(estimates))
-
-    return loadings, long_loadings
+            storage_df.loc[(t, m), 'loadings'] = np.mean(estimates)
 
 
-def intercepts_from_means(data, loadings, normalization=None):
-    if normalization is None:
-        intercept_list = list(data.mean())
+def intercepts_from_means(data, normalization, storage_df, mean_list):
+    """Calculate intercepts and factor means for 1 factor in the first period.
+
+    If the normalization list is not empty, it is assumed that the factor
+    mean is not normalized and has to be estimated. In this case, the factor
+    mean is calculated first and appended to the mean_list. Later the
+    non-normalized intercepts are calculated and stored in storage_df.
+
+    Args:
+        data (DataFrame): pandas DataFrame with the measurement data for one
+            factor in one period.
+        normalization (list): The first value is the name of a normalized
+            measurement, the second is the value it is normalized to.
+        storage_df (DataFrame): DataFrame in which the results are stored
+        mean_list (list): a list to which the estimated mean is appended
+
+    """
+    t = 0
+    measurements = list(data.columns)
+    if len(normalization) == 0:
+        for meas in measurements:
+            storage_df.loc[(t, meas), 'intercepts'] = data[meas].mean()
     else:
-        intercept_list = []
         intercept_norm, intercept_norm_val = normalization
-        measurements = data.columns
-        for m, meas in enumerate(measurements):
-            if meas == intercept_norm:
-                intercept_norm_loading = loadings[m]
-
+        loading = storage_df.loc[(t, intercept_norm), 'loadings']
         estimated_factor_mean = \
-            (data[intercept_norm].mean() - intercept_norm_val) \
-            / intercept_norm_loading
+            (data[intercept_norm].mean() - intercept_norm_val) / loading
+        mean_list.append(estimated_factor_mean)
 
         for m, meas in enumerate(measurements):
             if meas != intercept_norm:
-                mu = data[meas].mean() - loadings[m] * estimated_factor_mean
-                intercept_list.append(mu)
-
-    return intercept_list
-
+                loading = storage_df.loc[(t, meas), 'loadings']
+                storage_df.loc[(t, meas), 'intercepts'] = \
+                    data[meas].mean() - loading * estimated_factor_mean

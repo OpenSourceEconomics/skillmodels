@@ -2,7 +2,7 @@ from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 from skillmodels.pre_processing.data_processor import DataProcessor
 from skillmodels.estimation.likelihood_function import \
     log_likelihood_per_individual
-from skillmodels.estimation.wa_functions import loadings_from_covs
+from skillmodels.estimation.wa_functions import loadings_from_covs, intercepts_from_means # noqa
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
 from skillmodels.estimation.skill_model_results import SkillModelResults
@@ -1040,23 +1040,43 @@ class SkillModel(GenericLikelihoodModel):
         return chsmlefit
 
     def fit_wa(self):
+
+        # *********************************************************************
+        # *************************** preparations ****************************
+        # *********************************************************************
+        # prepare a DataFrame in which the parameter estimates can be stored
+        df = self.update_info.copy(deep=True)
+        norm_cols = ['{}_loading_norm_value'.format(f) for f in self.factors]
+        # storage column for factor loadings, initialized with zeros for un-
+        # normalized loadings and the norm_value for normalized loadings
+        df['loadings'] = df[norm_cols].sum(axis=1)
+        # storage column for intercepts, initialized with zeros for un-
+        # normalized intercepts and the norm_value for normalized intercepts.
+        df['intercepts'] = df['intercept_norm_value'].fillna(0)
+
+        relevant_columns = \
+            ['has_normalized_intercept', 'has_normalized_loading',
+             'loadings', 'intercepts']
+        storage_df = df[relevant_columns].copy(deep=True)
+
         # *********************************************************************
         # ****************************** Step 0 *******************************
         # *********************************************************************
 
         # estimate initial_factor_loadings and intercepts
-        # H_list = []
-        # intercept_list = []
-        # for factor in self.factors:
-        #     meas_list = self.measurements[factor][0]
-        #     data = self.y_data[0][meas_list]
-        #     norminfo = self.normalizations[factor][0]
-        #     H_list += loadings_from_covs(data, norminfo)
-        #     if self.estimate_X_zeros is False:
-        #         intercept_list += list(data.mean())
-        #     else:
-        # return H_list, intercept_list
-        pass
+        X_zero = [] if self.estimate_X_zeros is True else None
+
+        for f, factor in enumerate(self.factors):
+            meas_list = self.measurements[factor][0]
+            data = self.y_data[0][meas_list]
+            norminfo_load = self.normalizations[factor]['loadings'][0]
+            loadings_from_covs(data, norminfo_load, storage_df)
+            norminfo_intercept = self.normalizations[factor]['intercepts'][0]
+            intercepts_from_means(data, norminfo_intercept, storage_df, X_zero)
+        if self.estimate_X_zeros is True:
+            X_zero = np.array(X_zero)
+
+        return storage_df, X_zero
 
     def score(self, params, args):
         return approx_fprime(

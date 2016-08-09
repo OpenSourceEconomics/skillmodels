@@ -126,7 +126,7 @@ class ModelSpecProcessor:
                 self.model_name)
 
         if self.estimator == 'wa':
-            assert self.stagemap == list(self.periods), (
+            assert list(self.stagemap)[:-1] == list(self.periods)[:-1], (
                 'For the WA estimator stages cannot span more than 1 period.')
 
         for factor in self.factors:
