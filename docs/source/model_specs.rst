@@ -87,7 +87,7 @@ Points 4 and 5 are only specified once for all factors by adding entries to the 
 .. literalinclude:: test_model2.json
     :lines: 79-93
 
-The value that corresponds to ``controls`` is a list of lists analogous to the specification of measurements.
+The value that corresponds to ``controls`` is a list of lists analogous to the specification of measurements. Note that the constat variable ``x2`` is not specified here as constants are added automatically in each measurement equation without normalized intercept.
 
 The value that corresponds to ``stagemap`` is a list of length nperiods. The t_th entry indicates to which stage period t belongs. In the example it is just a list of zeros. (stages have to be numbered starting with zeros and incrementing in steps of one.)
 
