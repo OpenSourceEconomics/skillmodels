@@ -2,7 +2,8 @@ from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 from skillmodels.pre_processing.data_processor import DataProcessor
 from skillmodels.estimation.likelihood_function import \
     log_likelihood_per_individual
-from skillmodels.estimation.wa_functions import loadings_from_covs, intercepts_from_means # noqa
+from skillmodels.estimation.wa_functions import loadings_from_covs, \
+    intercepts_from_means, initial_cov_matrix
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
 from skillmodels.estimation.skill_model_results import SkillModelResults
@@ -1076,7 +1077,16 @@ class SkillModel(GenericLikelihoodModel):
         if self.estimate_X_zeros is True:
             X_zero = np.array(X_zero)
 
-        return storage_df, X_zero
+        # estimate entries of P_zero (the initial cov matrix)
+        measurements = {}
+        for factor in self.factors:
+            measurements[factor] = self.measurements[factor][0]
+
+        P_zero_params = initial_cov_matrix(
+            data=self.y_data[0], storage_df=storage_df,
+            measurements_per_factor=measurements)
+
+        return storage_df, X_zero, P_zero_params
 
     def score(self, params, args):
         return approx_fprime(

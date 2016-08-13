@@ -74,3 +74,38 @@ def intercepts_from_means(data, normalization, storage_df, mean_list):
                 loading = storage_df.loc[(t, meas), 'loadings']
                 storage_df.loc[(t, meas), 'intercepts'] = \
                     data[meas].mean() - loading * estimated_factor_mean
+
+
+def initial_cov_matrix(data, storage_df, measurements_per_factor):
+    meas_cov = data.cov()
+    factor_covs = []
+
+    loadings = storage_df.loc[0, 'loadings']
+    scaled_meas_cov = meas_cov.divide(
+        loadings, axis=0).divide(loadings, axis=1)
+
+    for i in scaled_meas_cov.index:
+        scaled_meas_cov.loc[i, i] = np.nan
+
+    factors = sorted(list(measurements_per_factor.keys()))
+
+    for f1, factor1 in enumerate(factors):
+        measurements1 = measurements_per_factor[factor1]
+        for f2, factor2 in enumerate(factors):
+            measurements2 = measurements_per_factor[factor2]
+            if f2 >= f1:
+                relevant = scaled_meas_cov.loc[measurements1, measurements2]
+                factor_covs.append(relevant.mean().mean())
+
+    return np.array(factor_covs)
+
+
+
+
+
+
+
+
+
+
+
