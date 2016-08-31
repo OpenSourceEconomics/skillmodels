@@ -3,7 +3,7 @@ from skillmodels.pre_processing.data_processor import DataProcessor
 from skillmodels.estimation.likelihood_function import \
     log_likelihood_per_individual
 from skillmodels.estimation.wa_functions import loadings_from_covs, \
-    intercepts_from_means, initial_cov_matrix
+    intercepts_from_means, initial_cov_matrix, residual_measurements
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
 from skillmodels.estimation.skill_model_results import SkillModelResults
@@ -1086,7 +1086,11 @@ class SkillModel(GenericLikelihoodModel):
             data=self.y_data[0], storage_df=storage_df,
             measurements_per_factor=measurements)
 
-        return storage_df, X_zero, P_zero_params
+        residual_df = residual_measurements(
+            data=self.y_data[0], loadings=storage_df.loc[0, 'loadings'],
+            intercepts=storage_df.loc[0, 'intercepts'])
+
+        return storage_df, X_zero, P_zero_params, residual_df
 
     def score(self, params, args):
         return approx_fprime(

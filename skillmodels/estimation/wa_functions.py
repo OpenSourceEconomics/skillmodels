@@ -34,8 +34,8 @@ def loadings_from_covs(data, normalization, storage_df):
             estimates = []
             for m_prime in measurements:
                 if m_prime not in [m, load_norm]:
-                    nominator = cov.loc[m, m_prime]
-                    denominator = load_norm_val * cov.loc[load_norm, m_prime]
+                    nominator = load_norm_val * cov.loc[m, m_prime]
+                    denominator = cov.loc[load_norm, m_prime]
                     estimates.append(nominator / denominator)
             storage_df.loc[(t, m), 'loadings'] = np.mean(estimates)
 
@@ -77,6 +77,7 @@ def intercepts_from_means(data, normalization, storage_df, mean_list):
 
 
 def initial_cov_matrix(data, storage_df, measurements_per_factor):
+    """Estimate initial cov matrix of factors from covs of measurements."""
     meas_cov = data.cov()
     factor_covs = []
 
@@ -84,6 +85,7 @@ def initial_cov_matrix(data, storage_df, measurements_per_factor):
     scaled_meas_cov = meas_cov.divide(
         loadings, axis=0).divide(loadings, axis=1)
 
+    # set diagonal elements to NaN
     for i in scaled_meas_cov.index:
         scaled_meas_cov.loc[i, i] = np.nan
 
@@ -98,6 +100,11 @@ def initial_cov_matrix(data, storage_df, measurements_per_factor):
                 factor_covs.append(relevant.mean().mean())
 
     return np.array(factor_covs)
+
+
+def residual_measurements(data, loadings, intercepts):
+    return (data - intercepts) / loadings
+
 
 
 
