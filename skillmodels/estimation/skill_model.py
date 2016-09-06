@@ -3,7 +3,8 @@ from skillmodels.pre_processing.data_processor import DataProcessor
 from skillmodels.estimation.likelihood_function import \
     log_likelihood_per_individual
 from skillmodels.estimation.wa_functions import loadings_from_covs, \
-    intercepts_from_means, initial_cov_matrix, residual_measurements
+    intercepts_from_means, initial_cov_matrix, residual_measurements, \
+    iv_reg
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
 from skillmodels.estimation.skill_model_results import SkillModelResults
@@ -13,6 +14,8 @@ import skillmodels.estimation.parse_params as pp
 from itertools import product
 from scipy.optimize import minimize
 from statsmodels.tools.numdiff import approx_hess, approx_fprime
+from patsy import dmatrix
+import pandas as pd
 
 
 class SkillModel(GenericLikelihoodModel):
@@ -1040,6 +1043,51 @@ class SkillModel(GenericLikelihoodModel):
         chsmlefit = SkillModelResults(self, mlefit, optimize_dict)
         return chsmlefit
 
+    def meas_lists_for_iv_equations(self, t, factor, suffix=''):
+        suffix = '_' + suffix if suffix != '' else suffix
+
+        f = self.factors.index(factor)
+        inc_facs = self.included_factors[f]
+        meas_lists = []
+        for inc in inc_facs:
+            trans_name = self.transition_names[self.factors.index(inc)]
+            if trans_name == 'constant' and t > 0:
+                form_string = '{}_copied' + suffix
+            else:
+                form_string = '{}' + suffix
+
+            meas_lists.append(
+                [form_string.format(m) for m in self.measurements[inc][0]])
+        return meas_lists
+
+    def iv_equation_variable_lists(self):
+        x_list = [[] for t in self.periods[:-1]]
+        z_list = [[[] for f in self.factors] for t in self.periods[:-1]]
+
+        for t in self.periods[:-1]:
+            for f, factor in enumerate(self.factors):
+                meas_lists_for_x = self.meas_lists_for_iv_equations(
+                    t, factor, suffix='resid')
+                x_list[t].append(list(map(list, product(*meas_lists_for_x))))
+
+                for x in x_list[t][f]:
+                    z = []
+                    for sublist in meas_lists_for_x:
+                        z.append([m[:-6] for m in sublist if m not in x])
+                    z_list[t][f].append(z)
+
+        return x_list, z_list
+
+    def number_of_iv_parameters(self, factor):
+        f = self.factors.index(factor)
+        trans_name = self.transition_names[f]
+        x_list, z_list = self.iv_equation_variable_lists()
+        example_x = x_list[0][f][0]
+        example_z = z_list[0][f][0]
+        x_formula, _ = getattr(tf, 'iv_formula_{}'.format(trans_name))(
+            example_x, example_z)
+        return x_formula.count('+') + 1
+
     def fit_wa(self):
 
         # *********************************************************************
@@ -1089,6 +1137,81 @@ class SkillModel(GenericLikelihoodModel):
         residual_df = residual_measurements(
             data=self.y_data[0], loadings=storage_df.loc[0, 'loadings'],
             intercepts=storage_df.loc[0, 'intercepts'])
+
+        x_list, z_list = self.iv_equation_variable_lists()
+
+        for t in self.periods[:-1]:
+            z_data = self.y_data[t].copy()
+            z_data['constant'] = 1
+
+            initial_meas = []
+            for f, factor in enumerate(self.factors):
+                if self.transition_names[f] == 'constant':
+                    initial_meas += self.measurements[factor][0]
+
+            loadings_of_constant_factors = \
+                storage_df.loc[0, 'loadings'].loc[initial_meas]
+
+            intercepts_of_constant_factors = \
+                storage_df.loc[0, 'intercepts'].loc[initial_meas]
+
+            loadings_of_constant_factors.index = [
+                '{}_copied'.format(m) for m in loadings_of_constant_factors.index]
+            intercepts_of_constant_factors.index = [
+                '{}_copied'.format(m) for m in intercepts_of_constant_factors.index]
+
+            loadings = storage_df.loc[t, 'loadings'].append(
+                loadings_of_constant_factors)
+
+            intercepts = storage_df.loc[t, 'intercepts'].append(
+                intercepts_of_constant_factors)
+
+            x_data = residual_measurements(
+                self.y_data[t], loadings=loadings, intercepts=intercepts)
+            x_data['constant'] = 1
+
+            for f, factor in enumerate(self.factors):
+                # ========================================
+                # generate a DataFrame to store the deltas
+                # ========================================
+                trans_name = self.transition_names[f]
+                if trans_name != 'constant':
+                    depvar_list = self.measurements[factor][t + 1]
+                    nr_deltas = self.number_of_iv_parameters(factor)
+                    columns = ['delta_{}'.format(i) for i in range(nr_deltas)]
+                    index_tuples = []
+                    for y, i in product(depvar_list, range(len(x_list[t][f]))):
+                        index_tuples.append((y, i))
+                    index = pd.MultiIndex.from_tuples(index_tuples)
+                    df = pd.DataFrame(data=0.0, index=index, columns=columns)
+
+                    # =========================================
+                    # calculate the deltas and store them in df
+                    # =========================================
+                    # all deltas on this level have the same gammas
+                    for y_name in depvar_list:
+                        y = self.y_data[t + 1][y_name].values
+                        # all deltas on this level have the same mü and lambda
+                        # mü and/or lambda might be normalized
+                        for (k, x_names), z_names in zip(
+                                enumerate(x_list[t][f]), z_list[t][f]):
+                            x_formula, z_formula = getattr(
+                                tf, 'iv_formula_{}'.format(trans_name))(
+                                x_names, z_names)
+                            x = dmatrix(x_formula, data=x_data,
+                                        return_type='dataframe').values
+                            z = dmatrix(z_formula, data=z_data,
+                                        return_type='dataframe').values
+                            deltas = iv_reg(y, x, z)
+                            df.loc[(y_name, k)] = deltas
+
+                    meas_coeffs, gammas = getattr(
+                        tf, 'model_coeffs_from_iv_coeffs_{}'.format(trans_name))(
+                            df, self.normalizations[factor]['loadings'][t + 1],
+                            self.normalizations[factor]['intercepts'][t + 1])
+                    meas_coeffs.index = pd.MultiIndex.from_tuples(
+                        [(t + 1, meas) for meas in meas_coeffs.index])
+                    storage_df.update(meas_coeffs)
 
         return storage_df, X_zero, P_zero_params, residual_df
 

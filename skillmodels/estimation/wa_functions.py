@@ -103,8 +103,52 @@ def initial_cov_matrix(data, storage_df, measurements_per_factor):
 
 
 def residual_measurements(data, loadings, intercepts):
-    return (data - intercepts) / loadings
+    df = (data - intercepts) / loadings
+    df.columns = ['{}_resid'.format(col) for col in df.columns]
+    return df
 
+
+def iv_reg(y, x, z, fit_method='2sls'):
+    """Estimate a linear-in-parameters instrumental variable equation via GMM.
+
+    args:
+        y (np.ndarray): array of length n, dependent variable.
+        x (np.ndarray): array of shape [n, k], original explanatory variables
+        z (np.ndarray): array of shape [n, >=k], the instruments. Instruments
+            have to include exogenous variables that are already in x.
+        fit_method (str): takes the values `2sls' or `optimal'. `Optimal' is
+            computationally  expensive but uses a more efficient weight matrix.
+            The default is `2sls'.
+
+    returns:
+        beta (np.ndarray): array of length k with the estimated parameters
+
+    All input arrays must not contain NaNs and constants must be included
+    explicitly in x and z.
+
+    """
+    nobs, k_prime = z.shape
+    w = np.linalg.pinv(np.dot(z.T, z) / nobs)
+    beta = _iv_math(y, x, z, w)
+
+    if fit_method == 'optimal':
+        u_squared = (y - np.dot(x, beta)) ** 2
+        outerprod = z.reshape(nobs, 1, k_prime) * z.reshape(nobs, k_prime, 1)
+        s = (u_squared.reshape(nobs, 1, 1) * outerprod).sum(axis=0) / nobs
+        w = np.linalg.pinv(s)
+        beta = _iv_math(y, x, z, w)
+
+    return beta
+
+
+def _iv_math(y, x, z, w):
+    xTz = x.T.dot(z)
+    helper = xTz.dot(w)
+    inverse_part = np.linalg.pinv(np.dot(helper, xTz.T))
+    y_part = helper.dot(z.T.dot(y))
+    beta = inverse_part.dot(y_part)
+
+    return beta
 
 
 

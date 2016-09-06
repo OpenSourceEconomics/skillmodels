@@ -18,6 +18,9 @@ class DataProcessor:
         self.nupdates = specs.nupdates
         self.nobs = specs.nobs
         self.update_info = specs.update_info()
+        self.transition_names = specs.transition_names
+        self.measurements = specs.measurements
+        self.factors = specs.factors
 
     def c_data_chs(self):
         """A List of 2d arrays with control variables for each period.
@@ -59,7 +62,16 @@ class DataProcessor:
         df_list = []
         for t in self.periods:
             measurements = list(self.update_info.loc[t].index)
-            df_list.append(self.data[self.data['period'] == t][measurements])
+            df = self.data[self.data['period'] == t][measurements]
+
+            if t > 0:
+                for f, factor in enumerate(self.factors):
+                    if self.transition_names[f] == 'constant':
+                        initial_meas = self.measurements[factor][0]
+                        df[['{}_copied'.format(m) for m in initial_meas]] = \
+                            df_list[0][initial_meas]
+
+            df_list.append(df)
         return df_list
 
     def y_data(self):

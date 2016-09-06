@@ -323,6 +323,25 @@ class ModelSpecProcessor:
                        self._has_variance(m, t))]
             measurements[factor].append(present)
 
+        for f, factor in enumerate(self.factors):
+            if self.transition_names[f] == 'constant':
+                for t in self.periods[1:]:
+                    assert len(measurements[factor][t]) == 0, (
+                        'In model {} factor {} has a constant transition '
+                        'equation. Therefore it can only have measurements '
+                        'in the initial period. However, you specified measure'
+                        'ments in period {}.'.format(
+                            self.model_name, factor, t))
+
+            elif self.estimator == 'WA':
+                for t in self.periods:
+                    assert len(measurements[factor][t]) >= 2, (
+                        'In model {} factor {} has a non-constant transition '
+                        'equation. Therefore it must have at least two '
+                        'measurements in every period. However, this is '
+                        'not the case in period {}'.format(
+                            self.model_name, factor, t))
+
         self.measurements = measurements
 
     def _clean_controls_specification(self):

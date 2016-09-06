@@ -1,0 +1,85 @@
+{
+    "factor_specific":
+    {
+        "fac1":
+        {
+            "measurements":
+                [
+                    ["y1", "y2", "y3"],
+                    ["y1", "y2", "y3"],
+                    ["y1", "y2", "y3"],
+                    ["y1", "y2", "y3"],
+                    ["y1", "y2", "y3"],
+                    ["y1", "y2", "y3"],
+                    ["y1", "y2", "y3"],
+                    ["y1", "y2", "y3"]
+                ],
+            "normalizations":
+                {
+                    "loadings": [["y1", 0.5], ["y1", 1.4], ["y1", 2.0], ["y1", 2.6],
+                               ["y1", 3.2], ["y1", 3.8], ["y1", 4.4], ["y1", 5.0]],
+                    "intercepts": [["y1", 0.05], ["y1", 0.95], ["y1", 1.55], ["y1", 2.15],
+                               ["y1", 2.75], ["y1", 3.35], ["y1", 3.95], ["y1", 4.55]]
+                },
+            "trans_eq":
+                {
+                    "name": "no_squares_translog",
+                    "included_factors": ["fac1", "fac2", "fac3"]
+                }
+        },
+        "fac2":
+        {
+            "measurements":
+                [
+                    ["y4", "y5", "y6"],
+                    ["y4", "y5", "y6"],
+                    ["y4", "y5", "y6"],
+                    ["y4", "y5", "y6"],
+                    ["y4", "y5", "y6"],
+                    ["y4", "y5", "y6"],
+                    ["y4", "y5", "y6"],
+                    ["y4", "y5", "y6"]
+                ],
+            "normalizations":
+                {
+                    "loadings": [["y4", 0.8], ["y4", 1.7], ["y4", 2.3], ["y4", 2.9],
+                               ["y4", 3.5], ["y4", 4.1], ["y4", 4.7], ["y4", 5.3]],
+                    "intercepts": [["y4", 0.35], ["y4", 1.25], ["y4", 1.85], ["y4", 2.45],
+                               ["y4", 3.05], ["y4", 3.65], ["y4", 4.25], ["y4", 4.85]]
+                },
+            "trans_eq":
+                {
+                    "name": "no_squares_translog",
+                    "included_factors": ["fac2", "fac3"]
+                }
+        },
+        "fac3":
+        {
+            "measurements":
+                [
+                    ["y7", "y8", "y9"],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    []
+                ],
+            "normalizations":
+                {
+                    "loadings": [["y7", 1.1], [], [], [], [], [], [], []],
+                    "intercepts": [["y7", 0.65], [], [], [], [], [], [], []]
+                },
+            "trans_eq":
+                {
+                    "name": "constant",
+                    "included_factors": ["fac3"]
+                }
+        }
+    },
+    "general":
+        {
+            "estimate_X_zeros": true
+        }
+}
