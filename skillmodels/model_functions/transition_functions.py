@@ -66,11 +66,13 @@ def iv_formula_linear(x_list, z_list):
 
 def model_coeffs_from_iv_coeffs_linear(
         iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum=None, trans_intercept=0):
+        coeff_sum_value=None, trans_intercept_value=0):
 
     return general_model_coeffs_from_iv_coeffs(
-        iv_coeffs, loading_norminfo, intercept_norminfo, coeff_sum,
-        trans_intercept)
+        iv_coeffs=iv_coeffs, iv_intercept_position=-1,
+        has_trans_intercept=False, loading_norminfo=loading_norminfo,
+        intercept_norminfo=intercept_norminfo, coeff_sum_value=coeff_sum_value,
+        trans_intercept_value=trans_intercept_value)
 
 
 # =============================================================================
@@ -92,7 +94,7 @@ def iv_formula_constant(x_list, z_list):
 
 def model_coeffs_from_iv_coeffs_constant(
         iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum=None, trans_intercept=0):
+        coeff_sum_value=None, trans_intercept_value=0):
     raise NotImplementedError
 
 
@@ -121,11 +123,13 @@ def iv_formula_ar1(x_list, z_list):
 
 def model_coeffs_from_iv_coeffs_ar1(
         iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum=None, trans_intercept=0):
+        coeff_sum_value=None, trans_intercept_value=0):
 
     return general_model_coeffs_from_iv_coeffs(
-        iv_coeffs, loading_norminfo, intercept_norminfo, coeff_sum,
-        trans_intercept)
+        iv_coeffs=iv_coeffs, iv_intercept_position=-1,
+        has_trans_intercept=False, loading_norminfo=loading_norminfo,
+        intercept_norminfo=intercept_norminfo, coeff_sum_value=coeff_sum_value,
+        trans_intercept_value=trans_intercept_value)
 
 # =============================================================================
 # log_ces (KLS-Verion)
@@ -193,7 +197,7 @@ def iv_formula_log_ces(x_list, z_list):
 
 def model_coeffs_from_iv_coeffs_log_ces(
         iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum=None, trans_intercept=0):
+        coeff_sum_value=None, trans_intercept_value=0):
 
     raise NotImplementedError(
         'The log_ces function would lead to an IV equation that is not linear '
@@ -263,7 +267,7 @@ def iv_formula_translog(x_list, z_list):
 
 def model_coeffs_from_iv_coeffs_translog(
         iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum=None, trans_intercept=0):
+        coeff_sum_value=None, trans_intercept_value=0):
     raise NotImplementedError(
         'The log_ces function would lead to an IV equation that is not linear '
         ' in parameters that cannot be estimated with closed form estimators. '
@@ -330,11 +334,13 @@ def iv_formula_no_squares_translog(x_list, z_list):
 
 def model_coeffs_from_iv_coeffs_no_squares_translog(
         iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum=None, trans_intercept=None):
+        coeff_sum_value=None, trans_intercept_value=None):
 
     return general_model_coeffs_from_iv_coeffs(
-        iv_coeffs, loading_norminfo, intercept_norminfo, coeff_sum,
-        trans_intercept)
+        iv_coeffs=iv_coeffs, iv_intercept_position=-1,
+        has_trans_intercept=True, loading_norminfo=loading_norminfo,
+        intercept_norminfo=intercept_norminfo, coeff_sum_value=coeff_sum_value,
+        trans_intercept_value=trans_intercept_value)
 
 
 # =============================================================================
@@ -372,44 +378,64 @@ def flatten_nested_list(nested_list):
 
 
 def general_model_coeffs_from_iv_coeffs(
-        iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum=None, trans_intercept=None):
+        iv_coeffs, iv_intercept_position, has_trans_intercept,
+        loading_norminfo=None, intercept_norminfo=None,
+        coeff_sum_value=None, trans_intercept_value=None):
+
+    # assert statements
+    to_check = [coeff_sum_value, loading_norminfo]
+    assert None in to_check, ('')
+    assert to_check != [None, None], ('')
+
+    to_check = [trans_intercept_value, intercept_norminfo]
+    assert None in to_check, ('')
+    assert to_check != [None, None], ('')
+
+    assert iv_intercept_position in [0, -1], ('')
 
     iv_coeffs = iv_coeffs.groupby(level=0).mean()
     meas_coeffs = pd.DataFrame(data=0, index=iv_coeffs.index,
                                columns=['loadings', 'intercepts'])
 
-    load_norm_y, load_norm_val = loading_norminfo
+    if iv_intercept_position == 0:
+        all_but_intercept = slice(1, len(iv_coeffs))
+    else:
+        all_but_intercept = slice(0, -1)
 
     # get coeff sum
-    if coeff_sum is None:
-        assert loading_norminfo is not None, (
-            'Some message')
-
-        iv_sum = iv_coeffs.loc[load_norm_y].values[:-1].sum()
-        coeff_sum = iv_sum / load_norm_val
+    if coeff_sum_value is None:
+        load_norm_y, load_norm_val = loading_norminfo
+        iv_sum = iv_coeffs.loc[load_norm_y].values[all_but_intercept].sum()
+        coeff_sum_value = iv_sum / load_norm_val
 
     # calculate all lambdas
     for y_variable in iv_coeffs.index:
-        iv_sum = iv_coeffs.loc[y_variable].values[:-1].sum()
-        meas_coeffs.loc[y_variable, 'loadings'] = iv_sum / coeff_sum
+        iv_sum = iv_coeffs.loc[y_variable].values[all_but_intercept].sum()
+        meas_coeffs.loc[y_variable, 'loadings'] = iv_sum / coeff_sum_value
 
     # get trans intercept
-    if trans_intercept is None:    # TFP term is free
-        assert intercept_norminfo is not None, (
-            'Some message')
+    if trans_intercept_value is None:    # TFP term is free
 
         intercept_norm_y, intercept_norm_val = intercept_norminfo
-        intercept_coeff = list(iv_coeffs.loc[intercept_norm_y])[-1]
+        intercept_coeff = list(iv_coeffs.loc[intercept_norm_y])[iv_intercept_position]
         corresponding_loading = meas_coeffs.loc[intercept_norm_y, 'loadings']
-        trans_intercept = \
+        trans_intercept_value = \
             (intercept_coeff - intercept_norm_val) / corresponding_loading
 
     # calculate all mus
     for y_variable in iv_coeffs.index:
-        intercept_coeff = list(iv_coeffs.loc[y_variable])[-1]
+        intercept_coeff = list(iv_coeffs.loc[y_variable])[iv_intercept_position]
         corresponding_loading = meas_coeffs.loc[y_variable, 'loadings']
         meas_coeffs.loc[y_variable, 'intercepts'] = \
-            intercept_coeff - corresponding_loading * trans_intercept
+            intercept_coeff - corresponding_loading * trans_intercept_value
 
-    return meas_coeffs, None
+    gamma_coeffs = iv_coeffs[iv_coeffs.columns[all_but_intercept]]
+    next_period_loadings = meas_coeffs['loadings']
+    gammas = gamma_coeffs.divide(next_period_loadings, axis=0).mean().values
+
+    if iv_intercept_position == 0:
+        gammas = np.hstack([trans_intercept_value, gammas])
+    else:
+        gammas = np.hstack([gammas, trans_intercept_value])
+
+    return meas_coeffs, gammas

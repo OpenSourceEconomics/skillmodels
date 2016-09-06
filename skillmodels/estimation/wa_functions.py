@@ -1,25 +1,23 @@
 """Contains functions that are needed for the WA estimator."""
 
 import numpy as np
+import pandas as pd
 
 
-def loadings_from_covs(data, normalization, storage_df):
+def loadings_from_covs(data, normalization):
     """Factor loadings of measurements of one factor in the first.
 
     Calculate the factor loadings of all measurements of one factor in the
     first period as average of ratios of covariances. For this to be possible,
     at least three  measurement variables have to be available in the dataset.
-    The result is stored in storage_df
 
     Args:
         data (DataFrame): pandas DataFrame with the measurement data for one
             factor in one period.
         normalization (list): The first value is the name of a normalized
             measurement, the second is the value it is normalized to.
-        storage_df (DataFrame): DataFrame in which the results are stored
 
     """
-    t = 0
     measurements = list(data.columns)
     nmeas = len(measurements)
     assert nmeas >= 3, (
@@ -28,6 +26,7 @@ def loadings_from_covs(data, normalization, storage_df):
 
     cov = data.cov()
     load_norm, load_norm_val = normalization
+    loadings = pd.Series(index=measurements, name='loadings')
 
     for m in measurements:
         if m != load_norm:
@@ -37,10 +36,13 @@ def loadings_from_covs(data, normalization, storage_df):
                     nominator = load_norm_val * cov.loc[m, m_prime]
                     denominator = cov.loc[load_norm, m_prime]
                     estimates.append(nominator / denominator)
-            storage_df.loc[(t, m), 'loadings'] = np.mean(estimates)
+            loadings[m] = np.mean(estimates)
+        else:
+            loadings[m] = load_norm_val
+    return loadings
 
 
-def intercepts_from_means(data, normalization, storage_df, mean_list):
+def intercepts_from_means(data, normalization, loadings):
     """Calculate intercepts and factor means for 1 factor in the first period.
 
     If the normalization list is not empty, it is assumed that the factor
@@ -53,27 +55,55 @@ def intercepts_from_means(data, normalization, storage_df, mean_list):
             factor in one period.
         normalization (list): The first value is the name of a normalized
             measurement, the second is the value it is normalized to.
-        storage_df (DataFrame): DataFrame in which the results are stored
-        mean_list (list): a list to which the estimated mean is appended
 
     """
-    t = 0
     measurements = list(data.columns)
+
     if len(normalization) == 0:
         for meas in measurements:
-            storage_df.loc[(t, meas), 'intercepts'] = data[meas].mean()
+            intercepts = data[meas].mean()
+        factor_mean = None
     else:
+        intercepts = pd.Series(index=measurements, name='intercepts')
         intercept_norm, intercept_norm_val = normalization
-        loading = storage_df.loc[(t, intercept_norm), 'loadings']
-        estimated_factor_mean = \
+        loading = loadings[intercept_norm]
+        factor_mean = \
             (data[intercept_norm].mean() - intercept_norm_val) / loading
-        mean_list.append(estimated_factor_mean)
 
         for m, meas in enumerate(measurements):
             if meas != intercept_norm:
-                loading = storage_df.loc[(t, meas), 'loadings']
-                storage_df.loc[(t, meas), 'intercepts'] = \
-                    data[meas].mean() - loading * estimated_factor_mean
+                loading = loadings[meas]
+                intercepts[meas] = \
+                    data[meas].mean() - loading * factor_mean
+            else:
+                intercepts[meas] = intercept_norm_val
+    return intercepts, factor_mean
+
+
+def prepend_index_level(df, to_prepend):
+    df = df.copy(deep=True)
+    df.index = pd.MultiIndex.from_tuples(
+        [(to_prepend, x) for x in df.index])
+    return df
+
+
+def initial_meas_coeffs(y_data, factors, measurements, normalizations):
+    to_concat = []
+    X_zero = []
+    for f, factor in enumerate(factors):
+        meas_list = measurements[factor][0]
+        data = y_data[meas_list]
+        norminfo_load = normalizations[factor]['loadings'][0]
+
+        loadings = loadings_from_covs(data, norminfo_load)
+        norminfo_intercept = normalizations[factor]['intercepts'][0]
+        intercepts, factor_mean = intercepts_from_means(
+            data, norminfo_intercept, loadings)
+        to_concat.append(pd.concat([loadings, intercepts], axis=1))
+        X_zero.append(factor_mean)
+
+    meas_coeffs = pd.concat(to_concat)
+    return meas_coeffs, np.array(X_zero)
 
 
 def initial_cov_matrix(data, storage_df, measurements_per_factor):
@@ -149,14 +179,3 @@ def _iv_math(y, x, z, w):
     beta = inverse_part.dot(y_part)
 
     return beta
-
-
-
-
-
-
-
-
-
-
-

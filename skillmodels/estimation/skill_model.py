@@ -2,9 +2,8 @@ from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 from skillmodels.pre_processing.data_processor import DataProcessor
 from skillmodels.estimation.likelihood_function import \
     log_likelihood_per_individual
-from skillmodels.estimation.wa_functions import loadings_from_covs, \
-    intercepts_from_means, initial_cov_matrix, residual_measurements, \
-    iv_reg
+from skillmodels.estimation.wa_functions import initial_cov_matrix, \
+    residual_measurements, iv_reg, initial_meas_coeffs, prepend_index_level
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
 from skillmodels.estimation.skill_model_results import SkillModelResults
@@ -101,7 +100,8 @@ class SkillModel(GenericLikelihoodModel):
             length = len(self.update_info.loc[t])
             width = len(self.controls[t]) + 1
             init = np.zeros((length, width))
-            init[:, 0] = self.update_info.loc[t]['intercept_norm_value'].fillna(0)
+            init[:, 0] = \
+                self.update_info.loc[t]['intercept_norm_value'].fillna(0)
             deltas.append(init)
         return deltas
 
@@ -117,7 +117,8 @@ class SkillModel(GenericLikelihoodModel):
         for t in self.periods:
             length = len(self.update_info.loc[t])
             width = len(self.controls[t]) + 1
-            has_normalized = self.update_info.loc[t]['has_normalized_intercept'].astype(int)
+            has_normalized = self.update_info.loc[t][
+                'has_normalized_intercept'].astype(int)
             boo = np.ones((length, width))
             boo[:, 0] -= has_normalized
             deltas_bool.append(boo.astype(bool))
@@ -1088,12 +1089,7 @@ class SkillModel(GenericLikelihoodModel):
             example_x, example_z)
         return x_formula.count('+') + 1
 
-    def fit_wa(self):
-
-        # *********************************************************************
-        # *************************** preparations ****************************
-        # *********************************************************************
-        # prepare a DataFrame in which the parameter estimates can be stored
+    def wa_storage_df(self):
         df = self.update_info.copy(deep=True)
         norm_cols = ['{}_loading_norm_value'.format(f) for f in self.factors]
         # storage column for factor loadings, initialized with zeros for un-
@@ -1102,45 +1098,33 @@ class SkillModel(GenericLikelihoodModel):
         # storage column for intercepts, initialized with zeros for un-
         # normalized intercepts and the norm_value for normalized intercepts.
         df['intercepts'] = df['intercept_norm_value'].fillna(0)
-
         relevant_columns = \
             ['has_normalized_intercept', 'has_normalized_loading',
              'loadings', 'intercepts']
         storage_df = df[relevant_columns].copy(deep=True)
+        return storage_df
 
-        # *********************************************************************
-        # ****************************** Step 0 *******************************
-        # *********************************************************************
+    def fit_wa(self):
+        storage_df = self.wa_storage_df()
 
-        # estimate initial_factor_loadings and intercepts
-        X_zero = [] if self.estimate_X_zeros is True else None
-
-        for f, factor in enumerate(self.factors):
-            meas_list = self.measurements[factor][0]
-            data = self.y_data[0][meas_list]
-            norminfo_load = self.normalizations[factor]['loadings'][0]
-            loadings_from_covs(data, norminfo_load, storage_df)
-            norminfo_intercept = self.normalizations[factor]['intercepts'][0]
-            intercepts_from_means(data, norminfo_intercept, storage_df, X_zero)
-        if self.estimate_X_zeros is True:
-            X_zero = np.array(X_zero)
+        t = 0
+        meas_coeffs, X_zero = initial_meas_coeffs(
+            y_data=self.y_data[t], factors=self.factors,
+            measurements=self.measurements, normalizations=self.normalizations)
+        storage_df.update(prepend_index_level(meas_coeffs, t))
 
         # estimate entries of P_zero (the initial cov matrix)
-        measurements = {}
-        for factor in self.factors:
-            measurements[factor] = self.measurements[factor][0]
+        measurements = {fac: self.measurements[fac][t] for fac in self.factors}
 
-        P_zero_params = initial_cov_matrix(
-            data=self.y_data[0], storage_df=storage_df,
+        P_zero = initial_cov_matrix(
+            data=self.y_data[t], storage_df=storage_df,
             measurements_per_factor=measurements)
 
-        residual_df = residual_measurements(
-            data=self.y_data[0], loadings=storage_df.loc[0, 'loadings'],
-            intercepts=storage_df.loc[0, 'intercepts'])
-
         x_list, z_list = self.iv_equation_variable_lists()
+        trans_coeff_storage = self._initial_trans_coeffs()
 
         for t in self.periods[:-1]:
+            stage = self.stagemap[t]
             z_data = self.y_data[t].copy()
             z_data['constant'] = 1
 
@@ -1156,9 +1140,11 @@ class SkillModel(GenericLikelihoodModel):
                 storage_df.loc[0, 'intercepts'].loc[initial_meas]
 
             loadings_of_constant_factors.index = [
-                '{}_copied'.format(m) for m in loadings_of_constant_factors.index]
+                '{}_copied'.format(m)
+                for m in loadings_of_constant_factors.index]
             intercepts_of_constant_factors.index = [
-                '{}_copied'.format(m) for m in intercepts_of_constant_factors.index]
+                '{}_copied'.format(m)
+                for m in intercepts_of_constant_factors.index]
 
             loadings = storage_df.loc[t, 'loadings'].append(
                 loadings_of_constant_factors)
@@ -1206,14 +1192,19 @@ class SkillModel(GenericLikelihoodModel):
                             df.loc[(y_name, k)] = deltas
 
                     meas_coeffs, gammas = getattr(
-                        tf, 'model_coeffs_from_iv_coeffs_{}'.format(trans_name))(
-                            df, self.normalizations[factor]['loadings'][t + 1],
-                            self.normalizations[factor]['intercepts'][t + 1])
+                        tf,
+                        'model_coeffs_from_iv_coeffs_{}'.format(trans_name))(
+                            iv_coeffs=df, loading_norminfo=self.normalizations[
+                                factor]['loadings'][t + 1],
+                            intercept_norminfo=self.normalizations[
+                                factor]['intercepts'][t + 1])
                     meas_coeffs.index = pd.MultiIndex.from_tuples(
                         [(t + 1, meas) for meas in meas_coeffs.index])
                     storage_df.update(meas_coeffs)
 
-        return storage_df, X_zero, P_zero_params, residual_df
+                    trans_coeff_storage[f][stage] = gammas
+
+        return storage_df, X_zero, P_zero, trans_coeff_storage
 
     def score(self, params, args):
         return approx_fprime(
