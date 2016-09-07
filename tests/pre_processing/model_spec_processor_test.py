@@ -90,6 +90,8 @@ class TestCleanMesaurementSpecifications:
         inf['f2']['measurements'] = [['m5', 'm6', 'm7', 'm8']] * 2
         self._facinf = inf
         self.factors = sorted(list(self._facinf.keys()))
+        self.transition_names = ['log_ces', 'blubb']
+        self.estimator = 'CHS'
 
     def test_clean_measuremnt_specifications_nothing_to_clean(self):
         self._present = Mock(return_value=True)

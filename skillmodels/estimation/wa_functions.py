@@ -106,8 +106,12 @@ def initial_meas_coeffs(y_data, factors, measurements, normalizations):
     return meas_coeffs, np.array(X_zero)
 
 
-def initial_cov_matrix(data, storage_df, measurements_per_factor):
+def initial_cov_matrix(data, storage_df, measurements):
     """Estimate initial cov matrix of factors from covs of measurements."""
+    t = 0
+    factors = sorted(list(measurements.keys()))
+    measurements = {factor: measurements[factor][t] for factor in factors}
+
     meas_cov = data.cov()
     factor_covs = []
 
@@ -119,12 +123,10 @@ def initial_cov_matrix(data, storage_df, measurements_per_factor):
     for i in scaled_meas_cov.index:
         scaled_meas_cov.loc[i, i] = np.nan
 
-    factors = sorted(list(measurements_per_factor.keys()))
-
     for f1, factor1 in enumerate(factors):
-        measurements1 = measurements_per_factor[factor1]
+        measurements1 = measurements[factor1]
         for f2, factor2 in enumerate(factors):
-            measurements2 = measurements_per_factor[factor2]
+            measurements2 = measurements[factor2]
             if f2 >= f1:
                 relevant = scaled_meas_cov.loc[measurements1, measurements2]
                 factor_covs.append(relevant.mean().mean())

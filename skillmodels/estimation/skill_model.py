@@ -1061,150 +1061,134 @@ class SkillModel(GenericLikelihoodModel):
                 [form_string.format(m) for m in self.measurements[inc][0]])
         return meas_lists
 
-    def iv_equation_variable_lists(self):
-        x_list = [[] for t in self.periods[:-1]]
-        z_list = [[[] for f in self.factors] for t in self.periods[:-1]]
+    def iv_equation_variable_lists(self, period, factor):
+        meas_lists_for_x = self.meas_lists_for_iv_equations(
+            period, factor, suffix='resid')
+        x_list = list(map(list, product(*meas_lists_for_x)))
 
-        for t in self.periods[:-1]:
-            for f, factor in enumerate(self.factors):
-                meas_lists_for_x = self.meas_lists_for_iv_equations(
-                    t, factor, suffix='resid')
-                x_list[t].append(list(map(list, product(*meas_lists_for_x))))
-
-                for x in x_list[t][f]:
-                    z = []
-                    for sublist in meas_lists_for_x:
-                        z.append([m[:-6] for m in sublist if m not in x])
-                    z_list[t][f].append(z)
+        z_list = []
+        for x in x_list:
+            z = []
+            for sublist in meas_lists_for_x:
+                z.append([m[:-6] for m in sublist if m not in x])
+            z_list.append(z)
 
         return x_list, z_list
 
     def number_of_iv_parameters(self, factor):
         f = self.factors.index(factor)
         trans_name = self.transition_names[f]
-        x_list, z_list = self.iv_equation_variable_lists()
-        example_x = x_list[0][f][0]
-        example_z = z_list[0][f][0]
+        x_list, z_list = self.iv_equation_variable_lists(0, factor)
+        example_x = x_list[0]
+        example_z = z_list[0]
         x_formula, _ = getattr(tf, 'iv_formula_{}'.format(trans_name))(
             example_x, example_z)
         return x_formula.count('+') + 1
 
-    def wa_storage_df(self):
-        df = self.update_info.copy(deep=True)
-        norm_cols = ['{}_loading_norm_value'.format(f) for f in self.factors]
-        # storage column for factor loadings, initialized with zeros for un-
-        # normalized loadings and the norm_value for normalized loadings
-        df['loadings'] = df[norm_cols].sum(axis=1)
-        # storage column for intercepts, initialized with zeros for un-
-        # normalized intercepts and the norm_value for normalized intercepts.
-        df['intercepts'] = df['intercept_norm_value'].fillna(0)
-        relevant_columns = \
-            ['has_normalized_intercept', 'has_normalized_loading',
-             'loadings', 'intercepts']
-        storage_df = df[relevant_columns].copy(deep=True)
-        return storage_df
+    def extended_meas_coeffs(self, coeff_type, period):
+        initial_meas = []
+        for f, factor in enumerate(self.factors):
+            if self.transition_names[f] == 'constant':
+                initial_meas += self.measurements[factor][0]
+
+        coeffs_of_constant_factors =  \
+            self.storage_df.loc[0, coeff_type].loc[initial_meas]
+
+        coeffs_of_constant_factors.index = [
+            '{}_copied'.format(m) for m in coeffs_of_constant_factors.index]
+
+        coeffs = self.storage_df.loc[period, coeff_type].append(
+            coeffs_of_constant_factors)
+
+        return coeffs
+
+    def iv_data(self, period):
+        y_data = self.y_data[period + 1]
+
+        loadings = self.extended_meas_coeffs('loadings', period)
+        intercepts = self.extended_meas_coeffs(
+            'intercepts', period)
+        x_data = residual_measurements(
+            self.y_data[period], loadings=loadings, intercepts=intercepts)
+        x_data['constant'] = 1
+
+        z_data = self.y_data[period].copy()
+        z_data['constant'] = 1
+
+        return y_data, x_data, z_data
+
+    def get_iv_coeffs(self, period, factor, y_data, x_data, z_data):
+        x_list, z_list = self.iv_equation_variable_lists(period, factor)
+        f = self.factors.index(factor)
+        trans_name = self.transition_names[f]
+        depvars = self.measurements[factor][period + 1]
+        nr_deltas = self.number_of_iv_parameters(factor)
+        columns = ['delta_{}'.format(i) for i in range(nr_deltas)]
+
+        ind_tuples = [(y, i) for y, i in product(depvars, range(len(x_list)))]
+        index = pd.MultiIndex.from_tuples(ind_tuples)
+
+        iv_coeffs = pd.DataFrame(data=0.0, index=index, columns=columns)
+
+        for y in depvars:
+            y_vector = y_data[y].values
+            # all deltas on this level have the same mü and lambda
+            # mü and/or lambda might be normalized
+            for x, z in zip(x_list, z_list):
+                iv_formula_func = getattr(tf, 'iv_formula_' + trans_name)
+                x_formula, z_formula = iv_formula_func(x, z)
+                x_matrix = dmatrix(x_formula, data=x_data,
+                                   return_type='dataframe').values
+                z_matrix = dmatrix(z_formula, data=z_data,
+                                   return_type='dataframe').values
+                deltas = iv_reg(y_vector, x_matrix, z_matrix)
+                iv_coeffs.loc[(y, x_list.index(x))] = deltas
+
+        return iv_coeffs
 
     def fit_wa(self):
-        storage_df = self.wa_storage_df()
-
         t = 0
         meas_coeffs, X_zero = initial_meas_coeffs(
             y_data=self.y_data[t], factors=self.factors,
             measurements=self.measurements, normalizations=self.normalizations)
-        storage_df.update(prepend_index_level(meas_coeffs, t))
-
-        # estimate entries of P_zero (the initial cov matrix)
-        measurements = {fac: self.measurements[fac][t] for fac in self.factors}
+        self.storage_df.update(prepend_index_level(meas_coeffs, t))
 
         P_zero = initial_cov_matrix(
-            data=self.y_data[t], storage_df=storage_df,
-            measurements_per_factor=measurements)
+            data=self.y_data[t], storage_df=self.storage_df,
+            measurements=self.measurements)
 
-        x_list, z_list = self.iv_equation_variable_lists()
+        # =====================================================================
         trans_coeff_storage = self._initial_trans_coeffs()
 
         for t in self.periods[:-1]:
             stage = self.stagemap[t]
-            z_data = self.y_data[t].copy()
-            z_data['constant'] = 1
 
-            initial_meas = []
-            for f, factor in enumerate(self.factors):
-                if self.transition_names[f] == 'constant':
-                    initial_meas += self.measurements[factor][0]
-
-            loadings_of_constant_factors = \
-                storage_df.loc[0, 'loadings'].loc[initial_meas]
-
-            intercepts_of_constant_factors = \
-                storage_df.loc[0, 'intercepts'].loc[initial_meas]
-
-            loadings_of_constant_factors.index = [
-                '{}_copied'.format(m)
-                for m in loadings_of_constant_factors.index]
-            intercepts_of_constant_factors.index = [
-                '{}_copied'.format(m)
-                for m in intercepts_of_constant_factors.index]
-
-            loadings = storage_df.loc[t, 'loadings'].append(
-                loadings_of_constant_factors)
-
-            intercepts = storage_df.loc[t, 'intercepts'].append(
-                intercepts_of_constant_factors)
-
-            x_data = residual_measurements(
-                self.y_data[t], loadings=loadings, intercepts=intercepts)
-            x_data['constant'] = 1
+            y_data, x_data, z_data = self.iv_data(t)
 
             for f, factor in enumerate(self.factors):
-                # ========================================
-                # generate a DataFrame to store the deltas
-                # ========================================
                 trans_name = self.transition_names[f]
                 if trans_name != 'constant':
-                    depvar_list = self.measurements[factor][t + 1]
-                    nr_deltas = self.number_of_iv_parameters(factor)
-                    columns = ['delta_{}'.format(i) for i in range(nr_deltas)]
-                    index_tuples = []
-                    for y, i in product(depvar_list, range(len(x_list[t][f]))):
-                        index_tuples.append((y, i))
-                    index = pd.MultiIndex.from_tuples(index_tuples)
-                    df = pd.DataFrame(data=0.0, index=index, columns=columns)
+                    iv_coeffs = self.get_iv_coeffs(
+                        t, factor, y_data, x_data, z_data)
 
-                    # =========================================
-                    # calculate the deltas and store them in df
-                    # =========================================
-                    # all deltas on this level have the same gammas
-                    for y_name in depvar_list:
-                        y = self.y_data[t + 1][y_name].values
-                        # all deltas on this level have the same mü and lambda
-                        # mü and/or lambda might be normalized
-                        for (k, x_names), z_names in zip(
-                                enumerate(x_list[t][f]), z_list[t][f]):
-                            x_formula, z_formula = getattr(
-                                tf, 'iv_formula_{}'.format(trans_name))(
-                                x_names, z_names)
-                            x = dmatrix(x_formula, data=x_data,
-                                        return_type='dataframe').values
-                            z = dmatrix(z_formula, data=z_data,
-                                        return_type='dataframe').values
-                            deltas = iv_reg(y, x, z)
-                            df.loc[(y_name, k)] = deltas
+                    model_coeffs_from_iv_coeffs_func = getattr(
+                        tf, 'model_coeffs_from_iv_coeffs_' + trans_name)
+                    loading_norminfo = \
+                        self.normalizations[factor]['loadings'][t + 1]
+                    intercept_norminfo = \
+                        self.normalizations[factor]['intercepts'][t + 1]
 
-                    meas_coeffs, gammas = getattr(
-                        tf,
-                        'model_coeffs_from_iv_coeffs_{}'.format(trans_name))(
-                            iv_coeffs=df, loading_norminfo=self.normalizations[
-                                factor]['loadings'][t + 1],
-                            intercept_norminfo=self.normalizations[
-                                factor]['intercepts'][t + 1])
+                    meas_coeffs, gammas = model_coeffs_from_iv_coeffs_func(
+                        iv_coeffs=iv_coeffs,
+                        loading_norminfo=loading_norminfo,
+                        intercept_norminfo=intercept_norminfo)
                     meas_coeffs.index = pd.MultiIndex.from_tuples(
                         [(t + 1, meas) for meas in meas_coeffs.index])
-                    storage_df.update(meas_coeffs)
+                    self.storage_df.update(meas_coeffs)
 
                     trans_coeff_storage[f][stage] = gammas
 
-        return storage_df, X_zero, P_zero, trans_coeff_storage
+        return self.storage_df, X_zero, P_zero, trans_coeff_storage
 
     def score(self, params, args):
         return approx_fprime(

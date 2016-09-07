@@ -92,6 +92,7 @@ class ModelSpecProcessor:
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
         self._nmeas_list()
+        self._wa_storage_df()
 
     def _set_time_specific_attributes(self):
         """Set model specs related to periods and stages as attributes."""
@@ -748,6 +749,21 @@ class ModelSpecProcessor:
                 df.loc[(t, variable), 'update_type'] = 'probit'
 
         return df
+
+    def _wa_storage_df(self):
+        df = self.update_info().copy(deep=True)
+        norm_cols = ['{}_loading_norm_value'.format(f) for f in self.factors]
+        # storage column for factor loadings, initialized with zeros for un-
+        # normalized loadings and the norm_value for normalized loadings
+        df['loadings'] = df[norm_cols].sum(axis=1)
+        # storage column for intercepts, initialized with zeros for un-
+        # normalized intercepts and the norm_value for normalized intercepts.
+        df['intercepts'] = df['intercept_norm_value'].fillna(0)
+        relevant_columns = \
+            ['has_normalized_intercept', 'has_normalized_loading',
+             'loadings', 'intercepts']
+        storage_df = df[relevant_columns].copy(deep=True)
+        self.storage_df = storage_df
 
     def new_trans_coeffs(self):
         """Array that indicates if new parameters from params are needed.
