@@ -2,11 +2,11 @@ from os import system
 
 if __name__ == '__main__':
     to_run = [
-        'kalman_filters_test.py', 'choldate_test.py',
-        'qr_decomposition_test.py', 'sigma_points_test.py',
-        'transition_functions_test.py', 'model_spec_processor_test.py',
-        'data_processor_test.py', 'parse_params_test.py',
-        'skill_model_test.py']
+        'wa_test_with_no_squares_translog_model',
+        'wa_functions_test', 'kalman_filters_test', 'choldate_test',
+        'qr_decomposition_test', 'sigma_points_test',
+        'transition_functions_test', 'model_spec_processor_test',
+        'data_processor_test', 'parse_params_test', 'skill_model_test']
 
     for file in to_run:
-        system('python {}'.format(file))
+        system('python {}.py'.format(file))

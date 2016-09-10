@@ -20,7 +20,6 @@ class TestTransitionEquationNames:
         msp._transition_equation_names(self)
         assert_equal(self.transition_names, ['linear', 'ces', 'ar1'])
 
-
 class TestTransitionEquationIncludedFactors:
     def setup(self):
         self.factors = ['f1', 'f2']
@@ -386,7 +385,8 @@ class TestUpdateInfoTable:
 
         self._is_dummy = Mock(side_effect=cycle([False, False, True]))
 
-        cols = self.factors + ['{}_loading_norm_value'.format(f) for f in self.factors]
+        cols = self.factors + [
+            '{}_loading_norm_value'.format(f) for f in self.factors]
         cols += ['stage', 'purpose', 'update_type']
 
         different_meas = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6']
@@ -410,14 +410,16 @@ class TestUpdateInfoTable:
         df['has_normalized_loading'] = False
         for factor in self.factors:
             norm_col = '{}_loading_norm_value'.format(factor)
-            for t, (n_meas, n_val) in enumerate(self.normalizations[factor]['loadings']):
+            for t, (n_meas, n_val) in enumerate(
+                    self.normalizations[factor]['loadings']):
                 df.loc[(t, n_meas), norm_col] = n_val
                 df.loc[(t, n_meas), 'has_normalized_loading'] = True
 
         df['has_normalized_intercept'] = False
         df['intercept_norm_value'] = np.nan
         for factor in self.factors:
-            for t, (n_meas, n_val) in enumerate(self.normalizations[factor]['intercepts']):
+            for t, (n_meas, n_val) in enumerate(
+                    self.normalizations[factor]['intercepts']):
                 df.loc[(t, n_meas), 'intercept_norm_value'] = n_val
                 df.loc[(t, n_meas), 'has_normalized_intercept'] = True
 
@@ -481,6 +483,38 @@ class TestUpdateInfoTable:
         calc = list(self.calculated_res['purpose'])
         exp = ['measurement'] * 24 + ['anchoring']
         assert_equal(calc, exp)
+
+
+class TestWAStorageDf:
+    def setup(self):
+        self.factors = ['fac1', 'fac2']
+
+        cols = ['fac1_loading_norm_value', 'fac2_loading_norm_value',
+                'intercept_norm_value',
+                'has_normalized_intercept', 'has_normalized_loading']
+        index = pd.MultiIndex.from_tuples(
+            [(0, 'm1'), (0, 'm2'), (1, 'm1'), (1, 'm2')])
+        update_data = np.array([
+            [1, 0, np.nan, False, True],
+            [0, 0, 2, True, False],
+            [0, 3, 0, True, True],
+            [0, 0, np.nan, False, False]])
+        self.update_info = Mock(return_value=pd.DataFrame(
+            data=update_data, columns=cols, index=index))
+
+        expected_data = np.array([
+            [True, False, 1, 0],
+            [False, True, 0, 2],
+            [True, True, 3, 0],
+            [False, False, 0, 0]])
+        expected_cols = ['has_normalized_loading', 'has_normalized_intercept',
+                         'loadings', 'intercepts']
+        self.expected_res = pd.DataFrame(
+            data=expected_data, columns=expected_cols, index=index)
+
+    def test_wa_storage_df(self):
+        msp._wa_storage_df(self)
+        assert_equal(self.storage_df.to_dict(), self.expected_res.to_dict())
 
 
 class TestNewTransitionCoeffs:

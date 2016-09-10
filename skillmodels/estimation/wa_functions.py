@@ -17,6 +17,9 @@ def loadings_from_covs(data, normalization):
         normalization (list): The first value is the name of a normalized
             measurement, the second is the value it is normalized to.
 
+    Returns:
+        loadings (Series): pandas Series with estimated factor loadings
+
     """
     measurements = list(data.columns)
     nmeas = len(measurements)
@@ -55,13 +58,18 @@ def intercepts_from_means(data, normalization, loadings):
             factor in one period.
         normalization (list): The first value is the name of a normalized
             measurement, the second is the value it is normalized to.
+        loadings (Series): pandas Series with estimated factor loadings
 
+    Returns:
+        intercepts (Series): pandas Series with estimated measurement
+            intercepts
+        factor mean: The estimated factor mean if a intercept was normalized
+            or None
     """
     measurements = list(data.columns)
 
     if len(normalization) == 0:
-        for meas in measurements:
-            intercepts = data[meas].mean()
+        intercepts = data.mean()
         factor_mean = None
     else:
         intercepts = pd.Series(index=measurements, name='intercepts')
@@ -87,7 +95,27 @@ def prepend_index_level(df, to_prepend):
     return df
 
 
-def initial_meas_coeffs(y_data, factors, measurements, normalizations):
+def initial_meas_coeffs(y_data, measurements, normalizations):
+    """Dataframe of loadings and intercepts for all factors in initial period.
+
+    Args:
+        y_data (DataFrame): pandas DataFrame with measurement data of initial
+            period.
+        measurements (dictionary): the keys are the factors. The values are
+            nested lits with one sublist of measurement names for each period.
+        normalizations (dictionary): the keys are the factors. the values are
+            dictionaries with 'intercepts' and 'loadings' as keys. Their values
+            are lists of lists with one sublist for each period. Each sublist
+            contains the name of the normalized measurements as first entry and
+            the value to which it is normalized as second entry.
+
+    Returns:
+        meas_coeffs (DataFrame): DataFrame with loadings and intercepts of the
+            initial period.
+        X_zero (np.ndarray): numpy array with initial factor means.
+
+    """
+    factors = sorted(list(measurements.keys()))
     to_concat = []
     X_zero = []
     for f, factor in enumerate(factors):
@@ -107,7 +135,19 @@ def initial_meas_coeffs(y_data, factors, measurements, normalizations):
 
 
 def initial_cov_matrix(data, storage_df, measurements):
-    """Estimate initial cov matrix of factors from covs of measurements."""
+    """
+    Initial covariance matrix of latent factors from measurement covariances.
+
+    Args:
+        data (DataFrame): DataFrame of the measurements of the initial period.
+        storage_df (DataFrame): DataFrame of loadings and intercepts.
+        measurements (dictionary): the keys are the factors. The values are
+            nested lits with one sublist of measurement names for each period.
+
+    Returns:
+        factor_covs (np.ndarray): 1d array with the upper triangular
+            elements of the covariance matrix.
+    """
     t = 0
     factors = sorted(list(measurements.keys()))
     measurements = {factor: measurements[factor][t] for factor in factors}
@@ -160,14 +200,12 @@ def iv_reg(y, x, z, fit_method='2sls'):
 
     """
     nobs, k_prime = z.shape
-    w = np.linalg.pinv(np.dot(z.T, z) / nobs)
+    w = _iv_gmm_weights(z)
     beta = _iv_math(y, x, z, w)
 
     if fit_method == 'optimal':
-        u_squared = (y - np.dot(x, beta)) ** 2
-        outerprod = z.reshape(nobs, 1, k_prime) * z.reshape(nobs, k_prime, 1)
-        s = (u_squared.reshape(nobs, 1, 1) * outerprod).sum(axis=0) / nobs
-        w = np.linalg.pinv(s)
+        u = y - np.dot(x, beta)
+        w = _iv_gmm_weights(z, u)
         beta = _iv_math(y, x, z, w)
 
     return beta
@@ -181,3 +219,15 @@ def _iv_math(y, x, z, w):
     beta = inverse_part.dot(y_part)
 
     return beta
+
+
+def _iv_gmm_weights(z, u=None):
+    nobs, k_prime = z.shape
+    if u is None:
+        w = np.linalg.pinv(np.dot(z.T, z) / nobs)
+    else:
+        u_squared = u ** 2
+        outerprod = z.reshape(nobs, 1, k_prime) * z.reshape(nobs, k_prime, 1)
+        s = (u_squared.reshape(nobs, 1, 1) * outerprod).sum(axis=0) / nobs
+        w = np.linalg.pinv(s)
+    return w

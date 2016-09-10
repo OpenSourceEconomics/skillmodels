@@ -523,7 +523,7 @@ class SkillModel(GenericLikelihoodModel):
             func = 'nr_coeffs_{}'.format(self.transition_names[f])
             width = getattr(tf, func)(
                 included_factors=self.included_factors[f], params_type='long')
-            initial_params.append(np.zeros((self.nstages, width)))
+            initial_params.append(np.zeros((self.nstages, int(width))))
         return initial_params
 
     def _params_slice_for_trans_coeffs(self, params_type):
@@ -1044,25 +1044,65 @@ class SkillModel(GenericLikelihoodModel):
         chsmlefit = SkillModelResults(self, mlefit, optimize_dict)
         return chsmlefit
 
-    def meas_lists_for_iv_equations(self, t, factor, suffix=''):
-        suffix = '_' + suffix if suffix != '' else suffix
+    def meas_list_for_iv_equations(self, period, factor, suffix=''):
+        """List of lists with names of measurements of included factors.
 
+        Args:
+            period (int): the period for which the list is generated
+            factor (str): the factor for which the list is generated
+            suffix (str): a suffix that is appended to all measurement names in
+                the list. It is separated from the actual name by '_'.
+
+        Returns:
+            meas_list (list): List of lists with one sublist for each factor
+                that appears on the right hand side of the transition equation
+                of *factor*. Each sublist contains the names of all
+                measurements in *period* of the corresponding right-hand-side
+                factor.
+
+        """
+        suffix = '_' + suffix if suffix != '' else suffix
         f = self.factors.index(factor)
         inc_facs = self.included_factors[f]
-        meas_lists = []
+        meas_list = []
         for inc in inc_facs:
             trans_name = self.transition_names[self.factors.index(inc)]
-            if trans_name == 'constant' and t > 0:
+            if trans_name == 'constant' and period > 0:
                 form_string = '{}_copied' + suffix
+                sublist = [
+                    form_string.format(m) for m in self.measurements[inc][0]]
             else:
                 form_string = '{}' + suffix
-
-            meas_lists.append(
-                [form_string.format(m) for m in self.measurements[inc][0]])
-        return meas_lists
+                sublist = [form_string.format(m)
+                           for m in self.measurements[inc][period]]
+            meas_list.append(sublist)
+        return meas_list
 
     def iv_equation_variable_lists(self, period, factor):
-        meas_lists_for_x = self.meas_lists_for_iv_equations(
+        """Nested lists with combination of measurement names for iv equations.
+
+        In the WA estimator, the transition equations are rewritten in an
+        errors-in-variables specification in which latent factors are
+        approximated by residual measurements and then instrumented by other
+        measurements.
+
+        Args:
+            period (int): the period for which the lists are generated
+            factor (str): the factor for which the lists are generated
+
+        Returns:
+            x_list (list): contains one sublist for each iv equation that has
+                to be estimated for *factor* in *period*. Each sublist contains
+                the names of the measurements that are used to form the
+                residual measurements for that iv equation. The length of each
+                sublist is the number of factors that are included in the right
+                hand side of the transition equation of *factor*.
+            z_list (list): has the same length as x_list and contains the
+                instruments for each transition equation. The instruments are
+                lists of lists with one sublist for each included factor.
+
+        """
+        meas_lists_for_x = self.meas_list_for_iv_equations(
             period, factor, suffix='resid')
         x_list = list(map(list, product(*meas_lists_for_x)))
 
@@ -1076,38 +1116,63 @@ class SkillModel(GenericLikelihoodModel):
         return x_list, z_list
 
     def number_of_iv_parameters(self, factor):
+        """Number of parameters in the IV equation of a parameter."""
         f = self.factors.index(factor)
         trans_name = self.transition_names[f]
         x_list, z_list = self.iv_equation_variable_lists(0, factor)
-        example_x = x_list[0]
-        example_z = z_list[0]
+        example_x, example_z = x_list[0], z_list[0]
         x_formula, _ = getattr(tf, 'iv_formula_{}'.format(trans_name))(
             example_x, example_z)
         return x_formula.count('+') + 1
 
     def extended_meas_coeffs(self, coeff_type, period):
-        initial_meas = []
-        for f, factor in enumerate(self.factors):
-            if self.transition_names[f] == 'constant':
-                initial_meas += self.measurements[factor][0]
+        """Series of coefficients for construction of residual measurements.
 
-        coeffs_of_constant_factors =  \
-            self.storage_df.loc[0, coeff_type].loc[initial_meas]
+        Args:
+            coeff_type (str): takes values 'loadings' and 'intercepts'
+            period (int): period identifier
 
-        coeffs_of_constant_factors.index = [
-            '{}_copied'.format(m) for m in coeffs_of_constant_factors.index]
+        Returns:
+            coeffs (Series): Series of measurement coefficients in period
+                extendend with period zero coefficients of constant factors.
 
-        coeffs = self.storage_df.loc[period, coeff_type].append(
-            coeffs_of_constant_factors)
-
+        """
+        coeffs = self.storage_df.loc[period, coeff_type]
+        if period > 0 and 'constant' in self.transition_names:
+            initial_meas = []
+            for f, factor in enumerate(self.factors):
+                if self.transition_names[f] == 'constant':
+                    initial_meas += self.measurements[factor][0]
+            constant_factor_coeffs =  \
+                self.storage_df.loc[0, coeff_type].loc[initial_meas]
+            constant_factor_coeffs.index = [
+                '{}_copied'.format(m) for m in constant_factor_coeffs.index]
+            coeffs = coeffs.append(constant_factor_coeffs)
         return coeffs
 
     def iv_data(self, period):
+        """Construct DataFrames with data for all IV equations in period.
+
+        .. Note:: These DataFrames contain everything that will be needed for
+            IV equations but do not yet select the data for one particular
+            equation.
+
+        Args:
+            period (int): period identifier
+
+        Returns:
+            y_data (DataFrame): measurements from the next period (period + 1)
+            x_data (DataFrame): residual measurements from period, extended
+                with residual measurements of constant factors from initial
+                period.
+            z_data (DataFrame): measurements from period, extended  with
+                measurements of constant factors from initial period.
+        """
         y_data = self.y_data[period + 1]
 
         loadings = self.extended_meas_coeffs('loadings', period)
-        intercepts = self.extended_meas_coeffs(
-            'intercepts', period)
+        intercepts = self.extended_meas_coeffs('intercepts', period)
+
         x_data = residual_measurements(
             self.y_data[period], loadings=loadings, intercepts=intercepts)
         x_data['constant'] = 1
@@ -1118,6 +1183,22 @@ class SkillModel(GenericLikelihoodModel):
         return y_data, x_data, z_data
 
     def get_iv_coeffs(self, period, factor, y_data, x_data, z_data):
+        """Estimate parameters of all IV equations of factor in period.
+
+        Args:
+            period (int): period identifier
+            factor (str): name of a latent factor
+            y_data, x_data, z_data (DataFrames): see iv_data
+
+        Returns:
+            iv_coeffs (DataFrame): pandas DataFrame with the estimated
+                coefficients of all IV equations of factor in period. The
+                DataFrame has a Multiindex. The first level are the names of
+                the dependent variables (next period measurements) of the
+                estimated equations. The second level consists of inegers that
+                identify the different combinations of independent variables.
+
+        """
         x_list, z_list = self.iv_equation_variable_lists(period, factor)
         f = self.factors.index(factor)
         trans_name = self.transition_names[f]
@@ -1148,22 +1229,29 @@ class SkillModel(GenericLikelihoodModel):
 
     def fit_wa(self):
         t = 0
+        delta_df_list = []
         meas_coeffs, X_zero = initial_meas_coeffs(
-            y_data=self.y_data[t], factors=self.factors,
+            y_data=self.y_data[t],
             measurements=self.measurements, normalizations=self.normalizations)
+
+        # if self.model_name == 'no_squares_translog_model':
+        #     self.storage_df.update(prepend_index_level(meas_coeffs.round(decimals=3), t))
+        # else:
         self.storage_df.update(prepend_index_level(meas_coeffs, t))
 
         P_zero = initial_cov_matrix(
             data=self.y_data[t], storage_df=self.storage_df,
             measurements=self.measurements)
 
-        # =====================================================================
         trans_coeff_storage = self._initial_trans_coeffs()
+        per_period_iv_data = []
 
         for t in self.periods[:-1]:
+            delta_df_list.append([])
             stage = self.stagemap[t]
 
             y_data, x_data, z_data = self.iv_data(t)
+            per_period_iv_data.append({'y': y_data, 'x': x_data, 'z': z_data})
 
             for f, factor in enumerate(self.factors):
                 trans_name = self.transition_names[f]
@@ -1182,11 +1270,13 @@ class SkillModel(GenericLikelihoodModel):
                         iv_coeffs=iv_coeffs,
                         loading_norminfo=loading_norminfo,
                         intercept_norminfo=intercept_norminfo)
-                    meas_coeffs.index = pd.MultiIndex.from_tuples(
-                        [(t + 1, meas) for meas in meas_coeffs.index])
+                    meas_coeffs = prepend_index_level(meas_coeffs, t + 1)
+                    # if self.model_name == 'no_squares_translog_model':
+                    #     self.storage_df.update(meas_coeffs.round(decimals=3)) # ============================
+                    # else:
                     self.storage_df.update(meas_coeffs)
-
                     trans_coeff_storage[f][stage] = gammas
+                delta_df_list[t].append(iv_coeffs)
 
         return self.storage_df, X_zero, P_zero, trans_coeff_storage
 

@@ -92,7 +92,8 @@ class ModelSpecProcessor:
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
         self._nmeas_list()
-        self._wa_storage_df()
+        if self.estimator == 'wa':
+            self._wa_storage_df()
 
     def _set_time_specific_attributes(self):
         """Set model specs related to periods and stages as attributes."""
@@ -128,7 +129,7 @@ class ModelSpecProcessor:
 
         if self.estimator == 'wa':
             assert list(self.stagemap)[:-1] == list(self.periods)[:-1], (
-                'For the WA estimator stages cannot span more than 1 period.')
+                'For the wa estimator stages cannot span more than 1 period.')
 
         for factor in self.factors:
             length = len(self._facinf[factor]['measurements'])
@@ -334,7 +335,7 @@ class ModelSpecProcessor:
                         'ments in period {}.'.format(
                             self.model_name, factor, t))
 
-            elif self.estimator == 'WA':
+            elif self.estimator == 'wa':
                 for t in self.periods:
                     assert len(measurements[factor][t]) >= 2, (
                         'In model {} factor {} has a non-constant transition '

@@ -5,6 +5,9 @@ import numpy as np
 from pandas import DataFrame
 from numpy.testing import assert_array_equal as aae
 import json
+import pandas as pd
+from pandas.util.testing import assert_series_equal
+from pandas.util.testing import assert_frame_equal
 
 
 class TestGeneralParamsSlice:
@@ -56,7 +59,8 @@ class TestDeltasRelatedMethods:
             aae(calc, ex)
 
     def test_initial_deltas_with_controls_and_constants(self):
-        exp1 = np.array([[3, 0, 0], [0, 0, 0], [0, 0, 0], [4, 0, 0], [0, 0, 0], [0, 0, 0]])
+        exp1 = np.array([
+            [3, 0, 0], [0, 0, 0], [0, 0, 0], [4, 0, 0], [0, 0, 0], [0, 0, 0]])
         exp2 = np.array([[5, 0, 0, 0], [6, 0, 0, 0], [0, 0, 0, 0]])
         exp3 = np.array([[7, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]])
         expected = [exp1, exp2, exp3]
@@ -222,7 +226,8 @@ class TestTauRelatedMethods:
 class TestHRelatedMethods:
     def setup(self):
         self.factors = ['f1', 'f2']
-        cols = self.factors + ['f1_loading_norm_value', 'f2_loading_norm_value']
+        cols = self.factors + [
+            'f1_loading_norm_value', 'f2_loading_norm_value']
         self.nfac = 2
         dat = np.zeros((20, 4))
         dat[(0, 1, 6, 8, 11, 16, 18), 0] = 1
@@ -846,6 +851,151 @@ class TestSigmaWeightsAndScalingFactor:
 class TestLikelihoodArgumentsDict:
     def setup(self):
         pass
+
+
+class TestMeasListForIVEquations:
+    def setup(self):
+        self.measurements = {
+            'f1': [['y01', 'y02'], ['y11', 'y12']],
+            'f2': [['y04', 'y05'], ['y14', 'y15']],
+            'f3': [['y07', 'y08'], []]}
+
+        self.factors = ['f1', 'f2', 'f3']
+        self.included_factors = [['f1', 'f3'], ['f2', 'f3'], []]
+        self.transition_names = ['blubb', 'blubb', 'constant']
+
+    def test_meas_list_for_iv_equations_constant_factor(self):
+        calc_meas_list = smo.meas_list_for_iv_equations(self, 1, 'f1', 'test')
+        expected_meas_list = [
+            ['y11_test', 'y12_test'],
+            ['y07_copied_test', 'y08_copied_test']]
+        assert_equal(calc_meas_list, expected_meas_list)
+
+    def test_meas_list_for_iv_equations_non_constant(self):
+        calc_meas_list = smo.meas_list_for_iv_equations(self, 1, 'f2', '')
+        expected_meas_list = [
+            ['y14', 'y15'], ['y07_copied', 'y08_copied']]
+        assert_equal(calc_meas_list, expected_meas_list)
+
+    def test_x_list(self):
+        ret_val = [['y1', 'y2'], ['y3', 'y4']]
+        self.meas_list_for_iv_equations = Mock(return_value=ret_val)
+
+        expected_xs = [
+            ['y1', 'y3'], ['y1', 'y4'], ['y2', 'y3'], ['y2', 'y4']]
+        calc_xs = smo.iv_equation_variable_lists(self, 1, 1)[0]
+        assert_equal(calc_xs, expected_xs)
+
+    def test_z_list(self):
+        ret_val = [['y1_resid', 'y2_resid'], ['y3_resid', 'y4_resid']]
+        self.meas_list_for_iv_equations = Mock(return_value=ret_val)
+
+        expected_zs = [
+            [['y2'], ['y4']],
+            [['y2'], ['y3']],
+            [['y1'], ['y4']],
+            [['y1'], ['y3']]]
+        calc_zs = smo.iv_equation_variable_lists(self, 1, 1)[1]
+
+        assert_equal(calc_zs, expected_zs)
+
+
+class TestNumberOfIVParameters:
+    def setup(self):
+        self.factors = ['f1', 'f2', 'f3']
+        self.transition_names = ['bla', 'bla', 'blubb']
+        ret_val = (['correct', 'wrong'], ['correct2', 'wrong2'])
+        self.iv_equation_variable_lists = Mock(return_value=ret_val)
+
+    @patch('skillmodels.estimation.skill_model.tf')
+    def test_number_of_iv_parameters(self, mock_tf):
+        mock_tf.iv_formula_bla.return_value = ('1 + 2 + 3 + 4', '_')
+        expected_param_nr = 4
+        calc_res = smo.number_of_iv_parameters(self, 'f1')
+        assert_equal(calc_res, expected_param_nr)
+
+    @patch('skillmodels.estimation.skill_model.tf')
+    def test_right_calls(self, mock_tf):
+        mock_tf.iv_formula_bla.return_value = ('1 + 2 + 3 + 4', '_')
+        smo.number_of_iv_parameters(self, 'f1')
+        mock_tf.iv_formula_bla.assert_has_calls([call('correct', 'correct2')])
+
+
+class TestExtendedMeasCoeffs:
+    def setup(self):
+        self.factors = ['f1', 'f2']
+        self.transition_names = ['linear', 'constant']
+        self.measurements = {
+            'f1': [['y01', 'y02'], ['y11', 'y12']],
+            'f2': [['y03', 'y04'], []]}
+
+        coeffs = np.arange(0.6, 3.0, 0.2).reshape((6, 2))
+        cols = ['loadings', 'intercepts']
+        index_tuples = [(0, 'y01'), (0, 'y02'), (0, 'y03'), (0, 'y04'),
+                        (1, 'y11'), (1, 'y12')]
+        self.index = pd.MultiIndex.from_tuples(index_tuples)
+        self.storage_df = pd.DataFrame(coeffs, index=self.index, columns=cols)
+
+    def test_extended_meas_coeffs_no_constant_factor_and_intercepts_case(self):
+        coeff_type = 'intercepts'
+        calc_intercepts = smo.extended_meas_coeffs(self, coeff_type, 0)
+        expected_intercepts = pd.Series(
+            data=[0.8, 1.2, 1.6, 2.0],
+            name='intercepts', index=['y01', 'y02', 'y03', 'y04'])
+        assert_series_equal(calc_intercepts, expected_intercepts)
+
+    def test_extendend_meas_coeffs_constant_factor_and_loadings_case(self):
+        coeff_type = 'loadings'
+        calc_loadings = smo.extended_meas_coeffs(self, coeff_type, 1)
+        expected_loadings = pd.Series(
+            data=[2.2, 2.6, 1.4, 1.8],
+            name='loadings',
+            index=['y11', 'y12', 'y03_copied', 'y04_copied'])
+        assert_series_equal(calc_loadings, expected_loadings)
+
+
+class TestIVData:
+    def setup(self):
+        self.index = [0, 1, 2, 3, 4]
+        self.meas_names = ['y1', 'y2', 'y3', 'y4']
+
+        self.periods = [0, 1]
+        self.y_data = [
+            pd.DataFrame(data=0.5, columns=self.meas_names, index=self.index),
+            pd.DataFrame(data=1.5, columns=self.meas_names, index=self.index)]
+
+        loadings = pd.Series(data=[1.0, 1.5, 2.0, 2.5], name='loadings',
+                             index=self.meas_names)
+        intercepts = pd.Series(data=[0.8, 1.2, 1.6, 2.0], name='intercepts',
+                               index=self.meas_names)
+        self.extended_meas_coeffs = Mock(return_val=[loadings, intercepts])
+        self.fake_x = pd.DataFrame(
+            2.5, columns=self.meas_names, index=self.index)
+
+    @patch('skillmodels.estimation.skill_model.residual_measurements')
+    def test_iv_data_y(self, mock_residual_measurements):
+        mock_residual_measurements.return_value = self.fake_x
+        expected_y = pd.DataFrame(
+            data=1.5, columns=self.meas_names, index=self.index)
+        calc_y, calc_x, calc_z = smo.iv_data(self, 0)
+        assert_frame_equal(calc_y, expected_y)
+
+    @patch('skillmodels.estimation.skill_model.residual_measurements')
+    def test_iv_data_x(self, mock_residual_measurements):
+        mock_residual_measurements.return_value = self.fake_x
+        expected_x = self.fake_x.copy(deep=True)
+        expected_x['constant'] = 1
+        calc_y, calc_x, calc_z = smo.iv_data(self, 0)
+        assert_frame_equal(calc_x, expected_x)
+
+    @patch('skillmodels.estimation.skill_model.residual_measurements')
+    def test_iv_data_z(self, mock_residual_measurements):
+        mock_residual_measurements.return_value = self.fake_x
+        expected_z = pd.DataFrame(
+            data=0.5, columns=self.meas_names, index=self.index)
+        expected_z['constant'] = 1
+        calc_y, calc_x, calc_z = smo.iv_data(self, 0)
+        assert_frame_equal(calc_z, expected_z)
 
 if __name__ == '__main__':
     from nose.core import runmodule
