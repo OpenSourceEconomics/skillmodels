@@ -2,8 +2,10 @@ from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 from skillmodels.pre_processing.data_processor import DataProcessor
 from skillmodels.estimation.likelihood_function import \
     log_likelihood_per_individual
-from skillmodels.estimation.wa_functions import initial_cov_matrix, \
-    residual_measurements, iv_reg, initial_meas_coeffs, prepend_index_level
+from skillmodels.estimation.wa_functions import initial_meas_coeffs, \
+    prepend_index_level, factor_covs_and_measurement_error_variances, \
+    iv_reg_array_dict, iv_reg, large_df_for_iv_equations, \
+    transition_error_variance_from_u_covs
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
 from skillmodels.estimation.skill_model_results import SkillModelResults
@@ -13,7 +15,6 @@ import skillmodels.estimation.parse_params as pp
 from itertools import product
 from scipy.optimize import minimize
 from statsmodels.tools.numdiff import approx_hess, approx_fprime
-from patsy import dmatrix
 import pandas as pd
 
 
@@ -1044,7 +1045,9 @@ class SkillModel(GenericLikelihoodModel):
         chsmlefit = SkillModelResults(self, mlefit, optimize_dict)
         return chsmlefit
 
-    def meas_list_for_iv_equations(self, period, factor, suffix=''):
+    # WA Estimator
+
+    def all_variables_for_iv_equations(self, period, factor, suffix=''):
         """List of lists with names of measurements of included factors.
 
         Args:
@@ -1054,17 +1057,19 @@ class SkillModel(GenericLikelihoodModel):
                 the list. It is separated from the actual name by '_'.
 
         Returns:
-            meas_list (list): List of lists with one sublist for each factor
+            varlist (list): List of lists with one sublist for each factor
                 that appears on the right hand side of the transition equation
                 of *factor*. Each sublist contains the names of all
                 measurements in *period* of the corresponding right-hand-side
                 factor.
 
+        formerly called meas_list_for_iv_equations
+
         """
         suffix = '_' + suffix if suffix != '' else suffix
         f = self.factors.index(factor)
         inc_facs = self.included_factors[f]
-        meas_list = []
+        varlist = []
         for inc in inc_facs:
             trans_name = self.transition_names[self.factors.index(inc)]
             if trans_name == 'constant' and period > 0:
@@ -1075,51 +1080,59 @@ class SkillModel(GenericLikelihoodModel):
                 form_string = '{}' + suffix
                 sublist = [form_string.format(m)
                            for m in self.measurements[inc][period]]
-            meas_list.append(sublist)
-        return meas_list
+            varlist.append(sublist)
+        return varlist
 
-    def iv_equation_variable_lists(self, period, factor):
-        """Nested lists with combination of measurement names for iv equations.
+    def variable_permutations_for_iv_equations(self, period, factor):
+        """Nested lists with permutations of variable names for iv equations.
 
         In the WA estimator, the transition equations are rewritten in an
         errors-in-variables specification in which latent factors are
         approximated by residual measurements and then instrumented by other
-        measurements.
+        measurements. The get the closed form estimator with the highest
+        statistical efficiency, iv equations with all possible permutations of
+        residual measurements and instruments are estimated and their results
+        will be averaged.
 
         Args:
             period (int): the period for which the lists are generated
             factor (str): the factor for which the lists are generated
 
         Returns:
-            x_list (list): contains one sublist for each iv equation that has
-                to be estimated for *factor* in *period*. Each sublist contains
-                the names of the measurements that are used to form the
-                residual measurements for that iv equation. The length of each
-                sublist is the number of factors that are included in the right
-                hand side of the transition equation of *factor*.
-            z_list (list): has the same length as x_list and contains the
-                instruments for each transition equation. The instruments are
-                lists of lists with one sublist for each included factor.
+            indepvar_permutations (list): contains one sublist for each iv
+                equation that has to be estimated for *factor* in *period*.
+                Each sublist contains the names of the measurements that are
+                used to form the residual measurements for that iv equation.
+                The length of each sublist is the number of factors that are
+                included in the right hand side of the transition equation of
+                *factor*.
+            instrument_permutations (list): has the same length as x_list and
+                contains the instruments for each transition equation. The
+                instruments are lists of lists with one sublist for each
+                included factor.
+
+        formerly called iv_equation_variable_lists
 
         """
-        meas_lists_for_x = self.meas_list_for_iv_equations(
+        all_variables_for_indepvars = self.all_variables_for_iv_equations(
             period, factor, suffix='resid')
-        x_list = list(map(list, product(*meas_lists_for_x)))
+        indepvar_permutations = \
+            list(map(list, product(*all_variables_for_indepvars)))
 
-        z_list = []
-        for x in x_list:
+        instrument_permutations = []
+        for x in indepvar_permutations:
             z = []
-            for sublist in meas_lists_for_x:
+            for sublist in all_variables_for_indepvars:
                 z.append([m[:-6] for m in sublist if m not in x])
-            z_list.append(z)
+            instrument_permutations.append(z)
 
-        return x_list, z_list
+        return indepvar_permutations, instrument_permutations
 
     def number_of_iv_parameters(self, factor):
-        """Number of parameters in the IV equation of a parameter."""
+        """Number of parameters in the IV equation of a factor."""
         f = self.factors.index(factor)
         trans_name = self.transition_names[f]
-        x_list, z_list = self.iv_equation_variable_lists(0, factor)
+        x_list, z_list = self.variable_permutations_for_iv_equations(0, factor)
         example_x, example_z = x_list[0], z_list[0]
         x_formula, _ = getattr(tf, 'iv_formula_{}'.format(trans_name))(
             example_x, example_z)
@@ -1150,40 +1163,26 @@ class SkillModel(GenericLikelihoodModel):
             coeffs = coeffs.append(constant_factor_coeffs)
         return coeffs
 
-    def iv_data(self, period):
-        """Construct DataFrames with data for all IV equations in period.
-
-        .. Note:: These DataFrames contain everything that will be needed for
-            IV equations but do not yet select the data for one particular
-            equation.
+    def residual_measurements(self, period):
+        """Residual measurements for the wa estimator in one period.
 
         Args:
             period (int): period identifier
 
-        Returns:
-            y_data (DataFrame): measurements from the next period (period + 1)
-            x_data (DataFrame): residual measurements from period, extended
+        Returns
+            res_meas (DataFrame): residual measurements from period, extended
                 with residual measurements of constant factors from initial
                 period.
-            z_data (DataFrame): measurements from period, extended  with
-                measurements of constant factors from initial period.
         """
-        y_data = self.y_data[period + 1]
-
         loadings = self.extended_meas_coeffs('loadings', period)
         intercepts = self.extended_meas_coeffs('intercepts', period)
 
-        x_data = residual_measurements(
-            self.y_data[period], loadings=loadings, intercepts=intercepts)
-        x_data['constant'] = 1
+        res_meas = (self.y_data[period] - intercepts) / loadings
+        res_meas.columns = [col + '_resid' for col in res_meas.columns]
+        return res_meas
 
-        z_data = self.y_data[period].copy()
-        z_data['constant'] = 1
-
-        return y_data, x_data, z_data
-
-    def get_iv_coeffs(self, period, factor, y_data, x_data, z_data):
-        """Estimate parameters of all IV equations of factor in period.
+    def all_iv_estimates(self, period, factor, data):
+        """Coeffs and residual covs for all IV equations of factor in period.
 
         Args:
             period (int): period identifier
@@ -1195,88 +1194,119 @@ class SkillModel(GenericLikelihoodModel):
                 coefficients of all IV equations of factor in period. The
                 DataFrame has a Multiindex. The first level are the names of
                 the dependent variables (next period measurements) of the
-                estimated equations. The second level consists of inegers that
+                estimated equations. The second level consists of integers that
                 identify the different combinations of independent variables.
+            u_cov_df (DataFrame): pandas DataFrame with covariances of iv
+                residuals u with alternative dependent variables. The index is
+                the same Multiindex as in iv_coeffs. The columns are all
+                possible dependent variables of *factor* in *period*.
 
         """
-        x_list, z_list = self.iv_equation_variable_lists(period, factor)
-        f = self.factors.index(factor)
-        trans_name = self.transition_names[f]
-        depvars = self.measurements[factor][period + 1]
+        indep_permutations, instr_permutations = \
+            self.variable_permutations_for_iv_equations(period, factor)
         nr_deltas = self.number_of_iv_parameters(factor)
-        columns = ['delta_{}'.format(i) for i in range(nr_deltas)]
+        trans_name = self.transition_names[self.factors.index(factor)]
+        depvars = self.measurements[factor][period + 1]
 
-        ind_tuples = [(y, i) for y, i in product(depvars, range(len(x_list)))]
+        iv_columns = ['delta_{}'.format(i) for i in range(nr_deltas)]
+        u_cov_columns = ['cov_u_{}'.format(y) for y in depvars]
+
+        ind_tuples = [(dep_name, indep_loc) for dep_name, indep_loc in product(
+            depvars, range(len(indep_permutations)))]
         index = pd.MultiIndex.from_tuples(ind_tuples)
 
-        iv_coeffs = pd.DataFrame(data=0.0, index=index, columns=columns)
+        iv_coeffs = pd.DataFrame(data=0.0, index=index, columns=iv_columns)
+        u_cov_df = pd.DataFrame(data=0.0, index=index, columns=u_cov_columns)
 
-        for y in depvars:
-            y_vector = y_data[y].values
-            # all deltas on this level have the same mü and lambda
-            # mü and/or lambda might be normalized
-            for x, z in zip(x_list, z_list):
-                iv_formula_func = getattr(tf, 'iv_formula_' + trans_name)
-                x_formula, z_formula = iv_formula_func(x, z)
-                x_matrix = dmatrix(x_formula, data=x_data,
-                                   return_type='dataframe').values
-                z_matrix = dmatrix(z_formula, data=z_data,
-                                   return_type='dataframe').values
-                deltas = iv_reg(y_vector, x_matrix, z_matrix)
-                iv_coeffs.loc[(y, x_list.index(x))] = deltas
+        for dep in depvars:
+            counter = 0
+            for indep, instr in zip(indep_permutations, instr_permutations):
+                iv_arrs = iv_reg_array_dict(
+                    dep, indep, instr, trans_name, data)
+                non_missing_index = iv_arrs.pop('non_missing_index')
+                deltas = iv_reg(**iv_arrs)
+                iv_coeffs.loc[(dep, counter)] = deltas
+                y, x = iv_arrs['depvar_arr'], iv_arrs['indepvars_arr']
+                u = pd.Series(data=y - np.dot(x, deltas),
+                              index=non_missing_index)
+                for dep2 in depvars:
+                    if dep2 != dep:
+                        u_cov_df.loc[(dep, counter), dep2] = \
+                            u.cov(data[('y', dep2)])
+                    else:
+                        u_cov_df.loc[(dep, counter), dep2] = np.nan
+                counter += 1
+        return iv_coeffs, u_cov_df
 
-        return iv_coeffs
+    def wa_norminfo_dict(self, period, factor):
+        norm_dict = {}
+        norm_dict['loading_norminfo'] = \
+            self.normalizations[factor]['loadings'][period]
+        norm_dict['intercept_norminfo'] = \
+            self.normalizations[factor]['intercepts'][period]
+        return norm_dict
 
     def fit_wa(self):
         t = 0
-        delta_df_list = []
+        # identify measurement system and factor means in initial period
         meas_coeffs, X_zero = initial_meas_coeffs(
             y_data=self.y_data[t],
             measurements=self.measurements, normalizations=self.normalizations)
-
-        # if self.model_name == 'no_squares_translog_model':
-        #     self.storage_df.update(prepend_index_level(meas_coeffs.round(decimals=3), t))
-        # else:
         self.storage_df.update(prepend_index_level(meas_coeffs, t))
 
-        P_zero = initial_cov_matrix(
-            data=self.y_data[t], storage_df=self.storage_df,
-            measurements=self.measurements)
-
+        # generate variables to store transition parameters and transition
+        # error variances
         trans_coeff_storage = self._initial_trans_coeffs()
-        per_period_iv_data = []
+        trans_var_df = pd.DataFrame(
+            data=0.0, columns=self.factors, index=self.stages)
 
-        for t in self.periods[:-1]:
-            delta_df_list.append([])
-            stage = self.stagemap[t]
-
-            y_data, x_data, z_data = self.iv_data(t)
-            per_period_iv_data.append({'y': y_data, 'x': x_data, 'z': z_data})
+        # apply the WA IV approach in all period for all factors and calculate
+        # all model parameters of interest from the iv parameters
+        for t, stage in zip(self.periods[:-1], self.stagemap[:-1]):
+            # generate the large IV DataFrame for period t
+            resid_meas = self.residual_measurements(period=t)
+            iv_data = large_df_for_iv_equations(
+                depvar_data=self.y_data[t + 1], indepvars_data=resid_meas,
+                instruments_data=self.y_data[t])
 
             for f, factor in enumerate(self.factors):
                 trans_name = self.transition_names[f]
                 if trans_name != 'constant':
-                    iv_coeffs = self.get_iv_coeffs(
-                        t, factor, y_data, x_data, z_data)
+                    # get iv estimates (parameters and residual covariances)
+                    iv_coeffs, u_cov_df = self.all_iv_estimates(
+                        t, factor, iv_data)
 
-                    model_coeffs_from_iv_coeffs_func = getattr(
+                    # get model parameters from iv parameters
+                    model_coeffs_func = getattr(
                         tf, 'model_coeffs_from_iv_coeffs_' + trans_name)
-                    loading_norminfo = \
-                        self.normalizations[factor]['loadings'][t + 1]
-                    intercept_norminfo = \
-                        self.normalizations[factor]['intercepts'][t + 1]
 
-                    meas_coeffs, gammas = model_coeffs_from_iv_coeffs_func(
+                    meas_coeffs, gammas = model_coeffs_func(
                         iv_coeffs=iv_coeffs,
-                        loading_norminfo=loading_norminfo,
-                        intercept_norminfo=intercept_norminfo)
-                    meas_coeffs = prepend_index_level(meas_coeffs, t + 1)
-                    # if self.model_name == 'no_squares_translog_model':
-                    #     self.storage_df.update(meas_coeffs.round(decimals=3)) # ============================
-                    # else:
-                    self.storage_df.update(meas_coeffs)
+                        **self.wa_norminfo_dict(period=t + 1, factor=factor))
+
+                    self.storage_df.update(
+                        prepend_index_level(meas_coeffs, t + 1))
                     trans_coeff_storage[f][stage] = gammas
-                delta_df_list[t].append(iv_coeffs)
+
+                    # get transition error variance from residual covariances
+                    trans_var_df.loc[stage, factor] = \
+                        transition_error_variance_from_u_covs(
+                            u_cov_df, meas_coeffs['loadings'])
+
+        # calculate measurement error variances and factor covariance matrices
+        factor_cov_list = []
+        for t in self.periods:
+            meas_cov = self.y_data[t].cov()
+            loadings = self.storage_df.loc[t, 'loadings']
+            meas_per_f = {f: self.measurements[f][t] for f in self.factors}
+            p, meas_error_variances = \
+                factor_covs_and_measurement_error_variances(
+                    meas_cov=meas_cov, loadings=loadings,
+                    meas_per_factor=meas_per_f)
+            factor_cov_list.append(p)
+            self.storage_df.update(prepend_index_level(
+                meas_error_variances, t))
+        P_zero = factor_cov_list[0]
 
         return self.storage_df, X_zero, P_zero, trans_coeff_storage
 

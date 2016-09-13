@@ -853,7 +853,7 @@ class TestLikelihoodArgumentsDict:
         pass
 
 
-class TestMeasListForIVEquations:
+class TestAllVariablesForIVEquations:
     def setup(self):
         self.measurements = {
             'f1': [['y01', 'y02'], ['y11', 'y12']],
@@ -864,38 +864,39 @@ class TestMeasListForIVEquations:
         self.included_factors = [['f1', 'f3'], ['f2', 'f3'], []]
         self.transition_names = ['blubb', 'blubb', 'constant']
 
-    def test_meas_list_for_iv_equations_constant_factor(self):
-        calc_meas_list = smo.meas_list_for_iv_equations(self, 1, 'f1', 'test')
+    def test_all_variables_for_iv_equations_constant_factor(self):
+        calc_meas_list = smo.all_variables_for_iv_equations(
+            self, 1, 'f1', 'test')
         expected_meas_list = [
             ['y11_test', 'y12_test'],
             ['y07_copied_test', 'y08_copied_test']]
         assert_equal(calc_meas_list, expected_meas_list)
 
-    def test_meas_list_for_iv_equations_non_constant(self):
-        calc_meas_list = smo.meas_list_for_iv_equations(self, 1, 'f2', '')
+    def test_all_variables_for_iv_equations_non_constant(self):
+        calc_meas_list = smo.all_variables_for_iv_equations(self, 1, 'f2', '')
         expected_meas_list = [
             ['y14', 'y15'], ['y07_copied', 'y08_copied']]
         assert_equal(calc_meas_list, expected_meas_list)
 
-    def test_x_list(self):
+    def test_indepvar_permutations(self):
         ret_val = [['y1', 'y2'], ['y3', 'y4']]
-        self.meas_list_for_iv_equations = Mock(return_value=ret_val)
+        self.all_variables_for_iv_equations = Mock(return_value=ret_val)
 
         expected_xs = [
             ['y1', 'y3'], ['y1', 'y4'], ['y2', 'y3'], ['y2', 'y4']]
-        calc_xs = smo.iv_equation_variable_lists(self, 1, 1)[0]
+        calc_xs = smo.variable_permutations_for_iv_equations(self, 1, 1)[0]
         assert_equal(calc_xs, expected_xs)
 
-    def test_z_list(self):
+    def test_instrument_permutations(self):
         ret_val = [['y1_resid', 'y2_resid'], ['y3_resid', 'y4_resid']]
-        self.meas_list_for_iv_equations = Mock(return_value=ret_val)
+        self.all_variables_for_iv_equations = Mock(return_value=ret_val)
 
         expected_zs = [
             [['y2'], ['y4']],
             [['y2'], ['y3']],
             [['y1'], ['y4']],
             [['y1'], ['y3']]]
-        calc_zs = smo.iv_equation_variable_lists(self, 1, 1)[1]
+        calc_zs = smo.variable_permutations_for_iv_equations(self, 1, 1)[1]
 
         assert_equal(calc_zs, expected_zs)
 
@@ -904,8 +905,8 @@ class TestNumberOfIVParameters:
     def setup(self):
         self.factors = ['f1', 'f2', 'f3']
         self.transition_names = ['bla', 'bla', 'blubb']
-        ret_val = (['correct', 'wrong'], ['correct2', 'wrong2'])
-        self.iv_equation_variable_lists = Mock(return_value=ret_val)
+        ret = (['correct', 'wrong'], ['correct2', 'wrong2'])
+        self.variable_permutations_for_iv_equations = Mock(return_value=ret)
 
     @patch('skillmodels.estimation.skill_model.tf')
     def test_number_of_iv_parameters(self, mock_tf):
@@ -954,48 +955,41 @@ class TestExtendedMeasCoeffs:
         assert_series_equal(calc_loadings, expected_loadings)
 
 
-class TestIVData:
+class TestResidualMeasurements:
     def setup(self):
-        self.index = [0, 1, 2, 3, 4]
-        self.meas_names = ['y1', 'y2', 'y3', 'y4']
+        intercepts = pd.Series(
+            [3.0, 2.0], name='intercepts', index=['m2', 'm1'])
+        loadings = pd.Series(
+            [2.0, 0.5], name='loadings', index=['m1', 'm2'])
+        self.extended_meas_coeffs = Mock(side_effect=[loadings, intercepts])
 
-        self.periods = [0, 1]
-        self.y_data = [
-            pd.DataFrame(data=0.5, columns=self.meas_names, index=self.index),
-            pd.DataFrame(data=1.5, columns=self.meas_names, index=self.index)]
+        d = pd.DataFrame(data=np.array([[5, 4], [3, 2]]), columns=['m1', 'm2'])
 
-        loadings = pd.Series(data=[1.0, 1.5, 2.0, 2.5], name='loadings',
-                             index=self.meas_names)
-        intercepts = pd.Series(data=[0.8, 1.2, 1.6, 2.0], name='intercepts',
-                               index=self.meas_names)
-        self.extended_meas_coeffs = Mock(return_val=[loadings, intercepts])
-        self.fake_x = pd.DataFrame(
-            2.5, columns=self.meas_names, index=self.index)
+        self.y_data = ['dummy', d, 'dummy']
 
-    @patch('skillmodels.estimation.skill_model.residual_measurements')
-    def test_iv_data_y(self, mock_residual_measurements):
-        mock_residual_measurements.return_value = self.fake_x
-        expected_y = pd.DataFrame(
-            data=1.5, columns=self.meas_names, index=self.index)
-        calc_y, calc_x, calc_z = smo.iv_data(self, 0)
-        assert_frame_equal(calc_y, expected_y)
+    def test_residual_measurements(self):
+        expected_data = np.array([
+            [1.5, 2],
+            [0.5, -2]])
+        expected_resid = pd.DataFrame(
+            expected_data, columns=['m1_resid', 'm2_resid'])
+        calc_resid = smo.residual_measurements(self, period=1)
+        assert_frame_equal(calc_resid, expected_resid)
 
-    @patch('skillmodels.estimation.skill_model.residual_measurements')
-    def test_iv_data_x(self, mock_residual_measurements):
-        mock_residual_measurements.return_value = self.fake_x
-        expected_x = self.fake_x.copy(deep=True)
-        expected_x['constant'] = 1
-        calc_y, calc_x, calc_z = smo.iv_data(self, 0)
-        assert_frame_equal(calc_x, expected_x)
 
-    @patch('skillmodels.estimation.skill_model.residual_measurements')
-    def test_iv_data_z(self, mock_residual_measurements):
-        mock_residual_measurements.return_value = self.fake_x
-        expected_z = pd.DataFrame(
-            data=0.5, columns=self.meas_names, index=self.index)
-        expected_z['constant'] = 1
-        calc_y, calc_x, calc_z = smo.iv_data(self, 0)
-        assert_frame_equal(calc_z, expected_z)
+class TestWANorminfoDict:
+    def setup(self):
+        n = {}
+        n['f1'] = {'loadings': [['y1', 4], ['y2', 5], ['y3', 6]],
+                   'intercepts': [['y4', 7], ['y5', 8]]}
+        self.normalizations = n
+
+    def test_wa_norminfo_dict(self):
+        expected = {'loading_norminfo': ['y2', 5],
+                    'intercept_norminfo': ['y5', 8]}
+        calculated = smo.wa_norminfo_dict(self, 1, 'f1')
+        assert_equal(calculated, expected)
+
 
 if __name__ == '__main__':
     from nose.core import runmodule

@@ -764,6 +764,7 @@ class ModelSpecProcessor:
             ['has_normalized_intercept', 'has_normalized_loading',
              'loadings', 'intercepts']
         storage_df = df[relevant_columns].copy(deep=True)
+        storage_df['epsilon_variances'] = 0.0
         self.storage_df = storage_df
 
     def new_trans_coeffs(self):

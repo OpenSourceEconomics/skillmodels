@@ -512,6 +512,8 @@ class TestWAStorageDf:
         self.expected_res = pd.DataFrame(
             data=expected_data, columns=expected_cols, index=index)
 
+        self.expected_res['epsilon_variances'] = 0
+
     def test_wa_storage_df(self):
         msp._wa_storage_df(self)
         assert_equal(self.storage_df.to_dict(), self.expected_res.to_dict())

@@ -15,6 +15,7 @@ with open('no_squares_translog_model.json') as j:
 def generate_test_data(nobs, factors, periods, included_positions, meas_names,
                        initial_mean, initial_cov, intercepts, loadings,
                        meas_sd, gammas, trans_sd):
+
     np.random.seed(69403)
     nfac = len(factors)
     initial_factors = np.random.multivariate_normal(
@@ -24,6 +25,7 @@ def generate_test_data(nobs, factors, periods, included_positions, meas_names,
     m_to_factor = [0, 0, 0, 1, 1, 1, 2, 2, 2]
     counter = 0
     for t in periods:
+
         if t == 0:
             new_facs = initial_factors
         else:
@@ -42,9 +44,8 @@ def generate_test_data(nobs, factors, periods, included_positions, meas_names,
         nmeas = 9 if t == 0 else 6
         # noise part of measurements
         measurements = np.random.normal(
-            loc=np.zeros(nmeas), scale=meas_sd[:nmeas],
+            loc=np.zeros(nmeas), scale=meas_sd[counter: counter + nmeas],
             size=(nobs, nmeas))
-        measurements = np.zeros((nobs, nmeas))
         # add structural part of measurements
         for m in range(nmeas):
             factor_pos = m_to_factor[m]
@@ -63,7 +64,7 @@ def generate_test_data(nobs, factors, periods, included_positions, meas_names,
 
 class TestOfWAEstimator:
     def setup(self):
-        self.nobs = 10000
+        self.nobs = 5000
         self.nperiods = 8
         self.periods = list(range(self.nperiods))
 
@@ -99,7 +100,7 @@ class TestOfWAEstimator:
                                          [0.18, 9.0, 0.0],
                                          [0.4, 0.0, 16.0]])
         self.true_P_zero = self.true_cov_matrix[np.triu_indices(self.nfac)]
-        self.base_meas_sd = 0.0001
+        self.base_meas_sd = 0.00001
         self.true_meas_sd = self.true_loadings * self.base_meas_sd
         self.true_meas_var = self.true_meas_sd ** 2
         self.true_trans_sd = 0.00001 * np.arange(
@@ -123,14 +124,20 @@ class TestOfWAEstimator:
             self.calc_gammas = self.wa_model.fit_wa()
         self.calc_loadings = self.calc_storage_df['loadings']
         self.calc_intercepts = self.calc_storage_df['intercepts']
+        self.calc_epsilon_variances = self.calc_storage_df['epsilon_variances']
 
     def test_fit_wa_results(self):
-        aaae(self.calc_loadings.values, self.true_loadings)
-        aaae(self.calc_intercepts.values, self.true_intercepts)
+        aaae(self.calc_loadings.values, self.true_loadings, decimal=3)
+        aaae(self.calc_intercepts.values, self.true_intercepts, decimal=3)
         aaae(self.calc_X_zero, self.true_X_zero, decimal=1)
         for arr1, arr2 in zip(self.calc_gammas, self.true_gammas):
-            aaae(arr1, arr2, decimal=4)
+            aaae(arr1, arr2, decimal=3)
+
+        # parameters that are estimated with less precision. They would
+        # require a much too large number of observations in the test.
+        # aaae(self.calc_epsilon_variances, self.true_meas_var)
         # aaae(self.calc_P_zero, self.true_P_zero, decimal=2)
+
 
 if __name__ == '__main__':
     from nose.core import runmodule

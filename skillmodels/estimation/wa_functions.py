@@ -2,6 +2,8 @@
 
 import numpy as np
 import pandas as pd
+import skillmodels.model_functions.transition_functions as tf
+from patsy import dmatrix
 
 
 def loadings_from_covs(data, normalization):
@@ -89,9 +91,16 @@ def intercepts_from_means(data, normalization, loadings):
 
 
 def prepend_index_level(df, to_prepend):
-    df = df.copy(deep=True)
+    df = df.copy()
     df.index = pd.MultiIndex.from_tuples(
         [(to_prepend, x) for x in df.index])
+    return df
+
+
+def prepend_column_level(df, to_prepend):
+    df = df.copy()
+    df.columns = pd.MultiIndex.from_tuples(
+        [(to_prepend, x) for x in df.columns])
     return df
 
 
@@ -134,60 +143,103 @@ def initial_meas_coeffs(y_data, measurements, normalizations):
     return meas_coeffs, np.array(X_zero)
 
 
-def initial_cov_matrix(data, storage_df, measurements):
-    """
-    Initial covariance matrix of latent factors from measurement covariances.
+def factor_covs_and_measurement_error_variances(
+        meas_cov, loadings, meas_per_factor):
+    """Covs of latent factors and vars of measurement equations in a period.
 
     Args:
-        data (DataFrame): DataFrame of the measurements of the initial period.
-        storage_df (DataFrame): DataFrame of loadings and intercepts.
-        measurements (dictionary): the keys are the factors. The values are
-            nested lits with one sublist of measurement names for each period.
+        meas_cov (DataFrame): covariance matrix of measurement data.
+        loadings (Series): factor loadings
+        meas_per_factor (dictionary): the keys are the factors. The values are
+            a list with the names of their measurements.
 
     Returns:
         factor_covs (np.ndarray): 1d array with the upper triangular
-            elements of the covariance matrix.
+            elements of the covariance matrix of the latent factors.
+        meas_error_variances (Series): variances of errors in measurement
+            equations.
+
     """
-    t = 0
-    factors = sorted(list(measurements.keys()))
-    measurements = {factor: measurements[factor][t] for factor in factors}
+    factors = sorted(list(meas_per_factor.keys()))
 
-    meas_cov = data.cov()
-    factor_covs = []
-
-    loadings = storage_df.loc[0, 'loadings']
     scaled_meas_cov = meas_cov.divide(
         loadings, axis=0).divide(loadings, axis=1)
 
-    # set diagonal elements to NaN
-    for i in scaled_meas_cov.index:
-        scaled_meas_cov.loc[i, i] = np.nan
+    diag_bool = np.eye(len(scaled_meas_cov), dtype=bool)
+    diag_series = pd.Series(
+        data=scaled_meas_cov.values[diag_bool], index=scaled_meas_cov.index,
+        name='meas_error_variances')
+    scaled_meas_cov.values[diag_bool] = np.nan
 
+    factor_covs = []
     for f1, factor1 in enumerate(factors):
-        measurements1 = measurements[factor1]
+        meas_list1 = meas_per_factor[factor1]
         for f2, factor2 in enumerate(factors):
-            measurements2 = measurements[factor2]
+            meas_list2 = meas_per_factor[factor2]
             if f2 >= f1:
-                relevant = scaled_meas_cov.loc[measurements1, measurements2]
-                factor_covs.append(relevant.mean().mean())
+                relevant = scaled_meas_cov.loc[meas_list1, meas_list2]
+                cov_estimate = relevant.mean().mean()
+                factor_covs.append(cov_estimate)
+                if f2 == f1:
+                    diag_series[meas_list1] -= cov_estimate
 
-    return np.array(factor_covs)
+    factor_covs = np.array(factor_covs)
+    meas_error_variances = diag_series
+    return factor_covs, meas_error_variances
 
 
-def residual_measurements(data, loadings, intercepts):
-    df = (data - intercepts) / loadings
-    df.columns = ['{}_resid'.format(col) for col in df.columns]
-    return df
+def iv_reg_array_dict(depvar_name, indepvar_names, instrument_names,
+                      transition_name, data):
+    """Prepare the data arrays for an iv regression.
+
+    Args:
+        data (DataFrame): contains all variables that are used. Can contain any
+            number of additional variables without causing problems.
+        depvar_name (str): the name of the dependent variable
+        indepvar_names (list): list of strings with the names of the
+            independent variables.
+        indepvar_names (list): list of strings with the names of the
+            instruments
+        transition_name (str): name of the transition function that is
+            estimated via the iv approach of the wa estimator.
+
+    Returns:
+        arr_dict (dict): A dictionary with the keys depvar_arr, indepvars_arr
+            and instruments_arr. The corresponding values are numpy arrays
+            with the data for an iv regression. NaNs are removed.
+
+    """
+    arr_dict = {}
+    used_variables = \
+        [('y', depvar_name)] + [('x', indep) for indep in indepvar_names] + \
+        [('z', instr) for sublist in instrument_names for instr in sublist]
+
+    data = data[used_variables].dropna()
+    for category in ['x', 'z']:
+        data[(category, 'constant')] = 1.0
+
+    arr_dict['depvar_arr'] = data[('y', depvar_name)].values
+
+    formula_func = getattr(tf, 'iv_formula_{}'.format(transition_name))
+    indep_formula, instr_formula = formula_func(
+        indepvar_names, instrument_names)
+    arr_dict['indepvars_arr'] = \
+        dmatrix(indep_formula, data=data['x'], return_type='dataframe').values
+    arr_dict['instruments_arr'] = \
+        dmatrix(instr_formula, data=data['z'], return_type='dataframe').values
+
+    arr_dict['non_missing_index'] = data.index
+    return arr_dict
 
 
-def iv_reg(y, x, z, fit_method='2sls'):
+def iv_reg(depvar_arr, indepvars_arr, instruments_arr, fit_method='2sls'):
     """Estimate a linear-in-parameters instrumental variable equation via GMM.
 
     args:
-        y (np.ndarray): array of length n, dependent variable.
-        x (np.ndarray): array of shape [n, k], original explanatory variables
-        z (np.ndarray): array of shape [n, >=k], the instruments. Instruments
-            have to include exogenous variables that are already in x.
+        depvar (np.ndarray): array of length n, dependent variable.
+        indepvars (np.ndarray): array of shape [n, k], independent variables
+        instruments (np.ndarray): array of shape [n, >=k]. Instruments
+            have to include exogenous variables that are already in indepvars.
         fit_method (str): takes the values `2sls' or `optimal'. `Optimal' is
             computationally  expensive but uses a more efficient weight matrix.
             The default is `2sls'.
@@ -196,9 +248,13 @@ def iv_reg(y, x, z, fit_method='2sls'):
         beta (np.ndarray): array of length k with the estimated parameters
 
     All input arrays must not contain NaNs and constants must be included
-    explicitly in x and z.
+    explicitly in indepvars and instruments.
 
     """
+    y = depvar_arr
+    x = indepvars_arr
+    z = instruments_arr
+
     nobs, k_prime = z.shape
     w = _iv_gmm_weights(z)
     beta = _iv_math(y, x, z, w)
@@ -231,3 +287,19 @@ def _iv_gmm_weights(z, u=None):
         s = (u_squared.reshape(nobs, 1, 1) * outerprod).sum(axis=0) / nobs
         w = np.linalg.pinv(s)
     return w
+
+
+def large_df_for_iv_equations(depvar_data, indepvars_data, instruments_data):
+    to_concat = [prepend_column_level(depvar_data, 'y'),
+                 prepend_column_level(indepvars_data, 'x'),
+                 prepend_column_level(instruments_data, 'z')]
+
+    df = pd.concat(to_concat, axis=1)
+    return df
+
+
+def transition_error_variance_from_u_covs(u_covs, loadings):
+
+    scaled_u_covs = u_covs.divide(loadings, level=0, axis=0).divide(loadings)
+    transition_error_variance = scaled_u_covs.mean().mean()
+    return transition_error_variance
