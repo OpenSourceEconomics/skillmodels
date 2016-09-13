@@ -268,12 +268,37 @@ class TestIVGMMWeights:
 
 class TestLargeDFForIVEquations:
     def setup(self):
-        pass
+        self.dep = pd.DataFrame(
+            data=np.ones((2, 2), dtype=float), columns=list('ab'))
+        self.indep = pd.DataFrame(data=np.ones((2, 1)) * 1.5, columns=['c'])
+        self.instr = pd.DataFrame(
+            data=np.arange(2, dtype=float).reshape(2, 1), columns=['d'])
+
+        expected_dat = np.array([[1., 1, 1.5, 0], [1, 1, 1.5, 1]])
+        expected_cols = pd.MultiIndex.from_tuples(
+            [('y', 'a'), ('y', 'b'), ('x', 'c'), ('z', 'd')])
+        self.expected_df = pd.DataFrame(
+            data=expected_dat, columns=expected_cols)
+
+    def test_large_df_for_iv_equations(self):
+        calc = wf.large_df_for_iv_equations(self.dep, self.indep, self.instr)
+        assert_frame_equal(calc, self.expected_df,)
 
 
 class TestTransitionErrorVarianceFromUCovs:
     def setup(self):
-        pass
+        cols = ['m0', 'm1', 'm2']
+        ind = pd.MultiIndex.from_tuples([
+            ('m0', 0), ('m0', 1), ('m1', 0), ('m1', 1), ('m2', 0), ('m2', 1)])
+        dat = np.ones((6, 3))
+        self.u_covs = pd.DataFrame(data=dat, columns=cols, index=ind)
+
+        self.loadings = pd.Series(data=[1, 2, 3], index=cols)
+
+    def test_transition_error_variance_from_u_covs(self):
+        calc = wf.transition_error_variance_from_u_covs(
+            self.u_covs, self.loadings)
+        assert_almost_equal(calc, 0.3734567901234568)
 
 
 if __name__ == '__main__':
