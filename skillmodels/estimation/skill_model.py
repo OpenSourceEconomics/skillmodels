@@ -1257,8 +1257,10 @@ class SkillModel(GenericLikelihoodModel):
         # generate variables to store transition parameters and transition
         # error variances
         trans_coeff_storage = self._initial_trans_coeffs()
+        trans_var_cols = [fac for f, fac in enumerate(self.factors)
+                          if self.transition_names[f] != 'constant']
         trans_var_df = pd.DataFrame(
-            data=0.0, columns=self.factors, index=self.stages)
+            data=0.0, columns=trans_var_cols, index=self.stages)
 
         # apply the WA IV approach in all period for all factors and calculate
         # all model parameters of interest from the iv parameters
@@ -1308,7 +1310,7 @@ class SkillModel(GenericLikelihoodModel):
                 meas_error_variances, t))
         P_zero = factor_cov_list[0]
 
-        return self.storage_df, X_zero, P_zero, trans_coeff_storage
+        return self.storage_df, X_zero, P_zero, trans_coeff_storage, trans_var_df
 
     def score(self, params, args):
         return approx_fprime(

@@ -512,7 +512,7 @@ class TestWAStorageDf:
         self.expected_res = pd.DataFrame(
             data=expected_data, columns=expected_cols, index=index)
 
-        self.expected_res['epsilon_variances'] = 0
+        self.expected_res['meas_error_variances'] = 0
 
     def test_wa_storage_df(self):
         msp._wa_storage_df(self)
