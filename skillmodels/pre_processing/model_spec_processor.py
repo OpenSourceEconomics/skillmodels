@@ -96,6 +96,7 @@ class ModelSpecProcessor:
         if self.estimator == 'wa':
             self._wa_period_weights()
             self._wa_storage_df()
+            self._wa_identified_transition_function_restrictions()
 
     def _set_time_specific_attributes(self):
         """Set model specs related to periods and stages as attributes."""
@@ -779,6 +780,15 @@ class ModelSpecProcessor:
         storage_df = df[relevant_columns].copy(deep=True)
         storage_df['meas_error_variances'] = 0.0
         self.storage_df = storage_df
+
+    def _wa_identified_transition_function_restrictions(self):
+        restriction_dict = {}
+        for rtype in ['coeff_sum_value', 'trans_intercept_value']:
+            df = pd.DataFrame(
+                data=[[None] * self.nfac] * self.nstages,
+                columns=self.factors, index=self.stages)
+            restriction_dict[rtype] = df
+        self.identified_restrictions = restriction_dict
 
     def new_trans_coeffs(self):
         """Array that indicates if new parameters from params are needed.

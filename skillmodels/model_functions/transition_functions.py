@@ -14,6 +14,8 @@ functions is explained with a transition function called example_func:
     Args:
         * sigma_points: 2d array of sigma_points or states being transformed
         * coeffs: vector with coefficients specific to this transition function
+          If the coeffs include an intercept term (e.g. the log of a TFP term),
+          this has to be the FIRST or LAST element of coeffs.
         * included_positions: the positions of the factors that are
           included in the transition equation
 
@@ -40,6 +42,10 @@ be implemented:
     Translates a transition function into patsy formulas that can be used to
     construct the arrays for ln iv regression. This is only used in the WA
     estimator.
+
+    The formula strings MUST contain '- 1' to disable the automatic inclusion
+    of a intercept term by patsy. If an intercept is needed in the IV equation,
+    the variable 'constant' has to be the FIRST or LAST term in the formula.
 
     Args:
         * x_list: a list with names of variables that are used to form the
@@ -95,6 +101,9 @@ trans_intercept_value* **)**:
         * meas_coeffs: DataFrame with next-period loadings and intercepts.
           The index are the names of the dependent variable of the regression.
         * gammas: numpy array with estimated transition function coefficients.
+        * newly_identified_coeff_sum_value: None if a coeff_sum_value was
+          given; else, the coeff_sum_value that was identified.
+        * newly_identified_trans_intercept_value: analogous.
 
 
 Moreover, for each transition function, the following auxiliary functions can
@@ -539,9 +548,11 @@ def general_model_coeffs_from_iv_coeffs(
 
     Args:
         iv_coeffs (DataFrame): see example above.
-        iv_intercept_position (int): The iv intercept either has to be the
+        iv_intercept_position (int): The iv intercept either must be the
             first (intercept_position=0) or the last (intercept_position=-1)
-            IV parameter.
+            IV parameter. It has to coincide with the (relative) position
+            of the intercept in the coeff vector of the transition function
+            if the transition function has a intercept.
         has_trans_intercept (bool): specifies if the transition function has
             a intercept. This is a transition function property. Do not
             confound it with the question whether the transition equation
@@ -554,6 +565,8 @@ def general_model_coeffs_from_iv_coeffs(
     Returns:
         meas_coeffs: see example above
         gammas: see example above
+        newly_identified_coeff_sum_value: see example above
+        newly_identified_trans_intercept_value: see example above
 
 
     """
@@ -585,6 +598,9 @@ def general_model_coeffs_from_iv_coeffs(
         load_norm_y, load_norm_val = loading_norminfo
         iv_sum = iv_coeffs.loc[load_norm_y].values[all_but_intercept].sum()
         coeff_sum_value = iv_sum / load_norm_val
+        newly_identified_coeff_sum_value = coeff_sum_value
+    else:
+        newly_identified_coeff_sum_value = None
 
     # calculate all lambdas
     for y_variable in iv_coeffs.index:
@@ -594,6 +610,7 @@ def general_model_coeffs_from_iv_coeffs(
     # get trans intercept
     if has_trans_intercept is False:
         trans_intercept_value = 0
+        newly_identified_trans_intercept_value = None
     elif trans_intercept_value is None:
         intercept_norm_y, intercept_norm_val = intercept_norminfo
         intercept_coeff = list(
@@ -601,6 +618,9 @@ def general_model_coeffs_from_iv_coeffs(
         corresponding_loading = meas_coeffs.loc[intercept_norm_y, 'loadings']
         trans_intercept_value = \
             (intercept_coeff - intercept_norm_val) / corresponding_loading
+        newly_identified_trans_intercept_value = trans_intercept_value
+    else:
+        newly_identified_trans_intercept_value = None
 
     # calculate all mus
     for y_variable in iv_coeffs.index:
@@ -614,9 +634,11 @@ def general_model_coeffs_from_iv_coeffs(
     next_period_loadings = meas_coeffs['loadings']
     gammas = gamma_coeffs.divide(next_period_loadings, axis=0).mean().values
 
-    if iv_intercept_position == 0:
-        gammas = np.hstack([trans_intercept_value, gammas])
-    else:
-        gammas = np.hstack([gammas, trans_intercept_value])
+    if has_trans_intercept is True:
+        if iv_intercept_position == 0:
+            gammas = np.hstack([trans_intercept_value, gammas])
+        else:
+            gammas = np.hstack([gammas, trans_intercept_value])
 
-    return meas_coeffs, gammas
+    return meas_coeffs, gammas, newly_identified_coeff_sum_value, \
+        newly_identified_trans_intercept_value

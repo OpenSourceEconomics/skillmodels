@@ -1239,7 +1239,7 @@ class SkillModel(GenericLikelihoodModel):
                 counter += 1
         return iv_coeffs, u_cov_df
 
-    def wa_norminfo_dict(self, period, factor):
+    def model_coeffs_from_iv_coeffs_args_dict(self, period, factor):
         norm_dict = {}
 
         load_norm = self.normalizations[factor]['loadings'][period]
@@ -1252,10 +1252,25 @@ class SkillModel(GenericLikelihoodModel):
             inter_norm = None
         norm_dict['intercept_norminfo'] = inter_norm
 
+        stage = self.stagemap[period]
+        print(self.identified_restrictions)
+        for rtype in ['coeff_sum_value', 'trans_intercept_value']:
+            restriction = self.identified_restrictions[rtype].loc[
+                stage, factor]
+            if restriction is not None:
+                norm_dict[rtype] = restriction
         return norm_dict
 
+    def update_identified_restrictions(
+            self, stage, factor, coeff_sum, intercept):
+        if coeff_sum is not None:
+            self.identified_restrictions['coeff_sum_value'].loc[
+                stage, factor] = coeff_sum
+        if intercept is not None:
+            self.identified_restrictions['trans_intercept_value'].loc[
+                stage, factor] = intercept
+
     def _calculate_wa_estimates(self):
-        # TODO: Implement Stages!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         t = 0
         # identify measurement system and factor means in initial period
         meas_coeffs, X_zero = initial_meas_coeffs(
@@ -1263,13 +1278,12 @@ class SkillModel(GenericLikelihoodModel):
             measurements=self.measurements, normalizations=self.normalizations)
         self.storage_df.update(prepend_index_level(meas_coeffs, t))
 
-        # generate variables to store transition parameters and transition
-        # error variances
+        # generate variables to store trans_coeffs and transition variances
         trans_coeff_storage = self._initial_trans_coeffs()
         trans_var_cols = [fac for f, fac in enumerate(self.factors)
                           if self.transition_names[f] != 'constant']
         trans_var_df = pd.DataFrame(
-            data=0.0, columns=trans_var_cols, index=self.stages)    # TODO: implement stages here
+            data=0.0, columns=trans_var_cols, index=self.stages)
 
         # apply the WA IV approach in all period for all factors and calculate
         # all model parameters of interest from the iv parameters
@@ -1291,19 +1305,24 @@ class SkillModel(GenericLikelihoodModel):
                     model_coeffs_func = getattr(
                         tf, 'model_coeffs_from_iv_coeffs_' + trans_name)
 
-                    # TODO: with stages I will need other arguments (gamma_sum)!!!!!
-                    meas_coeffs, gammas = model_coeffs_func(
-                        iv_coeffs=iv_coeffs,
-                        **self.wa_norminfo_dict(period=t + 1, factor=factor))
+                    optional_args = self.model_coeffs_from_iv_coeffs_args_dict(
+                        period=t + 1, factor=factor)
+
+                    meas_coeffs, gammas, n_i_coeff_sum, n_i_intercept = \
+                        model_coeffs_func(iv_coeffs=iv_coeffs, **optional_args)
 
                     self.storage_df.update(
                         prepend_index_level(meas_coeffs, t + 1))
-                    trans_coeff_storage[f][stage] = gammas    # TODO: implement stages here
+                    weight = self.wa_period_weights.loc[t, factor]
+                    trans_coeff_storage[f][stage] += weight * gammas
+
+                    self.update_identified_restrictions(
+                        stage, factor, n_i_coeff_sum, n_i_intercept)
 
                     # get transition error variance from residual covariances
-                    trans_var_df.loc[stage, factor] = \
-                        transition_error_variance_from_u_covs(
-                            u_cov_df, meas_coeffs['loadings'])    # TODO: implement stages here
+                    trans_var_df.loc[stage, factor] += \
+                        weight * transition_error_variance_from_u_covs(
+                            u_cov_df, meas_coeffs['loadings'])
 
         # calculate measurement error variances and factor covariance matrices
         factor_cov_list = []

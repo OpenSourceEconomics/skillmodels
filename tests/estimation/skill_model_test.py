@@ -963,12 +963,17 @@ class TestWANorminfoDict:
         n = {}
         n['f1'] = {'loadings': [['y1', 4], ['y2', 5], ['y3', 6]],
                    'intercepts': [['y4', 7], ['y5', 8]]}
+
+        df = pd.DataFrame(data=[[None]] * 3, columns=['f1'])
+        self.identified_restrictions = {
+            'coeff_sum_value': df, 'trans_intercept_value': df}
         self.normalizations = n
+        self.stagemap = [0, 1, 2, 2]
 
     def test_wa_norminfo_dict(self):
         expected = {'loading_norminfo': ['y2', 5],
                     'intercept_norminfo': ['y5', 8]}
-        calculated = smo.wa_norminfo_dict(self, 1, 'f1')
+        calculated = smo.model_coeffs_from_iv_coeffs_args_dict(self, 1, 'f1')
         assert_equal(calculated, expected)
 
 
