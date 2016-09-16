@@ -114,10 +114,7 @@ The "general" section of the model dictionary:
 Usually a research project comprises the estimation of more than one model and there are some specifications that are likely not to vary across these models. The default values for these specifications are hardcoded. If some or all of these values are redefined in the "general" section of the model dictionary the ones from the model dictionary have precedence. The specifications are:
 
     * ``nemf``: number of elements in the mixture of normals distribution of the latent factors. Usually set to 1 which corresponds to the assumption that the factors are normally distributed.
-    * ``sigma_method``: specifies how the sigma points in the unscented transform are calculated. Takes the values "julier" and "van_merwe". CHS use the algorithm proposed by Julier.
-    * ``kappa``: scaling parameter for the sigma_points. Usually set to 2 for "julier" and to 3 - nfac for "van_merwe", where nfac is the number of latent factors.
-    * ``alpha``: scaling parameter only used for the "van_merwe" algorithm. Usually set to some value between 0 and 1.
-    * ``beta``: scaling parameter only used for the "van_merwe" algorithm. Usually set to 2.
+    * ``kappa``: scaling parameter for the sigma_points. Usually set to 2.
     * ``square_root_filters``: takes the values true and false and specifies if square-root implementations of the kalman filters are used. I strongly recommend always using square-root filters. As mentioned in section 3.2.2 of CHS' readme file the standard filters often crash unless very good start values for the maximization are available. Using the square-root filters completely avoids this problem.
     * ``missing_variables``: Takes the values "raise_error" or "drop_variable" and specifies what happens if a variable is not in the dataset or has only missing values. Automatically dropping these variables is handy when the same model is estimated with several similar but not exactly equal datasets.
     * ``controls_with_missings``: Takes the values "raise_error", "drop_variable" or "drop_observations". Recall that measurement variables can have missing observations as long as they are missing at random and at least some observations are not missing. For control variables this is not the case and it is necessary to drop the missing observations or the contol variable.

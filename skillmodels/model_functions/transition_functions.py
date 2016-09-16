@@ -1,33 +1,139 @@
 """Contains transition functions and corresponding helper functions.
 
-Each transition function has to transform a 2d array of flattened sigma points
-of the form [nemf * nind * nsigma, nfac] and should be optimized for speed.
+Not all functions and helper functions will be used in all estimators. But if
+you contribute a transition function you should also add the helper functions
+for all estimators.
 
-It will be called with the following arguments:
+Below the signature and purpose of a transition function and its helper
+functions is explained with a transition function called example_func:
 
-    * sigma_points: the array of sigma_points that is being transformed
-    * coeffs: a vector with coefficients specific to this transition function
-    * included_positions: the positions of the factors that are
-      included in the transition equation
+**example_func(** *sigma_points, coeffs, included_positions* **)**:
 
-Moreover for each transition function the following auxiliary functions should
+    The actual transition function.
+
+    Args:
+        * sigma_points: 2d array of sigma_points or states being transformed
+        * coeffs: vector with coefficients specific to this transition function
+        * included_positions: the positions of the factors that are
+          included in the transition equation
+
+    Returns
+        * 1d array
+
+Mor each transition function, the following auxiliary functions must
 be implemented:
 
-    * mandatory:
-        * nr_coeffs_NAME(included_factors, params_type)
-    * optional:
-        * transform_params_NAME(params, included_factors, out)
-        * bounds_Name(included_factors)
-        * coeff_names_NAME(included_factors, params_type, factor, stage)
-        * start_values_NAME(factor, included_factors)
+**nr_coeffs_example_func(** *included_factors, params_type* **)**:
 
-NAME has to be replaced by the transition function's name.
+    Determines the number of estimated coefficients.
+
+    Args:
+        * included_factors: a list with the name of factors that are included
+          in the right hand side of the transition equation.
+        * params_type: see :ref:`params_type`
+
+    Returns:
+        nr_coeffs: integer value
+
+**iv_formula_example_func(** *x_list, z_list* **)**:
+
+    Translates a transition function into patsy formulas that can be used to
+    construct the arrays for ln iv regression. This is only used in the WA
+    estimator.
+
+    Args:
+        * x_list: a list with names of variables that are used to form the
+          independent variables of the iv equation. Does not yet contain
+          squares or interaction terms. Adding those is the purpose of the
+          formula.
+
+        * z_list: a list of lists with one sublist for each included factor.
+          Each sublist contains the variables used to form the instruments.
+          The sublists do not yet contain squares or interaction terms.
+          Adding those is the purpose of the formula.
+
+    Returns:
+        * x_formula: a valid patsy formula to construct a DesignMatrix of
+          independent variables out of a DataFrame that contains the variables
+          from x_list.
+        * z_formula: a valid patsy formula to construct a DesignMatrix of
+          instruments out of a DataFrame that contains the variables from
+          z_list.
+
+**model_coeffs_from_iv_coeffs_example_func(**
+*iv_coeffs, loading_norminfo, intercept_norminfo, coeff_sum_value,
+trans_intercept_value* **)**:
+
+    Calculates the true transition function parameters as well as next period
+    measurement system parameters (intercepts and loadings) from the iv
+    estimates, given that enough restrictions or normalizations for
+    identification are provided. The restrictions and normalizations are
+    provided by all but the first argument of the function.
+
+    This is the most complicated helper function of all, but for most
+    linear-in-parameters functions it will only be a call to
+    general_model_coeffs_from_iv_coeffs with suitable arguments.
+
+    Args:
+        * iv_coeffs: DataFrame with IV-regression estimates. The columns are
+          just delta0, delta1, ...; The index is a MultiIndex. The first level
+          are the names of the dependent variables (next period measurements)
+          of the estimated equations. The second level consists of integers
+          that identify the different combinations of independent variables.
+        * loading_norminfo: None or a list of length 2 of the form
+          [normalized_variable_name, norm_value]
+        * intercept_norminfo: same as loading norminfo.
+        * coeff_sum_value: None or a float that specifies the sum of the
+          transition equation parameters, excluding the transition intercept.
+          For KLS functions this is usually a transition function prperty. For
+          non KLS functions it can be identified from the first period in a
+          development stage.
+        * trans_intercept_value: analogous to coeff_sum_value, but for the
+          intercept of the transition equation.
+
+    Returns
+        * meas_coeffs: DataFrame with next-period loadings and intercepts.
+          The index are the names of the dependent variable of the regression.
+        * gammas: numpy array with estimated transition function coefficients.
+
+
+Moreover, for each transition function, the following auxiliary functions can
+be implemented:
+
+**transform_params_example_func(** *params, included_factors, out* **)**
+
+    Transform parameters from params_type 'short' to 'long'. See
+    :ref:`params_type` for details. Only needed for CHS estimator and only for
+    functions that need transformation of parameters.
+
+    Args:
+        * params: 1d array of parameters
+        * included_factors: list of names of included factors
+        * out: numpy array in which the result is stored
+
+**bounds_example_func(** *included_factors* **)**
+
+    Generate a list of bounds for the estimated parameters of the transition
+    equation. Only needed for CHS and only if the parameters need bounds.
+
+    Args:
+        * included_factors: list of names of included factors
+
+    Returns:
+        * lower_bound: 1d array with bounds for the estimated parameters.
+          Takes the value None if no lower bound is needed.
+        * upper_bound: analogous to lower bound.
+
+**coeff_names_example_func(**
+*included_factors, params_type, factor, stage* **)**
+
+    List of names for the estimated parameters.
+    Optional but highly recommended.
+
+
 The naming of the auxiliary functions is very important as other code relies
 on it. Since most of the helper functions are optional the code won't raise an
 error if a function is not found because of a wrong name.
-
-.. Note:: It is possible that this module changes quite heavily when I optimize
-    the predict step for speed.
 
 """
 import numpy as np
@@ -66,7 +172,7 @@ def iv_formula_linear(x_list, z_list):
 
 def model_coeffs_from_iv_coeffs_linear(
         iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum_value=None, trans_intercept_value=0):
+        coeff_sum_value=None, trans_intercept_value=None):
 
     return general_model_coeffs_from_iv_coeffs(
         iv_coeffs=iv_coeffs, iv_intercept_position=-1,
@@ -74,6 +180,13 @@ def model_coeffs_from_iv_coeffs_linear(
         intercept_norminfo=intercept_norminfo, coeff_sum_value=coeff_sum_value,
         trans_intercept_value=trans_intercept_value)
 
+
+def output_has_known_scale_linear():
+    return False
+
+
+def output_has_known_location_linear():
+    return True
 
 # =============================================================================
 # constant
@@ -97,6 +210,13 @@ def model_coeffs_from_iv_coeffs_constant(
         coeff_sum_value=None, trans_intercept_value=0):
     raise NotImplementedError
 
+
+def output_has_known_scale_constant():
+    return True
+
+
+def output_has_known_location_constant():
+    return True
 
 # =============================================================================
 # ar1
@@ -123,13 +243,21 @@ def iv_formula_ar1(x_list, z_list):
 
 def model_coeffs_from_iv_coeffs_ar1(
         iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum_value=None, trans_intercept_value=0):
+        coeff_sum_value=None, trans_intercept_value=None):
 
     return general_model_coeffs_from_iv_coeffs(
         iv_coeffs=iv_coeffs, iv_intercept_position=-1,
         has_trans_intercept=False, loading_norminfo=loading_norminfo,
         intercept_norminfo=intercept_norminfo, coeff_sum_value=coeff_sum_value,
         trans_intercept_value=trans_intercept_value)
+
+
+def output_has_known_scale_ar1():
+    return False
+
+
+def output_has_known_location_ar1():
+    return True
 
 # =============================================================================
 # log_ces (KLS-Verion)
@@ -205,6 +333,12 @@ def model_coeffs_from_iv_coeffs_log_ces(
         ' It is not and will not be implemented as part of the WA estimator.')
 
 
+def output_has_known_scale_log_ces():
+    return True
+
+
+def output_has_known_location_log_ces():
+    return True
 # =============================================================================
 # translog (Non-KLS-Version)
 # =============================================================================
@@ -272,6 +406,14 @@ def model_coeffs_from_iv_coeffs_translog(
         'The log_ces function would lead to an IV equation that is not linear '
         ' in parameters that cannot be estimated with closed form estimators. '
         ' It is not and will not be implemented as part of the WA estimator.')
+
+
+def output_has_known_scale_translog():
+    return False
+
+
+def output_has_known_location_translog():
+    return False
 
 # =============================================================================
 # translog without square terms
@@ -343,6 +485,14 @@ def model_coeffs_from_iv_coeffs_no_squares_translog(
         trans_intercept_value=trans_intercept_value)
 
 
+def output_has_known_scale_no_squares_translog():
+    return False
+
+
+def output_has_known_location_no_squares_translog():
+    return False
+
+
 # =============================================================================
 # helper functions
 # =============================================================================
@@ -381,7 +531,32 @@ def general_model_coeffs_from_iv_coeffs(
         iv_coeffs, iv_intercept_position, has_trans_intercept,
         loading_norminfo=None, intercept_norminfo=None,
         coeff_sum_value=None, trans_intercept_value=None):
+    """Calculate model coeffs from iv coeffs for most transition functions.
 
+    Many linear-in-parameters transition functions have very similar ways of
+    calculating the model parameters from iv parameters in the wa estimator.
+    The few differences can be influenced by the arguments:
+
+    Args:
+        iv_coeffs (DataFrame): see example above.
+        iv_intercept_position (int): The iv intercept either has to be the
+            first (intercept_position=0) or the last (intercept_position=-1)
+            IV parameter.
+        has_trans_intercept (bool): specifies if the transition function has
+            a intercept. This is a transition function property. Do not
+            confound it with the question whether the transition equation
+            intercept is normalized or known in some periods.
+        loading_norminfo (list): see example above
+        intercept_norminfo (list): see example above
+        coeff_sum_value (float):see example above
+        trans_intercept_value (float): see example above
+
+    Returns:
+        meas_coeffs: see example above
+        gammas: see example above
+
+
+    """
     # assert statements
     to_check = [coeff_sum_value, loading_norminfo]
     assert None in to_check, ('')
@@ -392,6 +567,9 @@ def general_model_coeffs_from_iv_coeffs(
     assert to_check != [None, None], ('')
 
     assert iv_intercept_position in [0, -1], ('')
+
+    if has_trans_intercept is False:
+        assert trans_intercept_value is None, ('')
 
     iv_coeffs = iv_coeffs.groupby(level=0).mean()
     meas_coeffs = pd.DataFrame(data=0, index=iv_coeffs.index,
@@ -414,17 +592,20 @@ def general_model_coeffs_from_iv_coeffs(
         meas_coeffs.loc[y_variable, 'loadings'] = iv_sum / coeff_sum_value
 
     # get trans intercept
-    if trans_intercept_value is None:    # TFP term is free
-
+    if has_trans_intercept is False:
+        trans_intercept_value = 0
+    elif trans_intercept_value is None:
         intercept_norm_y, intercept_norm_val = intercept_norminfo
-        intercept_coeff = list(iv_coeffs.loc[intercept_norm_y])[iv_intercept_position]
+        intercept_coeff = list(
+            iv_coeffs.loc[intercept_norm_y])[iv_intercept_position]
         corresponding_loading = meas_coeffs.loc[intercept_norm_y, 'loadings']
         trans_intercept_value = \
             (intercept_coeff - intercept_norm_val) / corresponding_loading
 
     # calculate all mus
     for y_variable in iv_coeffs.index:
-        intercept_coeff = list(iv_coeffs.loc[y_variable])[iv_intercept_position]
+        intercept_coeff = list(
+            iv_coeffs.loc[y_variable])[iv_intercept_position]
         corresponding_loading = meas_coeffs.loc[y_variable, 'loadings']
         meas_coeffs.loc[y_variable, 'intercepts'] = \
             intercept_coeff - corresponding_loading * trans_intercept_value

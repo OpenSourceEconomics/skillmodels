@@ -2,6 +2,7 @@ import pandas as pd
 from pandas import DataFrame
 import numpy as np
 from itertools import product
+import skillmodels.model_functions.transition_functions as tf
 
 
 class ModelSpecProcessor:
@@ -24,13 +25,15 @@ class ModelSpecProcessor:
     """
 
     def __init__(
-            self, model_name, dataset_name, model_dict, dataset, estimator):
-
+            self, model_name, dataset_name, model_dict, dataset, estimator,
+            quiet_mode=False):
+        # TODO: check where I could use quiet mode
         self.model_name = model_name
         self.estimator = estimator
         self.dataset_name = dataset_name
         self._data = dataset
         self._model_dict = model_dict
+        self.quiet_mode = quiet_mode
         if 'time_specific' in model_dict:
             self._timeinf = model_dict['time_specific']
         else:
@@ -43,10 +46,7 @@ class ModelSpecProcessor:
         # set the general model specifications
         general_settings = \
             {"nemf": 1,
-             "sigma_method": "julier",
              "kappa": 2,
-             "alpha": 0.5,
-             "beta": 2,
              "square_root_filters": True,
              "missing_variables": "raise_error",
              "controls_with_missings": "raise_error",
@@ -74,6 +74,7 @@ class ModelSpecProcessor:
                     "trans_coeffs": 1.0
                 },
              "numba_target": "cpu"}
+        # TODO: Müssen noch andere argumente in general settings aufgenommen werden?
 
         if 'general' in model_dict:
             general_settings.update(model_dict['general'])
@@ -93,6 +94,7 @@ class ModelSpecProcessor:
         self.nupdates = len(self.update_info())
         self._nmeas_list()
         if self.estimator == 'wa':
+            self._wa_period_weights()
             self._wa_storage_df()
 
     def _set_time_specific_attributes(self):
@@ -108,9 +110,8 @@ class ModelSpecProcessor:
         self.periods = range(self.nperiods)
         self.stages = list(set(self.stagemap))
         self.nstages = len(self.stages)
-        self.stage_length_list = []
-        for stage in self.stages:
-            self.stage_length_list.append(np.in1d(self.stagemap, stage).sum())
+        self.stage_length_list = [
+            list(self.stagemap[:-1]).count(s) for s in self.stages]
 
         assert len(self.stagemap) == self.nperiods, (
             'You have to specify a list of length nperiods '
@@ -127,6 +128,7 @@ class ModelSpecProcessor:
             'steps of 1. Your stagemap in mode {} is invalid').format(
                 self.model_name)
 
+        # TODO: remove this assert statement after implementing stages in WA!!!!!!!!!!
         if self.estimator == 'wa':
             assert list(self.stagemap)[:-1] == list(self.periods)[:-1], (
                 'For the wa estimator stages cannot span more than 1 period.')
@@ -184,6 +186,7 @@ class ModelSpecProcessor:
 
     def _set_anchoring_attributes(self):
         """Set attributes related to anchoring and make some checks."""
+        # TODO: reimplement the anchoring procedure; check if all of this is still needed
         if 'anchoring' in self._model_dict:
             assert len(self._model_dict['anchoring']) <= 1, (
                 'At most one anchoring equation can be estimated. You '
@@ -203,6 +206,7 @@ class ModelSpecProcessor:
             self.anchored_factors = []
 
     def _set_endogeneity_correction_attributes(self):
+        # TODO: implement a comparable endogeneity correction option for both estimators
         if 'endog_correction' in self._model_dict:
             info_dict = self._model_dict['endog_correction']
             self.endog_factor = info_dict['endog_factor']
@@ -372,12 +376,17 @@ class ModelSpecProcessor:
             'drop the variable (in period {}) or the missing observations '
             '(in all periods!), respectively')
 
-        self.uses_controls = 'controls' in self._timeinf
+        self.uses_controls = False
+        if 'controls' in self._timeinf:
+            for t in self.periods:
+                if len(self._timeinf['controls'][t]) > 0:
+                    self.uses_controls = True
 
-        if self.estimator == 'wa':
-            assert self.uses_controls is False, (
-                'It is not possible to use control variables in the measure'
-                'ment equatiens with the wa estimator.')
+        if self.estimator == 'wa' and self.quiet_mode is False:
+            if self.uses_controls is True:
+                print('The control variables you specified in model {} will '
+                      'be ignored when the model is estimated with the wa '
+                      'estimator.'.format(self.model_name))
 
         obs_to_keep = np.ones(len(self._data) // self.nperiods, dtype=bool)
         controls = [[] for t in self.periods]
@@ -490,6 +499,7 @@ class ModelSpecProcessor:
         period of stage s is fixed through normalizations in previous stages
         or normalization of initial values.
         """
+        # TODO: reread this function after writing the new automatic normalization specification
         has_fixed = []
         for s in self.stages:
             if s == 0:
@@ -518,17 +528,10 @@ class ModelSpecProcessor:
 
         The t_th entry is True if factor needs a normalization of norm_type
         in period period t. Else it is False.
+
         """
-        kls_functions = ['log_ces', 'constant']
-        non_kls_functions = ['linear', 'ar1', 'translog']
+        transition_name = self.transition_names[self.factors.index(factor)]
 
-        f = self.factors.index(factor)
-        transition_name = self.transition_names[f]
-
-        assert transition_name in kls_functions + non_kls_functions, (
-            'Automatic generation of normalizations only works for the '
-            'functions {}. You can generalize it for other functions.'.format(
-                kls_functions + non_kls_functions))
 
         needs_normalization = []
         # first period entry
@@ -537,9 +540,15 @@ class ModelSpecProcessor:
         else:
             needs_normalization.append(False)
 
-        if transition_name in kls_functions:
-            needs_normalization += [False] * (self.nperiods - 1)
+        if norm_type == 'loadings':
+            func_string = 'output_has_known_scale_{}'
+        else:
+            func_string = 'output_has_known_location_{}'
 
+        no_norm_after_0 = getattr(tf, func_string.format(transition_name))()
+
+        if no_norm_after_0:
+            needs_normalization += [False] * (self.nperiods - 1)
         elif transition_name == 'ar1':
             needs_normalization.append(True)
             needs_normalization += [False] * (self.nperiods - 2)
@@ -743,11 +752,15 @@ class ModelSpecProcessor:
             df.drop(anch_index, axis=0, inplace=True)
             df = df.append(anch_row)
 
+        # TODO: test how probit measurements are implemented in the code
         # add the update_type column
         df['update_type'] = 'linear'
         for t, variable in list(df.index):
             if self._is_dummy(variable, t) and self.probit_measurements is True:    # noqa
                 df.loc[(t, variable), 'update_type'] = 'probit'
+
+        if self.estimator == 'wa':
+            df = df[df['purpose'] == 'measurement']
 
         return df
 
@@ -786,6 +799,7 @@ class ModelSpecProcessor:
             parameters at all.
 
         """
+        # TODO: use this in WA estimator. Currently ar1 case is not handled correctly.
         new_params = np.zeros((self.nstages, self.nfac))
 
         for f, factor in enumerate(self.factors):
@@ -800,6 +814,35 @@ class ModelSpecProcessor:
                 new_params[:, f] = 1
 
         return new_params
+
+    def _wa_period_weights(self):
+        """Dataframe of shape (nperiods - 1, nfac) with weights.
+
+        The weights are used to combine the transition parameters of several
+        periods if they belong to the same stage. In the case of an ar1
+        transition equations the paramaters of all periods are combined.
+        Currently, weights are the same for all periods in a stage and only
+        depend on the length of the stage and type of transition equation.
+        The format of the DataFrame was chosen to facilitate the
+        implementation of a more efficient weighting scheme later.
+
+        """
+        # OPTIONAL: base thes on new_params instead of special treatment for
+        # ar1 and constant.
+        arr = np.ones((self.nperiods - 1, self.nfac))
+
+        for t, f in product(self.periods[:-1], range(self.nfac)):
+            s = self.stagemap[t]
+            arr[t, f] /= self.stage_length_list[s]
+        df = pd.DataFrame(data=arr, index=self.periods[:-1],
+                          columns=self.factors)
+
+        for f, factor in enumerate(self.factors):
+            if self.transition_names[f] == 'ar1':
+                df[factor] = 1 / (self.nperiods - 1)
+            elif self.transition_names[f] == 'constant':
+                df[factor] = np.nan
+        self.wa_period_weights = df
 
     def public_attribute_dict(self):
         all_attributes = self.__dict__

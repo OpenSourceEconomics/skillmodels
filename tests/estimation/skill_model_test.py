@@ -814,8 +814,6 @@ class TestSigmaWeightsAndScalingFactor:
         self.nobs = 10
         self.nfac = 4
         self.kappa = 1.5
-        self.alpha = 0.1
-        self.beta = 2
 
         # these test results have been calculated with the sigma_point
         # function of the filterpy library
@@ -823,27 +821,10 @@ class TestSigmaWeightsAndScalingFactor:
             self.fixtures = json.load(f)
 
     def test_julier_sigma_weight_construction(self):
-        self.sigma_method = 'julier'
         expected_sws = self.fixtures['julier_wm']
         aae(smo.sigma_weights(self)[0], expected_sws)
 
-    def test_merwe_sigma_weight_m_construction(self):
-        self.sigma_method = 'van_merwe'
-        expected_sws = self.fixtures['merwe_wm']
-        aae(smo.sigma_weights(self)[0], expected_sws)
-
-    def test_merwe_sigma_weight_c_construction(self):
-        self.sigma_method = 'van_merwe'
-        expected_sws = self.fixtures['merwe_wc']
-        aae(smo.sigma_weights(self)[1], expected_sws)
-
-    def test_merwe_scaling_factor(self):
-        self.sigma_method = 'van_merwe'
-        expected_sf = 0.23452078799
-        assert_almost_equal(smo.sigma_scaling_factor(self), expected_sf)
-
     def test_julier_scaling_factor(self):
-        self.sigma_method = 'julier'
         expected_sf = 2.34520787991
         assert_almost_equal(smo.sigma_scaling_factor(self), expected_sf)
 

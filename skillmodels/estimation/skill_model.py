@@ -39,11 +39,13 @@ class SkillModel(GenericLikelihoodModel):
     """
 
     def __init__(
-            self, model_name, dataset_name, model_dict, dataset, estimator):
+            self, model_name, dataset_name, model_dict, dataset, estimator,
+            quiet_mode=False):
         """Initialize the CHSModel class and set attributes."""
         self.estimator = estimator
         specs = ModelSpecProcessor(
-            model_name, dataset_name, model_dict, dataset, estimator)
+            model_name, dataset_name, model_dict, dataset, estimator,
+            quiet_mode)
         self.__dict__.update(specs.public_attribute_dict())
 
         data = DataProcessor(
@@ -56,6 +58,7 @@ class SkillModel(GenericLikelihoodModel):
         self.new_trans_coeffs = specs.new_trans_coeffs()
 
         # create a list of all quantities that depend from params vector
+        # TODO: check this for wa case. W_zero does not make sense with wa!!!!!!!!!!!!!!
         self.params_quants = \
             ['deltas', 'H', 'R', 'Q', 'P_zero', 'trans_coeffs']
         if self.estimate_X_zeros is True:
@@ -158,6 +161,7 @@ class SkillModel(GenericLikelihoodModel):
 
     def _initial_psi(self):
         """Initial psi vector filled with ones."""
+        # TODO: Check if psi is needed for endog correction in wa case!!!!!!!!!!!
         return np.ones(self.nfac)
 
     def _psi_bool(self):
@@ -189,6 +193,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _initial_tau(self):
         """Initial tau array, filled with zeros."""
+        # TODO: Check if tau is needed for endog correction in wa case!!!!!!!!!!!
+
         return np.zeros((self.nstages, self.nfac))
 
     def _tau_bool(self):
@@ -262,6 +268,7 @@ class SkillModel(GenericLikelihoodModel):
             numpy arrey to store intermediate results
 
         """
+        # TODO: remove this function. It didn't bring the time improvement I hoped for
         assert self.endog_correction is True, (
             'The psi_bool_for_H method should only be called if '
             'endog_correction is True. You did otherwise in model {}').format(
@@ -486,6 +493,7 @@ class SkillModel(GenericLikelihoodModel):
 
     def _P_zero_names(self, params_type):
         """List with names for the params mapped to P_zero."""
+        # TODO make it work for wa, where the conditions I check are not testable
         P_zero_names = []
         format_string = 'P_zero__{}__{}__{}'
         if self.cholesky_of_P_zero is True or params_type == 'short':
@@ -611,13 +619,13 @@ class SkillModel(GenericLikelihoodModel):
             that map params to the corresponding quantity.
 
         """
+        # TODO: Maybe this needs an option to ignore control variables except for intercepts
         self.param_counter = 0
         slices = {}
         for quantity in self.params_quants:
             func = '_params_slice_for_{}'.format(quantity)
             slices[quantity] = getattr(self, func)(params_type)
         # safety measure
-
         del self.param_counter
         return slices
 
@@ -726,11 +734,13 @@ class SkillModel(GenericLikelihoodModel):
         return long_params
 
     def reduceparams(self, params):
+        # TODO: write this function!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         raise NotImplementedError(
             'A reduceparams method is not implemented in CHSModel')
 
     def generate_start_params(self):
         """Vector with start values for the optimization."""
+        # TODO: use wa estimates to generate the start values !!!!!!!!!!!!!!!!!!!!!
         if hasattr(self, 'start_params'):
             assert len(self.start_params) == self.len_params('short'), (
                 'In model {} with dataset {} your start_params have not the '
@@ -779,22 +789,13 @@ class SkillModel(GenericLikelihoodModel):
 
     def sigma_weights(self):
         nsigma = 2 * self.nfac + 1
-        if self.sigma_method == 'julier':
-            s_weights_m = np.ones(nsigma) / (2 * (self.nfac + self.kappa))
-            s_weights_m[0] = self.kappa / (self.nfac + self.kappa)
-            s_weights_c = s_weights_m
-        elif self.sigma_method == 'van_merwe':
-            lambda_ = self.alpha ** 2 * (self.nfac + self.kappa) - self.nfac
-            s_weights_m = np.ones(nsigma) / (2 * (self.nfac + lambda_))
-            s_weights_m[0] = lambda_ / (self.nfac + lambda_)
-            s_weights_c = np.copy(s_weights_m)
-            s_weights_c[0] += (1 - self.alpha ** 2 + self.beta)
+        s_weights_m = np.ones(nsigma) / (2 * (self.nfac + self.kappa))
+        s_weights_m[0] = self.kappa / (self.nfac + self.kappa)
+        s_weights_c = s_weights_m
         return s_weights_m, s_weights_c
 
     def sigma_scaling_factor(self):
         scaling_factor = np.sqrt(self.kappa + self.nfac)
-        if self.sigma_method == 'van_merwe':
-            scaling_factor *= self.alpha
         return scaling_factor
 
     def _initial_quantities_dict(self):
@@ -977,6 +978,7 @@ class SkillModel(GenericLikelihoodModel):
 
     def nloglike(self, params, args):
         return - log_likelihood_per_individual(params, **args).sum()
+        # TODO: store params in each iteration !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     def loglikeobs(self, params, args):
         return log_likelihood_per_individual(params, **args)
@@ -984,11 +986,10 @@ class SkillModel(GenericLikelihoodModel):
     def loglike(self, params, args):
         return log_likelihood_per_individual(params, **args).sum()
 
-    def fit(self, start_params=None, maxiter=1000000, maxfun=1000000,
-            print_result=True, standard_error_method='op_of_gradient'):
-
-        if start_params is None:
-            start_params = self.generate_start_params()
+    def fit_chs(self, maxiter=1000000, maxfun=1000000,
+                print_result=True, standard_error_method='op_of_gradient'):
+        # TODO: remove calculation of standard errors after putting it in results class
+        start_params = self.generate_start_params()
         bounds = self.bounds_list()
         args = self.likelihood_arguments_dict(params_type='short')
 
@@ -1240,13 +1241,21 @@ class SkillModel(GenericLikelihoodModel):
 
     def wa_norminfo_dict(self, period, factor):
         norm_dict = {}
-        norm_dict['loading_norminfo'] = \
-            self.normalizations[factor]['loadings'][period]
-        norm_dict['intercept_norminfo'] = \
-            self.normalizations[factor]['intercepts'][period]
+
+        load_norm = self.normalizations[factor]['loadings'][period]
+        if len(load_norm) == 0:
+            load_norm = None
+        norm_dict['loading_norminfo'] = load_norm
+
+        inter_norm = self.normalizations[factor]['intercepts'][period]
+        if len(inter_norm) == 0:
+            inter_norm = None
+        norm_dict['intercept_norminfo'] = inter_norm
+
         return norm_dict
 
-    def fit_wa(self):
+    def _calculate_wa_estimates(self):
+        # TODO: Implement Stages!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         t = 0
         # identify measurement system and factor means in initial period
         meas_coeffs, X_zero = initial_meas_coeffs(
@@ -1260,7 +1269,7 @@ class SkillModel(GenericLikelihoodModel):
         trans_var_cols = [fac for f, fac in enumerate(self.factors)
                           if self.transition_names[f] != 'constant']
         trans_var_df = pd.DataFrame(
-            data=0.0, columns=trans_var_cols, index=self.stages)
+            data=0.0, columns=trans_var_cols, index=self.stages)    # TODO: implement stages here
 
         # apply the WA IV approach in all period for all factors and calculate
         # all model parameters of interest from the iv parameters
@@ -1282,18 +1291,19 @@ class SkillModel(GenericLikelihoodModel):
                     model_coeffs_func = getattr(
                         tf, 'model_coeffs_from_iv_coeffs_' + trans_name)
 
+                    # TODO: with stages I will need other arguments (gamma_sum)!!!!!
                     meas_coeffs, gammas = model_coeffs_func(
                         iv_coeffs=iv_coeffs,
                         **self.wa_norminfo_dict(period=t + 1, factor=factor))
 
                     self.storage_df.update(
                         prepend_index_level(meas_coeffs, t + 1))
-                    trans_coeff_storage[f][stage] = gammas
+                    trans_coeff_storage[f][stage] = gammas    # TODO: implement stages here
 
                     # get transition error variance from residual covariances
                     trans_var_df.loc[stage, factor] = \
                         transition_error_variance_from_u_covs(
-                            u_cov_df, meas_coeffs['loadings'])
+                            u_cov_df, meas_coeffs['loadings'])    # TODO: implement stages here
 
         # calculate measurement error variances and factor covariance matrices
         factor_cov_list = []
@@ -1310,7 +1320,39 @@ class SkillModel(GenericLikelihoodModel):
                 meas_error_variances, t))
         P_zero = factor_cov_list[0]
 
-        return self.storage_df, X_zero, P_zero, trans_coeff_storage, trans_var_df
+        return self.storage_df, X_zero, P_zero, trans_coeff_storage, \
+            trans_var_df
+
+    def fit_wa(self):
+        storage_df, X_zero, P_zero, trans_coeff_storage, trans_var_df = \
+            self._calculate_wa_estimates()
+
+        params = np.zeros(self.len_params(params_type='long'))
+        slices = self.params_slices(params_type='long')
+
+        # write intercepts in params
+        delta_start_index = slices['deltas'][0].start
+        delta_stop_index = slices['deltas'][-1].stop
+        params[delta_start_index: delta_stop_index] = storage_df[storage_df[
+            'has_normalized_intercept'] == False]['intercepts'].values
+
+        # write loadings in params
+        params[slices['H']] = storage_df[storage_df[
+            'has_normalized_loadings' == False]]['loadings'].values
+
+        # write measurement variances in params
+        params[slices['R']] = storage_df['meas_error_variances'].values
+
+        # write transition variances (Q) in params. This is complicated.
+        # check q_bool.
+
+        # write P_zero in params
+
+        # write trans_coeffs in params
+
+        # write X_zero in params
+        if self.estimate_X_zeros is True:
+            params[slices['X_zero']] = X_zero
 
     def score(self, params, args):
         return approx_fprime(
@@ -1322,3 +1364,12 @@ class SkillModel(GenericLikelihoodModel):
 
     def hessian(self, params, args):
         return approx_hess(params, self.loglike, args=(args, ))
+
+    def fit(self):
+        if self.estimator == 'chs':
+            return self.fit_chs()
+        elif self.estimator == 'wa':
+            return self.fit_wa()
+        else:
+            raise NotImplementedError(
+                'Only the chs and wa estimator are implemented.')

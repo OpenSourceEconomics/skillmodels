@@ -246,13 +246,13 @@ class TestGenerateNormalizationSpecifications:
 
     def test_needs_norm_ar1_case_for_intercept_fixed_x_zeros(self):
         self.estimate_X_zeros = False
-        expected = [False, True, False, False, False,
+        expected = [False, False, False, False, False,
                     False, False, False, False]
         result = msp.needs_normalization(self, 'fac1', 'intercepts')
         assert_equal(result, expected)
 
     def test_needs_norm_ar1_case_for_intercept_free_x_zeros(self):
-        expected = [True, True, False, False, False,
+        expected = [True, False, False, False, False,
                     False, False, False, False]
         result = msp.needs_normalization(self, 'fac1', 'intercepts')
         assert_equal(result, expected)
@@ -360,6 +360,7 @@ class TestUpdateInfoTable:
         self.nperiods = len(self.periods)
         self.stagemap = [0, 0, 1, 1]
         self.probit_measurements = True
+        self.estimator = 'chs'
 
         m = {}
         m['f1'] = [['m1', 'm2']] * 4
