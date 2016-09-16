@@ -484,11 +484,11 @@ class SkillModel(GenericLikelihoodModel):
         be called by the user.
 
         """
-        nr_lower_triangular_elements = 0.5 * self.nfac * (self.nfac + 1)
-        if self.restrict_P_zeros is True:
-            length = nr_lower_triangular_elements
+        nr_upper_triangular_elements = 0.5 * self.nfac * (self.nfac + 1)
+        if self.restrict_P_zeros is True or self.estimator == 'wa':
+            length = nr_upper_triangular_elements
         else:
-            length = nr_lower_triangular_elements * self.nemf
+            length = nr_upper_triangular_elements * self.nemf
         return self._general_params_slice(length)
 
     def _P_zero_names(self, params_type):
@@ -1253,7 +1253,6 @@ class SkillModel(GenericLikelihoodModel):
         norm_dict['intercept_norminfo'] = inter_norm
 
         stage = self.stagemap[period]
-        print(self.identified_restrictions)
         for rtype in ['coeff_sum_value', 'trans_intercept_value']:
             restriction = self.identified_restrictions[rtype].loc[
                 stage, factor]
@@ -1343,7 +1342,7 @@ class SkillModel(GenericLikelihoodModel):
             trans_var_df
 
     def fit_wa(self):
-        storage_df, X_zero, P_zero, trans_coeff_storage, trans_var_df = \
+        storage_df, X_zero, P_zero, trans_coeffs, trans_var_df = \
             self._calculate_wa_estimates()
 
         params = np.zeros(self.len_params(params_type='long'))
@@ -1357,21 +1356,48 @@ class SkillModel(GenericLikelihoodModel):
 
         # write loadings in params
         params[slices['H']] = storage_df[storage_df[
-            'has_normalized_loadings' == False]]['loadings'].values
+            'has_normalized_loading'] == False]['loadings'].values
 
         # write measurement variances in params
         params[slices['R']] = storage_df['meas_error_variances'].values
 
-        # write transition variances (Q) in params. This is complicated.
-        # check q_bool.
+        # write transition variances (Q) in params.
+
+        # first take the mean of those trans_var estimates that have to be
+        # averaged between stages. This is for example necessary if the
+        # transition function is ar1. Averaging reduces to a addition as the
+        # estimates are weighted already.
+        for f, factor in enumerate(self.factors):
+            if self.transition_names[f] != 'constant':
+                for s in reversed(self.stages):
+                    if self.new_trans_coeffs[s, f] == 0:
+                        trans_var_df.loc[s - 1, factor] += \
+                            trans_var_df.loc[s, factor]
+                        trans_var_df.loc[s, factor] = np.nan
+
+        # then write them in a flat list in the correct order
+        trans_var_list = []
+        for s in self.stages:
+            for f, factor in enumerate(self.factors):
+                if self.new_trans_coeffs[s, f] == 1:
+                    trans_var_list.append(trans_var_df.loc[s, factor])
+
+        # finally write them in params
+        params[slices['Q']] = trans_var_list
 
         # write P_zero in params
+        params[slices['P_zero']] = P_zero
 
         # write trans_coeffs in params
+        for f in range(self.nfac):
+            for coeffs, sl in zip(trans_coeffs[f], slices['trans_coeffs'][f]):
+                params[sl] += coeffs
 
         # write X_zero in params
         if self.estimate_X_zeros is True:
             params[slices['X_zero']] = X_zero
+
+        return params
 
     def score(self, params, args):
         return approx_fprime(

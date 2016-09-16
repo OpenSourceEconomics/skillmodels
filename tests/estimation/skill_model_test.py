@@ -493,6 +493,7 @@ class TestPZeroRelatedMethods:
         self.lower_bound[:] = None
         self.bound_indices = [10, 14, 17, 19, 20, 24, 27, 29]
         self.bounds_distance = 0.001
+        self.estimator = 'chs'
 
     def test_initial_P_zero_no_square_root_filters(self):
         self.square_root_filters = False
