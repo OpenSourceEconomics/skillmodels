@@ -22,7 +22,7 @@ functions is explained with a transition function called example_func:
     Returns
         * 1d array
 
-Mor each transition function, the following auxiliary functions must
+For each transition function, the following auxiliary functions must
 be implemented:
 
 **nr_coeffs_example_func(** *included_factors, params_type* **)**:
@@ -40,7 +40,7 @@ be implemented:
 **iv_formula_example_func(** *x_list, z_list* **)**:
 
     Translates a transition function into patsy formulas that can be used to
-    construct the arrays for ln iv regression. This is only used in the WA
+    construct the arrays for an iv regression. This is only used in the WA
     estimator.
 
     The formula strings MUST contain '- 1' to disable the automatic inclusion
@@ -91,7 +91,7 @@ trans_intercept_value* **)**:
         * intercept_norminfo: same as loading norminfo.
         * coeff_sum_value: None or a float that specifies the sum of the
           transition equation parameters, excluding the transition intercept.
-          For KLS functions this is usually a transition function prperty. For
+          For KLS functions this is usually a transition function property. For
           non KLS functions it can be identified from the first period in a
           development stage.
         * trans_intercept_value: analogous to coeff_sum_value, but for the
@@ -563,11 +563,13 @@ def general_model_coeffs_from_iv_coeffs(
         trans_intercept_value (float): see example above
 
     Returns:
-        meas_coeffs: see example above
-        gammas: see example above
-        newly_identified_coeff_sum_value: see example above
-        newly_identified_trans_intercept_value: see example above
+        **meas_coeffs**: see example above
 
+        **gammas**: see example above
+
+        **newly_identified_coeff_sum_value**: see example above
+
+        **newly_identified_trans_intercept_value**: see example above
 
     """
     # assert statements

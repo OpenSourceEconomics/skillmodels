@@ -986,10 +986,11 @@ class SkillModel(GenericLikelihoodModel):
     def loglike(self, params, args):
         return log_likelihood_per_individual(params, **args).sum()
 
-    def fit_chs(self, maxiter=1000000, maxfun=1000000,
+    def fit_chs(self, start_params=None, maxiter=1000000, maxfun=1000000,
                 print_result=True, standard_error_method='op_of_gradient'):
         # TODO: remove calculation of standard errors after putting it in results class
-        start_params = self.generate_start_params()
+        if start_params is None:
+            start_params = self.generate_start_params()
         bounds = self.bounds_list()
         args = self.likelihood_arguments_dict(params_type='short')
 
