@@ -120,7 +120,7 @@ class TestOfWAEstimator:
             model_dict=model_dict, dataset=self.y_data, estimator='wa')
 
         calc_storage_df, calc_X_zero, calc_P_zero, calc_gammas, trans_vars = \
-            wa_model._calculate_wa_estimates()
+            wa_model._calculate_wa_quantities()
         calc_loadings = calc_storage_df['loadings']
         calc_intercepts = calc_storage_df['intercepts']
 
@@ -160,7 +160,7 @@ class TestOfWAEstimator:
             model_dict=model_dict, dataset=self.y_data, estimator='wa')
 
         calc_storage_df, calc_X_zero, calc_P_zero, calc_gammas, trans_vars = \
-            wa_model._calculate_wa_estimates()
+            wa_model._calculate_wa_quantities()
 
         calc_epsilon_variances = calc_storage_df['meas_error_variances']
         average_epsilon_diff = \
@@ -198,7 +198,7 @@ class TestOfWAEstimator:
             model_dict=model_dict, dataset=self.y_data, estimator='wa')
 
         calc_storage_df, calc_X_zero, calc_P_zero, calc_gammas, \
-            calc_trans_vars = wa_model._calculate_wa_estimates()
+            calc_trans_vars = wa_model._calculate_wa_quantities()
 
         aaae(calc_trans_vars.values, self.true_trans_var, decimal=3)
 

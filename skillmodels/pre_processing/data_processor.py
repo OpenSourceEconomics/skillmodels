@@ -7,10 +7,13 @@ class DataProcessor:
     """Transform a pandas DataFrame in long format into numpy arrays."""
 
     def __init__(
-            self, model_name, dataset_name, model_dict, dataset, estimator):
+            self, model_dict, dataset, estimator, model_name='some_model',
+            dataset_name='some_dataset', save_path=None, quiet_mode=False):
         self.estimator = estimator
         specs = ModelSpecProcessor(
-            model_name, dataset_name, model_dict, dataset, estimator)
+            model_dict=model_dict, dataset=dataset, estimator=estimator,
+            model_name=model_name, dataset_name=dataset_name,
+            quiet_mode=quiet_mode)
         self.data = specs._data
         self.periods = specs.periods
         self.controls = specs.controls

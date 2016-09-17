@@ -39,17 +39,20 @@ class SkillModel(GenericLikelihoodModel):
     """
 
     def __init__(
-            self, model_name, dataset_name, model_dict, dataset, estimator,
-            quiet_mode=False):
+            self, model_dict, dataset, estimator, model_name='some_model',
+            dataset_name='some_dataset', save_path=None, quiet_mode=False):
         """Initialize the CHSModel class and set attributes."""
         self.estimator = estimator
         specs = ModelSpecProcessor(
-            model_name, dataset_name, model_dict, dataset, estimator,
-            quiet_mode)
+            model_dict=model_dict, dataset=dataset, estimator=estimator,
+            model_name=model_name, dataset_name=dataset_name,
+            quiet_mode=quiet_mode)
         self.__dict__.update(specs.public_attribute_dict())
 
         data = DataProcessor(
-            model_name, dataset_name, model_dict, dataset, estimator)
+            model_dict=model_dict, dataset=dataset, estimator=estimator,
+            model_name=model_name, dataset_name=dataset_name,
+            save_path=save_path, quiet_mode=quiet_mode)
 
         self.c_data = data.c_data() if self.estimator == 'chs' else None
         self.y_data = data.y_data()
@@ -58,14 +61,14 @@ class SkillModel(GenericLikelihoodModel):
         self.new_trans_coeffs = specs.new_trans_coeffs()
 
         # create a list of all quantities that depend from params vector
-        # TODO: check this for wa case. W_zero does not make sense with wa!!!!!!!!!!!!!!
         self.params_quants = \
             ['deltas', 'H', 'R', 'Q', 'P_zero', 'trans_coeffs']
         if self.estimate_X_zeros is True:
             self.params_quants.append('X_zero')
+        # Todo: maybe this does not make sense for the wa estimator
         if self.endog_correction is True:
             self.params_quants += ['psi', 'tau']
-        if self.restrict_W_zeros is False:
+        if self.restrict_W_zeros is False and self.estimator == 'chs':
             self.params_quants.append('W_zero')
 
         self.df_model = self.len_params(params_type='short')
@@ -161,7 +164,7 @@ class SkillModel(GenericLikelihoodModel):
 
     def _initial_psi(self):
         """Initial psi vector filled with ones."""
-        # TODO: Check if psi is needed for endog correction in wa case!!!!!!!!!!!
+        # TODO: Check if psi is needed for endog correction in wa case
         return np.ones(self.nfac)
 
     def _psi_bool(self):
@@ -193,7 +196,7 @@ class SkillModel(GenericLikelihoodModel):
 
     def _initial_tau(self):
         """Initial tau array, filled with zeros."""
-        # TODO: Check if tau is needed for endog correction in wa case!!!!!!!!!!!
+        # TODO: Check if tau is needed for endog correction in wa case.
 
         return np.zeros((self.nstages, self.nfac))
 
@@ -986,9 +989,8 @@ class SkillModel(GenericLikelihoodModel):
     def loglike(self, params, args):
         return log_likelihood_per_individual(params, **args).sum()
 
-    def fit_chs(self, start_params=None, maxiter=1000000, maxfun=1000000,
-                print_result=True, standard_error_method='op_of_gradient'):
-        # TODO: remove calculation of standard errors after putting it in results class
+    def estimate_params_chs(self, start_params=None, params_type='short',
+                            return_optimize_dict=True):
         if start_params is None:
             start_params = self.generate_start_params()
         bounds = self.bounds_list()
@@ -996,7 +998,8 @@ class SkillModel(GenericLikelihoodModel):
 
         res = minimize(self.nloglike, start_params, args=(args),
                        method='L-BFGS-B', bounds=bounds,
-                       options={'maxiter': maxiter, 'maxfun': maxfun})
+                       options={'maxiter': self.maxiter,
+                                'maxfun': self.maxfun})
 
         optimize_dict = {}
         optimize_dict['success'] = res.success
@@ -1004,48 +1007,12 @@ class SkillModel(GenericLikelihoodModel):
         optimize_dict['log_lh_value'] = -res.fun
         optimize_dict['xopt'] = res.x.tolist()
 
-        params = self.expandparams(res.x)
-        args = self.likelihood_arguments_dict(params_type='long')
+        params = self.expandparams(res.x) if params_type == 'short' else res.x
 
-        if standard_error_method == 'hessian_inverse':
-            hessian = self.hessian(params)
-            try:
-                cov = np.linalg.inv(-hessian)
-            except:
-                warning = 'The hessian could not be inverted.'
-                optimize_dict['hessian_warning'] = warning
-                standard_error_method = 'op_of_gradient'
-                print('Model {} with dataset {}:'.format(
-                    self.model_name, self.dataset_name))
-                print(warning)
-                print(hessian)
-
-        if standard_error_method == 'op_of_gradient':
-            gradient = self.score_obs(params, args)
-            try:
-                # what follows is equivalent to:
-                # cov = np.linalg.inv(np.dot(gradient.T, gradient))
-                # but it ensures that the resulting covariance matrix is
-                # positive semi-definite
-                u = np.linalg.qr(gradient)[1]
-                u_inv = np.linalg.inv(u)
-                cov = np.dot(u_inv, u_inv.T)
-            except:
-                warning = (
-                    'The outer product of gradients could not be inverted. '
-                    'No standard errors could be calculated.')
-
-                optimize_dict['gradient_warning'] = warning
-                print('Model {} with dataset {}:'.format(
-                    self.model_name, self.dataset_name))
-                print(warning)
-                print(gradient)
-                cov = np.diag(params * np.nan)
-
-            mlefit = LikelihoodModelResults(self, params, cov)
-
-        chsmlefit = SkillModelResults(self, mlefit, optimize_dict)
-        return chsmlefit
+        if return_optimize_dict is True:
+            return params, optimize_dict
+        else:
+            return params
 
     # WA Estimator
 
@@ -1270,7 +1237,7 @@ class SkillModel(GenericLikelihoodModel):
             self.identified_restrictions['trans_intercept_value'].loc[
                 stage, factor] = intercept
 
-    def _calculate_wa_estimates(self):
+    def _calculate_wa_quantities(self):
         t = 0
         # identify measurement system and factor means in initial period
         meas_coeffs, X_zero = initial_meas_coeffs(
@@ -1342,9 +1309,9 @@ class SkillModel(GenericLikelihoodModel):
         return self.storage_df, X_zero, P_zero, trans_coeff_storage, \
             trans_var_df
 
-    def fit_wa(self):
+    def estimate_params_wa(self):
         storage_df, X_zero, P_zero, trans_coeffs, trans_var_df = \
-            self._calculate_wa_estimates()
+            self._calculate_wa_quantities()
 
         params = np.zeros(self.len_params(params_type='long'))
         slices = self.params_slices(params_type='long')
@@ -1411,11 +1378,59 @@ class SkillModel(GenericLikelihoodModel):
     def hessian(self, params, args):
         return approx_hess(params, self.loglike, args=(args, ))
 
-    def fit(self):
+    def op_of_gradient_cov_matrix(self, params, params_type):
+        assert len(params) == self.len_params(params_type), (
+            'You try to calculate standard error of a params vector of '
+            'incorrect length for the specified params_type {} in model {} '
+            'with dataset {}'.format(
+                params_type, self.model_name, self.dataset_name))
+
+        args = self.likelihood_arguments_dict(params_type)
+        gradient = self.score_obs(params, args)
+        # what follows is equivalent to:
+        # cov = np.linalg.inv(np.dot(gradient.T, gradient))
+        # but it ensures that the resulting covariance matrix is
+        # positive semi-definite
+        u = np.linalg.qr(gradient)[1]
+        u_inv = np.linalg.inv(u)
+        cov = np.dot(u_inv, u_inv.T)
+        return cov
+
+    def hessian_inverse_cov_matrix(self, params, params_type):
+        assert len(params) == self.len_params(params_type), (
+            'You try to calculate standard error of a params vector of '
+            'incorrect length for the specified params_type {} in model {} '
+            'with dataset {}'.format(
+                params_type, self.model_name, self.dataset_name))
+
+        args = self.likelihood_arguments_dict(params_type)
+        hessian = self.hessian(params, args)
+        cov = np.linalg.inv(-hessian)
+        return cov
+
+    def bootstrap_cov_matrix(self, params, params_type):
+        # TODO: write this function, at least in a simple implementation
+        # TODO: add necessary arguments to general section
+        assert len(params) == self.len_params(params_type), (
+            'You try to calculate standard error of a params vector of '
+            'incorrect length for the specified params_type {} in model {} '
+            'with dataset {}'.format(
+                params_type, self.model_name, self.dataset_name))
+        raise NotImplementedError('bootstrap is not yet implemented')
+
+    def fit(self, start_params=None, params=None):
         if self.estimator == 'chs':
-            return self.fit_chs()
+            params, optimize_dict = self.estimate_params_chs(
+                start_params, return_optimize_dict=True, params_type='long')
+
         elif self.estimator == 'wa':
-            return self.fit_wa()
-        else:
-            raise NotImplementedError(
-                'Only the chs and wa estimator are implemented.')
+            params = self.estimate_params_wa()
+            optimize_dict = None
+
+        cov_func = getattr('{}_cov_matrix'.format(self.standard_error_method))
+        cov = cov_func(params, 'long')
+
+        like_res = LikelihoodModelResults(self, params, cov)
+
+        skillmodel_res = SkillModelResults(self, like_res, optimize_dict)
+        return skillmodel_res

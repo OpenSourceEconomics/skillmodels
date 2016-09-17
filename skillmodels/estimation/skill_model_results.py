@@ -2,9 +2,14 @@ from statsmodels.base.model import GenericLikelihoodModelResults
 from statsmodels.tools.decorators import resettable_cache, cache_readonly
 
 
+class NotApplicableError(Exception):
+    pass
+
+
 class SkillModelResults(GenericLikelihoodModelResults):
-    def __init__(self, model, mlefit, optimize_dict):
+    def __init__(self, model, mlefit, optimize_dict=None):
         self.model = model
+        self.estimator = model.estimator
         self.optimize_dict = optimize_dict
         self.nobs = model.nobs
         self.df_model = model.df_model
@@ -23,9 +28,15 @@ class SkillModelResults(GenericLikelihoodModelResults):
 
     @cache_readonly
     def llf(self):
-        return self.optimize_dict['log_lh_value']
+        if self.estimator == 'wa':
+            return self.optimize_dict['log_lh_value']
+        else:
+            raise NotApplicableError(
+                'If the wa estimator was used there is no likelihood value.')
 
     def bootstrap(self, nrep=100, method='nm', disp=0, store=1):
+        # TODO: write this function. should be a call to model.bootstrap
+        # or a lookup if this is the standard_error_method
         raise NotImplementedError(
             'Bootstrap is not yet implemented for CHSModelResults')
 

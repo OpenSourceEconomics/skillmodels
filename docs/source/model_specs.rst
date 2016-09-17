@@ -73,7 +73,8 @@ The value that corresponds to the ``trans_eq`` key is a dictionary. The ``name``
     * ``log_ces`` (Known Location and Scale (KLS) version)
     * ``constant``
     * ``ar1`` (linear equation with only one included factor and the same coefficient in all stages)
-    * ``translog`` (non KLS version; a log-linear-in-parameters function including squares and interaction terms)
+    * ``translog`` (non KLS version; a log-linear-in-parameters function including squares and interaction terms. Not yet supported by wa estimator.).
+    * ``no_squares_translog`` (as translog but without squares and therefore supported by wa estimator.)
 
 To see how new types of transition equations can be added see :ref:`model_functions`.
 
@@ -137,9 +138,11 @@ Usually a research project comprises the estimation of more than one model and t
     * ``ignore_intercept_in_linear_anchoring``: takes the values true and false. Often the results remain interpretable if the intercept of the anchoring equation is ignored in the anchoring process. CHS do so in the example model (see equation above).
     * ``start_params``: a start vector for the maximization
     * ``start_values_per_quantity``: a dictionary with values that are used to construct the start vector for the maximization if the start vector is not provided directly.
-    * ``numba_target``: can take the values "cpu", "parallel" and "cuda" and specifies for which target functions that use numba's @guvectorize decorator are compiled. See the `numba documentation`_ for details.
-
-    .. Note:: This feature is experimental and for now "cpu" should be used.
+    * ``wa_standard_error_method``: a string that indicates which method is used to calculate standard_errors if the WA estimator is used. Curently "bootstrap" is the only option.
+    * ``chs_standard_error_method``:  a string that indicates which method is used to calculate standard_errors if the CHS estimator is used. Currently the options "op_of_gradient" (outer product of gradient), "hessian_inverse" and "bootstrap" are supported with the CHS estimator.
+    * ``save_intermediate_optimization_results``: boolean variable. If true, the the optional arguments of SkillModel (save_path, model_name, dataset_name) have to be specified in order to generate a directory where the intermediate results are stored. The default value is False.
+    * ``save_params_before_calculating_standard_errors``: boolean variable. If true, the the optional arguments of SkillModel (save_path, model_name, dataset_name) have to be specified in order to generate a directory where the intermediate results are stored. The default value is False.
+    *``maxiter`` and ``maxfun`` are the maximal number of iterations or function evaluations for estimators that use numerical optimization techniques. The default for both is one million which probably won't be reached in practice.
 
 .. _replication files:
     https://www.econometricsociety.org/content/supplement-estimating-technology-cognitive-and-noncognitive-skill-formation-0

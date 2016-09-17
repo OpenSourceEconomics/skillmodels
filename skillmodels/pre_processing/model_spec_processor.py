@@ -3,6 +3,7 @@ from pandas import DataFrame
 import numpy as np
 from itertools import product
 import skillmodels.model_functions.transition_functions as tf
+import os
 
 
 class ModelSpecProcessor:
@@ -25,14 +26,15 @@ class ModelSpecProcessor:
     """
 
     def __init__(
-            self, model_name, dataset_name, model_dict, dataset, estimator,
-            quiet_mode=False):
+            self, model_dict, dataset, estimator, model_name='some_model',
+            dataset_name='some_dataset', save_path=None, quiet_mode=False):
         # TODO: check where I could use quiet mode
-        self.model_name = model_name
-        self.estimator = estimator
-        self.dataset_name = dataset_name
-        self._data = dataset
         self._model_dict = model_dict
+        self._data = dataset
+        self.estimator = estimator
+        self.model_name = model_name
+        self.dataset_name = dataset_name
+        self.save_path = save_path
         self.quiet_mode = quiet_mode
         if 'time_specific' in model_dict:
             self._timeinf = model_dict['time_specific']
@@ -73,15 +75,25 @@ class ModelSpecProcessor:
                     "tau": 0.1,
                     "trans_coeffs": 1.0
                 },
-             "numba_target": "cpu"}
-        # TODO: Müssen noch andere argumente in general settings aufgenommen werden?
+             # "numba_target": "cpu",
+             'wa_standard_error_method': 'bootstrap',
+             'chs_standard_error_method': 'op_of_gradient',
+             'save_intermediate_optimization_results': False,
+             'save_params_before_calculating_standard_errors': False,
+             'maxiter': 1000000,
+             'maxfun': 1000000,
+             }
 
         if 'general' in model_dict:
             general_settings.update(model_dict['general'])
         self.__dict__.update(general_settings)
-
+        self.standard_error_method = getattr(
+            self, '{}_standard_error_method'.format(self.estimator))
+        if self.standard_error_method == 'bootstrap':
+            self._asserts_and_warnings_for_bootstrap()
         self._set_time_specific_attributes()
         self._check_general_specifications()
+        self._generate_save_directories()
         self._transition_equation_names()
         self._transition_equation_included_factors()
         self._set_anchoring_attributes()
@@ -97,6 +109,12 @@ class ModelSpecProcessor:
             self._wa_period_weights()
             self._wa_storage_df()
             self._wa_identified_transition_function_restrictions()
+
+    def _generate_save_directories(self):
+        if self.save_intermediate_optimization_results is True:
+            os.makedirs(self.save_path + '/opt_results', exist_ok=True)
+        if self.save_params_before_calculating_standard_errors is True:
+            os.makedirs(self.save_path + '/params', exist_ok=True)
 
     def _set_time_specific_attributes(self):
         """Set model specs related to periods and stages as attributes."""
@@ -129,11 +147,6 @@ class ModelSpecProcessor:
             'steps of 1. Your stagemap in mode {} is invalid').format(
                 self.model_name)
 
-        # TODO: remove this assert statement after implementing stages in WA!!!!!!!!!!
-        if self.estimator == 'wa':
-            assert list(self.stagemap)[:-1] == list(self.periods)[:-1], (
-                'For the wa estimator stages cannot span more than 1 period.')
-
         for factor in self.factors:
             length = len(self._facinf[factor]['measurements'])
             assert length == self.nperiods, (
@@ -150,6 +163,34 @@ class ModelSpecProcessor:
                 'possible to have more than one element in the mixture '
                 'distribution of the latent factors. Check model {}').format(
                     self.model_name)
+
+        assert self.wa_standard_error_method == 'bootstrap', (
+            'Currently, the only standard error method supported with the wa '
+            'estimator is bootstrap.')
+
+        chs_admissible = ['bootstrap', 'op_of_gradient', 'hessian_inverse']
+        assert self.chs_standard_error_method in chs_admissible, (
+            'Currently, the only standard error methods supported with the '
+            'chs estimator are {}'.format(chs_admissible))
+
+        something_ist_saved = self.save_intermediate_optimization_results or \
+            self.save_params_before_calculating_standard_errors
+
+        if something_ist_saved is True:
+            assert self.save_path is not None and \
+                self.model_name != 'some_model' and \
+                self.dataset_name != 'some_dataset', (
+                    'If you specified to save intermediate optimization '
+                    'results or estimated parameters you have to provide '
+                    'a save_path and meaningful names for the model and '
+                    'dataset in order to generate a directory structure.')
+
+    def _asserts_and_warnings_for_bootstrap(self):
+        # TODO: write this function!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # make asserts about the handling of missing variables and the like
+        # asserst should ensure that the exactly same model is estimated with
+        # all bootstrap datasets.
+        pass
 
     def _transition_equation_names(self):
         # todo: change to check_and_set

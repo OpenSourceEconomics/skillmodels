@@ -12,10 +12,8 @@ The main object a user interacts with is ``SkillModel`` (see :ref:`estimation`) 
 .. code::
 
     from skillmodels import SkillModel
-    mod = SkillModel('model_name', 'dataset_name', model_dict, dataset, estimator)
+    mod = SkillModel(model_dict, dataset, estimator)
 
-* 'model_name' a string that is used in error messages to clearly identify where the errors occured and as names of directories for the storage of intermediate results.
-* 'dataset_name' is used for the same purpose
 * model_dict is the actual model dictionary (usually loaded from a json file)
 * dataset is a pandas dataframe in long format. It has to contain a variable named 'period' that indicates the period starting with 0 and incrementing in steps of 1.
 * estimator is a string that can take the values 'wa' (Wiswall Agostinelli Estimator and 'chs' (Cunha, Heckman, Schennach estimator).
@@ -34,7 +32,8 @@ will return an instance of ``SkillModelResults`` which is a subclass of ``Generi
 
     # access the estimated parameter vector (long form)
     estimated_parameters = res.params
-    # access standard errors based on the outer product of gradients
+    # access standard errors based on the method you specified in the general
+    # section of the model dictionary.
     standard_errrors = res.bse
     # access the t-valuess of the parameters
     tvalues = res.tvalues
