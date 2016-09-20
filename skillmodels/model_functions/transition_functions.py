@@ -429,6 +429,7 @@ def output_has_known_location_translog():
 # =============================================================================
 
 
+@jit
 def no_squares_translog(sigma_points, coeffs, included_positions):
     # the coeffs will be parsed as follows:
     # last entry = TFP term

@@ -13,7 +13,7 @@ class DataProcessor:
         specs = ModelSpecProcessor(
             model_dict=model_dict, dataset=dataset, estimator=estimator,
             model_name=model_name, dataset_name=dataset_name,
-            quiet_mode=quiet_mode)
+            quiet_mode=quiet_mode, save_path=save_path)
         self.data = specs._data
         self.periods = specs.periods
         self.controls = specs.controls

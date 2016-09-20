@@ -86,10 +86,6 @@ class TestOfWAEstimator:
         self.true_loadings = np.arange(start=0.5, stop=1.85, step=0.05)
         self.true_intercepts = np.arange(start=-0.665, stop=0.665, step=0.05)
         self.true_X_zero = np.array([5, 7.5, 30])
-        self.true_cov_matrix = np.array([[1.44, 0.05, 0.1],
-                                         [0.05, 2.25, 0.0],
-                                         [0.1, 0.0, 4.0]])
-        self.true_P_zero = self.true_cov_matrix[np.triu_indices(self.nfac)]
 
     def test_loadings_intercepts_transparams_and_xzeros(self):
         self.nobs = 1000

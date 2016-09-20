@@ -16,6 +16,7 @@ from itertools import product
 from scipy.optimize import minimize
 from statsmodels.tools.numdiff import approx_hess, approx_fprime
 import pandas as pd
+import json
 
 
 class SkillModel(GenericLikelihoodModel):
@@ -46,7 +47,7 @@ class SkillModel(GenericLikelihoodModel):
         specs = ModelSpecProcessor(
             model_dict=model_dict, dataset=dataset, estimator=estimator,
             model_name=model_name, dataset_name=dataset_name,
-            quiet_mode=quiet_mode)
+            quiet_mode=quiet_mode, save_path=save_path)
         self.__dict__.update(specs.public_attribute_dict())
 
         data = DataProcessor(
@@ -739,7 +740,7 @@ class SkillModel(GenericLikelihoodModel):
     def reduceparams(self, params):
         # TODO: write this function!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         raise NotImplementedError(
-            'A reduceparams method is not implemented in CHSModel')
+            'A reduceparams method is not implemented in SkillModel')
 
     def generate_start_params(self):
         """Vector with start values for the optimization."""
@@ -980,8 +981,11 @@ class SkillModel(GenericLikelihoodModel):
         return - log_likelihood_per_individual(params, **args)
 
     def nloglike(self, params, args):
+        path = self.save_path + '/opt_results/iteration{}.json'
+        with open(path.format(self.optimize_iteration_counter), 'w') as j:
+            json.dump(params.tolist(), j)
+        self.optimize_iteration_counter += 1
         return - log_likelihood_per_individual(params, **args).sum()
-        # TODO: store params in each iteration !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     def loglikeobs(self, params, args):
         return log_likelihood_per_individual(params, **args)
@@ -995,7 +999,7 @@ class SkillModel(GenericLikelihoodModel):
             start_params = self.generate_start_params()
         bounds = self.bounds_list()
         args = self.likelihood_arguments_dict(params_type='short')
-
+        self.optimize_iteration_counter = 0
         res = minimize(self.nloglike, start_params, args=(args),
                        method='L-BFGS-B', bounds=bounds,
                        options={'maxiter': self.maxiter,
@@ -1007,7 +1011,7 @@ class SkillModel(GenericLikelihoodModel):
         optimize_dict['log_lh_value'] = -res.fun
         optimize_dict['xopt'] = res.x.tolist()
 
-        params = self.expandparams(res.x) if params_type == 'short' else res.x
+        params = self.expandparams(res.x) if params_type == 'long' else res.x
 
         if return_optimize_dict is True:
             return params, optimize_dict
@@ -1238,6 +1242,8 @@ class SkillModel(GenericLikelihoodModel):
                 stage, factor] = intercept
 
     def _calculate_wa_quantities(self):
+        self.identified_restrictions['coeff_sum_value'][:] = None
+        self.identified_restrictions['trans_intercept_value'][:] = None
         t = 0
         # identify measurement system and factor means in initial period
         meas_coeffs, X_zero = initial_meas_coeffs(
@@ -1427,7 +1433,12 @@ class SkillModel(GenericLikelihoodModel):
             params = self.estimate_params_wa()
             optimize_dict = None
 
-        cov_func = getattr('{}_cov_matrix'.format(self.standard_error_method))
+        if self.save_params_before_calculating_standard_errors is True:
+            path = self.save_path + '/params/params.json'
+            with open(path, 'w') as j:
+                json.dump(params.tolist(), j)
+
+        cov_func = getattr(self, '{}_cov_matrix'.format(self.standard_error_method))
         cov = cov_func(params, 'long')
 
         like_res = LikelihoodModelResults(self, params, cov)

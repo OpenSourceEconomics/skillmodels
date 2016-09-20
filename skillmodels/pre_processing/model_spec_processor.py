@@ -91,6 +91,8 @@ class ModelSpecProcessor:
             self, '{}_standard_error_method'.format(self.estimator))
         if self.standard_error_method == 'bootstrap':
             self._asserts_and_warnings_for_bootstrap()
+        if self.estimator == 'wa':
+            self.nemf = 1
         self._set_time_specific_attributes()
         self._check_general_specifications()
         self._generate_save_directories()
@@ -177,13 +179,10 @@ class ModelSpecProcessor:
             self.save_params_before_calculating_standard_errors
 
         if something_ist_saved is True:
-            assert self.save_path is not None and \
-                self.model_name != 'some_model' and \
-                self.dataset_name != 'some_dataset', (
+            assert self.save_path is not None, (
                     'If you specified to save intermediate optimization '
                     'results or estimated parameters you have to provide '
-                    'a save_path and meaningful names for the model and '
-                    'dataset in order to generate a directory structure.')
+                    'a save_path.')
 
     def _asserts_and_warnings_for_bootstrap(self):
         # TODO: write this function!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
