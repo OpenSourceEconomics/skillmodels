@@ -981,10 +981,11 @@ class SkillModel(GenericLikelihoodModel):
         return - log_likelihood_per_individual(params, **args)
 
     def nloglike(self, params, args):
-        path = self.save_path + '/opt_results/iteration{}.json'
-        with open(path.format(self.optimize_iteration_counter), 'w') as j:
-            json.dump(params.tolist(), j)
-        self.optimize_iteration_counter += 1
+        if self.save_intermediate_optimization_results is True:
+            path = self.save_path + '/opt_results/iteration{}.json'
+            with open(path.format(self.optimize_iteration_counter), 'w') as j:
+                json.dump(params.tolist(), j)
+            self.optimize_iteration_counter += 1
         return - log_likelihood_per_individual(params, **args).sum()
 
     def loglikeobs(self, params, args):
@@ -999,7 +1000,8 @@ class SkillModel(GenericLikelihoodModel):
             start_params = self.generate_start_params()
         bounds = self.bounds_list()
         args = self.likelihood_arguments_dict(params_type='short')
-        self.optimize_iteration_counter = 0
+        if self.save_intermediate_optimization_results is True:
+            self.optimize_iteration_counter = 0
         res = minimize(self.nloglike, start_params, args=(args),
                        method='L-BFGS-B', bounds=bounds,
                        options={'maxiter': self.maxiter,
