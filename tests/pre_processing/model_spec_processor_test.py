@@ -20,6 +20,7 @@ class TestTransitionEquationNames:
         msp._transition_equation_names(self)
         assert_equal(self.transition_names, ['linear', 'ces', 'ar1'])
 
+
 class TestTransitionEquationIncludedFactors:
     def setup(self):
         self.factors = ['f1', 'f2']
@@ -45,11 +46,12 @@ class TestVariableCheckMethods:
         df1.loc[1, 'var1'] = 1
         df2 = DataFrame(data=np.ones((5, 2)), columns=['period', 'var2'])
         df2.loc[1, 'var2'] = 5
-        self._data = pd.concat([df1, df2], axis=0)
+        self.data = pd.concat([df1, df2], axis=0)
         self.missing_variables = 'drop_variable'
         self.variables_without_variance = 'drop_variable'
         self.model_name = 'model'
         self.dataset_name = 'dataset'
+        self.period_identifier = 'period'
 
     def test_present_where_true(self):
         assert_equal(msp._present(self, 'var1', 0), True)
@@ -74,7 +76,7 @@ class TestVariableCheckMethods:
         assert_equal(msp._has_variance(self, 'var1', 0), True)
 
     def test_has_variance_where_false_non_missing(self):
-        self._data.loc[1, 'var1'] = 0
+        self.data.loc[1, 'var1'] = 0
         assert_equal(msp._has_variance(self, 'var1', 0), False)
 
     def test_has_variance_where_false_missing(self):
@@ -131,8 +133,9 @@ class TestCleanControlSpecifications:
         cols = ['period', 'c1', 'c2']
         dat = np.zeros((10, 3))
         dat[5:, 0] = 1
-        self._data = DataFrame(data=dat, columns=cols)
+        self.data = DataFrame(data=dat, columns=cols)
         self.estimator = 'chs'
+        self.period_identifier = 'period'
 
     def test_clean_control_specs_nothing_to_clean(self):
         msp._clean_controls_specification(self)
@@ -148,14 +151,14 @@ class TestCleanControlSpecifications:
         aae(self.obs_to_keep, np.ones(5, dtype=bool))
 
     def test_clean_control_specs_missing_observations_drop_variable(self):
-        self._data.loc[2, 'c2'] = np.nan
+        self.data.loc[2, 'c2'] = np.nan
         msp._clean_controls_specification(self)
         res = [['c1'], ['c1', 'c2']]
         assert_equal(self.controls, res)
         aae(self.obs_to_keep, np.ones(5, dtype=bool))
 
     def test_clean_control_specs_missing_observation_drop_observation(self):
-        self._data.loc[2, 'c2'] = np.nan
+        self.data.loc[2, 'c2'] = np.nan
         self.controls_with_missings = 'drop_observations'
         msp._clean_controls_specification(self)
         res = [['c1', 'c2'], ['c1', 'c2']]
@@ -163,7 +166,7 @@ class TestCleanControlSpecifications:
         aae(self.obs_to_keep, np.array([True, True, False, True, True]))
 
     def test_clean_control_specs_missing_observations_error(self):
-        self._data.loc[2, 'c2'] = np.nan
+        self.data.loc[2, 'c2'] = np.nan
         self.controls_with_missings = 'raise_error'
         assert_raises(ValueError, msp._clean_controls_specification, self)
 

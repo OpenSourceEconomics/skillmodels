@@ -24,6 +24,7 @@ class TestCData:
 
         self.obs_to_keep = np.array([True, True, True, False, True])
         self.estimator = 'chs'
+        self.period_identifier = 'period'
 
     def test_c_data_with_constants(self):
         res1 = [[1.0, 'c1_t0_0', 'c2_t0_0'], [1.0, 'c1_t0_1', 'c2_t0_1'],
@@ -62,6 +63,7 @@ class TestYData:
         self.nobs = 3
 
         self.obs_to_keep = np.array([True, True, False, True])
+        self.period_identifier = 'period'
 
     def test_y_data_focus_on_rows(self):
         data = np.tile(np.arange(6), 16).reshape(16, 6)
@@ -85,8 +87,6 @@ class TestYData:
              np.array([[8, 9, 11]] * 6), np.array([[12, 13, 15]] * 7)])
 
         aae(dc.y_data_chs(self), res)
-
-
 
 if __name__ == '__main__':
     from nose.core import runmodule

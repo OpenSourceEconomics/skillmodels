@@ -15,8 +15,8 @@ The main object a user interacts with is ``SkillModel`` (see :ref:`estimation`) 
     mod = SkillModel(model_dict, dataset, estimator)
 
 * model_dict is the actual model dictionary (usually loaded from a json file)
-* dataset is a pandas dataframe in long format. It has to contain a variable named 'period' that indicates the period starting with 0 and incrementing in steps of 1.
-* estimator is a string that can take the values 'wa' (Wiswall Agostinelli Estimator and 'chs' (Cunha, Heckman, Schennach estimator).
+* dataset is a pandas dataframe in long format. It has to contain columns that identify the period and individual. The names of these columns are indicated as 'period_identifier' and 'person_identifier' in the general section of the model dictionary. The default values are 'period' and 'id'.
+* estimator is a string that can take the values 'wa' (Wiswall Agostinelli Estimator) and 'chs' (Cunha, Heckman, Schennach estimator).
 
 .. Note:: Currently only the CHS estimator is implemented.
 

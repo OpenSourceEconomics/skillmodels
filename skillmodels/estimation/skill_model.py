@@ -41,25 +41,24 @@ class SkillModel(GenericLikelihoodModel):
 
     def __init__(
             self, model_dict, dataset, estimator, model_name='some_model',
-            dataset_name='some_dataset', save_path=None, quiet_mode=False):
+            dataset_name='some_dataset', save_path=None, quiet_mode=False,
+            bootstrap_samples=None):
         """Initialize the CHSModel class and set attributes."""
         self.estimator = estimator
         specs = ModelSpecProcessor(
             model_dict=model_dict, dataset=dataset, estimator=estimator,
             model_name=model_name, dataset_name=dataset_name,
             quiet_mode=quiet_mode, save_path=save_path)
-        self.__dict__.update(specs.public_attribute_dict())
-
-        data = DataProcessor(
-            model_dict=model_dict, dataset=dataset, estimator=estimator,
-            model_name=model_name, dataset_name=dataset_name,
-            save_path=save_path, quiet_mode=quiet_mode)
-
+        specs_dict = specs.public_attribute_dict()
+        data = DataProcessor(specs_dict)
         self.c_data = data.c_data() if self.estimator == 'chs' else None
         self.y_data = data.y_data()
+        self.__dict__.update(specs_dict)
 
-        self.update_info = specs.update_info()
-        self.new_trans_coeffs = specs.new_trans_coeffs()
+        if bootstrap_samples is not None:
+            self.bootstrap_samples = bootstrap_samples
+        else:
+            self.bootstrap_samples = self._generate_bs_samples()
 
         # create a list of all quantities that depend from params vector
         self.params_quants = \
@@ -1415,6 +1414,90 @@ class SkillModel(GenericLikelihoodModel):
         hessian = self.hessian(params, args)
         cov = np.linalg.inv(-hessian)
         return cov
+
+    def _check_bs_samples(self):
+        assert hasattr(self.bootstrap_samples, '__iter__'), (
+            'The bootstrap_samples you provided are not iterable. '
+            'The bootstrap_samples must be iterable with each item providing '
+            'the person_identifiers chosen to be in that bootstrap sample. '
+            'See the documentation on model_specs for more information. '
+            'This error occured in model {} and dataset {}'.format(
+                self.model_name, self.dataset_name))
+
+        identifiers = self.data[self.person_identifier].unique()
+        for item in self.bootstrap_samples:
+            assert set(item) in identifiers, (
+                'The bootstrap_samples you provided contain person_identifiers'
+                ' which are not in the dataset {}. These missing identifiers '
+                'are {}.\nYou specified {} as person_identifier. This error '
+                'occurred in model {}'.format(
+                    self.dataset_name,
+                    [i for i in item if i not in identifiers],
+                    self.person_identifier, self.model_name))
+
+        assert len(self.bootstrap_samples) >= self.bootstrap_nreps, (
+            'You only provided {} bootstrap samples but specified {} '
+            'replications. You must either reduce the number of replications '
+            'or provide more samples in model {} and dataset {}'.format(
+                len(self.bootstrap_samples), self.bootstrap_nreps,
+                self.model_name, self.dataset_name))
+
+    def _generate_bs_samples(self):
+        """List of lists.
+
+        Each sublist contains the 'person_identifiers' of the individuals that
+        were sampled from the dataset with replacement.
+        """
+        individuals = np.array(self.data[self.person_identifier].unique())
+        selected_indices = np.random.randint(
+            low=0, high=len(individuals),
+            size=(self.bootstrap_nreps, self.nobs))
+        bootstrap_samples = individuals[selected_indices].tolist()
+        return bootstrap_samples
+
+    def _generate_bootstrap_data(self, rep):
+        """
+        """
+        data = self.data.set_index(
+            [self.person_identifier, self.period_identifier])
+        current_sample = self.bootstrap_samples[rep]
+        bs_index = pd.MultiIndex.from_product(
+            [current_sample, self.periods],
+            names=[self.person_identifier, self.period_identifier])
+
+        bs_data = data.loc[bs_index].reset_index()
+        return bs_data
+
+    def _bs_fit(self, rep, params, params_type):
+        bootstrap_data = self._generate_bootstrap_data(rep)
+
+        new_mod = SkillModel(
+            model_dict=self.model_dict, dataset=bootstrap_data,
+            estimator=self.estimator,
+            model_name=self.model_name + '_{}'.format(rep),
+            dataset_name=self.dataset_name + '_{}'.format(rep),
+            save_path=self.save_path + '/bootstrap/{}'.format(rep),
+            quiet_mode=self.quiet_mode)
+
+        if self.estimator == 'chs':
+            params = new_mod.estimate_params_chs(
+                start_params=params, return_optimize_dict=False,
+                params_type=params_type)
+        elif self.estimator == 'wa':
+            assert params_type in ['long', None], (
+                'There is no short params_type in the wa estimator.')
+            params = new_mod.estimate_params_wa()
+
+        return params
+
+    def all_bootstrap_params(self, params_type):
+        pass
+
+    def bootstrap_params_to_cov(self, bootstrap_params):
+        pass
+
+    def bootstrap_params_to_conf_int(self, bootstrap_params):
+        pass
 
     def bootstrap_cov_matrix(self, params, params_type):
         # TODO: write this function, at least in a simple implementation

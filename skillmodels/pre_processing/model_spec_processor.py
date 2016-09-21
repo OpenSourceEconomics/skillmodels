@@ -29,8 +29,8 @@ class ModelSpecProcessor:
             self, model_dict, dataset, estimator, model_name='some_model',
             dataset_name='some_dataset', save_path=None, quiet_mode=False):
         # TODO: check where I could use quiet mode
-        self._model_dict = model_dict
-        self._data = dataset
+        self.model_dict = model_dict
+        self.data = dataset
         self.estimator = estimator
         self.model_name = model_name
         self.dataset_name = dataset_name
@@ -82,6 +82,11 @@ class ModelSpecProcessor:
              'save_params_before_calculating_standard_errors': False,
              'maxiter': 1000000,
              'maxfun': 1000000,
+             'period_identifier': 'period',
+             'person_identifier': 'id',
+             'bootstrap_nreps': 300,
+             'bootstrap_nprocesses': None,
+             'save_bootstrap_params': True
              }
 
         if 'general' in model_dict:
@@ -180,9 +185,9 @@ class ModelSpecProcessor:
 
         if something_ist_saved is True:
             assert self.save_path is not None, (
-                    'If you specified to save intermediate optimization '
-                    'results or estimated parameters you have to provide '
-                    'a save_path.')
+                'If you specified to save intermediate optimization '
+                'results or estimated parameters you have to provide '
+                'a save_path.')
 
     def _asserts_and_warnings_for_bootstrap(self):
         # TODO: write this function!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -228,13 +233,13 @@ class ModelSpecProcessor:
     def _set_anchoring_attributes(self):
         """Set attributes related to anchoring and make some checks."""
         # TODO: reimplement the anchoring procedure; check if all of this is still needed
-        if 'anchoring' in self._model_dict:
-            assert len(self._model_dict['anchoring']) <= 1, (
+        if 'anchoring' in self.model_dict:
+            assert len(self.model_dict['anchoring']) <= 1, (
                 'At most one anchoring equation can be estimated. You '
                 'specify {} in model {}').format(
-                    len(self._model_dict['anchoring']), self.model_name)
+                    len(self.model_dict['anchoring']), self.model_name)
             (self.anch_outcome, self.anchored_factors), = \
-                self._model_dict['anchoring'].items()
+                self.model_dict['anchoring'].items()
             self.anchoring = True
             if self._is_dummy(self.anch_outcome, self.periods[-1]):
                 self.anchoring_update_type = 'probit'
@@ -248,8 +253,8 @@ class ModelSpecProcessor:
 
     def _set_endogeneity_correction_attributes(self):
         # TODO: implement a comparable endogeneity correction option for both estimators
-        if 'endog_correction' in self._model_dict:
-            info_dict = self._model_dict['endog_correction']
+        if 'endog_correction' in self.model_dict:
+            info_dict = self.model_dict['endog_correction']
             self.endog_factor = info_dict['endog_factor']
             self.endog_correction = True
             self.endog_function = info_dict['endog_function']
@@ -259,7 +264,7 @@ class ModelSpecProcessor:
     def _present(self, variable, period):
         """Check if **variable** is present in **period**.
 
-        **variable** is considered present if it is in self._data and not all
+        **variable** is considered present if it is in self.data and not all
         observations in **period** are NaN.
 
         args:
@@ -281,8 +286,8 @@ class ModelSpecProcessor:
             'to automatically drop missing variables.').format(
                 self.model_name, variable, self.dataset_name, period)
 
-        columns = set(self._data.columns)
-        df = self._data[self._data['period'] == period]
+        columns = set(self.data.columns)
+        df = self.data[self.data[self.period_identifier] == period]
         if variable in columns and df[variable].notnull().any():
             return True
         elif self.missing_variables == 'raise_error':
@@ -305,7 +310,8 @@ class ModelSpecProcessor:
             bool: True if **variable** is a dummy in **period**, else False
 
         """
-        series = self._data[self._data['period'] == period][variable]
+        series = \
+            self.data[self.data[self.period_identifier] == period][variable]
         unique_values = series[pd.notnull(series)].unique()
         if sorted(unique_values) == [0, 1]:
             return True
@@ -337,7 +343,8 @@ class ModelSpecProcessor:
             'or set the "variables_without_variance" key in general settings '
             'to "drop_variable".')
 
-        series = self._data[self._data['period'] == period][variable]
+        series = \
+            self.data[self.data[self.period_identifier] == period][variable]
         unique_non_missing_values = list(series[pd.notnull(series)].unique())
         nr_unique = len(unique_non_missing_values)
 
@@ -429,7 +436,7 @@ class ModelSpecProcessor:
                       'be ignored when the model is estimated with the wa '
                       'estimator.'.format(self.model_name))
 
-        obs_to_keep = np.ones(len(self._data) // self.nperiods, dtype=bool)
+        obs_to_keep = np.ones(len(self.data) // self.nperiods, dtype=bool)
         controls = [[] for t in self.periods]
 
         if self.uses_controls:
@@ -440,7 +447,7 @@ class ModelSpecProcessor:
                      if (self._present(c, t))])
 
             for t in self.periods:
-                df = self._data[self._data['period'] == t]
+                df = self.data[self.data[self.period_identifier] == t]
                 for c, control in enumerate(present_controls[t]):
                     if df[control].notnull().all():
                         controls[t].append(control)
@@ -898,4 +905,6 @@ class ModelSpecProcessor:
         all_attributes = self.__dict__
         public_attributes = {key: val for key, val in all_attributes.items()
                              if not key.startswith('_')}
+        public_attributes['update_info'] = self.update_info()
+        public_attributes['new_trans_coeffs'] = self.new_trans_coeffs()
         return public_attributes

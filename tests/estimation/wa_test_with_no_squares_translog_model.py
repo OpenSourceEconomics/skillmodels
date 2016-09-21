@@ -49,7 +49,6 @@ def generate_test_data(nobs, factors, periods, included_positions, meas_names,
         # add structural part of measurements
         for m in range(nmeas):
             factor_pos = m_to_factor[m]
-            measurements[:, m] *= loadings[counter]
             measurements[:, m] += (new_facs[:, factor_pos] * loadings[counter])
             measurements[:, m] += intercepts[counter]
             counter += 1

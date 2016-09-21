@@ -142,7 +142,11 @@ Usually a research project comprises the estimation of more than one model and t
     * ``chs_standard_error_method``:  a string that indicates which method is used to calculate standard_errors if the CHS estimator is used. Currently the options "op_of_gradient" (outer product of gradient), "hessian_inverse" and "bootstrap" are supported with the CHS estimator.
     * ``save_intermediate_optimization_results``: boolean variable. If true, the the optional arguments of SkillModel (save_path, model_name, dataset_name) have to be specified in order to generate a directory where the intermediate results are stored. The default value is False.
     * ``save_params_before_calculating_standard_errors``: boolean variable. If true, the the optional arguments of SkillModel (save_path, model_name, dataset_name) have to be specified in order to generate a directory where the intermediate results are stored. The default value is False.
-    *``maxiter`` and ``maxfun`` are the maximal number of iterations or function evaluations for estimators that use numerical optimization techniques. The default for both is one million which probably won't be reached in practice.
+    *``maxiter`` and ``maxfun``: the maximal number of iterations or function evaluations for estimators that use numerical optimization techniques. The default for both is one million which probably won't be reached in practice.
+    *``period_identifier`` and ``person_identifier``: give the names of the columns that identify the periods and individuals in the dataset. The defaults are 'period' and 'id'.
+    *``bootstrap_nreps``: number of bootstrap replications if the standard_error_method of the chosen estimator is bootstrap. Default is 300.
+    *``bootstrap_nprocesses``: amount of multiprocessing during the calculation of bootstrap standard errors. The default is 'None' which means that all available cores are used.
+    *``save_bootstrap_params``: boolean value that indicates whether the bootstrap parameter vectors are saved on disk. The default is False. If True, SkillModel has to be called with a save_path.
 
 .. _replication files:
     https://www.econometricsociety.org/content/supplement-estimating-technology-cognitive-and-noncognitive-skill-formation-0
