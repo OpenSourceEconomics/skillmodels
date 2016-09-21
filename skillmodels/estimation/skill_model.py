@@ -17,6 +17,8 @@ from scipy.optimize import minimize
 from statsmodels.tools.numdiff import approx_hess, approx_fprime
 import pandas as pd
 import json
+from multiprocessing import Pool
+import os
 
 
 class SkillModel(GenericLikelihoodModel):
@@ -1450,14 +1452,13 @@ class SkillModel(GenericLikelihoodModel):
         """
         individuals = np.array(self.data[self.person_identifier].unique())
         selected_indices = np.random.randint(
-            low=0, high=len(individuals),
+            low=0, high=self.bootstrap_sample_size,
             size=(self.bootstrap_nreps, self.nobs))
         bootstrap_samples = individuals[selected_indices].tolist()
         return bootstrap_samples
 
     def _generate_bootstrap_data(self, rep):
-        """
-        """
+        """Return the data of the resampled individuals."""
         data = self.data.set_index(
             [self.person_identifier, self.period_identifier])
         current_sample = self.bootstrap_samples[rep]
@@ -1488,26 +1489,59 @@ class SkillModel(GenericLikelihoodModel):
                 'There is no short params_type in the wa estimator.')
             params = new_mod.estimate_params_wa()
 
+        if self.save_bootstrap_params is True:
+            path = self.save_path + '/bootstrap/{}_params.json'.format(rep)
+            with open(path, 'w') as j:
+                json.dump(params.tolist(), j)
         return params
 
-    def all_bootstrap_params(self, params_type):
-        pass
+    def all_bootstrap_params(self, params, params_type):
+        """Return a DataFrame of all bootstrap parameters.
 
-    def bootstrap_params_to_cov(self, bootstrap_params):
-        pass
+        Create the resampled datasets from lists of person identifiers, fit
+        the models simultaneously and save them in a DataFrame as well as in a
+        specified path, if wanted.
+        """
+        if self.save_bootstrap_params is True:
+            os.makedirs(self.save_path + '/bootstrap_results', exist_ok=True)
+        with Pool(self.bootstrap_nprocesses) as p:
+            bootstrap_params = p.map(self._bs_fit, range(self.bootstrap_nreps))
+        columns = ['rep_{}'.format(rep) for rep in range(self.bootstrap_nreps)]
+        bootstrap_params = pd.DataFrame(data=bootstrap_params, index=columns).T
+        return bootstrap_params
 
-    def bootstrap_params_to_conf_int(self, bootstrap_params):
-        pass
+    def bootstrap_params_to_conf_int(self, bootstrap_params, alpha=0.05):
+        """Parameter confidence intervals from bootstrap parametres.
+
+        args:
+            bootstrap_params (df): pandas DataFrame where each column gives the
+                parameters from one bootstrap replication.
+            alpha (float): the significance level of the confidence interval.
+
+        Returns:
+            conf_int_df (df): pandas DataFrame with two columns that give the
+                lower and upper bound of the confidence interval based on the
+                distribution of the bootstrap parameters.
+
+        """
+        lower_ci = bootstrap_params.quantile(
+            0.5 * alpha, axis=1).rename('lower_ci_bound')
+        upper_ci = bootstrap_params.quantile(
+            1 - 0.5 * alpha, axis=1).rename('upper_ci_bound')
+        conf_int_df = pd.concat([lower_ci, upper_ci], axis=1)
+        return conf_int_df
 
     def bootstrap_cov_matrix(self, params, params_type):
-        # TODO: write this function, at least in a simple implementation
+        """Calculate the paramater covariance matrix using bootstrap."""
         # TODO: add necessary arguments to general section
         assert len(params) == self.len_params(params_type), (
             'You try to calculate standard error of a params vector of '
             'incorrect length for the specified params_type {} in model {} '
             'with dataset {}'.format(
                 params_type, self.model_name, self.dataset_name))
-        raise NotImplementedError('bootstrap is not yet implemented')
+        bootstrap_params = self.all_bootstrap_params(params, params_type)
+        cov = bootstrap_params.cov()
+        return cov
 
     def fit(self, start_params=None, params=None):
         if self.estimator == 'chs':
@@ -1523,7 +1557,8 @@ class SkillModel(GenericLikelihoodModel):
             with open(path, 'w') as j:
                 json.dump(params.tolist(), j)
 
-        cov_func = getattr(self, '{}_cov_matrix'.format(self.standard_error_method))
+        cov_func = getattr(
+            self, '{}_cov_matrix'.format(self.standard_error_method))
         cov = cov_func(params, 'long')
 
         like_res = LikelihoodModelResults(self, params, cov)

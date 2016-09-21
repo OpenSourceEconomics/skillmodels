@@ -85,6 +85,7 @@ class ModelSpecProcessor:
              'period_identifier': 'period',
              'person_identifier': 'id',
              'bootstrap_nreps': 300,
+             'bootstrap_sample_size': None,
              'bootstrap_nprocesses': None,
              'save_bootstrap_params': True
              }
@@ -108,6 +109,8 @@ class ModelSpecProcessor:
         self._clean_measurement_specifications()
         self._clean_controls_specification()
         self.nobs = self.obs_to_keep.sum()
+        if self.bootstrap_sample_size is None:
+            self.bootstrap_sample_size = self.nobs
         self._check_or_generate_normalization_specification()
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())

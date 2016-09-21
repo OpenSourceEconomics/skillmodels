@@ -977,7 +977,6 @@ class TestWANorminfoDict:
         calculated = smo.model_coeffs_from_iv_coeffs_args_dict(self, 1, 'f1')
         assert_equal(calculated, expected)
 
-
 if __name__ == '__main__':
     from nose.core import runmodule
     runmodule()
