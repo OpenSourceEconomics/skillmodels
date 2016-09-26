@@ -20,9 +20,10 @@ I will start implementing two estimators: the Kalman filter based maximum likeli
 .. _Working Paper (2016):
     https://dl.dropboxusercontent.com/u/45673846/agostinelli_wiswall_estimation.pdf
 
-The estimators were developed for the estimation of skill formation models but are by no means limited to this particular application. It can be applied to any dynamic nonlinear latent factor model.
+The estimators were developed for the estimation of skill formation models but are by no means limited to this particular application. They can be applied to any dynamic nonlinear latent factor model.
 
 The CHS estimator implemented here differs in two points from the estimator implemented in their `replication files`_: 1) It uses different normalizations that take into account the `critique`_ of Wiswall and Agostinelli. 2) It can optionally use more robust square-root implementations of the Kalman filters.
+
 
 Most of the code is unit tested and the results have been compared to the Fortran code by CHS for two basic models with hypothetical data from their `replication files`_.
 

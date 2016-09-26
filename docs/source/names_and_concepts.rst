@@ -24,12 +24,8 @@ Params and the quantities that depend on it
 
 params is a vector with all estimated parameters of the model. To evaluate the likelihood function, params has to be parsed into several quantities (Names follow conventions of Kalman filtering literature where possible):
 
-    * **deltas**: list with one matrix per period with the estimated parameters related to control variables in the measurement and anchoring equations, including constants.
-
-    .. todo:: Add the possibility that no control variables and constants are used.
-
+    * **deltas**: list with one matrix per period with the estimated parameters related to control variables in the measurement and anchoring equations, including constants
     * **psi**: vector with the parameters of the policy function used for endogeneity correction. Only needed if endog_correction is True.
-    * **tau**: Parameters used to incorporate the additively separable part of the endogeneity correction proposed by CHS into the transition equations. Only needed if endog_correction is True.
     * **H**: Matrix with factor loadings for the measurement and anchoring equations, i.e. for all Kalman updates. It has the shape [nupdates, nfac].
     * **R**: Vector of length nupdates with the variances of the measurement equations
     * **Q**: List of [nfac x nfac] matrices for each stage with the variances of the transition equations on the diagonals.

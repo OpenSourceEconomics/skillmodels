@@ -72,7 +72,6 @@ class ModelSpecProcessor:
                     "P_zero_diags": 0.4472135955,
                     "P_zero_off_diags": 0.0,
                     "psi": 0.1,
-                    "tau": 0.1,
                     "trans_coeffs": 1.0
                 },
              # "numba_target": "cpu",
@@ -86,7 +85,8 @@ class ModelSpecProcessor:
              'person_identifier': 'id',
              'bootstrap_nreps': 300,
              'bootstrap_nprocesses': None,
-             'save_bootstrap_params': True
+             'save_bootstrap_params': True,
+             'anchoring_mode': 'only_estimate_anchoring_equation'
              }
 
         if 'general' in model_dict:
@@ -189,15 +189,19 @@ class ModelSpecProcessor:
                 'results or estimated parameters you have to provide '
                 'a save_path.')
 
+        if self.estimator == 'wa':
+            assert self.probit_measurements is False, (
+                'It is not possible to estimate probit measurement equations '
+                'with the wa estimator.')
+
     def _asserts_and_warnings_for_bootstrap(self):
-        # TODO: write this function!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # TODO: write this function!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # make asserts about the handling of missing variables and the like
-        # asserst should ensure that the exactly same model is estimated with
+        # asserts should ensure that the exactly same model is estimated with
         # all bootstrap datasets.
         pass
 
     def _transition_equation_names(self):
-        # todo: change to check_and_set
         """Construct a list with the transition equation name for each factor.
 
         The result is set as class attribute ``transition_names``.
@@ -232,7 +236,6 @@ class ModelSpecProcessor:
 
     def _set_anchoring_attributes(self):
         """Set attributes related to anchoring and make some checks."""
-        # TODO: reimplement the anchoring procedure; check if all of this is still needed
         if 'anchoring' in self.model_dict:
             assert len(self.model_dict['anchoring']) <= 1, (
                 'At most one anchoring equation can be estimated. You '
@@ -247,12 +250,17 @@ class ModelSpecProcessor:
                 self.anchoring_update_type = 'linear'
             self.anch_positions = [f for f in range(self.nfac) if
                                    self.factors[f] in self.anchored_factors]
+            if self.anchoring_mode == 'truly_anchor_latent_factors':
+                self.anchor_in_predict = True
+            else:
+                self.anchor_in_predict = False
         else:
             self.anchoring = False
             self.anchored_factors = []
+            self.anchor_in_predict = False
 
     def _set_endogeneity_correction_attributes(self):
-        # TODO: implement a comparable endogeneity correction option for both estimators
+        # TODO: implement endogeneity correction option for both estimators
         if 'endog_correction' in self.model_dict:
             info_dict = self.model_dict['endog_correction']
             self.endog_factor = info_dict['endog_factor']
@@ -260,6 +268,12 @@ class ModelSpecProcessor:
             self.endog_function = info_dict['endog_function']
         else:
             self.endog_correction = False
+
+        if self.endog_correction is True:
+            raise NotImplementedError(
+                'You can currently not use endogeneity correction. The method '
+                'proposed by CHS is not easily adjustable to reflect the '
+                'critique about renormalization by Wiswall and Agostinelli.')
 
     def _present(self, variable, period):
         """Check if **variable** is present in **period**.
@@ -480,6 +494,12 @@ class ModelSpecProcessor:
                 'but your anchoring outcome {} in model {} is a dummy '
                 'variable.').format(self.anch_outcmoe, self.model_name)
 
+        if self.anchoring is True and self.estimator == 'wa':
+            assert self.anchor_in_predict is False, (
+                'For the wa estimator the only possible anchoring_mode is ',
+                'only_estimate_anchoring_equation. Check the specs of ',
+                'model {}'.format(self.model_name))
+
     def _check_normalizations_list(self, factor, norm_list):
         """Raise an error if invalid normalizations were specified.
 
@@ -547,7 +567,6 @@ class ModelSpecProcessor:
         period of stage s is fixed through normalizations in previous stages
         or normalization of initial values.
         """
-        # TODO: reread this function after writing the new automatic normalization specification
         has_fixed = []
         for s in self.stages:
             if s == 0:
@@ -579,7 +598,6 @@ class ModelSpecProcessor:
 
         """
         transition_name = self.transition_names[self.factors.index(factor)]
-
 
         needs_normalization = []
         # first period entry
@@ -741,7 +759,7 @@ class ModelSpecProcessor:
         for t, (f, factor) in product(self.periods, enumerate(self.factors)):
             stage = self.stagemap[t]
             load_norm_column = '{}_loading_norm_value'.format(factor)
-            measurements = self.measurements[factor][t]
+            measurements = self.measurements[factor][t].copy()
             if t == self.nperiods - 1 and factor in self.anchored_factors:
                 measurements.append(self.anch_outcome)
 
@@ -807,13 +825,13 @@ class ModelSpecProcessor:
             if self._is_dummy(variable, t) and self.probit_measurements is True:    # noqa
                 df.loc[(t, variable), 'update_type'] = 'probit'
 
-        if self.estimator == 'wa':
-            df = df[df['purpose'] == 'measurement']
-
         return df
 
     def _wa_storage_df(self):
         df = self.update_info().copy(deep=True)
+        df = df[df['purpose'] == 'measurement']
+        assert (df[self.factors].values.sum(axis=1) == 1).all(), (
+            'In the wa estimator each measurement can only measure 1 factor.')
         norm_cols = ['{}_loading_norm_value'.format(f) for f in self.factors]
         # storage column for factor loadings, initialized with zeros for un-
         # normalized loadings and the norm_value for normalized loadings
@@ -856,7 +874,6 @@ class ModelSpecProcessor:
             parameters at all.
 
         """
-        # TODO: use this in WA estimator. Currently ar1 case is not handled correctly.
         new_params = np.zeros((self.nstages, self.nfac))
 
         for f, factor in enumerate(self.factors):

@@ -37,13 +37,21 @@ class SkillModel(GenericLikelihoodModel):
     parsed and methods to construct argument dictionaries for the likelihood
     function.
 
-    """
+    Args:
+        model_dict (dict): see :ref:`basic_usage`.
+        dataset (DataFrame): datset in long format. see :ref:`basic_usage`.
+        estimator (str): takes the values 'wa' and 'chs'
+        model_name (str): optional. Used to make error messages readable.
+        dataset_name (str): same as model_name
+        save_path (str): specifies where intermediate results are saved.
+        quiet_mode (bool): if True some warning are not raised.
+        bootstrap_samples (list): optional, see docs of bootstrap functions.
 
+    """
     def __init__(
             self, model_dict, dataset, estimator, model_name='some_model',
             dataset_name='some_dataset', save_path=None, quiet_mode=False,
             bootstrap_samples=None):
-        """Initialize the CHSModel class and set attributes."""
         self.estimator = estimator
         specs = ModelSpecProcessor(
             model_dict=model_dict, dataset=dataset, estimator=estimator,
@@ -67,7 +75,7 @@ class SkillModel(GenericLikelihoodModel):
             self.params_quants.append('X_zero')
         # Todo: maybe this does not make sense for the wa estimator
         if self.endog_correction is True:
-            self.params_quants += ['psi', 'tau']
+            self.params_quants.append('psi')
         if self.restrict_W_zeros is False and self.estimator == 'chs':
             self.params_quants.append('W_zero')
 
@@ -194,45 +202,6 @@ class SkillModel(GenericLikelihoodModel):
                 psi_names.append('psi__{}'.format(factor))
         return psi_names
 
-    def _initial_tau(self):
-        """Initial tau array, filled with zeros."""
-        # TODO: Check if tau is needed for endog correction in wa case.
-
-        return np.zeros((self.nstages, self.nfac))
-
-    def _tau_bool(self):
-        """Boolean array.
-
-        It has the same shape as initial_tau and is True where initial_tau
-        has to be overwritten with entries from params.
-
-        """
-        boo = self._initial_tau().astype(bool)
-        for f, factor in enumerate(self.factors):
-            if factor != self.endog_factor:
-                if self.endog_factor in self.included_factors[f]:
-                    boo[:, f] = True
-        return boo
-
-    def _params_slice_for_tau(self, params_type):
-        """A slice object, selecting the part of params mapped to tau.
-
-        The method has a side effect on self.param_counter and should never
-        be called by the user.
-
-        """
-        length = self._tau_bool().sum()
-        return self._general_params_slice(length)
-
-    def _tau_names(self, params_type):
-        """List with names for the params mapped to tau."""
-        tau_names = []
-        boo = self._tau_bool()
-        for s, (f, factor) in product(self.stages, enumerate(self.factors)):
-            if boo[s, f] == True:
-                tau_names.append('tau__{}__{}'.format(s, factor))
-        return tau_names
-
     def _initial_H(self):
         """Initial H array filled with zeros and normalized factor loadings.
 
@@ -254,7 +223,8 @@ class SkillModel(GenericLikelihoodModel):
         """
         measured = self.update_info[self.factors].values.astype(bool)
         normalized = self._initial_H().astype(bool)
-        return np.logical_and(measured, np.logical_not(normalized))
+        boo = np.logical_and(measured, np.logical_not(normalized))
+        return boo
 
     def _helpers_for_H_transformation_with_psi(self):
         """A boolean array and two empty arrays to store intermediate results.
@@ -315,12 +285,18 @@ class SkillModel(GenericLikelihoodModel):
         be called by the user.
 
         """
-        return self._general_params_slice(self.nupdates)
+        length = self.nupdates
+        # in wa case no R can be estimated for the anchoring equation
+        if self.estimator == 'wa' and self.anchoring is True:
+            length -= 1
+        return self._general_params_slice(length)
 
     def _R_names(self, params_type):
         """List with names for the params mapped to R."""
         R_names = ['R__{}__{}'.format(t, measure)
                    for t, measure in list(self.update_info.index)]
+        if self.estimator == 'wa' and self.anchoring is True:
+            R_names = R_names[:-1]
         return R_names
 
     def _set_bounds_for_R(self, params_slice):
@@ -756,7 +732,7 @@ class SkillModel(GenericLikelihoodModel):
             slices = self.params_slices(params_type='short')
             start = np.zeros(self.len_params(params_type='short'))
             vals = self.start_values_per_quantity
-            for quant in ['deltas', 'H', 'R', 'Q', 'psi', 'tau', 'X_zero']:
+            for quant in ['deltas', 'H', 'R', 'Q', 'psi', 'X_zero']:
                 if quant in self.params_quants and quant in vals:
                     if type(slices[quant]) != list:
                         start[slices[quant]] = vals[quant]
@@ -915,8 +891,7 @@ class SkillModel(GenericLikelihoodModel):
     def _transform_sigma_points_args_dict(self, initial_quantities):
         tsp_args = {}
         tsp_args['transition_function_names'] = self.transition_names
-        # TODO: change this to if anchoring is really needed
-        if self.anchoring is True:
+        if self.anchor_in_predict is True:
             tsp_args['anchoring_type'] = self.anchoring_update_type
             tsp_args['anchoring_positions'] = self.anch_positions
             tsp_args['anch_params'] = initial_quantities['H'][-1, :]
@@ -926,7 +901,6 @@ class SkillModel(GenericLikelihoodModel):
 
         if self.endog_correction is True:
             tsp_args['psi'] = initial_quantities['psi']
-            tsp_args['tau'] = initial_quantities['tau']
             tsp_args['endog_position'] = self.endog_position
             tsp_args['correction_func'] = self.endog_function
         tsp_args['transition_argument_dicts'] = \
@@ -1019,30 +993,37 @@ class SkillModel(GenericLikelihoodModel):
         else:
             return params
 
-    # WA Estimator
-
-    def all_variables_for_iv_equations(self, period, factor, suffix=''):
+    def all_variables_for_iv_equations(self, period, factor=None, suffix=''):
         """List of lists with names of measurements of included factors.
 
         Args:
             period (int): the period for which the list is generated
             factor (str): the factor for which the list is generated
             suffix (str): a suffix that is appended to all measurement names in
-                the list. It is separated from the actual name by '_'.
+                the list. It is separated from the actual name by underscore.
 
         Returns:
             varlist (list): List of lists with one sublist for each factor
-                that appears on the right hand side of the transition equation
-                of *factor*. Each sublist contains the names of all
-                measurements in *period* of the corresponding right-hand-side
-                factor.
-
-        formerly called meas_list_for_iv_equations
+            that appears on the right hand side of the transition equation
+            of *factor*. Each sublist contains the names of all
+            measurements in *period* of the corresponding right-hand-side
+            factor.
 
         """
         suffix = '_' + suffix if suffix != '' else suffix
-        f = self.factors.index(factor)
-        inc_facs = self.included_factors[f]
+        last_period = self.periods[-1]
+
+        if period != last_period:
+            assert factor is not None, (
+                'all_variables_for_iv_equations needs the argument factor if '
+                'it is not called for the anchoring equation.')
+        if period != last_period:
+            f = self.factors.index(factor)
+            inc_facs = self.included_factors[f]
+        else:
+            # the function is called for anchoring
+            inc_facs = self.anchored_factors
+
         varlist = []
         for inc in inc_facs:
             trans_name = self.transition_names[self.factors.index(inc)]
@@ -1057,7 +1038,7 @@ class SkillModel(GenericLikelihoodModel):
             varlist.append(sublist)
         return varlist
 
-    def variable_permutations_for_iv_equations(self, period, factor):
+    def variable_permutations_for_iv_equations(self, period, factor=None):
         """Nested lists with permutations of variable names for iv equations.
 
         In the WA estimator, the transition equations are rewritten in an
@@ -1074,18 +1055,18 @@ class SkillModel(GenericLikelihoodModel):
 
         Returns:
             indepvar_permutations (list): contains one sublist for each iv
-                equation that has to be estimated for *factor* in *period*.
-                Each sublist contains the names of the measurements that are
-                used to form the residual measurements for that iv equation.
-                The length of each sublist is the number of factors that are
-                included in the right hand side of the transition equation of
-                *factor*.
-            instrument_permutations (list): has the same length as x_list and
-                contains the instruments for each transition equation. The
-                instruments are lists of lists with one sublist for each
-                included factor.
+            equation that has to be estimated for *factor* in *period*.
+            Each sublist contains the names of the measurements that are
+            used to form the residual measurements for that iv equation.
+            The length of each sublist is the number of factors that are
+            included in the right hand side of the transition equation of
+            *factor*.
 
-        formerly called iv_equation_variable_lists
+        Returns:
+            instrument_permutations (list): has the same length as x_list and
+            contains the instruments for each transition equation. The
+            instruments are lists of lists with one sublist for each
+            included factor.
 
         """
         all_variables_for_indepvars = self.all_variables_for_iv_equations(
@@ -1102,11 +1083,19 @@ class SkillModel(GenericLikelihoodModel):
 
         return indepvar_permutations, instrument_permutations
 
-    def number_of_iv_parameters(self, factor):
+    def number_of_iv_parameters(self, factor=None, anch_equation=False):
         """Number of parameters in the IV equation of a factor."""
-        f = self.factors.index(factor)
-        trans_name = self.transition_names[f]
-        x_list, z_list = self.variable_permutations_for_iv_equations(0, factor)
+        if anch_equation is False:
+            assert factor is not None, ('')
+            f = self.factors.index(factor)
+            trans_name = self.transition_names[f]
+            x_list, z_list = self.variable_permutations_for_iv_equations(
+                0, factor)
+        else:
+            trans_name = 'linear'
+            x_list, z_list = self.variable_permutations_for_iv_equations(
+                self.periods[-1], None)
+
         example_x, example_z = x_list[0], z_list[0]
         x_formula, _ = getattr(tf, 'iv_formula_{}'.format(trans_name))(
             example_x, example_z)
@@ -1121,7 +1110,7 @@ class SkillModel(GenericLikelihoodModel):
 
         Returns:
             coeffs (Series): Series of measurement coefficients in period
-                extendend with period zero coefficients of constant factors.
+            extendend with period zero coefficients of constant factors.
 
         """
         coeffs = self.storage_df.loc[period, coeff_type]
@@ -1145,8 +1134,9 @@ class SkillModel(GenericLikelihoodModel):
 
         Returns
             res_meas (DataFrame): residual measurements from period, extended
-                with residual measurements of constant factors from initial
-                period.
+            with residual measurements of constant factors from initial
+            period.
+
         """
         loadings = self.extended_meas_coeffs('loadings', period)
         intercepts = self.extended_meas_coeffs('intercepts', period)
@@ -1155,32 +1145,44 @@ class SkillModel(GenericLikelihoodModel):
         res_meas.columns = [col + '_resid' for col in res_meas.columns]
         return res_meas
 
-    def all_iv_estimates(self, period, factor, data):
+    def all_iv_estimates(self, period, data, factor=None):
         """Coeffs and residual covs for all IV equations of factor in period.
 
         Args:
             period (int): period identifier
             factor (str): name of a latent factor
-            y_data, x_data, z_data (DataFrames): see iv_data
+            data (DataFrames): see large_df_for_iv_equations in wa_functions
 
         Returns:
             iv_coeffs (DataFrame): pandas DataFrame with the estimated
-                coefficients of all IV equations of factor in period. The
-                DataFrame has a Multiindex. The first level are the names of
-                the dependent variables (next period measurements) of the
-                estimated equations. The second level consists of integers that
-                identify the different combinations of independent variables.
+            coefficients of all IV equations of factor in period. The
+            DataFrame has a Multiindex. The first level are the names of
+            the dependent variables (next period measurements) of the
+            estimated equations. The second level consists of integers that
+            identify the different combinations of independent variables.
+
+        Returns:
             u_cov_df (DataFrame): pandas DataFrame with covariances of iv
-                residuals u with alternative dependent variables. The index is
-                the same Multiindex as in iv_coeffs. The columns are all
-                possible dependent variables of *factor* in *period*.
+            residuals u with alternative dependent variables. The index is
+            the same Multiindex as in iv_coeffs. The columns are all
+            possible dependent variables of *factor* in *period*.
 
         """
+        last_period = self.periods[-1]
+        if period != last_period:
+            assert factor is not None, ('')
+
         indep_permutations, instr_permutations = \
             self.variable_permutations_for_iv_equations(period, factor)
-        nr_deltas = self.number_of_iv_parameters(factor)
-        trans_name = self.transition_names[self.factors.index(factor)]
-        depvars = self.measurements[factor][period + 1]
+
+        if period != last_period:
+            nr_deltas = self.number_of_iv_parameters(factor)
+            trans_name = self.transition_names[self.factors.index(factor)]
+            depvars = self.measurements[factor][period + 1]
+        else:
+            nr_deltas = self.number_of_iv_parameters(anch_equation=True)
+            trans_name = 'linear'
+            depvars = [self.anch_outcome]
 
         iv_columns = ['delta_{}'.format(i) for i in range(nr_deltas)]
         u_cov_columns = ['cov_u_{}'.format(y) for y in depvars]
@@ -1190,7 +1192,9 @@ class SkillModel(GenericLikelihoodModel):
         index = pd.MultiIndex.from_tuples(ind_tuples)
 
         iv_coeffs = pd.DataFrame(data=0.0, index=index, columns=iv_columns)
-        u_cov_df = pd.DataFrame(data=0.0, index=index, columns=u_cov_columns)
+        if period != last_period:
+            u_cov_df = pd.DataFrame(
+                data=0.0, index=index, columns=u_cov_columns)
 
         for dep in depvars:
             counter = 0
@@ -1200,17 +1204,21 @@ class SkillModel(GenericLikelihoodModel):
                 non_missing_index = iv_arrs.pop('non_missing_index')
                 deltas = iv_reg(**iv_arrs)
                 iv_coeffs.loc[(dep, counter)] = deltas
-                y, x = iv_arrs['depvar_arr'], iv_arrs['indepvars_arr']
-                u = pd.Series(data=y - np.dot(x, deltas),
-                              index=non_missing_index)
-                for dep2 in depvars:
-                    if dep2 != dep:
-                        u_cov_df.loc[(dep, counter), dep2] = \
-                            u.cov(data[('y', dep2)])
-                    else:
-                        u_cov_df.loc[(dep, counter), dep2] = np.nan
+                if period != last_period:
+                    y, x = iv_arrs['depvar_arr'], iv_arrs['indepvars_arr']
+                    u = pd.Series(data=y - np.dot(x, deltas),
+                                  index=non_missing_index)
+                    for dep2 in depvars:
+                        if dep2 != dep:
+                            u_cov_df.loc[(dep, counter), dep2] = \
+                                u.cov(data[('y', dep2)])
+                        else:
+                            u_cov_df.loc[(dep, counter), dep2] = np.nan
                 counter += 1
-        return iv_coeffs, u_cov_df
+        if period != last_period:
+            return iv_coeffs, u_cov_df
+        else:
+            return iv_coeffs
 
     def model_coeffs_from_iv_coeffs_args_dict(self, period, factor):
         norm_dict = {}
@@ -1273,7 +1281,7 @@ class SkillModel(GenericLikelihoodModel):
                 if trans_name != 'constant':
                     # get iv estimates (parameters and residual covariances)
                     iv_coeffs, u_cov_df = self.all_iv_estimates(
-                        t, factor, iv_data)
+                        t, iv_data, factor)
 
                     # get model parameters from iv parameters
                     model_coeffs_func = getattr(
@@ -1298,6 +1306,20 @@ class SkillModel(GenericLikelihoodModel):
                         weight * transition_error_variance_from_u_covs(
                             u_cov_df, meas_coeffs['loadings'])
 
+        if self.anchoring is True:
+            t = self.periods[-1]
+            resid_meas = self.residual_measurements(period=t)
+            iv_data = large_df_for_iv_equations(
+                depvar_data=self.y_data[t], indepvars_data=resid_meas,
+                instruments_data=self.y_data[t])
+            iv_coeffs = self.all_iv_estimates(t, iv_data)
+            deltas = iv_coeffs.mean().values
+            anch_intercept = deltas[-1]
+            anch_loadings = deltas[:-1]
+        else:
+            anch_intercept = None
+            anch_loadings = None
+
         # calculate measurement error variances and factor covariance matrices
         factor_cov_list = []
         for t in self.periods:
@@ -1314,11 +1336,11 @@ class SkillModel(GenericLikelihoodModel):
         P_zero = factor_cov_list[0]
 
         return self.storage_df, X_zero, P_zero, trans_coeff_storage, \
-            trans_var_df
+            trans_var_df, anch_intercept, anch_loadings
 
     def estimate_params_wa(self):
-        storage_df, X_zero, P_zero, trans_coeffs, trans_var_df = \
-            self._calculate_wa_quantities()
+        storage_df, X_zero, P_zero, trans_coeffs, trans_var_df, \
+            anch_intercept, anch_loadings = self._calculate_wa_quantities()
 
         params = np.zeros(self.len_params(params_type='long'))
         slices = self.params_slices(params_type='long')
@@ -1326,12 +1348,17 @@ class SkillModel(GenericLikelihoodModel):
         # write intercepts in params
         delta_start_index = slices['deltas'][0].start
         delta_stop_index = slices['deltas'][-1].stop
-        params[delta_start_index: delta_stop_index] = storage_df[storage_df[
-            'has_normalized_intercept'] == False]['intercepts'].values
-
+        all_intercepts = list(storage_df[storage_df[
+            'has_normalized_intercept'] == False]['intercepts'].values)
+        if anch_intercept is not None:
+            all_intercepts.append(anch_intercept)
+        params[delta_start_index: delta_stop_index] = all_intercepts
         # write loadings in params
-        params[slices['H']] = storage_df[storage_df[
-            'has_normalized_loading'] == False]['loadings'].values
+        all_loadings = list(storage_df[storage_df[
+            'has_normalized_loading'] == False]['loadings'].values)
+        if anch_loadings is not None:
+            all_loadings += list(anch_loadings)
+        params[slices['H']] = all_loadings
 
         # write measurement variances in params
         params[slices['R']] = storage_df['meas_error_variances'].values

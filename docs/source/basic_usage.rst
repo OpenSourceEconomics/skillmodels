@@ -8,17 +8,23 @@ Fitting models is very similar to fitting models in `Statsmodels`_
 
 The main object a user interacts with is ``SkillModel`` (see :ref:`estimation`) which is a subclass of Statsmodels `GenericLikelihoodModel`_. To create an instance of this class just type:
 
-
 .. code::
 
     from skillmodels import SkillModel
     mod = SkillModel(model_dict, dataset, estimator)
 
-* model_dict is the actual model dictionary (usually loaded from a json file)
-* dataset is a pandas dataframe in long format. It has to contain columns that identify the period and individual. The names of these columns are indicated as 'period_identifier' and 'person_identifier' in the general section of the model dictionary. The default values are 'period' and 'id'.
-* estimator is a string that can take the values 'wa' (Wiswall Agostinelli Estimator) and 'chs' (Cunha, Heckman, Schennach estimator).
+* model_dict: dictionary that defines the model (usually loaded from a json file). See :ref:`model_specs` for details.
+* dataset: a pandas dataframe in long format. It has to contain columns that identify the period and individual. The names of these columns are indicated as 'period_identifier' and 'person_identifier' in the general section of the model dictionary. The default values are 'period' and 'id'.
+* estimator: a string that can take the values 'wa' (Wiswall Agostinelli Estimator) and 'chs' (Cunha, Heckman, Schennach estimator).
 
-.. Note:: Currently only the CHS estimator is implemented.
+Optional arguments of SkillModel are:
+
+* model_name: a string that gives a name to the model that will be used in error messages or warnings. If you estimate several models it will help you a lot to locate the problems.
+* dataset_name: same as model_name
+* save_path: a string that indicates where intermediate results are saved. Saving intermediate results is optional and can be controlled in the "general" section of the model_dict. If anything is saved, you must provide a save_path.
+* quiet_mode: a boolean variable. If True some errors and warnings are not raised.
+* bootstrap_samples: a list of lists. Each sublist contains a sample of elements from the 'person_identifier' column of the dataset. If you don't specify this argument, sampling for bootstrap is handled automatically. For this it is assumed that your data is iid.
+
 
 Using the fit() method of ``SkillModel`` like so:
 
@@ -54,6 +60,9 @@ It should already work to use the t-test, f-test and wald-test as described `her
 .. Note:: As done in several places in Statsmodels, I will continue to use the structure of the
     LikelihoodResults and GenericLikelihoodModel classes also for other estimators. Of course, the ML specific ways to calculate standard errors and make tests are will raise an error if other estimators were used to fit the model.
 
+.. Note:: Some functions of the CHS estimator use numpy functions that call fast multithreaded
+    routines from the Intel Math Kernel Library (MKL). This is usually what you want, but if you fit several models in parallel (e.g. if you have datasets from different countries or you calculate boostrap standard errors) you might get better results if reduce the number of threads used. To do so, see the `documentation`_ of Anaconda.
+
 
 .. _Statsmodels:
     http://statsmodels.sourceforge.net/stable/
@@ -63,3 +72,6 @@ It should already work to use the t-test, f-test and wald-test as described `her
 
 .. _here:
     http://nipy.bic.berkeley.edu/nightly/statsmodels/doc/html/dev/generated/statsmodels.base.model.GenericLikelihoodModelResults.html#statsmodels.base.model.GenericLikelihoodModelResults
+
+.. _documentation:
+    https://docs.continuum.io/mkl-service/

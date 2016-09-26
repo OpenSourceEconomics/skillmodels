@@ -32,7 +32,7 @@ class TestMapParamsToDeltas:
         aae(self.initial[1], expected1)
 
 
-class TestMapParamsToPsiAndTau:
+class TestMapParamsToPsi:
     def setup(self):
         self.params = np.arange(100)
         self.slice = slice(10, 15)
@@ -42,11 +42,6 @@ class TestMapParamsToPsiAndTau:
     def test_map_params_to_psi(self):
         expected = np.array([10, 0, 11, 0, 12, 0, 13, 0, 14, 0])
         pp._map_params_to_psi(self.params, self.initial, self.slice, self.boo)
-        aae(self.initial, expected)
-
-    def test_map_params_to_tau(self):
-        expected = np.array([10, 0, 11, 0, 12, 0, 13, 0, 14, 0])
-        pp._map_params_to_tau(self.params, self.initial, self.slice, self.boo)
         aae(self.initial, expected)
 
 

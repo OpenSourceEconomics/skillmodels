@@ -26,11 +26,6 @@ def _map_params_to_psi(params, initial, params_slice, boo):
     initial[boo] = params[params_slice]
 
 
-def _map_params_to_tau(params, initial, params_slice, boo):
-    """Map parameters from params to tau."""
-    initial[boo] = params[params_slice]
-
-
 def _map_params_to_H(params, initial, params_slice, boo, psi_bool_for_H=None,
                      psi=None, arr1=None, arr2=None, endog_position=None,
                      initial_copy=None):
@@ -129,7 +124,7 @@ def _map_params_to_trans_coeffs(params, initial, params_slice,
 
 def parse_params(params, deltas_args, H_args, R_args, Q_args, P_zero_args,
                  trans_coeffs_args, X_zero_args=None, W_zero_args=None,
-                 psi_args=None, tau_args=None):
+                 psi_args=None):
     """Parse params into the quantities that depend on it.
 
     All quantities are updated in place. The order is important in some cases.
@@ -141,8 +136,6 @@ def parse_params(params, deltas_args, H_args, R_args, Q_args, P_zero_args,
     _map_params_to_deltas(params, **deltas_args)
     if psi_args is not None:
         _map_params_to_psi(params, **psi_args)
-    if tau_args is not None:
-        _map_params_to_tau(params, **tau_args)
     _map_params_to_H(params, **H_args)
     _map_params_to_R(params, **R_args)
     _map_params_to_Q(params, **Q_args)

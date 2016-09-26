@@ -9,7 +9,7 @@ def transform_sigma_points(
         transition_function_names,
         anchoring_type=None, anchoring_positions=None,
         anch_params=None, intercept=None,
-        psi=None, tau=None, endog_position=None, correction_func=None):
+        psi=None, endog_position=None, correction_func=None):
     """Transform an array of sigma_points for the unscented predict.
 
     This function automatically anchors the sigma points and unanchors the
@@ -31,8 +31,6 @@ def transform_sigma_points(
         p = endog_position
         intermediate_array[:, p] = getattr(trans, transition_function_names[p])(
             flat_sigma_points, **transition_argument_dicts[stage][p])
-        # store the unchanged endog_factor
-        heterogeneity = flat_sigma_points[:, p].copy()
 
         # call the endogeneity correction function()
         flat_sigma_points[:, p] = getattr(endog, correction_func)(
@@ -45,14 +43,8 @@ def transform_sigma_points(
                 getattr(trans, transition_function_names[f])(
                     flat_sigma_points, **transition_argument_dicts[stage][f])
 
-    # copy them into the sigma_point array, adding the additively separable
-    # part of the endogeneity correction where necessary
-    for f in range(nfac):
-        if tau is None or tau[f] == 0.0:
-            flat_sigma_points[:, f] = intermediate_array[:, f]
-        else:
-            flat_sigma_points[:, f] = \
-                intermediate_array[:, f] + tau[f] * heterogeneity
+    # copy them into the sigma_point array
+    flat_sigma_points[:] = intermediate_array[:]
 
     if anchoring_type is not None:
         unanch_func = 'unanchor_flat_sigma_points_{}'.format(anchoring_type)

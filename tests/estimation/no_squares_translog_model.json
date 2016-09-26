@@ -62,6 +62,7 @@
                 }
         }
     },
+    "anchoring": {"anch_out": ["fac1", "fac2"]},
     "general":
         {
             "estimate_X_zeros": true

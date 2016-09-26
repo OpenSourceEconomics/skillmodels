@@ -101,13 +101,13 @@ The anchoring equation is specified as follows:
 
 Q1 is the anchoring outcome and the list contains all anchored factors. In the example this is just fac1.
 
-The example does not use endogeneity correction but adding it would be very easy. If for example fac2 was the endogenous factor one only had to add the following subdictionary to the model dictionary:
+The example does not use endogeneity correction but adding it would be very easy. If for example fac2 was the endogenous factor that depends on both other latent factors:
 
 .. code::
 
-    "endog_correction": {"endog_factor": "fac2", "endog_function": "linear"}
+    "endog_correction": {"endog_factor": "fac2", "endog_function": linear"}
 
-.. Note:: Endogeneity correction is already implemented but not completely tested yet.
+.. Note:: Currently the endogeneity correction option cannot be used. The one proposed by CHS suffers from the type of renormalization that was criticized by Wiswall and Agostinelli and it will be quite a lot of work to make implement a version without those renormalizations.
 
 The "general" section of the model dictionary:
 **********************************************
@@ -136,6 +136,7 @@ Usually a research project comprises the estimation of more than one model and t
     .. Note:: Probability anchoring is not yet ready and will raise a NotImplementedError.
 
     * ``ignore_intercept_in_linear_anchoring``: takes the values true and false. Often the results remain interpretable if the intercept of the anchoring equation is ignored in the anchoring process. CHS do so in the example model (see equation above).
+    *``anchoring_mode``: Takes the values 'only_estimate_anchoring_equation' and 'truly_anchor_latent_factors'. The default is 'only_estimate_anchoring_equation'. In the WA estimator this is the only possible option. It means that an anchoring equation is estimated that can be used for the calculation of interpretable marginal effects. This option does, however, not make the estimated transition parameters interpretable. The other othe option requires more computer power and can make the transition parameters interpretable if enough age invariant measures are available and used for normalizations.
     * ``start_params``: a start vector for the maximization
     * ``start_values_per_quantity``: a dictionary with values that are used to construct the start vector for the maximization if the start vector is not provided directly.
     * ``wa_standard_error_method``: a string that indicates which method is used to calculate standard_errors if the WA estimator is used. Curently "bootstrap" is the only option.
@@ -151,8 +152,6 @@ Usually a research project comprises the estimation of more than one model and t
 .. _replication files:
     https://www.econometricsociety.org/content/supplement-estimating-technology-cognitive-and-noncognitive-skill-formation-0
 
-.. _numba documentation:
-    http://numba.pydata.org/numba-doc/latest/user/vectorize.html
 
 
 

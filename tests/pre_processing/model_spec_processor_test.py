@@ -503,8 +503,12 @@ class TestWAStorageDf:
             [0, 0, 2, True, False],
             [0, 3, 0, True, True],
             [0, 0, np.nan, False, False]])
-        self.update_info = Mock(return_value=pd.DataFrame(
-            data=update_data, columns=cols, index=index))
+        df = pd.DataFrame(data=update_data, columns=cols, index=index)
+        df['purpose'] = 'measurement'
+        df['fac1'] = 1
+        df['fac2'] = 0
+
+        self.update_info = Mock(return_value=df)
 
         expected_data = np.array([
             [True, False, 1, 0],
@@ -520,6 +524,8 @@ class TestWAStorageDf:
 
     def test_wa_storage_df(self):
         msp._wa_storage_df(self)
+        print('exp', self.expected_res)
+        print('calc', self.storage_df)
         assert_equal(self.storage_df.to_dict(), self.expected_res.to_dict())
 
 

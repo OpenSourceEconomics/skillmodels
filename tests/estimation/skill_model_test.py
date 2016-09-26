@@ -191,38 +191,6 @@ class TestPsiRelatedMethods:
                      ['psi__f1', 'psi__f2'])
 
 
-class TestTauRelatedMethods:
-    def setup(self):
-        self.nstages = 2
-        self.stages = [0, 1]
-        self.nfac = 4
-        self.factors = ['f1', 'f2', 'f3', 'f4']
-        self.endog_factor = 'f3'
-        self.included_factors = [
-            ['f1', 'f2'], self.factors, ['f1', 'f3'], ['f3', 'f4']]
-        res = np.zeros((2, 4), dtype=bool)
-        res[:, (1, 3)] = True
-        self.res_bool = res
-
-    def test_initial_tau(self):
-        aae(smo._initial_tau(self), np.zeros((2, 4)))
-
-    def test_tau_bool(self):
-        self._initial_tau = Mock(return_value=np.zeros((2, 4)))
-        aae(smo._tau_bool(self), self.res_bool)
-
-    def test_params_slice_for_tau(self):
-        self._tau_bool = Mock(return_value=self.res_bool)
-        self._general_params_slice = Mock()
-        smo._params_slice_for_tau(self, params_type='short')
-        self._general_params_slice.assert_has_calls([call(4)])
-
-    def test_tau_names(self):
-        self._tau_bool = Mock(return_value=self.res_bool)
-        res = ['tau__0__f2', 'tau__0__f4', 'tau__1__f2', 'tau__1__f4']
-        assert_equal(smo._tau_names(self, params_type='short'), res)
-
-
 class TestHRelatedMethods:
     def setup(self):
         self.factors = ['f1', 'f2']
@@ -301,6 +269,7 @@ class TestHRelatedMethods:
 class TestRRelatedMethods:
     def setup(self):
         self.nupdates = 12
+        self.estimator = 'chs'
 
         df = DataFrame(data=np.zeros((12, 1)), columns=['col'])
         df['period'] = np.array([0] * 5 + [1] * 7)
@@ -838,13 +807,14 @@ class TestLikelihoodArgumentsDict:
 class TestAllVariablesForIVEquations:
     def setup(self):
         self.measurements = {
-            'f1': [['y01', 'y02'], ['y11', 'y12']],
-            'f2': [['y04', 'y05'], ['y14', 'y15']],
-            'f3': [['y07', 'y08'], []]}
+            'f1': [['y01', 'y02'], ['y11', 'y12'], []],
+            'f2': [['y04', 'y05'], ['y14', 'y15'], []],
+            'f3': [['y07', 'y08'], [], []]}
 
         self.factors = ['f1', 'f2', 'f3']
         self.included_factors = [['f1', 'f3'], ['f2', 'f3'], []]
         self.transition_names = ['blubb', 'blubb', 'constant']
+        self.periods = [0, 1, 2]
 
     def test_all_variables_for_iv_equations_constant_factor(self):
         calc_meas_list = smo.all_variables_for_iv_equations(

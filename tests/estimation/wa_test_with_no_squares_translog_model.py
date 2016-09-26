@@ -14,7 +14,8 @@ with open('no_squares_translog_model.json') as j:
 @nottest
 def generate_test_data(nobs, factors, periods, included_positions, meas_names,
                        initial_mean, initial_cov, intercepts, loadings,
-                       meas_sd, gammas, trans_sd):
+                       meas_sd, gammas, trans_sd, anch_intercept,
+                       anch_loadings):
 
     np.random.seed(12345)
     nfac = len(factors)
@@ -53,6 +54,11 @@ def generate_test_data(nobs, factors, periods, included_positions, meas_names,
             measurements[:, m] += intercepts[counter]
             counter += 1
         df = pd.DataFrame(data=measurements, columns=meas_names[:nmeas])
+        if t == periods[-1]:
+            # add the anchoring outcome to the data
+            df['anch_out'] = np.dot(new_facs[:, :-1], anch_loadings)
+            df['anch_out'] += anch_intercept
+            df['anch_out'] += np.random.normal(loc=0, scale=0.01, size=nobs)
         df['period'] = t
         df['id'] = np.arange(nobs)
         meas_data.append(df)
@@ -68,6 +74,8 @@ class TestOfWAEstimator:
         self.nperiods = 4
         self.periods = list(range(self.nperiods))
         self.included_positions = [np.arange(3), np.array([1, 2]), []]
+        self.anch_intercept = 3.0
+        self.anch_loadings = np.array([1.2, 1.3])
 
         self.meas_names = ['y{}'.format(i + 1) for i in range(9)]
 
@@ -86,7 +94,7 @@ class TestOfWAEstimator:
         self.true_intercepts = np.arange(start=-0.665, stop=0.665, step=0.05)
         self.true_X_zero = np.array([5, 7.5, 30])
 
-    def test_loadings_intercepts_transparams_and_xzeros(self):
+    def test_loadings_intercepts_transparams_anchparams_and_xzeros(self):
         self.nobs = 1000
         self.base_meas_sd = 0.00001
         self.base_trans_sd = 0.00001
@@ -108,14 +116,16 @@ class TestOfWAEstimator:
             initial_mean=self.true_X_zero, initial_cov=self.true_cov_matrix,
             intercepts=self.true_intercepts, loadings=self.true_loadings,
             meas_sd=self.true_meas_sd, gammas=self.true_gammas,
-            trans_sd=self.true_trans_sd)
+            trans_sd=self.true_trans_sd,
+            anch_intercept=self.anch_intercept,
+            anch_loadings=self.anch_loadings)
 
         wa_model = SkillModel(
             model_name='no_squares_translog', dataset_name='test_data',
             model_dict=model_dict, dataset=self.y_data, estimator='wa')
 
-        calc_storage_df, calc_X_zero, calc_P_zero, calc_gammas, trans_vars = \
-            wa_model._calculate_wa_quantities()
+        calc_storage_df, calc_X_zero, calc_P_zero, calc_gammas, trans_vars, \
+            anch_intercept, anch_loadings = wa_model._calculate_wa_quantities()
         calc_loadings = calc_storage_df['loadings']
         calc_intercepts = calc_storage_df['intercepts']
 
@@ -124,6 +134,8 @@ class TestOfWAEstimator:
         aaae(calc_X_zero, self.true_X_zero, decimal=1)
         for arr1, arr2 in zip(calc_gammas, self.true_gammas):
             aaae(arr1, arr2, decimal=3)
+        assert_almost_equal(anch_intercept, 3.0, places=2)
+        aaae(anch_loadings, self.anch_loadings, decimal=3)
 
     def test_pzero_and_measurement_variances(self):
         self.nobs = 20000
@@ -148,14 +160,16 @@ class TestOfWAEstimator:
             initial_mean=self.true_X_zero, initial_cov=self.true_cov_matrix,
             intercepts=self.true_intercepts, loadings=self.true_loadings,
             meas_sd=self.true_meas_sd, gammas=self.true_gammas,
-            trans_sd=self.true_trans_sd)
+            trans_sd=self.true_trans_sd,
+            anch_intercept=self.anch_intercept,
+            anch_loadings=self.anch_loadings)
 
         wa_model = SkillModel(
             model_name='no_squares_translog', dataset_name='test_data',
             model_dict=model_dict, dataset=self.y_data, estimator='wa')
 
-        calc_storage_df, calc_X_zero, calc_P_zero, calc_gammas, trans_vars = \
-            wa_model._calculate_wa_quantities()
+        calc_storage_df, calc_X_zero, calc_P_zero, calc_gammas, trans_vars, \
+            anch_intercept, anch_loadings = wa_model._calculate_wa_quantities()
 
         calc_epsilon_variances = calc_storage_df['meas_error_variances']
         average_epsilon_diff = \
@@ -186,17 +200,19 @@ class TestOfWAEstimator:
             initial_mean=self.true_X_zero, initial_cov=self.true_cov_matrix,
             intercepts=self.true_intercepts, loadings=self.true_loadings,
             meas_sd=self.true_meas_sd, gammas=self.true_gammas,
-            trans_sd=self.true_trans_sd)
+            trans_sd=self.true_trans_sd,
+            anch_intercept=self.anch_intercept,
+            anch_loadings=self.anch_loadings)
 
         wa_model = SkillModel(
             model_name='no_squares_translog', dataset_name='test_data',
             model_dict=model_dict, dataset=self.y_data, estimator='wa')
 
         calc_storage_df, calc_X_zero, calc_P_zero, calc_gammas, \
-            calc_trans_vars = wa_model._calculate_wa_quantities()
+            calc_trans_vars, anch_intercept, anch_loadings = \
+            wa_model._calculate_wa_quantities()
 
         aaae(calc_trans_vars.values, self.true_trans_var, decimal=3)
-
 
 if __name__ == '__main__':
     from nose.core import runmodule

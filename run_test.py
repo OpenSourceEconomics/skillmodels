@@ -12,6 +12,5 @@ if __name__ == '__main__':
 
     to_run = normal_tests + long_running_tests
 
-
     for file in to_run:
         system('python {}.py'.format(file))
