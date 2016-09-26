@@ -1428,7 +1428,7 @@ class SkillModel(GenericLikelihoodModel):
 
         identifiers = self.data[self.person_identifier].unique()
         for item in self.bootstrap_samples:
-            assert set(item) in identifiers, (
+            assert set(item).issubset(identifiers), (
                 'The bootstrap_samples you provided contain person_identifiers'
                 ' which are not in the dataset {}. These missing identifiers '
                 'are {}.\nYou specified {} as person_identifier. This error '
@@ -1452,21 +1452,20 @@ class SkillModel(GenericLikelihoodModel):
         """
         individuals = np.array(self.data[self.person_identifier].unique())
         selected_indices = np.random.randint(
-            low=0, high=self.bootstrap_sample_size,
-            size=(self.bootstrap_nreps, self.nobs))
+            low=0, high=len(individuals),
+            size=(self.bootstrap_nreps, self.bootstrap_sample_size))
         bootstrap_samples = individuals[selected_indices].tolist()
         return bootstrap_samples
 
     def _generate_bootstrap_data(self, rep):
         """Return the data of the resampled individuals."""
         data = self.data.set_index(
-            [self.person_identifier, self.period_identifier])
+            [self.person_identifier, self.period_identifier], drop=False)
         current_sample = self.bootstrap_samples[rep]
         bs_index = pd.MultiIndex.from_product(
             [current_sample, self.periods],
             names=[self.person_identifier, self.period_identifier])
-
-        bs_data = data.loc[bs_index].reset_index()
+        bs_data = data.loc[bs_index].reset_index(drop=True)
         return bs_data
 
     def _bs_fit(self, rep, params, params_type):
@@ -1504,8 +1503,10 @@ class SkillModel(GenericLikelihoodModel):
         """
         if self.save_bootstrap_params is True:
             os.makedirs(self.save_path + '/bootstrap_results', exist_ok=True)
+        bs_fit_args = \
+            [(rep, params, params_type) for rep in range(self.bootstrap_nreps)]
         with Pool(self.bootstrap_nprocesses) as p:
-            bootstrap_params = p.map(self._bs_fit, range(self.bootstrap_nreps))
+            bootstrap_params = p.starmap(self._bs_fit, bs_fit_args)
         columns = ['rep_{}'.format(rep) for rep in range(self.bootstrap_nreps)]
         bootstrap_params = pd.DataFrame(data=bootstrap_params, index=columns).T
         return bootstrap_params
