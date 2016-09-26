@@ -4,6 +4,7 @@ from skillmodels import SkillModel as smo
 import numpy as np
 from pandas import DataFrame
 from numpy.testing import assert_array_equal as aae
+from numpy.testing import assert_array_almost_equal as aaae
 import json
 import pandas as pd
 from pandas.util.testing import assert_series_equal
@@ -947,6 +948,120 @@ class TestWANorminfoDict:
         calculated = smo.model_coeffs_from_iv_coeffs_args_dict(self, 1, 'f1')
         assert_equal(calculated, expected)
 
+
+class TestBSMethods:
+    def setup(self):
+        self.bootstrap_samples = [
+            ['id_0', 'id_1', 'id_1'],
+            ['id_0', 'id_1', 'id_0'],
+            ['id_1', 'id_0', 'id_0']]
+        self.bootstrap_nreps = 3
+        self.model_name = 'test_check_bs_sample'
+        self.dataset_name = 'test_data'
+        self.person_identifier = 'id'
+        self.period_identifier = 'period'
+        self.periods = [0, 1, 2]
+        self.data = pd.DataFrame(
+            data=np.array([
+                [0.0, 1.0, 2.0, 0.0, 1.0, 2.0, 0.0, 1.0, 2.0],
+                [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]]).T,
+            columns=['period', 'arange'])
+        self.data['id'] = pd.Series(dtype='str', data=[
+            'id_0', 'id_0', 'id_0', 'id_1', 'id_1', 'id_1', 'id_2', 'id_2', 'id_2']) # noqa
+        self.bootstrap_sample_size = 3
+        self.nobs = 3
+        self.save_bootstrap_params = False
+        self.bootstrap_nprocesses = 2
+
+    def test__check_bs_samples_accepts_iterable(self):
+        smo._check_bs_samples(self)
+
+    def test_rejects_non_iterable(self):
+        self.bootstrap_samples = 240
+        assert_raises(
+            AssertionError, smo._check_bs_samples, self)
+
+    def test_raises_error_with_unknown_identifier(self):
+        self.bootstrap_samples[2][0] = 'a'
+        assert_raises(
+            AssertionError, smo._check_bs_samples, self)
+
+    def test_only_bootstrap_samples_with_enough_samples(self):
+        self.bootstrap_nreps = 10
+        assert_raises(
+            AssertionError, smo._check_bs_samples, self)
+
+    def test__generate_bs_samples(self):
+        np.random.seed(495)
+        expected_samples = [
+            ['id_1', 'id_1', 'id_1'],
+            ['id_0', 'id_2', 'id_2'],
+            ['id_2', 'id_2', 'id_1']]
+        calc_samples = smo._generate_bs_samples(self)
+        assert_equal(calc_samples, expected_samples)
+
+    def test__generate_bootstrap_data(self):
+        expected_data = pd.DataFrame(
+            data=np.array([
+                [0.0, 1.0, 2.0, 0.0, 1.0, 2.0, 0.0, 1.0, 2.0],
+                [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 3.0, 4.0, 5.0]]).T,
+            columns=['period', 'arange'])
+        expected_data['id'] = [
+            'id_0', 'id_0', 'id_0', 'id_1', 'id_1', 'id_1', 'id_1', 'id_1', 'id_1'] # noqa
+        calc_data = smo._generate_bootstrap_data(self, 0)
+        assert_frame_equal(calc_data, expected_data)
+
+    def _bs_fit(self, rep, params, params_type):
+        return rep * np.ones(3)
+
+    def test_all_bootstrap_params(self):
+        calc_params = smo.all_bootstrap_params(
+            self, params=np.ones(3), params_type='short')
+        expected_params = pd.DataFrame(
+            data=[[0.0, 1.0, 2.0], [0.0, 1.0, 2.0], [0.0, 1.0, 2.0]],
+            columns=['rep_0', 'rep_1', 'rep_2'])
+        assert_frame_equal(calc_params, expected_params)
+
+
+class TestBootstrapParamsToConfIn:
+    def setup(self):
+        np.random.seed(3904)
+        self.bootstrap_params = pd.DataFrame(
+            np.random.normal(loc=0, scale=1, size=(3, 100000)))
+
+    def test_bootstrap_parmas_to_conf_int(self):
+        expected_conf_int = pd.DataFrame(
+            data=[[-1.96, 1.96], [-1.96, 1.96], [-1.96, 1.96]],
+            columns=['lower_ci_bound', 'upper_ci_bound'])
+        calc_conf_int = smo.bootstrap_params_to_conf_int(
+            self, self.bootstrap_params)
+        aaae(calc_conf_int, expected_conf_int, decimal=2)
+
+
+class TestBootstrapCovMatrix:
+    def setup(self):
+        np.random.seed(94355)
+        self.expected_cov = np.array([
+            [3.0, 0.5, 0.4],
+            [0.5, 2.0, 0.1],
+            [0.4, 0.1, 1.0]])
+        self.params = np.arange(3)
+        self.params_type = 'short'
+        self.model_name = 'test_bootstrap_cov_matrix'
+        self.dataset_name = 'data_for_testing_covmatrix'
+
+    def len_params(self, params_type):
+        return 3
+
+    def all_bootstrap_params(self, params, params_type):
+        return pd.DataFrame(
+            np.random.multivariate_normal(mean=self.params,
+                                          cov=self.expected_cov, size=10000))
+
+    def test_bootstrap_cov_matrix(self):
+        calc_cov = smo.bootstrap_cov_matrix(
+            self, self.params, self.params_type)
+        aaae(calc_cov, self.expected_cov, decimal=1)
 
 if __name__ == '__main__':
     from nose.core import runmodule

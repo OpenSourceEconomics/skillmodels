@@ -146,6 +146,7 @@ Usually a research project comprises the estimation of more than one model and t
     *``maxiter`` and ``maxfun``: the maximal number of iterations or function evaluations for estimators that use numerical optimization techniques. The default for both is one million which probably won't be reached in practice.
     *``period_identifier`` and ``person_identifier``: give the names of the columns that identify the periods and individuals in the dataset. The defaults are 'period' and 'id'.
     *``bootstrap_nreps``: number of bootstrap replications if the standard_error_method of the chosen estimator is bootstrap. Default is 300.
+    *``bootstrap_sample_size``: size of the samples that are drawn from the dataset with replacement. Default is the number of observations in the dataset nobs.
     *``bootstrap_nprocesses``: amount of multiprocessing during the calculation of bootstrap standard errors. The default is 'None' which means that all available cores are used.
     *``save_bootstrap_params``: boolean value that indicates whether the bootstrap parameter vectors are saved on disk. The default is False. If True, SkillModel has to be called with a save_path.
 
