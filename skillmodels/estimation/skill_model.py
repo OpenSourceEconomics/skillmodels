@@ -1548,8 +1548,8 @@ class SkillModel(GenericLikelihoodModel):
 
         Returns:
             conf_int_df (df): pandas DataFrame with two columns that give the
-                lower and upper bound of the confidence interval based on the
-                distribution of the bootstrap parameters.
+            lower and upper bound of the confidence interval based on the
+            distribution of the bootstrap parameters.
 
         """
         lower_ci = bootstrap_params.quantile(
