@@ -776,7 +776,7 @@ class TestGenerateStartParams:
         mock_tf.start_values_some_func.return_value = np.ones(1) * 7.7
         expected = np.array(
             [5] * 4 + [0.5, 0, 0.5] * 3 + [1 / 3] * 3 + [7.7] * 4)
-        aae(smo.generate_start_params(self), expected)
+        aae(smo._generate_naive_start_params(self), expected)
 
 
 class TestSigmaWeightsAndScalingFactor:

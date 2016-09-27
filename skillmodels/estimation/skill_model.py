@@ -5,7 +5,7 @@ from skillmodels.estimation.likelihood_function import \
 from skillmodels.estimation.wa_functions import initial_meas_coeffs, \
     prepend_index_level, factor_covs_and_measurement_error_variances, \
     iv_reg_array_dict, iv_reg, large_df_for_iv_equations, \
-    transition_error_variance_from_u_covs
+    transition_error_variance_from_u_covs, anchoring_error_variance_from_u_vars
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
 from skillmodels.estimation.skill_model_results import SkillModelResults
@@ -19,6 +19,7 @@ import pandas as pd
 import json
 from multiprocessing import Pool
 import os
+import warnings
 
 
 class SkillModel(GenericLikelihoodModel):
@@ -50,6 +51,7 @@ class SkillModel(GenericLikelihoodModel):
         bootstrap_samples (list): optional, see docs of bootstrap functions.
 
     """
+
     def __init__(
             self, model_dict, dataset, estimator, model_name='some_model',
             dataset_name='some_dataset', save_path=None, quiet_mode=False,
@@ -287,18 +289,12 @@ class SkillModel(GenericLikelihoodModel):
         be called by the user.
 
         """
-        length = self.nupdates
-        # in wa case no R can be estimated for the anchoring equation
-        if self.estimator == 'wa' and self.anchoring is True:
-            length -= 1
-        return self._general_params_slice(length)
+        return self._general_params_slice(self.nupdates)
 
     def _R_names(self, params_type):
         """List with names for the params mapped to R."""
         R_names = ['R__{}__{}'.format(t, measure)
                    for t, measure in list(self.update_info.index)]
-        if self.estimator == 'wa' and self.anchoring is True:
-            R_names = R_names[:-1]
         return R_names
 
     def _set_bounds_for_R(self, params_slice):
@@ -657,116 +653,168 @@ class SkillModel(GenericLikelihoodModel):
 
         return slice(first_slice.start, last_slice.stop)
 
-    # will replace method with same name in GenericLikelihoodModel
-    def expandparams(self, params):
-        short_slices = self.params_slices(params_type='short')
-        short_len = self.len_params(params_type='short')
-        long_slices = self.params_slices(params_type='long')
-        long_len = self.len_params(params_type='long')
+    def _transform_params(self, params, direction):
+        have_type = 'short' if direction.startswith('short') else 'long'
+        want_type = 'short' if direction.endswith('short') else 'long'
+
+        have_slices = self.params_slices(params_type=have_type)
+        have_len = self.len_params(params_type=have_type)
+
+        want_slices = self.params_slices(params_type=want_type)
+        want_len = self.len_params(params_type=want_type)
 
         for quant in ['deltas', 'trans_coeffs']:
-            long_slices[quant] = self._flatten_slice_list(
-                long_slices[quant])
+            want_slices[quant] = self._flatten_slice_list(want_slices[quant])
 
-        short_slices['deltas'] = self._flatten_slice_list(
-            short_slices['deltas'])
+        have_slices['deltas'] = self._flatten_slice_list(have_slices['deltas'])
 
         to_transform = ['X_zero', 'P_zero', 'trans_coeffs']
         to_transform = [quant for quant in to_transform
                         if quant in self.params_quants]
 
-        args = {quant: {} for quant in to_transform}
+        args = {quant: {'direction': direction} for quant in to_transform}
 
         args['P_zero']['params_for_P_zero'] = \
-            params[short_slices['P_zero']]
+            params[have_slices['P_zero']]
         args['P_zero']['filler'] = self._P_zero_filler()
         args['P_zero']['boo'] = self._P_zero_bool()
         args['P_zero']['estimate_cholesky_of_P_zero'] = self.cholesky_of_P_zero
 
         if 'X_zero' in self.params_quants:
             args['X_zero']['params_for_X_zero'] = \
-                params[short_slices['X_zero']]
+                params[have_slices['X_zero']]
             args['X_zero']['filler'] = self._X_zero_filler()
             args['X_zero']['replacements'] = self._X_zero_replacements()
 
         args['trans_coeffs']['params'] = params
         args['trans_coeffs']['initial'] = self._initial_trans_coeffs()
         args['trans_coeffs']['params_slice'] = \
-            short_slices['trans_coeffs']
+            have_slices['trans_coeffs']
 
         args['trans_coeffs']['transform_funcs'] = \
             self._transform_trans_coeffs_funcs()
         args['trans_coeffs']['included_factors'] = self.included_factors
 
-        assert len(params) == short_len, (
+        assert len(params) == have_len, (
             'You use a params vector with invalid length in the expandparams '
             'function in model {}'.format(self.model_name))
 
-        long_params = np.zeros(long_len)
+        want_params = np.zeros(want_len)
 
         for quant in self.params_quants:
             if quant not in to_transform:
-                long_params[long_slices[quant]] = params[short_slices[quant]]
+                want_params[want_slices[quant]] = params[have_slices[quant]]
             else:
                 func = 'transform_params_for_{}'.format(quant)
-                long_params[long_slices[quant]] = getattr(pp, func)(
+                want_params[want_slices[quant]] = getattr(pp, func)(
                     **args[quant])
 
-        return long_params
+        return want_params
+
+    def expandparams(self, params):
+        return self._transform_params(params, direction='short_to_long')
 
     def reduceparams(self, params):
-        # TODO: write this function!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        raise NotImplementedError(
-            'A reduceparams method is not implemented in SkillModel')
+        return self._transform_params(params, direction='long_to_short')
 
-    def generate_start_params(self):
-        """Vector with start values for the optimization."""
-        # TODO: use wa estimates to generate the start values !!!!!!!!!!!!!!!!!!!!!
-        if hasattr(self, 'start_params'):
-            assert len(self.start_params) == self.len_params('short'), (
-                'In model {} with dataset {} your start_params have not the '
+    def _wa_params_can_be_used_for_start_params(self, raise_warning=True):
+        reasons = []
+        if self.nemf != 1:
+            reasons.append('A mixture distribution is estimated.')
+        if self.uses_controls is True:
+            reasons.append('Control variables are used.')
+        update_types = list(self.update_info['update_type'])
+        if 'probit' in update_types or 'logit' in update_types:
+            reasons.append('Probit or logit updates are used.')
+        df = self.update_info.copy(deep=True)
+        df = df[df['purpose'] == 'measurement']
+        if not (df[self.factors].values.sum(axis=1) == 1).all():
+            reasons.append('Some measurements measure more than 1 factor.')
+        if self.anchoring_mode == 'truly_anchor_latent_factors':
+            reasons.append('The anchoring mode is not supported in wa.')
+
+        can_be_used = False if len(reasons) > 0 else True
+
+        warn_message = (
+            'In model {} with dataset {} it is not possible to use '
+            'estimates from the wa estimator as start values for the '
+            'chs estimator because of the following reasons:').format(
+                self.model_name, self.dataset_name)
+        for r in reasons:
+            warn_message += ('\n' + r)
+
+        if raise_warning is True:
+            warnings.warn(warn_message)
+
+        return can_be_used
+
+    def _correct_len_of_start_params(self, raise_warning=True):
+
+        if len(self.start_params) == self.len_params('short'):
+            return True
+        else:
+            warn_message = (
+                'The start_params vector you provided in model {} with '
+                'dataset {} will be ignored because it does not have the '
                 'correct length. Your start params have length {}, the '
                 'correct length is {}').format(
                 self.model_name, self.dataset_name, len(self.start_params),
                 self.len_params('short'))
-            return self.start_params
-        else:
-            slices = self.params_slices(params_type='short')
-            start = np.zeros(self.len_params(params_type='short'))
-            vals = self.start_values_per_quantity
-            for quant in ['deltas', 'H', 'R', 'Q', 'psi', 'X_zero']:
-                if quant in self.params_quants and quant in vals:
-                    if type(slices[quant]) != list:
-                        start[slices[quant]] = vals[quant]
-                    else:
-                        for sl in slices[quant]:
-                            start[sl] = vals[quant]
+            if raise_warning is True:
+                warnings.warn(warn_message)
+            return False
 
-            nr_matrices = 1 if self.restrict_P_zeros is True else self.nemf
-            params_per_matrix = int(0.5 * self.nfac * (self.nfac + 1))
-            p = start[slices['P_zero']].reshape(nr_matrices, params_per_matrix)
-
-            p[:] = vals['P_zero_off_diags']
-            diagonal_positions = np.cumsum([0] + list(range(self.nfac, 1, -1)))
-            p[:, diagonal_positions] = vals['P_zero_diags']
-            start[slices['P_zero']] = p.flatten()
-
-            for (f, fac), s in product(enumerate(self.factors), self.stages):
-                func = 'start_values_{}'.format(self.transition_names[f])
-                sl = slices['trans_coeffs'][f][s]
-                if hasattr(tf, func):
-                    start[sl] = getattr(tf, func)(
-                        factor=fac, included_factors=self.included_factors[f])
+    def _generate_naive_start_params(self):
+        slices = self.params_slices(params_type='short')
+        start = np.zeros(self.len_params(params_type='short'))
+        vals = self.start_values_per_quantity
+        for quant in ['deltas', 'H', 'R', 'Q', 'psi', 'X_zero']:
+            if quant in self.params_quants and quant in vals:
+                if type(slices[quant]) != list:
+                    start[slices[quant]] = vals[quant]
                 else:
-                    start[sl] = vals['trans_coeffs']
+                    for sl in slices[quant]:
+                        start[sl] = vals[quant]
 
-            if 'W_zero' in self.params_quants:
-                if 'W_zero' in vals:
-                    start[slices['W_zero']] = vals['W_zero']
-                else:
-                    start[slices['W_zero']] = np.ones(self.nemf) / self.nemf
+        nr_matrices = 1 if self.restrict_P_zeros is True else self.nemf
+        params_per_matrix = int(0.5 * self.nfac * (self.nfac + 1))
+        p = start[slices['P_zero']].reshape(nr_matrices, params_per_matrix)
+
+        p[:] = vals['P_zero_off_diags']
+        diagonal_positions = np.cumsum([0] + list(range(self.nfac, 1, -1)))
+        p[:, diagonal_positions] = vals['P_zero_diags']
+        start[slices['P_zero']] = p.flatten()
+
+        for (f, fac), s in product(enumerate(self.factors), self.stages):
+            func = 'start_values_{}'.format(self.transition_names[f])
+            sl = slices['trans_coeffs'][f][s]
+            if hasattr(tf, func):
+                start[sl] = getattr(tf, func)(
+                    factor=fac, included_factors=self.included_factors[f])
+            else:
+                start[sl] = vals['trans_coeffs']
+
+        if 'W_zero' in self.params_quants:
+            if 'W_zero' in vals:
+                start[slices['W_zero']] = vals['W_zero']
+            else:
+                start[slices['W_zero']] = np.ones(self.nemf) / self.nemf
 
             return start
+
+    def _generate_wa_based_start_params(self):
+        raise NotImplementedError
+
+    def generate_start_params(self):
+        """Vector with start values for the optimization."""
+        if hasattr(self, 'start_params'):
+            if self._correct_len_of_start_params() is True:
+                start = self.start_params
+        elif self._wa_params_can_be_used_for_start_params() is True:
+            start = self._generate_wa_based_start_params()
+        else:
+            start = self._generate_naive_start_params()
+        return start
 
     def sigma_weights(self):
         nsigma = 2 * self.nfac + 1
@@ -1197,6 +1245,9 @@ class SkillModel(GenericLikelihoodModel):
         if period != last_period:
             u_cov_df = pd.DataFrame(
                 data=0.0, index=index, columns=u_cov_columns)
+        else:
+            u_var_sr = pd.Series(
+                data=0.0, index=range(len(indep_permutations)), name='u_var')
 
         for dep in depvars:
             counter = 0
@@ -1206,21 +1257,24 @@ class SkillModel(GenericLikelihoodModel):
                 non_missing_index = iv_arrs.pop('non_missing_index')
                 deltas = iv_reg(**iv_arrs)
                 iv_coeffs.loc[(dep, counter)] = deltas
+                y, x = iv_arrs['depvar_arr'], iv_arrs['indepvars_arr']
+                u = pd.Series(data=y - np.dot(x, deltas),
+                              index=non_missing_index)
+
                 if period != last_period:
-                    y, x = iv_arrs['depvar_arr'], iv_arrs['indepvars_arr']
-                    u = pd.Series(data=y - np.dot(x, deltas),
-                                  index=non_missing_index)
                     for dep2 in depvars:
                         if dep2 != dep:
                             u_cov_df.loc[(dep, counter), dep2] = \
                                 u.cov(data[('y', dep2)])
                         else:
                             u_cov_df.loc[(dep, counter), dep2] = np.nan
+                else:
+                    u_var_sr[counter] = u.var()
                 counter += 1
         if period != last_period:
             return iv_coeffs, u_cov_df
         else:
-            return iv_coeffs
+            return iv_coeffs, u_var_sr
 
     def model_coeffs_from_iv_coeffs_args_dict(self, period, factor):
         norm_dict = {}
@@ -1314,20 +1368,33 @@ class SkillModel(GenericLikelihoodModel):
             iv_data = large_df_for_iv_equations(
                 depvar_data=self.y_data[t], indepvars_data=resid_meas,
                 instruments_data=self.y_data[t])
-            iv_coeffs = self.all_iv_estimates(t, iv_data)
+            iv_coeffs, u_var_sr = self.all_iv_estimates(t, iv_data)
             deltas = iv_coeffs.mean().values
             anch_intercept = deltas[-1]
             anch_loadings = deltas[:-1]
+            indep_permutations, instr_permutations = \
+                self.variable_permutations_for_iv_equations(
+                    period=t, factor=None)
+            anch_variance = anchoring_error_variance_from_u_vars(
+                u_vars=u_var_sr, indepvars_permutations=indep_permutations,
+                anch_loadings=anch_loadings,
+                meas_loadings=self.storage_df.loc[t, 'loadings'],
+                anchored_factors=self.anchored_factors)
         else:
             anch_intercept = None
             anch_loadings = None
+            anch_variance = None
 
         # calculate measurement error variances and factor covariance matrices
         factor_cov_list = []
         for t in self.periods:
-            meas_cov = self.y_data[t].cov()
-            loadings = self.storage_df.loc[t, 'loadings']
-            meas_per_f = {f: self.measurements[f][t] for f in self.factors}
+            loadings = self.extended_meas_coeffs(
+                period=t, coeff_type='loadings')
+            all_meas = list(loadings.index)
+            meas_cov = self.y_data[t][all_meas].cov()
+            # loadings = self.storage_df.loc[t, 'loadings']
+            meas_per_f = self._measurement_per_factor_dict(period=t)
+
             p, meas_error_variances = \
                 factor_covs_and_measurement_error_variances(
                     meas_cov=meas_cov, loadings=loadings,
@@ -1337,12 +1404,27 @@ class SkillModel(GenericLikelihoodModel):
                 meas_error_variances, t))
         P_zero = factor_cov_list[0]
 
+        # print('calculated_cov_matrices')
+        # for cov_mat in factor_cov_list:
+        #     print(cov_mat)
+
         return self.storage_df, X_zero, P_zero, trans_coeff_storage, \
-            trans_var_df, anch_intercept, anch_loadings
+            trans_var_df, anch_intercept, anch_loadings, anch_variance
+
+    def _measurement_per_factor_dict(self, period, include_copied=True):
+        d = {}
+        for f, factor in enumerate(self.factors):
+            if self.transition_names[f] != 'constant' or period == 0:
+                d[factor] = self.measurements[factor][period]
+            elif include_copied is True:
+                initial_meas = self.measurements[factor][0]
+                d[factor] = ['{}_copied'.format(m) for m in initial_meas]
+        return d
 
     def estimate_params_wa(self):
         storage_df, X_zero, P_zero, trans_coeffs, trans_var_df, \
-            anch_intercept, anch_loadings = self._calculate_wa_quantities()
+            anch_intercept, anch_loadings, anch_variance = \
+            self._calculate_wa_quantities()
 
         params = np.zeros(self.len_params(params_type='long'))
         slices = self.params_slices(params_type='long')
@@ -1363,7 +1445,10 @@ class SkillModel(GenericLikelihoodModel):
         params[slices['H']] = all_loadings
 
         # write measurement variances in params
-        params[slices['R']] = storage_df['meas_error_variances'].values
+        all_meas_variances = list(storage_df['meas_error_variances'].values)
+        if anch_variance is not None:
+            all_meas_variances.append(anch_variance)
+        params[slices['R']] = all_meas_variances
 
         # write transition variances (Q) in params.
 

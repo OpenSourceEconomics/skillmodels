@@ -11,6 +11,8 @@ if __name__ == '__main__':
         'wa_test_with_no_squares_translog_model']
 
     to_run = normal_tests + long_running_tests
+    # to_run = long_running_tests
+    # to_run = ['wa_functions_test', 'wa_test_with_no_squares_translog_model']
 
     for file in to_run:
         system('python {}.py'.format(file))

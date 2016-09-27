@@ -166,11 +166,12 @@ def factor_covs_and_measurement_error_variances(
         loadings, axis=0).divide(loadings, axis=1)
 
     diag_bool = np.eye(len(scaled_meas_cov), dtype=bool)
+    diag_data = scaled_meas_cov.copy(deep=True).values[diag_bool]
     diag_series = pd.Series(
-        data=scaled_meas_cov.values[diag_bool], index=scaled_meas_cov.index,
+        data=diag_data, index=scaled_meas_cov.index,
         name='meas_error_variances')
     scaled_meas_cov.values[diag_bool] = np.nan
-
+    # print('\n\nrelevant_parts_of_cov_matrix\n')
     factor_covs = []
     for f1, factor1 in enumerate(factors):
         meas_list1 = meas_per_factor[factor1]
@@ -178,6 +179,7 @@ def factor_covs_and_measurement_error_variances(
             meas_list2 = meas_per_factor[factor2]
             if f2 >= f1:
                 relevant = scaled_meas_cov.loc[meas_list1, meas_list2]
+                # print(relevant)
                 cov_estimate = relevant.mean().mean()
                 factor_covs.append(cov_estimate)
                 if f2 == f1:
@@ -185,6 +187,8 @@ def factor_covs_and_measurement_error_variances(
 
     factor_covs = np.array(factor_covs)
     meas_error_variances = diag_series
+    meas_error_variances *= loadings ** 2
+
     return factor_covs, meas_error_variances
 
 
@@ -303,3 +307,21 @@ def transition_error_variance_from_u_covs(u_covs, loadings):
     scaled_u_covs = u_covs.divide(loadings, level=0, axis=0).divide(loadings)
     transition_error_variance = scaled_u_covs.mean().mean()
     return transition_error_variance
+
+
+def anchoring_error_variance_from_u_vars(
+        u_vars, indepvars_permutations, anch_loadings, meas_loadings,
+        anchored_factors):
+    meas_noise_df = pd.DataFrame(0.0, index=u_vars.index,
+                                 columns=anchored_factors)
+
+    for p, perm in enumerate(indepvars_permutations):
+        for f, factor in enumerate(anchored_factors):
+            meas_name = perm[f][:-6]
+            m_loading_squared = meas_loadings[meas_name] ** 2
+            meas_noise_df.loc[p, factor] = u_vars[p] / m_loading_squared
+    anch_loadings_squared = anch_loadings ** 2
+    meas_noise_df *= anch_loadings_squared
+    anch_variance_estimates = u_vars - meas_noise_df.sum(axis=1)
+    anch_variance = anch_variance_estimates.mean()
+    return anch_variance
