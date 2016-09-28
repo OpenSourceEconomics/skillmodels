@@ -69,6 +69,7 @@ class SkillModel(GenericLikelihoodModel):
 
         if bootstrap_samples is not None:
             self.bootstrap_samples = bootstrap_samples
+            self._check_bs_samples()
         else:
             self.bootstrap_samples = self._generate_bs_samples()
 
@@ -1067,6 +1068,12 @@ class SkillModel(GenericLikelihoodModel):
 
         params = self.expandparams(res.x) if params_type == 'long' else res.x
 
+        if optimize_dict['success'] is False:
+            warnings.warn(
+                'The model {} in dataset {} terminated unsuccessfully. Its '
+                'parameters should not be used.'.format(
+                    self.model_name, self.dataset_name))
+
         if return_optimize_dict is True:
             return params, optimize_dict
         else:
@@ -1598,7 +1605,7 @@ class SkillModel(GenericLikelihoodModel):
         bootstrap_samples = individuals[selected_indices].tolist()
         return bootstrap_samples
 
-    def _generate_bootstrap_data(self, rep):
+    def _select_bootstrap_data(self, rep):
         """Return the data of the resampled individuals."""
         data = self.data.set_index(
             [self.person_identifier, self.period_identifier], drop=False)
@@ -1610,7 +1617,7 @@ class SkillModel(GenericLikelihoodModel):
         return bs_data
 
     def _bs_fit(self, rep, params, params_type):
-        bootstrap_data = self._generate_bootstrap_data(rep)
+        bootstrap_data = self._select_bootstrap_data(rep)
 
         new_mod = SkillModel(
             model_dict=self.model_dict, dataset=bootstrap_data,
@@ -1621,19 +1628,67 @@ class SkillModel(GenericLikelihoodModel):
             quiet_mode=self.quiet_mode)
 
         if self.estimator == 'chs':
-            params = new_mod.estimate_params_chs(
-                start_params=params, return_optimize_dict=False,
-                params_type=params_type)
+            if new_mod.len_params(params_type=params_type) == len(params):
+                if params_type == 'short':
+                    start_params = params
+                else:
+                    start_params = new_mod.reduceparams(params)
+
+                bs_params, optimize_dict = new_mod.estimate_params_chs(
+                    start_params=start_params, return_optimize_dict=True,
+                    params_type=params_type)
+
+            else:
+                warnings.warn(
+                    'No bootstrap results were calculated for replication {} '
+                    'because the resulting parameter vectors would not have '
+                    'had the right length. One reason why this could happen '
+                    'is that variables had no variance in the bootstrap '
+                    'data. This happened in model {} for dataset {}.'.format(
+                        rep, self.model_name, self.dataset_name))
+                bs_params = [np.nan] * len(params)
+                optimize_dict = {
+                    'success': 'Not started because the resulting ' +
+                    'parameter vector would have had the wrong length.'}
+
         elif self.estimator == 'wa':
             assert params_type in ['long', None], (
                 'There is no short params_type in the wa estimator.')
-            params = new_mod.estimate_params_wa()
+            bs_params = new_mod.estimate_params_wa()
 
         if self.save_bootstrap_params is True:
             path = self.save_path + '/bootstrap/{}_params.json'.format(rep)
+            optim_path = \
+                self.save_path + '/bootstrap/{}_optimize_dict.json'.format(rep)
             with open(path, 'w') as j:
-                json.dump(params.tolist(), j)
-        return params
+                json.dump(bs_params.tolist(), j)
+            if self.estimator == 'chs':
+                with open(optim_path, 'w') as j:
+                    json.dump(optimize_dict, j)
+
+        if self.estimator == 'chs' and optimize_dict['success'] is False:
+            bs_params = [np.nan] * len(bs_params)
+            warnings.warn(
+                'The minimization for bootstrap replication number {} has '
+                'failed. It is therefore not included in the calculation of '
+                'the standard errors of the parameters. If you specified that '
+                'you want the bootstrap parameters saved, the incomplete '
+                'result and its optimize_dict were saved to your save_path. '
+                'This occured for model {} in dataset {}'.format(
+                    rep, self.model_name, self.dataset_name))
+
+        if len(bs_params) != len(params):
+            warnings.warn(
+                'The bootstrap results of replication {} do not have the '
+                'correct length. Therefore they are not included in the '
+                'bootstrap calculation. One reason why this could happen '
+                'is that variables had no variance in the bootstrap '
+                'data. If you specified that you want the '
+                'bootstrap parameters saved, the parameters were saved to your'
+                ' save_path. This occured in model {} for dataset {}'.format(
+                    rep, self.model_name, self.dataset_name))
+            bs_params = [np.nan] * len(params)
+        return bs_params
 
     def all_bootstrap_params(self, params, params_type):
         """Return a DataFrame of all bootstrap parameters.
@@ -1649,8 +1704,10 @@ class SkillModel(GenericLikelihoodModel):
         with Pool(self.bootstrap_nprocesses) as p:
             bootstrap_params = p.starmap(self._bs_fit, bs_fit_args)
         columns = ['rep_{}'.format(rep) for rep in range(self.bootstrap_nreps)]
-        bootstrap_params = pd.DataFrame(data=bootstrap_params, index=columns).T
-        return bootstrap_params
+
+        bootstrap_params_df = pd.DataFrame(
+            data=bootstrap_params, index=columns).T.dropna()
+        return bootstrap_params_df
 
     def bootstrap_params_to_conf_int(self, bootstrap_params, alpha=0.05):
         """Parameter confidence intervals from bootstrap parametres.
@@ -1675,7 +1732,6 @@ class SkillModel(GenericLikelihoodModel):
 
     def bootstrap_cov_matrix(self, params, params_type):
         """Calculate the paramater covariance matrix using bootstrap."""
-        # TODO: add necessary arguments to general section
         assert len(params) == self.len_params(params_type), (
             'You try to calculate standard error of a params vector of '
             'incorrect length for the specified params_type {} in model {} '
