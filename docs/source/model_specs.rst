@@ -114,20 +114,20 @@ The "general" section of the model dictionary:
 
 Usually a research project comprises the estimation of more than one model and there are some specifications that are likely not to vary across these models. The default values for these specifications are hardcoded. If some or all of these values are redefined in the "general" section of the model dictionary the ones from the model dictionary have precedence. The specifications are:
 
-    * ``nemf``: number of elements in the mixture of normals distribution of the latent factors. Usually set to 1 which corresponds to the assumption that the factors are normally distributed.
-    * ``kappa``: scaling parameter for the sigma_points. Usually set to 2.
-    * ``square_root_filters``: takes the values true and false and specifies if square-root implementations of the kalman filters are used. I strongly recommend always using square-root filters. As mentioned in section 3.2.2 of CHS' readme file the standard filters often crash unless very good start values for the maximization are available. Using the square-root filters completely avoids this problem.
+    * ``nemf``: number of elements in the mixture of normals distribution of the latent factors. Usually set to 1 which corresponds to the assumption that the factors are normally distributed. Only used in CHS estimator.
+    * ``kappa``: scaling parameter for the sigma_points. Usually set to 2. Only used in CHS estimator.
+    * ``square_root_filters``: takes the values true and false and specifies if square-root implementations of the kalman filters are used. I strongly recommend always using square-root filters. As mentioned in section 3.2.2 of CHS' readme file the standard filters often crash unless very good start values for the maximization are available. Using the square-root filters completely avoids this problem. Only used in CHS estimator.
     * ``missing_variables``: Takes the values "raise_error" or "drop_variable" and specifies what happens if a variable is not in the dataset or has only missing values. Automatically dropping these variables is handy when the same model is estimated with several similar but not exactly equal datasets.
     * ``controls_with_missings``: Takes the values "raise_error", "drop_variable" or "drop_observations". Recall that measurement variables can have missing observations as long as they are missing at random and at least some observations are not missing. For control variables this is not the case and it is necessary to drop the missing observations or the contol variable.
     * ``variables_without_variance``: takes the same values as ``missing_variables`` and specifies what happens if a measurement or anchoring variable has no variance. Control variables without variance are not dropped as this would drop constants.
-    * ``robust_bounds``: takes the values true or false and refers to the bounds on some parameters during the maximization of the likelihood function. If true the lower bound for estimated variances is not set to zero but to ``bounds_distance``. This improves the stability of the estimator but is usually unnecessary if square-root filters are used.
-    * ``bounds_distance``: a small number
+    * ``robust_bounds``: takes the values true or false and refers to the bounds on some parameters during the maximization of the likelihood function. If true the lower bound for estimated variances is not set to zero but to ``bounds_distance``. This improves the stability of the estimator but is usually unnecessary if square-root filters are used. Only used in CHS estimator.
+    * ``bounds_distance``: a small number. Only used in CHS estimator.
     * ``estimate_X_zeros``: takes the values true or false. If true the start mean of the factor distribution is estimated, else it is normalized to zero. This is an alternative normalization of location in the initial period. If set to False you have to specify less normalizations of intercepts that otherwise. The automatic generation of normalizations correctly handles this case. If nemf > 1 you have to set estimate_X_zeros to True.
-    * ``order_X_zeros``: Takes an integer value between 0 and nfac - 1.  If ``estimate_X_zeros`` is true and nemf > 1 the model would not be identified without imposing an order on the start means. The value of order_X_zeros determines which factor (in the alphabetically ordered factor list) is used to impose this order.
-    * ``restrict_W_zeros``: takes the values true or false. If true the start weights of the mixture distribution is not estimated but set to 1 / nemf for each factor.
-    * ``restrict_P_zeros``: takes the values true or false. If true the covariance matrices of all elements in the mixture distribution of the factors is required to be the same. CHS use this because their models with nemf > 1 do not converge otherwise.
-    * ``cholesky_of_P_zero``: takes the values true or false. If true both the "long" and "short" parameter vector contain the cholesky factor of the covariance matrix of the factor distribution, which increases robustness. Else the "short" vector contains the cholesky factor and the "long" version the entries of the normal covariance matrix. See :ref:`params_type` for an explanation.
-    * ``probit_measurements``: takes the values true and false. If true measurements that take only the values 0 and 1 are not incorporated with a linear measurement equation but similar to a probit model.
+    * ``order_X_zeros``: Takes an integer value between 0 and nfac - 1.  If ``estimate_X_zeros`` is true and nemf > 1 the model would not be identified without imposing an order on the start means. The value of order_X_zeros determines which factor (in the alphabetically ordered factor list) is used to impose this order. Only used in CHS estimator.
+    * ``restrict_W_zeros``: takes the values true or false. If true the start weights of the mixture distribution is not estimated but set to 1 / nemf for each factor. Only used in CHS estimator.
+    * ``restrict_P_zeros``: takes the values true or false. If true the covariance matrices of all elements in the mixture distribution of the factors is required to be the same. CHS use this because their models with nemf > 1 do not converge otherwise. Only used in CHS estimator.
+    * ``cholesky_of_P_zero``: takes the values true or false. If true both the "long" and "short" parameter vector contain the cholesky factor of the covariance matrix of the factor distribution, which increases robustness. Else the "short" vector contains the cholesky factor and the "long" version the entries of the normal covariance matrix. See :ref:`params_type` for an explanation. Only used in CHS estimator.
+    * ``probit_measurements``: takes the values true and false. If true measurements that take only the values 0 and 1 are not incorporated with a linear measurement equation but similar to a probit model. Only used in CHS estimator.
 
     .. Note:: This is not yet ready and will raise a NotImplementedError.
 
@@ -135,20 +135,35 @@ Usually a research project comprises the estimation of more than one model and t
 
     .. Note:: Probability anchoring is not yet ready and will raise a NotImplementedError.
 
-    * ``ignore_intercept_in_linear_anchoring``: takes the values true and false. Often the results remain interpretable if the intercept of the anchoring equation is ignored in the anchoring process. CHS do so in the example model (see equation above).
-    *``anchoring_mode``: Takes the values 'only_estimate_anchoring_equation' and 'truly_anchor_latent_factors'. The default is 'only_estimate_anchoring_equation'. In the WA estimator this is the only possible option. It means that an anchoring equation is estimated that can be used for the calculation of interpretable marginal effects. This option does, however, not make the estimated transition parameters interpretable. The other othe option requires more computer power and can make the transition parameters interpretable if enough age invariant measures are available and used for normalizations.
-    * ``start_params``: a start vector for the maximization
-    * ``start_values_per_quantity``: a dictionary with values that are used to construct the start vector for the maximization if the start vector is not provided directly.
+    * ``ignore_intercept_in_linear_anchoring``: takes the values true and false. Often the results remain interpretable if the intercept of the anchoring equation is ignored in the anchoring process. CHS do so in the example model (see equation above). Only used if anchoring_mode equals 'truly_anchor_latent_factors'
+    * ``anchoring_mode``: Takes the values 'only_estimate_anchoring_equation' and 'truly_anchor_latent_factors'. The default is 'only_estimate_anchoring_equation'. In the WA estimator this is the only possible option. It means that an anchoring equation is estimated that can be used for the calculation of interpretable marginal effects. This option does, however, not make the estimated transition parameters interpretable. The other other option requires more computer power and can make the transition parameters interpretable if enough age invariant measures are available and used for normalizations.
+    * ``start_params``: a start vector for the maximization. Only used in CHS estimator. If no start_params are provided in the model dictionary, SkillModel will try to fit the model with the wa estimator in order to get good start values. If this fails or is not possible because the model uses options that are not supported by the wa estimator, naive start value will be generated, based on 'start_values_per_quantity'.
+    * ``start_values_per_quantity``: a dictionary with values that are used to construct the start vector for the maximization if the start vector is not provided directly. Only used in CHS estimator.
     * ``wa_standard_error_method``: a string that indicates which method is used to calculate standard_errors if the WA estimator is used. Curently "bootstrap" is the only option.
     * ``chs_standard_error_method``:  a string that indicates which method is used to calculate standard_errors if the CHS estimator is used. Currently the options "op_of_gradient" (outer product of gradient), "hessian_inverse" and "bootstrap" are supported with the CHS estimator.
-    * ``save_intermediate_optimization_results``: boolean variable. If true, the the optional arguments of SkillModel (save_path, model_name, dataset_name) have to be specified in order to generate a directory where the intermediate results are stored. The default value is False.
+    * ``save_intermediate_optimization_results``: boolean variable. If true, the the optional arguments of SkillModel (save_path, model_name, dataset_name) have to be specified in order to generate a directory where the intermediate results are stored. The default value is False. Only used in CHS estimator.
     * ``save_params_before_calculating_standard_errors``: boolean variable. If true, the the optional arguments of SkillModel (save_path, model_name, dataset_name) have to be specified in order to generate a directory where the intermediate results are stored. The default value is False.
-    *``maxiter`` and ``maxfun``: the maximal number of iterations or function evaluations for estimators that use numerical optimization techniques. The default for both is one million which probably won't be reached in practice.
-    *``period_identifier`` and ``person_identifier``: give the names of the columns that identify the periods and individuals in the dataset. The defaults are 'period' and 'id'.
-    *``bootstrap_nreps``: number of bootstrap replications if the standard_error_method of the chosen estimator is bootstrap. Default is 300.
-    *``bootstrap_sample_size``: size of the samples that are drawn from the dataset with replacement. Default is the number of observations in the dataset nobs.
-    *``bootstrap_nprocesses``: amount of multiprocessing during the calculation of bootstrap standard errors. The default is 'None' which means that all available cores are used.
-    *``save_bootstrap_params``: boolean value that indicates whether the bootstrap parameter vectors are saved on disk. The default is False. If True, SkillModel has to be called with a save_path.
+    * ``maxiter`` and ``maxfun``: the maximal number of iterations or function evaluations for estimators that use numerical optimization techniques. The default for both is one million which probably won't be reached in practice.
+    * ``period_identifier`` and ``person_identifier``: give the names of the columns that identify the periods and individuals in the dataset. The defaults are 'period' and 'id'.
+    * ``bootstrap_nreps``: number of bootstrap replications if the standard_error_method of the chosen estimator is bootstrap. Default is 300.
+    * ``bootstrap_sample_size``: size of the samples that are drawn from the dataset with replacement. Default is the number of observations in the dataset nobs.
+    * ``bootstrap_nprocesses``: amount of multiprocessing during the calculation of bootstrap standard errors. The default is 'None' which means that all available cores are used.
+    * ``save_bootstrap_params``: boolean value that indicates whether the bootstrap parameter vectors are saved on disk. The default is False. If True, SkillModel has to be called with a save_path.
+
+
+Differences between estimators:
+*******************************
+
+Skillmodels has the aim of using the same model specification for all estimators. However, the WA estimator is a bit less general than the CHS estimator. Therefore, in some cases it is note possible to use the results of the MUCH FASTER(!!!) wa estimator as start values for the chs estimator:
+
+    * if control variables are used
+    * if probit or logit updates are used
+    * if nemf > 1 (actually, here the wa estimator is more general as it does not make any distributional assumptions and thus doesn't need a mixture of normals but it is still a problem when using wa estimates as start values.)
+    * if measurements measure more than one latent factor
+    * if anchoring model == 'truly_anchor_latent_factors'
+    * if one or more transition functions are not linear in parameters, such as the log_ces function.
+
+Currently, in any of these cases the WA estimates are not used at all in the generation of start values. In some cases it might be possible to at least recover some parameters. You are invited to add this functionality to skillmodels.
 
 .. _replication files:
     https://www.econometricsociety.org/content/supplement-estimating-technology-cognitive-and-noncognitive-skill-formation-0
