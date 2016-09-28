@@ -108,7 +108,8 @@ def _map_params_to_P_zero(params, params_type, initial, params_slice, filler,
 
 
 def _map_params_to_trans_coeffs(params, initial, params_slice,
-                                transform_funcs=None, included_factors=None):
+                                transform_funcs=None, included_factors=None,
+                                direction='short_to_long'):
     """Map parameters from params to trans_coeffs."""
     for f, coeffs in enumerate(initial):
         func = transform_funcs[f] if transform_funcs is not None else None
@@ -119,7 +120,7 @@ def _map_params_to_trans_coeffs(params, initial, params_slice,
             for s in range(len(coeffs)):
                 getattr(tf, func)(
                     params[params_slice[f][s]], included_factors[f],
-                    out=coeffs[s])
+                    direction, out=coeffs[s])
 
 
 def parse_params(params, deltas_args, H_args, R_args, Q_args, P_zero_args,
@@ -156,34 +157,48 @@ def restore_unestimated_quantities(X_zero=None, X_zero_value=None,
         W_zero[:] = W_zero_value
 
 
-def transform_params_for_X_zero(params_for_X_zero, filler, replacements=None):
+def transform_params_for_X_zero(params_for_X_zero, filler, direction,
+                                replacements=None):
     if replacements is None:
         return params_for_X_zero
+    elif direction == 'short_to_long':
+        filler[:] = params_for_X_zero.reshape(filler.shape)
+        for add_to_pos, take_from_pos in replacements:
+            filler[add_to_pos] += filler[take_from_pos]
+        return filler.flatten()
     else:
         filler[:] = params_for_X_zero.reshape(filler.shape)
-        for add_to_position, take_from_position in replacements:
-            filler[add_to_position] += filler[take_from_position]
+        for subtract_from_pos, take_from_pos in reversed(replacements):
+            filler[subtract_from_pos] -= filler[take_from_pos]
         return filler.flatten()
 
 
 def transform_params_for_P_zero(params_for_P_zero, filler, boo,
-                                estimate_cholesky_of_P_zero):
+                                estimate_cholesky_of_P_zero, direction):
+
     filler[:] = 0
     if estimate_cholesky_of_P_zero is True:
         return params_for_P_zero
-    else:
+    elif direction == 'short_to_long':
         filler[boo] = params_for_P_zero
         filler = matrix_multiply(
             np.transpose(filler, axes=(0, 2, 1)), filler)
         return filler[boo]
+    else:
+        filler[boo] = params_for_P_zero
+        for i in range(len(filler)):
+            filler[i] += (filler[i] - np.diag(np.diagonal(filler[i]))).T
+        filler = np.transpose(cholesky(filler), axes=(0, 2, 1))
+        return filler[boo]
 
 
-def transform_params_for_trans_coeffs(params, initial, params_slice,
-                                      transform_funcs=None,
-                                      included_factors=None):
+def transform_params_for_trans_coeffs(
+        params, initial, params_slice, transform_funcs,
+        included_factors, direction):
 
-    _map_params_to_trans_coeffs(params, initial, params_slice, transform_funcs,
-                                included_factors)
+    _map_params_to_trans_coeffs(
+        params, initial, params_slice, transform_funcs, included_factors,
+        direction)
 
     transformed = []
     for f, sl in enumerate(params_slice):
@@ -191,3 +206,8 @@ def transform_params_for_trans_coeffs(params, initial, params_slice,
             if s == 0 or sl[s] != sl[s - 1]:
                 transformed += list(initial[f][s, :])
     return np.array(transformed)
+
+
+
+
+

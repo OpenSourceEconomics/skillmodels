@@ -33,7 +33,7 @@ class TestLinear:
     def test_nr_coeffs_linear(self):
         assert_equal(tf.nr_coeffs_linear(self.incl_fac, 'short'), 3)
 
-    def tset_coeff_names_linear(self):
+    def test_coeff_names_linear(self):
         expected = ['lincoeff__3__f1__f1', 'lincoeff__3__f1__f2',
                     'lincoeff__3__f1__f3']
 
@@ -91,16 +91,29 @@ class TestLogCes:
     def test_log_ces_nr_coeffs_long(self):
         assert_equal(tf.nr_coeffs_log_ces(self.incl_fac, 'long'), 3)
 
-    def test_transform_coeffs_log_ces(self):
+    def test_transform_coeffs_log_ces_short_to_long(self):
         big_out = np.zeros((2, 3))
         small_out = big_out[0, :]
 
         coeffs = np.array([1, 3])
 
-        tf.transform_coeffs_log_ces(coeffs, self.incl_fac, small_out)
+        tf.transform_coeffs_log_ces(
+            coeffs, self.incl_fac, 'short_to_long', small_out)
 
         expected = np.zeros((2, 3))
         expected[0, :] = np.array([0.5, 0.5, 3])
+        aaae(big_out, expected)
+
+    def test_transform_coeffs_log_ces_long_to_short(self):
+        big_out = np.zeros((2, 2))
+        small_out = big_out[0, :]
+        coeffs = np.array([0.5, 0.5, 3])
+
+        tf.transform_coeffs_log_ces(
+            coeffs, self.incl_fac, 'long_to_short', small_out)
+
+        expected = np.zeros((2, 2))
+        expected[0, :] = np.array([1, 3])
         aaae(big_out, expected)
 
     def test_bounds_log_ces(self):

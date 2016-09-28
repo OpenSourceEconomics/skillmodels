@@ -109,15 +109,16 @@ trans_intercept_value* **)**:
 Moreover, for each transition function, the following auxiliary functions can
 be implemented:
 
-**transform_params_example_func(** *params, included_factors, out* **)**
+**transform_coeffs_example_func(** *coeffs, included_factors, direction, out* **)**
 
     Transform parameters from params_type 'short' to 'long'. See
     :ref:`params_type` for details. Only needed for CHS estimator and only for
     functions that need transformation of parameters.
 
     Args:
-        * params: 1d array of parameters
+        * coeffs: 1d array of parameters
         * included_factors: list of names of included factors
+        * direction: takes values 'short_to_long' and 'long_to_short'
         * out: numpy array in which the result is stored
 
 **bounds_example_func(** *included_factors* **)**
@@ -296,11 +297,15 @@ def nr_coeffs_log_ces(included_factors, params_type):
         return len(included_factors) + 1
 
 
-def transform_coeffs_log_ces(coeffs, included_factors, out):
-    out[:-2] = coeffs[:-1]
-    out[-2] = 1
-    out /= np.sum(out[:-1])
-    out[-1] = coeffs[-1]
+def transform_coeffs_log_ces(coeffs, included_factors, direction, out):
+    if direction == 'short_to_long':
+        out[:-2] = coeffs[:-1]
+        out[-2] = 1
+        out /= np.sum(out[:-1])
+        out[-1] = coeffs[-1]
+    else:
+        out[:-1] = coeffs[:-2] / coeffs[-2]
+        out[-1] = coeffs[-1]
 
 
 def bounds_log_ces(included_factors):

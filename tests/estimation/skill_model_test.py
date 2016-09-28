@@ -710,7 +710,7 @@ class TestParamNames:
             AssertionError, smo.param_names, self, params_type='short')
 
 
-class TestExpandparams:
+class TestTransformParams:
     def setup(self):
         self.params_quants = [
             'deltas', 'trans_coeffs', 'X_zero', 'P_zero']
@@ -729,6 +729,9 @@ class TestExpandparams:
         self.params_slices = Mock(
             side_effect=lambda params_type: slices_dict[params_type])
 
+        self._flatten_slice_list = \
+            Mock(side_effect=[slice(0, 5), slice(5, 14), slice(0, 5)])
+
         len_dict = {'short': 18, 'long': 20}
         self.len_params = Mock(
             side_effect=lambda params_type: len_dict[params_type])
@@ -740,14 +743,15 @@ class TestExpandparams:
         self._initial_trans_coeffs = Mock()
         self._transform_trans_coeffs_funcs = Mock()
         self.included_factors = []
+        self.model_name = 'some_model'
 
-    # @patch('src.model_code.skill_model.pp')
-    # def test_expand_params(self, mock_pt):
-    #     mock_pt.transform_params_for_X_zero.return_value = np.arange(3)
-    #     mock_pt.transform_params_for_trans_coeffs.return_value = np.ones(9)
-    #     mock_pt.transform_params_for_P_zero.return_value = np.ones(3) * 17
-    #     expected = np.array([0] * 5 + [1] * 9 + [0, 1, 2] + [17] * 3)
-    #     aae(smo.expandparams(self, np.zeros(18)), expected)
+    @patch('skillmodels.estimation.skill_model.pp')
+    def test_expand_params(self, mock_pt):
+        mock_pt.transform_params_for_X_zero.return_value = np.arange(3)
+        mock_pt.transform_params_for_trans_coeffs.return_value = np.ones(9)
+        mock_pt.transform_params_for_P_zero.return_value = np.ones(3) * 17
+        expected = np.array([0] * 5 + [1] * 9 + [0, 1, 2] + [17] * 3)
+        aae(smo._transform_params(self, np.zeros(18), 'short_to_long'), expected)
 
 
 class TestGenerateStartParams:

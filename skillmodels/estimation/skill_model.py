@@ -502,13 +502,16 @@ class SkillModel(GenericLikelihoodModel):
         self.lower_bound[diagonal_indices] = \
             self.robust_bounds * self.bounds_distance
 
-    def _initial_trans_coeffs(self):
+    def _initial_trans_coeffs(self, short_version=False):
         """List of initial trans_coeffs arrays, each filled with zeros."""
+        # Note: the short version is only needed for reduceparams. it does
+        # not depend on the normal params_type argument.
+        partype = 'short' if short_version is True else 'long'
         initial_params = []
         for f, factor in enumerate(self.factors):
             func = 'nr_coeffs_{}'.format(self.transition_names[f])
             width = getattr(tf, func)(
-                included_factors=self.included_factors[f], params_type='long')
+                included_factors=self.included_factors[f], params_type=partype)
             initial_params.append(np.zeros((self.nstages, int(width))))
         return initial_params
 
@@ -687,7 +690,11 @@ class SkillModel(GenericLikelihoodModel):
             args['X_zero']['replacements'] = self._X_zero_replacements()
 
         args['trans_coeffs']['params'] = params
-        args['trans_coeffs']['initial'] = self._initial_trans_coeffs()
+
+        short_version = True if direction == 'long_to_short' else False
+        args['trans_coeffs']['initial'] = \
+            self._initial_trans_coeffs(short_version)
+
         args['trans_coeffs']['params_slice'] = \
             have_slices['trans_coeffs']
 
@@ -732,6 +739,8 @@ class SkillModel(GenericLikelihoodModel):
             reasons.append('Some measurements measure more than 1 factor.')
         if self.anchoring_mode == 'truly_anchor_latent_factors':
             reasons.append('The anchoring mode is not supported in wa.')
+        if 'log_ces' in self.transition_names:
+            reasons.append('The log_ces cannot be used in wa.')
 
         can_be_used = False if len(reasons) > 0 else True
 
@@ -803,7 +812,19 @@ class SkillModel(GenericLikelihoodModel):
             return start
 
     def _generate_wa_based_start_params(self):
-        raise NotImplementedError
+        long_params = self.estimate_params_wa
+        short_params = self.reduceparams(long_params)
+
+        # for robustness, replace very small estimated variances
+        # this is necessary because these variances are estimated quite
+        # imprecisely with the wa estimator and might even be negative which
+        # would totally crash the chs estimator.
+        slices = self.params_slices('short')
+        for quant in ['R', 'Q']:
+            sl = slices[quant]
+            short_params[sl][short_params[sl] <= 0.05] = 0.05
+
+        return short_params
 
     def generate_start_params(self):
         """Vector with start values for the optimization."""
@@ -811,7 +832,15 @@ class SkillModel(GenericLikelihoodModel):
             if self._correct_len_of_start_params() is True:
                 start = self.start_params
         elif self._wa_params_can_be_used_for_start_params() is True:
-            start = self._generate_wa_based_start_params()
+            try:
+                start = self._generate_wa_based_start_params()
+            except:
+                warn_message = (
+                    'Fitting model {} with the wa estimator in order to get '
+                    'start values for the chs estimator failed. Instead '
+                    'naive start params will be used.'.format(self.model_name))
+                warnings.warn(warn_message)
+                start = self._generate_naive_start_params()
         else:
             start = self._generate_naive_start_params()
         return start

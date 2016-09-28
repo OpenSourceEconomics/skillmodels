@@ -173,16 +173,24 @@ class TestMapParamsToXZero:
                                  self.slice)
         aae(self.initial, exp)
 
-    def test_transform_params_for_X_zero_without_replacements(self):
+    def test_transform_params_for_X_zero_no_replacements_short_to_long(self):
         params_for_X_zero = self.params[self.slice]
-        result = pp.transform_params_for_X_zero(params_for_X_zero, self.filler)
+        result = pp.transform_params_for_X_zero(
+            params_for_X_zero, self.filler, 'short_to_long')
         aae(result, params_for_X_zero)
 
-    def test_transform_params_for_X_zero_with_replacements(self):
+    def test_transform_params_for_X_zero_short_to_long(self):
         params_for_X_zero = self.params[self.slice]
         expected = np.array([10, 11, 12, 23, 14, 15])
-        result = pp.transform_params_for_X_zero(params_for_X_zero, self.filler,
-                                                self.replacements)
+        result = pp.transform_params_for_X_zero(
+            params_for_X_zero, self.filler, 'short_to_long', self.replacements)
+        aae(result, expected)
+
+    def test_transform_params_for_X_zero_long_to_short(self):
+        params_for_X_zero = np.array([10, 11, 12, 23, 14, 15])
+        expected = np.array([10, 11, 12, 13, 14, 15])
+        result = pp.transform_params_for_X_zero(
+            params_for_X_zero, self.filler, 'long_to_short', self.replacements)
         aae(result, expected)
 
 
@@ -349,31 +357,52 @@ class TestMapParamsToPZero:
 
         aae(self.sqrt_initial, exp)
 
-    def test_transform_params_for_p_zero_no_transform(self):
-        params_for_X_zero = self.params[self.slice_2mat]
+    def test_transform_params_for_p_zero_no_transform_short_to_long(self):
+        params_for_P_zero = self.params[self.slice_2mat]
         result = pp.transform_params_for_P_zero(
-            params_for_X_zero, self.filler_2mat, self.boo_2mat, True)
-        aae(result, params_for_X_zero)
+            params_for_P_zero, self.filler_2mat, self.boo_2mat, True,
+            'short_to_long')
+        aae(result, params_for_P_zero)
 
-    def test_transform_params_for_p_zero(self):
-        params_for_X_zero = self.params[self.slice_2mat]
+    def test_transform_params_for_p_zero_short_to_long(self):
+        params_for_P_zero = self.params[self.slice_2mat]
         result = pp.transform_params_for_P_zero(
-            params_for_X_zero, self.filler_2mat, self.boo_2mat, False)
+            params_for_P_zero, self.filler_2mat, self.boo_2mat, False,
+            'short_to_long')
 
         expected = np.array(
             [100, 20, 10, 173, 41, 235, 256, 32, 16, 365, 78, 458])
 
         aae(result, expected)
 
+    def test_transform_params_for_p_zero_long_to_short(self):
+        params_for_P_zero = expected = np.array(
+            [100, 20, 10, 173, 41, 235, 256, 32, 16, 365, 78, 458])
+        result = pp.transform_params_for_P_zero(
+            params_for_P_zero, self.filler_2mat, self.boo_2mat, False,
+            'long_to_short')
 
-def fake_transform_func(coeffs, inlcluded_factors, out):
-    out[:] = 1.0
+        expected = self.params[self.slice_2mat]
+        aae(result, expected)
+
+
+def fake_transform_func(coeffs, inlcluded_factors, direction, out):
+    if direction == 'short_to_long':
+        out[:-1] = coeffs * 2
+        out[-1] = 1
+    else:
+        out[:] = coeffs[:-1] / 2
 
 
 def fake_map_func(params, initial, params_slice, transform_funcs=None,
-                  included_factors=None):
-    initial[0][:] = np.arange(6).reshape(2, 3)
-    initial[1][:] = np.arange(10).reshape(2, 5) + 6
+                  included_factors=None, direction='short_to_long'):
+
+    if direction == 'short_to_long':
+        initial[0][:] = np.arange(6).reshape(2, 3)
+        initial[1][:] = np.arange(start=6, stop=16).reshape(2, 5)
+    if direction == 'long_to_short':
+        initial[0][:] = np.arange(6).reshape(2, 3) / 2
+        initial[1][:] = np.arange(start=6, stop=14).reshape(2, 4) / 2
 
 
 class TestMapParamsToTransCoeffs:
@@ -381,8 +410,10 @@ class TestMapParamsToTransCoeffs:
         self.initial_no_transform = [np.zeros((2, 3)), np.zeros((2, 4))]
         self.initial_transform = [np.zeros((2, 3)), np.zeros((2, 5))]
         self.params = np.arange(100)
-        self.slice = [[slice(10, 13), slice(13, 16)],
-                      [slice(16, 20), slice(20, 24)]]
+        self.short_slice = [[slice(10, 13), slice(13, 16)],
+                            [slice(16, 20), slice(20, 24)]]
+        self.long_slice = [[slice(10, 13), slice(13, 16)],
+                           [slice(16, 21), slice(21, 26)]]
         self.transform_funcs = [None, 'some_transform_func']
         self.included = [[], ['f1', 'f2']]
 
@@ -391,32 +422,52 @@ class TestMapParamsToTransCoeffs:
         exp2 = np.array([[16, 17, 18, 19], [20, 21, 22, 23]])
 
         pp._map_params_to_trans_coeffs(
-            self.params, self.initial_no_transform, self.slice)
+            self.params, self.initial_no_transform, self.short_slice)
 
         aae(self.initial_no_transform[0], exp1)
         aae(self.initial_no_transform[1], exp2)
 
     @patch('skillmodels.estimation.parse_params.tf')
-    def test_map_params_to_trans_coeffs_with_transformation(self, mock_tf):
+    def test_map_params_to_trans_coeffs_short_to_long(self, mock_tf):
         mock_tf.some_transform_func.side_effect = fake_transform_func
         exp1 = np.array([[10, 11, 12], [13, 14, 15]])
-        exp2 = np.ones((2, 5))
+        exp2 = np.array([[32, 34, 36, 38, 1], [40, 42, 44, 46, 1]])
 
         pp._map_params_to_trans_coeffs(
-            self.params, self.initial_transform, self.slice,
+            self.params, self.initial_transform, self.short_slice,
             self.transform_funcs, self.included)
 
         aae(self.initial_transform[0], exp1)
         aae(self.initial_transform[1], exp2)
 
+    @patch('skillmodels.estimation.parse_params.tf')
+    def test_map_params_to_trans_coeffs_long_to_short(self, mock_tf):
+        mock_tf.some_transform_func.side_effect = fake_transform_func
+        exp1 = np.array([[10, 11, 12], [13, 14, 15]])
+        exp2 = np.array([[8, 8.5, 9, 9.5], [10.5, 11, 11.5, 12]])
+        pp._map_params_to_trans_coeffs(
+            self.params, self.initial_no_transform, self.long_slice,
+            self.transform_funcs, self.included, 'long_to_short')
+        aae(self.initial_no_transform[0], exp1)
+        aae(self.initial_no_transform[1], exp2)
+
     @patch('skillmodels.estimation.parse_params._map_params_to_trans_coeffs')
-    def test_transform_params_for_trans_coeffs(self, mock):
+    def test_transform_params_for_trans_coeffs_short_to_long(self, mock):
         mock.side_effect = fake_map_func
         result = pp.transform_params_for_trans_coeffs(
-            self.params, self.initial_transform, self.slice,
-            self.transform_funcs, self.included)
+            self.params, self.initial_transform, self.short_slice,
+            self.transform_funcs, self.included, 'short_to_long')
 
         aae(result, np.arange(16))
+
+    @patch('skillmodels.estimation.parse_params._map_params_to_trans_coeffs')
+    def test_transform_params_for_trans_coeffs_long_to_short(self, mock):
+        mock.side_effect = fake_map_func
+        result = pp.transform_params_for_trans_coeffs(
+            self.params, self.initial_no_transform, self.long_slice,
+            self.transform_funcs, self.included, 'long_to_short')
+
+        aae(result, np.arange(14) / 2)
 
 
 if __name__ == '__main__':
