@@ -991,13 +991,13 @@ class TestBSMethods:
         assert_raises(
             AssertionError, smo._check_bs_samples, self)
 
-    def test__generate_bs_samples(self):
+    def test__select_bs_samples(self):
         np.random.seed(495)
         expected_samples = [
             ['id_1', 'id_1', 'id_1'],
             ['id_0', 'id_2', 'id_2'],
             ['id_2', 'id_2', 'id_1']]
-        calc_samples = smo._generate_bs_samples(self)
+        calc_samples = smo._select_bs_samples(self)
         assert_equal(calc_samples, expected_samples)
 
     def test__generate_bootstrap_data(self):
