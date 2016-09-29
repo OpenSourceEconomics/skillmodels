@@ -1291,7 +1291,13 @@ class SkillModel(GenericLikelihoodModel):
                 iv_arrs = iv_reg_array_dict(
                     dep, indep, instr, trans_name, data)
                 non_missing_index = iv_arrs.pop('non_missing_index')
-                deltas = iv_reg(**iv_arrs)
+                try:
+                    deltas = iv_reg(**iv_arrs)
+                except:
+                    print('period:', period)
+                    print('factor:', factor)
+                    print('nobs:', len(data))
+                    print('data:\n', data)
                 iv_coeffs.loc[(dep, counter)] = deltas
                 y, x = iv_arrs['depvar_arr'], iv_arrs['indepvars_arr']
                 u = pd.Series(data=y - np.dot(x, deltas),
@@ -1313,25 +1319,26 @@ class SkillModel(GenericLikelihoodModel):
             return iv_coeffs, u_var_sr
 
     def model_coeffs_from_iv_coeffs_args_dict(self, period, factor):
-        norm_dict = {}
+        args = {}
 
         load_norm = self.normalizations[factor]['loadings'][period]
         if len(load_norm) == 0:
             load_norm = None
-        norm_dict['loading_norminfo'] = load_norm
+        args['loading_norminfo'] = load_norm
 
         inter_norm = self.normalizations[factor]['intercepts'][period]
         if len(inter_norm) == 0:
             inter_norm = None
-        norm_dict['intercept_norminfo'] = inter_norm
+        args['intercept_norminfo'] = inter_norm
 
         stage = self.stagemap[period]
         for rtype in ['coeff_sum_value', 'trans_intercept_value']:
             restriction = self.identified_restrictions[rtype].loc[
                 stage, factor]
             if restriction is not None:
-                norm_dict[rtype] = restriction
-        return norm_dict
+                args[rtype] = restriction
+
+        return args
 
     def update_identified_restrictions(
             self, stage, factor, coeff_sum, intercept):

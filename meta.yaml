@@ -1,6 +1,6 @@
 package:
   name: skillmodels
-  version: "0.0.0225"
+  version: "0.0.0237"
 
 source:
   path: ../skillmodels

@@ -580,12 +580,13 @@ def general_model_coeffs_from_iv_coeffs(
     """
     # assert statements
     to_check = [coeff_sum_value, loading_norminfo]
-    assert None in to_check, ('')
-    assert to_check != [None, None], ('')
+    assert None in to_check, ('Overidentified scale')
+    assert to_check != [None, None], ('Underidentified scale')
 
     to_check = [trans_intercept_value, intercept_norminfo]
-    assert None in to_check, ('')
-    assert to_check != [None, None], ('')
+    assert None in to_check, ('Overidentified location')
+    if has_trans_intercept:
+        assert to_check != [None, None], ('Underidentified location')
 
     assert iv_intercept_position in [0, -1], ('')
 

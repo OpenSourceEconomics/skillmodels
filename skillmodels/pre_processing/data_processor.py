@@ -49,8 +49,9 @@ class DataProcessor:
         df_list = []
         for t in self.periods:
             measurements = list(self.update_info.loc[t].index)
-            df = self.data[self.data[self.period_identifier] == t][
-                measurements]
+            df = self.data[self.data[self.period_identifier] == t]
+            df.set_index(self.person_identifier, inplace=True, drop=True)
+            df = df[measurements]
 
             if t > 0:
                 for f, factor in enumerate(self.factors):

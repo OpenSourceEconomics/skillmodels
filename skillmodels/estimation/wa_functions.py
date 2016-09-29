@@ -274,7 +274,12 @@ def iv_reg(depvar_arr, indepvars_arr, instruments_arr, fit_method='2sls'):
 def _iv_math(y, x, z, w):
     xTz = x.T.dot(z)
     helper = xTz.dot(w)
-    inverse_part = np.linalg.pinv(np.dot(helper, xTz.T))
+    try:
+        inverse_part = np.linalg.pinv(np.dot(helper, xTz.T))
+    except:
+        print('non_invertible_matrix:\n', np.dot(helper, xTz.T))
+        print('z_matrix:\n', z)
+        print('helper:\n', helper)
     y_part = helper.dot(z.T.dot(y))
     beta = inverse_part.dot(y_part)
 
@@ -284,7 +289,11 @@ def _iv_math(y, x, z, w):
 def _iv_gmm_weights(z, u=None):
     nobs, k_prime = z.shape
     if u is None:
-        w = np.linalg.pinv(np.dot(z.T, z) / nobs)
+        try:
+            w = np.linalg.pinv(np.dot(z.T, z) / nobs)
+        except:
+            print('non_invertible_matrix:\n', np.dot(z.T, z) / nobs)
+            print('z_matrix:\n', z)
     else:
         u_squared = u ** 2
         outerprod = z.reshape(nobs, 1, k_prime) * z.reshape(nobs, k_prime, 1)
