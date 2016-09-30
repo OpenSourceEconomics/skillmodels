@@ -22,7 +22,6 @@ Optional arguments of SkillModel are:
 * model_name: a string that gives a name to the model that will be used in error messages or warnings. If you estimate several models it will help you a lot to locate the problems.
 * dataset_name: same as model_name
 * save_path: a string that indicates where intermediate results are saved. Saving intermediate results is optional and can be controlled in the "general" section of the model_dict. If anything is saved, you must provide a save_path.
-* quiet_mode: a boolean variable. If True some errors and warnings are not raised.
 * bootstrap_samples: a list of lists. Each sublist contains a sample of elements from the 'person_identifier' column of the dataset. If you don't specify this argument, sampling for bootstrap is handled automatically. For this it is assumed that your data is iid.
 
 

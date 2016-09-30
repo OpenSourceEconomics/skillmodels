@@ -18,21 +18,45 @@ class SkillModelResults(GenericLikelihoodModelResults):
         self.__dict__.update(mlefit.__dict__)
         self.param_names = model.param_names(params_type='long')
 
-    def summary(self, yname=None, xname=None, title=None, alpha=.05):
-        raise NotImplementedError(
-            'The summary method is not yet implemented for CHSModelResults')
+    @cache_readonly
+    def aic(self):
+        if self.estimator == 'chs':
+            return super(SkillModelResults, self).aic()
+        else:
+            raise NotApplicableError(
+                'aic only works for likelihood based models.')
 
     @cache_readonly
     def df_modelwc(self):
         return self.df_model
 
     @cache_readonly
+    def bic(self):
+        raise NotImplementedError
+
+
+
+
+
+
+    def summary(self, yname=None, xname=None, title=None, alpha=.05):
+        raise NotImplementedError(
+            'The summary method is not yet implemented for CHSModelResults')
+
+
+    @cache_readonly
     def llf(self):
-        if self.estimator == 'wa':
+        if self.estimator == 'chs':
             return self.optimize_dict['log_lh_value']
         else:
             raise NotApplicableError(
                 'If the wa estimator was used there is no likelihood value.')
+
+    @cache_readonly
+    def score_obsv(self):
+        if self.estimator == 'wa':
+            raise NotApplicableError
+        raise NotImplementedError
 
     def bootstrap(self, nrep=100, method='nm', disp=0, store=1):
         # TODO: write this function. should be a call to model.bootstrap
@@ -60,13 +84,8 @@ class SkillModelResults(GenericLikelihoodModelResults):
         raise NotImplementedError(
             'A predict method is not yet implemented for CHSModelResults')
 
-    @cache_readonly
-    def bic(self):
-        raise NotImplementedError
 
-    @cache_readonly
-    def score_obsv(self):
-        raise NotImplementedError
+
 
     @cache_readonly
     def hessv(self):

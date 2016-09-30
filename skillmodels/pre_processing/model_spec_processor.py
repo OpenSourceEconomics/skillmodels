@@ -4,6 +4,7 @@ import numpy as np
 from itertools import product
 import skillmodels.model_functions.transition_functions as tf
 import os
+import warnings
 
 
 class ModelSpecProcessor:
@@ -27,15 +28,15 @@ class ModelSpecProcessor:
 
     def __init__(
             self, model_dict, dataset, estimator, model_name='some_model',
-            dataset_name='some_dataset', save_path=None, quiet_mode=False):
-        # TODO: check where I could use quiet mode
+            dataset_name='some_dataset', save_path=None,
+            bootstrap_samples=None):
         self.model_dict = model_dict
         self.data = dataset
         self.estimator = estimator
         self.model_name = model_name
         self.dataset_name = dataset_name
         self.save_path = save_path
-        self.quiet_mode = quiet_mode
+        self.bootstrap_samples = bootstrap_samples
         if 'time_specific' in model_dict:
             self._timeinf = model_dict['time_specific']
         else:
@@ -86,7 +87,6 @@ class ModelSpecProcessor:
              'bootstrap_nreps': 300,
              'bootstrap_sample_size': None,
              'bootstrap_nprocesses': None,
-             'save_bootstrap_params': True,
              'anchoring_mode': 'only_estimate_anchoring_equation'
              }
 
@@ -95,8 +95,6 @@ class ModelSpecProcessor:
         self.__dict__.update(general_settings)
         self.standard_error_method = getattr(
             self, '{}_standard_error_method'.format(self.estimator))
-        if self.standard_error_method == 'bootstrap':
-            self._asserts_and_warnings_for_bootstrap()
         if self.estimator == 'wa':
             self.nemf = 1
         self._set_time_specific_attributes()
@@ -109,8 +107,7 @@ class ModelSpecProcessor:
         self._clean_measurement_specifications()
         self._clean_controls_specification()
         self.nobs = self.obs_to_keep.sum()
-        if self.bootstrap_sample_size is None:
-            self.bootstrap_sample_size = self.nobs
+        self._set_bootstrap_sample_size()
         self._check_or_generate_normalization_specification()
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
@@ -119,6 +116,21 @@ class ModelSpecProcessor:
             self._wa_period_weights()
             self._wa_storage_df()
             self._wa_identified_transition_function_restrictions()
+
+    def _set_bootstrap_sample_size(self):
+        if self.bootstrap_samples is not None:
+            bs_n = len(self.bootstrap_samples[0])
+            if self.bootstrap_sample_size is not None:
+                if bs_n != self.bootstrap_sample_size:
+                    message = (
+                        'The bootsrap_sample_size you specified in the general'
+                        ' section of the model dict in model {} does not '
+                        'coincide with the bootstrap_samples you provide '
+                        'and will be ignored.').format(self.model_name)
+                    warnings.warn(message)
+            self.bootstrap_sample_size = bs_n
+        elif self.bootstrap_sample_size is None:
+            self.bootstrap_sample_size = self.nobs
 
     def _generate_save_directories(self):
         if self.save_intermediate_optimization_results is True:
@@ -185,7 +197,6 @@ class ModelSpecProcessor:
 
         something_ist_saved = self.save_intermediate_optimization_results or \
             self.save_params_before_calculating_standard_errors
-
         if something_ist_saved is True:
             assert self.save_path is not None, (
                 'If you specified to save intermediate optimization '
@@ -196,13 +207,6 @@ class ModelSpecProcessor:
             assert self.probit_measurements is False, (
                 'It is not possible to estimate probit measurement equations '
                 'with the wa estimator.')
-
-    def _asserts_and_warnings_for_bootstrap(self):
-        # TODO: write this function!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # make asserts about the handling of missing variables and the like
-        # asserts should ensure that the exactly same model is estimated with
-        # all bootstrap datasets.
-        pass
 
     def _transition_equation_names(self):
         """Construct a list with the transition equation name for each factor.
@@ -447,7 +451,7 @@ class ModelSpecProcessor:
                 if len(self._timeinf['controls'][t]) > 0:
                     self.uses_controls = True
 
-        if self.estimator == 'wa' and self.quiet_mode is False:
+        if self.estimator == 'wa':
             if self.uses_controls is True:
                 print('The control variables you specified in model {} will '
                       'be ignored when the model is estimated with the wa '
