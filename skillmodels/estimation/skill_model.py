@@ -8,7 +8,8 @@ from skillmodels.estimation.wa_functions import initial_meas_coeffs, \
     transition_error_variance_from_u_covs, anchoring_error_variance_from_u_vars
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
-from skillmodels.estimation.skill_model_results import SkillModelResults
+from skillmodels.estimation.skill_model_results import \
+    SkillModelResults, NotApplicableError
 import numpy as np
 import skillmodels.model_functions.transition_functions as tf
 import skillmodels.estimation.parse_params as pp
@@ -19,10 +20,6 @@ import pandas as pd
 import json
 from multiprocessing import Pool
 import warnings
-
-
-class NotApplicableError(Exception):
-    pass
 
 
 class SkillModel(GenericLikelihoodModel):
@@ -474,13 +471,16 @@ class SkillModel(GenericLikelihoodModel):
 
     def _P_zero_names(self, params_type):
         """List with names for the params mapped to P_zero."""
-        # TODO make it work for wa, where the conditions I check are not testable
         P_zero_names = []
         format_string = 'P_zero__{}__{}__{}'
-        if self.cholesky_of_P_zero is True or params_type == 'short':
-            format_string = 'cholesky_' + format_string
+        if self.estimator == 'chs':
+            if self.cholesky_of_P_zero is True or params_type == 'short':
+                format_string = 'cholesky_' + format_string
 
-        nr_matrices = 1 if self.restrict_P_zeros is True else self.nemf
+        if self.estimator == 'chs' and self.restrict_P_zeros is True:
+            nr_matrices = 1
+        else:
+            nr_matrices = self.nemf
 
         for mat in range(nr_matrices):
             for row, factor1 in enumerate(self.factors):
@@ -1737,7 +1737,6 @@ class SkillModel(GenericLikelihoodModel):
 
     def _bs_fit(self, rep, params):
         """Check the bootstrap data and re-fit the model with it."""
-
         bootstrap_data = self._select_bootstrap_data(rep)
 
         if self.save_path is not None:
