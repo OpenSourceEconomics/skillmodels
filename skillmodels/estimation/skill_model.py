@@ -21,6 +21,10 @@ from multiprocessing import Pool
 import warnings
 
 
+class NotApplicableError(Exception):
+    pass
+
+
 class SkillModel(GenericLikelihoodModel):
     """Estimate dynamic nonlinear latent factor models.
 
@@ -762,6 +766,7 @@ class SkillModel(GenericLikelihoodModel):
         return can_be_used
 
     def _correct_len_of_start_params(self, raise_warning=True):
+        """Check if self.start_params has the correct length."""
         if len(self.start_params) == self.len_params('short'):
             return True
         else:
@@ -777,6 +782,7 @@ class SkillModel(GenericLikelihoodModel):
             return False
 
     def _generate_naive_start_params(self):
+        """Generate start_params based on self.start_values_per_quantity."""
         slices = self.params_slices(params_type='short')
         start = np.zeros(self.len_params(params_type='short'))
         vals = self.start_values_per_quantity
@@ -815,6 +821,13 @@ class SkillModel(GenericLikelihoodModel):
             return start
 
     def _generate_wa_based_start_params(self):
+        """Use wa estimates to construct a start_params vector for chs.
+
+        Fit the model with the wa estimator and use reduceparams to get a
+        params vector of type short. Then replace all estimated variances that
+        are below 0.05 with 0.05 for robustness reasons.
+
+        """
         long_params = self.estimate_params_wa
         short_params = self.reduceparams(long_params)
 
@@ -1041,9 +1054,21 @@ class SkillModel(GenericLikelihoodModel):
         return args
 
     def nloglikeobs(self, params, args):
+        """Negative log likelihood function per individual.
+
+        This is the function used to calculate the standard errors based on
+        the outer product of gradients.
+
+        """
         return - log_likelihood_per_individual(params, **args)
 
     def nloglike(self, params, args):
+        """Negative log likelihood function.
+
+        This is the function used to fit the model as numeric optimization
+        methods are implemented as minimizers.
+
+        """
         if self.save_intermediate_optimization_results is True:
             path = self.save_path + '/opt_results/iteration{}.json'
             with open(path.format(self.optimize_iteration_counter), 'w') as j:
@@ -1052,13 +1077,27 @@ class SkillModel(GenericLikelihoodModel):
         return - log_likelihood_per_individual(params, **args).sum()
 
     def loglikeobs(self, params, args):
+        """Log likelihood per individual."""
         return log_likelihood_per_individual(params, **args)
 
     def loglike(self, params, args):
+        """Log likelihood."""
         return log_likelihood_per_individual(params, **args).sum()
 
     def estimate_params_chs(self, start_params=None, params_type='short',
                             return_optimize_dict=True):
+        """Estimate the params vector with the chs estimator.
+
+        Args:
+            start_params (np.ndarray): start values that take precedence over
+                all other ways of specifying start values.
+            params_type (str): specify which type of params is returned.
+                the default is short.
+            return_optimize_dict (bool): if True, in addition to the params
+                vector a dictionary with information from the numerical
+                optimization is returned.
+
+        """
         if start_params is None:
             start_params = self.generate_start_params()
         bounds = self.bounds_list()
@@ -1357,6 +1396,18 @@ class SkillModel(GenericLikelihoodModel):
 
     def update_identified_restrictions(
             self, stage, factor, coeff_sum, intercept):
+        """Update self.identified_restrictions if necessary.
+
+        Identified restrictions are sums of coefficients of transition
+        equations or intercepts of transition equations. They are used in the
+        wa estimator to calculate model coefficients from the IV regression
+        coefficients.
+
+        Using restrictions that were identified in earlier periods of a stage
+        to calculate the model parameters of later periods in a stage makes
+        it possible to use development stages without over-normalization.
+
+        """
         if coeff_sum is not None:
             self.identified_restrictions['coeff_sum_value'].loc[
                 stage, factor] = coeff_sum
@@ -1365,6 +1416,12 @@ class SkillModel(GenericLikelihoodModel):
                 stage, factor] = intercept
 
     def _calculate_wa_quantities(self):
+        """Helper function.
+
+        In this function the wa estimates are calculated, but not yet written
+        into a single params vector that can be used for later processing.
+
+        """
         self.identified_restrictions['coeff_sum_value'][:] = None
         self.identified_restrictions['trans_intercept_value'][:] = None
         t = 0
@@ -1480,6 +1537,7 @@ class SkillModel(GenericLikelihoodModel):
         return d
 
     def estimate_params_wa(self):
+        """Estimate the params vector with wa."""
         storage_df, X_zero, P_zero, trans_coeffs, trans_var_df, \
             anch_intercept, anch_loadings, anch_variance = \
             self._calculate_wa_quantities()
@@ -1552,20 +1610,52 @@ class SkillModel(GenericLikelihoodModel):
         return params
 
     def score(self, params):
-        args = self.likelihood_arguments_dict('long')
-        return approx_fprime(
-            params, self.loglike, args=(args, ), centered=True).ravel()
+        """Gradient of loglike with respect to each parameter.
+
+        To calculate the gradient, simple numerical derivatives are used.
+        """
+        if self.estimator == 'wa':
+            raise NotApplicableError(
+                'score only works for likelihood based estimators.')
+        elif not hasattr(self, 'stored_score'):
+            args = self.likelihood_arguments_dict('long')
+            self.stored_score = approx_fprime(
+                params, self.loglike, args=(args, ), centered=True).ravel()
+
+        return self.stored_score
 
     def score_obs(self, params):
-        args = self.likelihood_arguments_dict('long')
-        return approx_fprime(params, self.loglikeobs, args=(args, ),
-                             centered=True)
+        """Gradient of loglikeobs with respect to each parameter.
+
+        To calculate the gradient, simple numerical derivatives are used.
+
+        """
+        if self.estimator == 'wa':
+            raise NotApplicableError(
+                'score_obs only works for likelihood based estimators.')
+        elif not hasattr(self, 'stored_score_obs'):
+            args = self.likelihood_arguments_dict('long')
+            self.stored_score_obs = approx_fprime(
+                params, self.loglikeobs, args=(args, ), centered=True)
+        return self.stored_score_obs
 
     def hessian(self, params):
-        args = self.likelihood_arguments_dict('long')
-        return approx_hess(params, self.loglike, args=(args, ))
+        """Hessian matrix of loglike.
+
+        To calculate the hessian, simple numerical derivatives are used.
+
+        """
+        if self.estimator == 'wa':
+            raise NotApplicableError(
+                'hessian only works for likelihood based estimators.')
+        elif not hasattr(self, 'stored_hessian'):
+            args = self.likelihood_arguments_dict('long')
+            self.stored_hessian = approx_hess(
+                params, self.loglike, args=(args, ))
+        return self.stored_hessian
 
     def op_of_gradient_cov_matrix(self, params):
+        """Covariance matrix of params based on outer product of gradients."""
         assert len(params) == self.len_params('long'), (
             'Standard errors can only be calculated for params vectors of the '
             'long type. Your params vector has incorrect length in model {} '
@@ -1582,6 +1672,7 @@ class SkillModel(GenericLikelihoodModel):
         return cov
 
     def hessian_inverse_cov_matrix(self, params):
+        """Covariance matrix of params based on inverse of hessian."""
         assert len(params) == self.len_params('long'), (
             'Standard errors can only be calculated for params vectors of the '
             'long type. Your params vector has incorrect length in model {} '
@@ -1592,6 +1683,7 @@ class SkillModel(GenericLikelihoodModel):
         return cov
 
     def _check_bs_samples(self):
+        """Check validity of provided bootstrap samples."""
         assert hasattr(self.bootstrap_samples, '__iter__'), (
             'The bootstrap_samples you provided are not iterable. '
             'The bootstrap_samples must be iterable with each item providing '
@@ -1623,6 +1715,7 @@ class SkillModel(GenericLikelihoodModel):
 
         Each sublist contains the 'person_identifiers' of the individuals that
         were sampled from the dataset with replacement.
+
         """
         individuals = np.array(self.data[self.person_identifier].unique())
         selected_indices = np.random.randint(
@@ -1643,6 +1736,7 @@ class SkillModel(GenericLikelihoodModel):
         return bs_data
 
     def _bs_fit(self, rep, params):
+        """Check the bootstrap data and re-fit the model with it."""
 
         bootstrap_data = self._select_bootstrap_data(rep)
 
@@ -1696,25 +1790,29 @@ class SkillModel(GenericLikelihoodModel):
     def all_bootstrap_params(self, params):
         """Return a DataFrame of all bootstrap parameters.
 
-        Create the resampled datasets from lists of person identifiers, fit
-        the models simultaneously and save them in a DataFrame as well as in a
-        specified path, if wanted.
+        Create the resampled datasets from lists of person identifiers and fit
+        re-fit the model.
+
+        The boostrap replications are estimated in parallel, using the
+        Multiprocessing module from the Python Standard Library.
+
         """
         assert len(params) == self.len_params('long'), (
             'Standard errors can only be calculated for params vectors of the '
             'long type. Your params vector has incorrect length in model {} '
             'with dataset {}').format(self.model_name, self.dataset_name)
 
-        bs_fit_args = \
-            [(rep, params) for rep in range(self.bootstrap_nreps)]
-        with Pool(self.bootstrap_nprocesses) as p:
-            bootstrap_params = p.starmap(self._bs_fit, bs_fit_args)
-        ind = ['rep_{}'.format(rep) for rep in range(self.bootstrap_nreps)]
-        cols = self.param_names('long')
-        bootstrap_params_df = pd.DataFrame(
-            data=bootstrap_params, index=ind, columns=cols)
-        bootstrap_params_df.dropna()
-        self.bootstrap_params = bootstrap_params_df
+        if not hasattr(self, 'stored_bootstrap_params'):
+            bs_fit_args = [(r, params) for r in range(self.bootstrap_nreps)]
+            with Pool(self.bootstrap_nprocesses) as p:
+                bootstrap_params = p.starmap(self._bs_fit, bs_fit_args)
+            ind = ['rep_{}'.format(rep) for rep in range(self.bootstrap_nreps)]
+            cols = self.param_names('long')
+            bootstrap_params_df = pd.DataFrame(
+                data=bootstrap_params, index=ind, columns=cols)
+            bootstrap_params_df.dropna(inplace=True)
+            self.stored_bootstrap_params = bootstrap_params_df
+        return self.stored_bootstrap_params
 
     def bootstrap_conf_int(self, params, alpha=0.05):
         """Parameter confidence intervals from bootstrap parametres.
@@ -1730,23 +1828,31 @@ class SkillModel(GenericLikelihoodModel):
             distribution of the bootstrap parameters.
 
         """
-        if not hasattr(self, 'bootstrap_params'):
-            self.all_bootstrap_params(params)
-        lower = self.bootstrap_params.quantile(
-            0.5 * alpha, axis=0).rename('lower')
-        upper = self.bootstrap_params.quantile(
-            1 - 0.5 * alpha, axis=0).rename('upper')
+        bs_params = self.all_bootstrap_params(params)
+
+        lower = bs_params.quantile(0.5 * alpha, axis=0).rename('lower')
+        upper = bs_params.quantile(1 - 0.5 * alpha, axis=0).rename('upper')
         conf_int_df = pd.concat([lower, upper], axis=1)
         return conf_int_df
 
     def bootstrap_cov_matrix(self, params):
         """Calculate the paramater covariance matrix using bootstrap."""
-        if not hasattr(self, 'bootstrap_params'):
-            self.all_bootstrap_params(params)
-        cov = self.bootstrap_params.cov()
-        return cov
+        bs_params = self.all_bootstrap_params(params)
+        return bs_params.cov()
+
+    def bootstrap_mean(self, params):
+        bs_params = self.all_bootstrap_params(params)
+        return bs_params.mean()
+
+    def bootstrap_p_values(self, params):
+        bs_params = self.all_bootstrap_params(params)    # noqa
+        # get the p values from the bootstrap_params
+        raise NotImplementedError(
+            'Nonparametric P values from bootstrap params are not yet '
+            'implemented in SkillModel.')
 
     def fit(self, start_params=None, params=None):
+        """Fit the model and return an instance of SkillModelResults."""
         if self.estimator == 'chs':
             params, optimize_dict = self.estimate_params_chs(
                 start_params, return_optimize_dict=True, params_type='long')

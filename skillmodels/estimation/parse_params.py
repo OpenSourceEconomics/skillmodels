@@ -6,7 +6,7 @@ described in :ref:`params_and_quants`.
 
 Speed is relevant throughout this module. Therefore everything that does not
 depend on the parameter vector but only on the model specifications has
-already been done in CHSModel.
+already been done in SkillModel.
 
 """
 import skillmodels.model_functions.transition_functions as tf

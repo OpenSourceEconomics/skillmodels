@@ -1,5 +1,6 @@
 from statsmodels.base.model import GenericLikelihoodModelResults
 from statsmodels.tools.decorators import resettable_cache, cache_readonly
+import numpy as np
 
 
 class NotApplicableError(Exception):
@@ -21,28 +22,10 @@ class SkillModelResults(GenericLikelihoodModelResults):
     @cache_readonly
     def aic(self):
         if self.estimator == 'chs':
-            return super(SkillModelResults, self).aic()
+            return super(SkillModelResults, self).aic
         else:
             raise NotApplicableError(
                 'aic only works for likelihood based models.')
-
-    @cache_readonly
-    def df_modelwc(self):
-        return self.df_model
-
-    @cache_readonly
-    def bic(self):
-        raise NotImplementedError
-
-
-
-
-
-
-    def summary(self, yname=None, xname=None, title=None, alpha=.05):
-        raise NotImplementedError(
-            'The summary method is not yet implemented for CHSModelResults')
-
 
     @cache_readonly
     def llf(self):
@@ -53,59 +36,84 @@ class SkillModelResults(GenericLikelihoodModelResults):
                 'If the wa estimator was used there is no likelihood value.')
 
     @cache_readonly
-    def score_obsv(self):
-        if self.estimator == 'wa':
-            raise NotApplicableError
+    def df_modelwc(self):
+        return self.df_model
+
+    @cache_readonly
+    def bic(self):
         raise NotImplementedError
 
-    def bootstrap(self, nrep=100, method='nm', disp=0, store=1):
-        # TODO: write this function. should be a call to model.bootstrap
-        # or a lookup if this is the standard_error_method
+    @cache_readonly
+    def covbs(self):
+        """Return boostrap covariance matrix.
+
+        Why is this handled differently than other cov matrices in Statsmodels?
+
+        """
+        return self.model.bootstrap_cov_matrix(self.params)
+
+    @cache_readonly
+    def bsebs(self):
+        """Return bootstrap standard errors.
+
+        Why is this handled differently than other cov matrices in Statsmodels?
+
+        """
+        return np.sqrt(np.diag(self.covbs))
+
+    def bootstrap(self):
+        """A dictionary with all bootstrapped statistics.
+
+        Currently implemented are:
+            * covariance matrix
+            * standard_errors
+            * mean
+            * conf_int
+
+        I plan to add p_values.
+        """
+        bs_dict = {}
+        bs_dict['covariance_matrix'] = self.covbs
+        bs_dict['standard_errors'] = self.bsebs
+        bs_dict['mean'] = self.model.bootstrap_mean(self.params)
+        bs_dict['conf_int'] = self.model.bootstrap_conf_int(self.params)
+
+        return bs_dict
+
+    def summary(self, yname=None, xname=None, title=None, alpha=.05):
         raise NotImplementedError(
-            'Bootstrap is not yet implemented for CHSModelResults')
+            'The summary method is not yet implemented for SkillModelResults')
 
     def get_nlfun(self, fun):
+        # in the super class this is a do-nothing function
+        # for safety I raise an error here.
         raise NotImplementedError
+
+    def conf_int(self):
+        if self.model.standard_error_method == 'bootstrap':
+            return self.model.bootstrap_conf_int(self.params)
+        else:
+            return super(SkillModelResults, self).conf_int()
 
     def save(self, fname, remove_data=False):
         raise NotImplementedError(
-            'A save method is not yet implemented for CHSModelResults')
+            'A save method is not yet implemented for SkillModelResults')
 
     @classmethod
     def load(cls, fname):
         raise NotImplementedError(
-            'A load method is not yet implemented for CHSModelResults')
+            'A load method is not yet implemented for SkillModelResults')
 
     def remove_data(self):
         raise NotImplementedError(
-            'A remove_data method is not yet implemented for CHSModelResults')
+            'A remove_data method is not yet implemented for '
+            'SkillModelResults.')
 
     def predict(self, exog=None, transform=True, *args, **kwargs):
         raise NotImplementedError(
-            'A predict method is not yet implemented for CHSModelResults')
+            'A predict method is not yet implemented for SkillModelResults')
 
 
-
-
-    @cache_readonly
-    def hessv(self):
-        raise NotImplementedError
-
-    @cache_readonly
-    def covjac(self):
-        raise NotImplementedError
-
-    @cache_readonly
-    def covjhj(self):
-        raise NotImplementedError
-
-    @cache_readonly
-    def bsejhj(self):
-        raise NotImplementedError
-
-    @cache_readonly
-    def bsejac(self):
-        raise NotImplementedError
 
 
 

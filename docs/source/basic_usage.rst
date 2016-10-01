@@ -6,12 +6,14 @@ Basic Usage
 
 Fitting models is very similar to fitting models in `Statsmodels`_
 
-The main object a user interacts with is ``SkillModel`` (see :ref:`estimation`) which is a subclass of Statsmodels `GenericLikelihoodModel`_. To create an instance of this class just type:
+The main object a user interacts with is ``SkillModel`` (see :ref:`estimation`) which is a subclass of Statsmodel's `GenericLikelihoodModel`_. To create an instance of this class just type:
 
 .. code::
 
     from skillmodels import SkillModel
     mod = SkillModel(model_dict, dataset, estimator)
+
+The mandatory arguments of SkillModel are:
 
 * model_dict: dictionary that defines the model (usually loaded from a json file). See :ref:`model_specs` for details.
 * dataset: a pandas dataframe in long format. It has to contain columns that identify the period and individual. The names of these columns are indicated as 'period_identifier' and 'person_identifier' in the general section of the model dictionary. The default values are 'period' and 'id'.
@@ -47,17 +49,13 @@ will return an instance of ``SkillModelResults`` which is a subclass of ``Generi
     # access the confidence intervals (5 %)
     confidence_intervals = res.conf_int
 
-Some methods are not yet implemented but will be in the future:
+For the chs estimator you can also use the many other ways of calculating standard errors documented `here`_. It should already work to use the t-test, f-test and wald-test as described `here`_ but I haven't tested it yet.
+
+Some methods are not yet implemented but are on my To-Do list:
 
     * save, load and remove_data
     * summary
     * predict
-    * other ways to calculate the standard errors
-
-It should already work to use the t-test, f-test and wald-test as described `here`_ but I haven't tested it yet.
-
-.. Note:: As done in several places in Statsmodels, I will continue to use the structure of the
-    LikelihoodResults and GenericLikelihoodModel classes also for other estimators. Of course, the ML specific ways to calculate standard errors and make tests are will raise an error if other estimators were used to fit the model.
 
 .. Note:: Some functions of the CHS estimator use numpy functions that call fast multithreaded
     routines from the Intel Math Kernel Library (MKL). This is usually what you want, but if you fit several models in parallel (e.g. if you have datasets from different countries or you calculate boostrap standard errors) you might get better results if reduce the number of threads used. To do so, see the `documentation`_ of Anaconda.

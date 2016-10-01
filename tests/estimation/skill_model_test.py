@@ -975,7 +975,6 @@ class TestBSMethods:
             'id_0', 'id_0', 'id_0', 'id_1', 'id_1', 'id_1', 'id_2', 'id_2', 'id_2']) # noqa
         self.bootstrap_sample_size = 3
         self.nobs = 3
-        self.save_bootstrap_params = False
         self.bootstrap_nprocesses = 2
 
     def test_check_bs_samples_accepts_iterable(self):
@@ -1005,7 +1004,7 @@ class TestBSMethods:
         calc_samples = smo._generate_bs_samples(self)
         assert_equal(calc_samples, expected_samples)
 
-    def test__select_bootstrap_data(self):
+    def test_select_bootstrap_data(self):
         expected_data = pd.DataFrame(
             data=np.array([
                 [0.0, 1.0, 2.0, 0.0, 1.0, 2.0, 0.0, 1.0, 2.0],
@@ -1029,8 +1028,7 @@ class TestBSMethods:
         return 3
 
     def test_all_bootstrap_params(self):
-        smo.all_bootstrap_params(self, params=np.ones(3))
-        calc_params = self.bootstrap_params
+        calc_params = smo.all_bootstrap_params(self, params=np.ones(3))
         expected_params = pd.DataFrame(
             data=[[0.0] * 3, [1.0] * 3, [2.0] * 3],
             index=['rep_0', 'rep_1', 'rep_2'],
@@ -1048,7 +1046,10 @@ class TestBootstrapParamsToConfInt:
         ind = ['rep_{}'.format(i) for i in range(100)]
         df = pd.DataFrame(data=bs_data, columns=cols, index=ind)
 
-        self.bootstrap_params = df
+        self.stored_bootstrap_params = df
+
+    def all_bootstrap_params(self, params):
+        return self.stored_bootstrap_params
 
     def test_bootstrap_conf_int(self):
         expected_conf_int = pd.DataFrame(
@@ -1078,7 +1079,7 @@ class TestBootstrapCovMatrix:
         fake_df = pd.DataFrame(
             data=fake_bs_params, columns=self.par_names,
             index=['rep1', 'rep2', 'rep3'])
-        self.bootstrap_params = fake_df
+        return fake_df
 
     def test_bootstrap_cov_matrix(self):
         calc_cov = smo.bootstrap_cov_matrix(self, self.params)
