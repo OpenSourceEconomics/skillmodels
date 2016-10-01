@@ -21,6 +21,7 @@ The CHS estimator implemented here differs in two points from the estimator impl
 
 The WA estimator differs in three points: 1) In order to make the wa estimates usable as start values for the chs estimator, I extended it to also estimate measurement error variances and anchoring equation variances. 2) Development stages (i.e. the same technology of skill formation in several periods) can be used. 3) It is possible to use non-KLS transition functions as long as enough normalizations are provided.
 
+
 Most of the code is unit tested. Furthermore, the results of the CHS estimator have been compared to the Fortran code by CHS for two basic models with hypothetical data from their [replication files](https://www.econometricsociety.org/content/supplement-estimating-technology-cognitive-and-noncognitive-skill-formation-0). For the WA estimator, I wrote a comprehensive integration test with simulated data.
 
 
