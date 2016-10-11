@@ -45,6 +45,19 @@ make html
 to generate detailed documentation.
 
 
+Building the package with conda-build
+-------------------------------------
+
+If you want to make changes to the source code of skillmodels or build the package on your machine for any other reason, you can do so with conda-build.
+
+* clone the repository and make your changes
+* Install conda-build 2.0 or higher (earlier versions won't work!)
+* Adjust the version number in setup.py and meta.yaml.
+* Open a shell in the directory that contains skillmodels (i.e. one level higher than your git repository)
+* type: conda build skillmodels
+
+For more information see the [conda documentation](http://conda.pydata.org/docs/building/build.html)
+
 
 
 

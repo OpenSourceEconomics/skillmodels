@@ -1,6 +1,7 @@
 from statsmodels.base.model import GenericLikelihoodModelResults
 from statsmodels.tools.decorators import resettable_cache, cache_readonly
 import numpy as np
+from statsmodels.tools.numdiff import approx_fprime, approx_fprime_cs
 
 
 class NotApplicableError(Exception):
@@ -112,6 +113,48 @@ class SkillModelResults(GenericLikelihoodModelResults):
     def predict(self, exog=None, transform=True, *args, **kwargs):
         raise NotImplementedError(
             'A predict method is not yet implemented for SkillModelResults')
+
+    def marginal_effecs(self, of, on, at=None, anchor_on=True, centered=True,
+                        complex_step=False):
+        """
+        Marginal effects of a factor in all periods on a last period outcome.
+
+        The marginal effect will be calculated by simple numerical differentiation.
+
+        Args:
+            of (str): the name of a factor that causes the marginal effect
+            on (str): the last period outcome that is influenced by the effect.
+                This can be the name of a factor or 'anch_outcome'.
+            at (DataFrame): the start factors at which the marginal effects are
+                calculated. If not specified, they will be generated from a
+                multivariate normal distribution.
+            anchor_on (bool): If True and *on* is the name of an anchored
+                factor, *on* will be multiplied with its anchoring loading such
+                that the marginal effect can be interpreted as an effet on
+                the anchoring outcome through a change in *on*.
+            centered ()
+
+        """
+        assert self.model.endog_correction is False, (
+            'Currently, marginal effects cannot be calculated if endogeneity '
+            'correction is used.')
+
+        self.model.me_of = of
+        self.model.me_on = on
+        self.model.me_at = at
+        self.model.me_anchor_on = anchor_on
+        self.model.me_params = self.params
+
+        change = np.zeros(self.nperiods - 1)
+
+        diff_func = \
+            approx_fprime if complex_step is False else approx_fprime_cs
+
+        me = diff_func(change, self.model._marginal_effect_outcome, centered)
+
+        return me
+
+
 
 
 

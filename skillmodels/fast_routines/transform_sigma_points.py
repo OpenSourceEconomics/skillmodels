@@ -13,8 +13,7 @@ def transform_sigma_points(
     """Transform an array of sigma_points for the unscented predict.
 
     This function automatically anchors the sigma points and unanchors the
-    results if this is specified. It also automatically performs endogeneity
-    correction for an endogenous factor if specified.
+    results if this is specified.
 
     """
     nfac = flat_sigma_points.shape[1]

@@ -10,9 +10,14 @@ from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
 from skillmodels.estimation.skill_model_results import \
     SkillModelResults, NotApplicableError
+from skillmodels.fast_routines.transform_sigma_points import \
+    transform_sigma_points
 import numpy as np
 import skillmodels.model_functions.transition_functions as tf
+from skillmodels.estimation.parse_params import parse_params
 import skillmodels.estimation.parse_params as pp
+import skillmodels.model_functions.anchoring_functions as anch
+
 from itertools import product
 from scipy.optimize import minimize
 from statsmodels.tools.numdiff import approx_hess, approx_fprime
@@ -1868,3 +1873,126 @@ class SkillModel(GenericLikelihoodModel):
 
         skillmodel_res = SkillModelResults(self, like_res, optimize_dict)
         return skillmodel_res
+
+    def _generate_start_factors(self):
+        """Start factors for simulations or marginal effects.
+
+        Returns:
+            start_factors (np.ndarray): array of size (self.nobs, self.nfac)
+                with a simulated sample of initial latent factors.
+
+        """
+        assert self.nemf == 1, (
+            'Start factors for simulation can currently only be generated '
+            'if nemf == 1.')
+
+        # get start means
+        slices = self.params_slices('long')
+        if 'X_zero' in self.params_quants:
+            X_zero = self.me_params[slices['X_zero']]
+        else:
+            X_zero = np.zeros(self.nfac)
+
+        # get start covariance matrix
+        p_params = self.me_params[slices['P_zero']]
+        p_helper = np.zeros(self.nfac)
+        p_helper[np.triu_indices(self.nfac)] = p_params
+
+        if self.estimator == 'chs' and self.cholesky_of_P_zero is True:
+            P_zero = np.dot(p_helper.T, p_helper)
+        else:
+            p_helper_2 = p_helper - np.diag(np.diagonal(p_helper)).T
+            P_zero = p_helper + p_helper_2
+
+        # generate the sample
+        start_factors = np.random.multivariate_normal(
+            mean=X_zero, cov=P_zero, size=self.nobs)
+
+        return start_factors
+
+    def _predict_final_factors(self, change):
+
+        assert self.endog_correction is False, (
+            'Currently, final factors can only be predicted if no '
+            'endogeneity correction is used.')
+
+        assert len(change) == self.nperiods - 1, (
+            'factor_change must have len nperiods - 1.')
+
+        changed_pos = self.factors.index(self.me_of)
+        args = self.likelihood_arguments_dict('long')
+        tsp_args = args['predict_args']['transform_sigma_points_args']
+        pp_args = args['parse_params_args']
+        parse_params(self.me_params, **pp_args)
+
+        start_factors = self.me_at
+
+        for t, stage in enumerate(self.stagemap[:-1]):
+            start_factors[:, changed_pos] += change[t]
+            transform_sigma_points(stage, start_factors, **tsp_args)
+
+        return start_factors
+
+    def _select_final_factor(self, final_factors):
+        assert self.anchoring is True
+        pos = self.factors.index(self.me_on)
+        return final_factors[:, pos]
+
+    def _anchor_final_factors(self, final_factors, anch_loadings):
+        assert self.anchoring_update_type == 'linear', (
+            'Currently, marginal effects only work for linearly anchored '
+            'factors.')
+
+        if self.anchoring is True:
+            anch_func = 'anchor_flat_sigma_points_{}'.format(
+                self.anchoring_update_type)
+            getattr(anch, anch_func)(
+                final_factors, self.anch_positions, anch_loadings,
+                intercept=None)
+
+        return final_factors
+
+    def _anchoring_outcome_from_final_factors(
+            self, final_factors, anch_loadings, anch_intercept):
+
+        assert self.anchoring is True, (
+            'Marginal effects on a anchoring outcome can only be calculated '
+            'if anchoring equations were estimated.')
+
+        assert self.anchoring_update_type == 'linear', (
+            'Currently, marginal effects on an anchoring outcome can only '
+            'be calculated for linear anchoring.')
+
+        anchored = self._anchor_final_factors(final_factors, anch_loadings)
+        anch_outcome = np.dot(anchored, anch_loadings) + anch_intercept
+        return anch_outcome
+
+    def _marginal_effect_outcome(self, change):
+
+        if self.me_at is None:
+            self.me_at = self.generate_start_factors()
+
+        final_factors = self._predict_final_factors(change)
+
+        if self.anchoring is True:
+            # construct_anch_loadings and anch_intercept
+            slices = self.params_slices('long')
+            relevant_params = self.me_params[slices['H']][
+                len(self.anchored_factors):]
+
+            anch_loadings = np.zeros(self.nfac)
+            for p, pos in enumerate(self.anch_positions):
+                anch_loadings[pos] = relevant_params[p]
+
+            anch_intercept = self.me_params[slices['deltas']][-1]
+
+            if self.me_on == 'anch_outcome':
+                return self._anchoring_outcome_from_final_factors(
+                    final_factors, anch_loadings, anch_intercept)
+            elif self.me_anchor_on is True:
+                anchored_final_factors = \
+                    self._anchor_final_factors(final_factors, anch_loadings)
+                return(self._select_final_factor(anchored_final_factors))
+
+        else:
+            return self._select_final_factor(final_factors)

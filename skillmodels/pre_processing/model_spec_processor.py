@@ -97,6 +97,7 @@ class ModelSpecProcessor:
             self, '{}_standard_error_method'.format(self.estimator))
         if self.estimator == 'wa':
             self.nemf = 1
+            self.cholesky_of_P_zero = False
         self._set_time_specific_attributes()
         self._check_general_specifications()
         self._generate_save_directories()

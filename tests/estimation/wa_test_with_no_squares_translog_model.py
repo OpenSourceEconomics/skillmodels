@@ -7,7 +7,7 @@ from skillmodels.model_functions.transition_functions import \
 from numpy.testing import assert_array_almost_equal as aaae
 from nose.tools import nottest, assert_almost_equal
 
-with open('no_squares_translog_model.json') as j:
+with open('tests/estimation/no_squares_translog_model.json') as j:
     model_dict = json.load(j)
 
 

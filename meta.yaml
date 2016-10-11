@@ -1,6 +1,6 @@
 package:
   name: skillmodels
-  version: "0.0.0256"
+  version: "0.0.0260"
 
 source:
   path: ../skillmodels
@@ -30,7 +30,6 @@ test:
     - tests/estimation/wa_functions_test.py
     - tests/estimation/wa_test_with_no_squares_translog_model.py
     - tests/estimation/no_squares_translog_model.json
-    - tests/estimation/skill_model_results_test.py
   requires:
     - nose
     - numpy
