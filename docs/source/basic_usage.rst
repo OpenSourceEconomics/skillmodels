@@ -4,6 +4,42 @@
 Basic Usage
 ***********
 
+Some Python Skills you will need
+********************************
+
+To use skillmodels you will probably have to create a pandas DataFrame from a file on your disk and potentially a python dictionary from a json file. Both things are very easy:
+
+To create the DataFrame:
+
+.. code::
+
+    # from a .dta file
+    import pandas as pd
+    dataset = pd.read_stata('some/path/to/data.dta')
+
+.. code::
+
+    # from a .csv file
+    import pandas as pd
+    dataset = pd.read_csv('some/path/to/data.csv')
+
+For any other file formats or advanced options for loading .dta and .csv files, see the `pandas documentation`_.
+
+To load the model dictionary:
+
+.. code::
+
+    import json
+
+    with open('some/path/to/model_dict.json') as j:
+        model_dict = json.load(j)
+
+In case of any problem check the documentation of the `json module`_.
+
+
+Usage of Skillmodels
+********************
+
 Fitting models is very similar to fitting models in `Statsmodels`_
 
 The main object a user interacts with is ``SkillModel`` (see :ref:`estimation`) which is a subclass of Statsmodel's `GenericLikelihoodModel`_. To create an instance of this class just type:
@@ -72,3 +108,9 @@ Some methods are not yet implemented but are on my To-Do list:
 
 .. _documentation:
     https://docs.continuum.io/mkl-service/
+
+.. _pandas documentation:
+    http://pandas.pydata.org/pandas-docs/stable/io.html
+
+.. _json module:
+    https://docs.python.org/3.4/library/json.html
