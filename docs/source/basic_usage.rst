@@ -7,7 +7,7 @@ Basic Usage
 Some Python Skills you will need
 ********************************
 
-To use skillmodels you will probably have to create a pandas DataFrame from a file on your disk and potentially a python dictionary from a json file. Both things are very easy:
+To use skillmodels you probably will have to create a pandas DataFrame from a file on your disk and a python dictionary from a json file. Both things are very easy:
 
 To create the DataFrame:
 

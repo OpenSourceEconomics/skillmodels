@@ -58,11 +58,9 @@ The value that corresponds to the ``measurements`` key is a list of lists. It ha
 
 The value that corresponds to the ``normalizations`` key is a dictionary in which the normalizations for factor loadings and intercepts are specified. Its values (for each type of normalization) are lits of lists with one sublist per period. Each sublist has length 2. Its first entry is the name of the measurement whose factor loading is normalized. Its second entry is the value the loading is normalized to. For loadings it is typical to normalize to one but in theory any non-zero value is ok. Intercepts are typically normalized to zero. The example model has no normalizations on intercepts and this is ok due to the known location and scale of the CES production function.
 
-Specifying normalizations is optional. If none are specified, they are generated automatically. The automatic generation takes into account the critique of `Wiswall and Agostinelli <https://dl.dropboxusercontent.com/u/33774399/wiswall_webpage/agostinelli_wiswall_renormalizations.pdf>`_, i.e. uses less normalizations for production functions with known scale and location. Moreover, it uses less normalizations if development stages span more than one period, because the location and scale of the transition function can be identified from the first period of such a long stage and no further normalization is needed. This shows another type of over-normalization in the original paper by CHS.
+Specifying normalizations is optional. If none are specified, they are generated automatically. The automatic generation takes into account the critique of `Wiswall and Agostinelli <https://dl.dropboxusercontent.com/u/33774399/wiswall_webpage/agostinelli_wiswall_renormalizations.pdf>`_, i.e. uses less normalizations for production functions with known scale and location. Moreover, it uses less normalizations if development stages span more than one period (See: :ref:`normalization_and_stages`).
 
 .. Caution:: If you don't want to use normalizations you have to explicitly specify normalization lists with empty sublists (as in the example model). Simply not specifying normalizations triggers the automatic generation of normalization specifications.
-
-.. Note:: I argue that the Wiswall Agostinelli critique is incomplete as transition function can also have known INPUT locations and/or scales. The log_CES function is an example for a function with known input scale. In this case even the initial normalizations might be unnecessary but I haven't yet tried to show that the restrictions the log_CES function poses on the input scale and location is sufficient for identification. Therefore the automatic generation of normalizations simply treats the log_CES function as a KLS function. I would currently recommend to rather use the translog function that (probably) doesn't have this problem.
 
 .. Note:: The model shown below uses too many normalizations to make the results comparable with the
     parameters from the CHS replication files.
@@ -70,7 +68,7 @@ Specifying normalizations is optional. If none are specified, they are generated
 The value that corresponds to the ``trans_eq`` key is a dictionary. The ``name`` entry specifies the name of the transition equation. The ``included_factors`` entry specifies which factors enter the transition equation. The transition equations already implemented are:
 
     * ``linear``
-    * ``log_ces`` (Known Location and Scale (KLS) version)
+    * ``log_ces`` (Known Location and Scale (KLS) version. See :ref:`log_ces_problem`.)
     * ``constant``
     * ``ar1`` (linear equation with only one included factor and the same coefficient in all stages)
     * ``translog`` (non KLS version; a log-linear-in-parameters function including squares and interaction terms. Not yet supported by wa estimator.).
@@ -100,14 +98,6 @@ The anchoring equation is specified as follows:
     :lines: 94
 
 Q1 is the anchoring outcome and the list contains all anchored factors. In the example this is just fac1.
-
-The example does not use endogeneity correction but adding it would be very easy. If for example fac2 was the endogenous factor that depends on both other latent factors:
-
-.. code::
-
-    "endog_correction": {"endog_factor": "fac2", "endog_function": linear"}
-
-.. Note:: Currently the endogeneity correction option cannot be used. The one proposed by CHS suffers from the type of renormalization that was criticized by Wiswall and Agostinelli and it will be quite a lot of work to make implement a version without those renormalizations.
 
 The "general" section of the model dictionary:
 **********************************************
@@ -168,6 +158,27 @@ Currently, in any of these cases the WA estimates are not used at all in the gen
 
 .. _replication files:
     https://www.econometricsociety.org/content/supplement-estimating-technology-cognitive-and-noncognitive-skill-formation-0
+
+
+A note on endogeneity correction methods:
+*****************************************
+
+In the empirical part of their paper, CHS use two methods for endogeneity correction. Both suffer from too strong assumptions on the scale of factors. Below I give an overview of the proposed endogeneity correction methods that can serve as a starting point for someone who wants to extend skillmodels in that direction:
+
+In secton 4.2.4 they extend their basic model with a time invariant individual specific heterogeneity component, i.e. a fixed effect. The time invariance assumption can only be valid if the scale of all factors remains the same throughout the model. This is highly unlikely, unless age invariant measurements (as defined by Wiswall and Agostinelli) are available and used for normalization in all periods for all factors. With KLS transition functions the assumption of the factor scales remaining constant in all periods is highly unlikely (see: :ref:`KLS_not_constant`). Moreover, this approach requires 3 adult outcomes, so it only works with a few datasets. If you have a dataset with enough time invariant measurements and enough adult outcomes, this method could work with the CHS estimator and you could use the Fortran code by CHS as a starting point.
+
+In 4.2.5 they make a endogeneity correction with time varying heterogeneity. However, this heterogeneity follows the same AR1 process in each period and relies on an estimated time invariant investment equation, so it also requires the factor scales to be constant. This is problematic in most cases, for the same reasons as before. Moreover, this correction method relies on a exclusion restriction (Income is an argument of the investment function but not of the transition functions of other latent factors) or suitable functional form assumptions for identification.
+
+To use this correction method in models where not enough age invariant measurements are available to ensure constant factor scales, one would have to replace the AR1 process by a linear transition function with different estimated parameters in each period and also estimate a different investment function in each period. I don't know if this model were identified.
+
+Moreover, I don't know if these methods could be used in the WA estimator.
+
+Wiswall and Agostinelli use a simpler model of endegeneity of investments that could be used with both estimators, but I don't have the time to implement them right now. See section 6.1.2 of their `paper`_.
+
+.. _paper:
+    https://dl.dropboxusercontent.com/u/45673846/agostinelli_wiswall_estimation.pdf
+
+
 
 
 

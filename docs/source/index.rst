@@ -14,6 +14,7 @@ Welcome to the documentation of skillmodels!
     model_specs
     basic_usage
     names_and_concepts
+    notes_on_factor_scales
     estimation
     model_functions
     pre_processing
