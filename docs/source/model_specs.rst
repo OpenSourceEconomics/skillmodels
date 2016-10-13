@@ -56,13 +56,13 @@ The value that corresponds to the ``measurements`` key is a list of lists. It ha
 
 .. Note:: If the WA estimator is used, factors with constant transition equation can only have measurements in the initial period and all other factors need at least two measurements per period. If the CHS estimator is used these limitations do not hold as long as there are enough measurements to identify the model. If development stages span more than one period, models can be identified even if some factors have no measurements in some periods.
 
-The value that corresponds to the ``normalizations`` key is a dictionary in which the normalizations for factor loadings and intercepts are specified. Its values (for each type of normalization) are lits of lists with one sublist per period. Each sublist has length 2. Its first entry is the name of the measurement whose factor loading is normalized. Its second entry is the value the loading is normalized to. For loadings it is typical to normalize to one but in theory any non-zero value is ok. Intercepts are typically normalized to zero. The example model has no normalizations on intercepts and this is ok due to the known location and scale of the CES production function.
+The value that corresponds to the ``normalizations`` key is a dictionary in which the normalizations for factor loadings and intercepts are specified. Its values (for each type of normalization) are lists of lists with one sublist per period. Each sublist has length 2. Its first entry is the name of the measurement whose factor loading is normalized. Its second entry is the value the loading is normalized to. For loadings it is typical to normalize to one but in theory any non-zero value is ok. Intercepts are typically normalized to zero. The example model has no normalizations on intercepts and this is ok due to the known location and scale of the CES production function.
 
 Specifying normalizations is optional. If none are specified, they are generated automatically. The automatic generation takes into account the critique of `Wiswall and Agostinelli <https://dl.dropboxusercontent.com/u/33774399/wiswall_webpage/agostinelli_wiswall_renormalizations.pdf>`_, i.e. uses less normalizations for production functions with known scale and location. Moreover, it uses less normalizations if development stages span more than one period (See: :ref:`normalization_and_stages`).
 
 .. Caution:: If you don't want to use normalizations you have to explicitly specify normalization lists with empty sublists (as in the example model). Simply not specifying normalizations triggers the automatic generation of normalization specifications.
 
-.. Note:: The model shown below uses too many normalizations to make the results comparable with the
+.. Note:: The model shown below uses deliberately too many normalizations in order to make the results comparable with the
     parameters from the CHS replication files.
 
 The value that corresponds to the ``trans_eq`` key is a dictionary. The ``name`` entry specifies the name of the transition equation. The ``included_factors`` entry specifies which factors enter the transition equation. The transition equations already implemented are:
@@ -71,8 +71,13 @@ The value that corresponds to the ``trans_eq`` key is a dictionary. The ``name``
     * ``log_ces`` (Known Location and Scale (KLS) version. See :ref:`log_ces_problem`.)
     * ``constant``
     * ``ar1`` (linear equation with only one included factor and the same coefficient in all stages)
-    * ``translog`` (non KLS version; a log-linear-in-parameters function including squares and interaction terms. Not yet supported by wa estimator.).
+    * ``translog`` (non KLS version; a log-linear-in-parameters function including squares and interaction terms.
     * ``no_squares_translog`` (as translog but without squares and therefore supported by wa estimator.)
+
+.. Note:: The general translog function can currently not be used with the wa estimator. While Wiswall and Agostinelli call their transition function a translog function, they use what is called no_squares_translog in skillmodels. The reason is that the square-terms in the translog inflate the error term in the iv regressions with variances of measurement errors. I can think of two solution for the problem:
+
+    #) Circumvent the problem: Instead of replacing the square of a factor in the iv equation by the square of a residual measurement one could use the product of two different residual measurements of the same factor. However, this increases the number of required measurements to at least 3 per period and factor and requires changes at several places of the code.
+    #) Correction approach: As skillmodels already implements an extended version of the wa estimator where measurement variances are estimated, one could simply subtract those variances (scaled with several model parameters) from the intercept in the iv equation. This requires relatively few changes in the code but one drawback is that the measurement variances are estimated very imprecisely.
 
 To see how new types of transition equations can be added see :ref:`model_functions`.
 
