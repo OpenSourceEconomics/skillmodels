@@ -1085,6 +1085,19 @@ class TestBootstrapCovMatrix:
         calc_cov = smo.bootstrap_cov_matrix(self, self.params)
         assert_frame_equal(calc_cov, self.expected_cov)
 
+
+class TestBootstrapPValues:
+    def setup(self):
+        bs_params = pd.DataFrame(np.arange(10).reshape(5, 2),
+                                 columns=['a', 'b'])
+        self.all_bootstrap_params = Mock(return_value=bs_params)
+
+    def test_bootstrap_p_values(self):
+        params = np.array([2, -9])
+        expected_p_values = pd.Series([0.8333333, 0.333333], index=['a', 'b'])
+        calculated_p_values = smo.bootstrap_pvalues(self, params)
+        assert_series_equal(expected_p_values, calculated_p_values)
+
 if __name__ == '__main__':
     from nose.core import runmodule
     runmodule()

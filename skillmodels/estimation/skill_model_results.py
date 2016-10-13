@@ -96,6 +96,12 @@ class SkillModelResults(GenericLikelihoodModelResults):
         else:
             return super(SkillModelResults, self).conf_int()
 
+    def pvalues(self):
+        if self.model.standard_error_method == 'bootstrap':
+            return self.model.bootstrap_pvalues(self.params)
+        else:
+            return super(SkillModelResults, self).pvalues()
+
     def save(self, fname, remove_data=False):
         raise NotImplementedError(
             'A save method is not yet implemented for SkillModelResults')
@@ -119,7 +125,7 @@ class SkillModelResults(GenericLikelihoodModelResults):
         """
         Marginal effects of a factor in all periods on a last period outcome.
 
-        The marginal effect will be calculated by simple numerical differentiation.
+        The marginal effect will be calculated by numerical differentiation.
 
         Args:
             of (str): the name of a factor that causes the marginal effect

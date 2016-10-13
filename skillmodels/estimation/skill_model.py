@@ -1848,12 +1848,14 @@ class SkillModel(GenericLikelihoodModel):
         bs_params = self.all_bootstrap_params(params)
         return bs_params.mean()
 
-    def bootstrap_p_values(self, params):
-        bs_params = self.all_bootstrap_params(params)    # noqa
-        # get the p values from the bootstrap_params
-        raise NotImplementedError(
-            'Nonparametric P values from bootstrap params are not yet '
-            'implemented in SkillModel.')
+    def bootstrap_pvalues(self, params):
+        bs_params = self.all_bootstrap_params(params)
+        # safety measure
+        params = np.array(params)
+        nan_where_less_extreme = bs_params[abs(bs_params) >= abs(params)]
+        numerator = nan_where_less_extreme.count() + 1
+        p_values = numerator / (len(bs_params) + 1)
+        return p_values
 
     def fit(self, start_params=None, params=None):
         """Fit the model and return an instance of SkillModelResults."""
