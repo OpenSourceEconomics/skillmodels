@@ -1098,6 +1098,268 @@ class TestBootstrapPValues:
         calculated_p_values = smo.bootstrap_pvalues(self, params)
         assert_series_equal(expected_p_values, calculated_p_values)
 
+
+class TestGenerateStartFactorsForMarginalEffects:
+    def setup(self):
+        sl = {}
+        sl['X_zero'] = slice(0, 2)
+        sl['P_zero'] = slice(2, 5)
+        self.params_slices = Mock(return_value=sl)
+
+        self.me_params = np.array([5, 10, 1, 0.1, 4])
+        self.cholesky_of_P_zero = False
+
+        self.estimator = 'chs'
+        self.nobs = 50000
+        self.nemf = 1
+        self.nfac = 2
+        self.params_quants = ['X_zero']
+        self.exp_cov = np.array([[1, 0.1], [0.1, 4]])
+        np.random.seed(5471)
+
+    def test_generate_start_factors_mean_with_estimated_X_zero(self):
+        exp_mean = np.array([5, 10])
+        calc_mean = smo._generate_start_factors(self).mean(axis=0)
+        aaae(calc_mean, exp_mean, decimal=2)
+
+    def test_generate_start_factors_mean_with_normalized_X_zero(self):
+        exp_mean = np.array([0, 0])
+        self.params_quants = []
+        calc_mean = smo._generate_start_factors(self).mean(axis=0)
+        aaae(calc_mean, exp_mean, decimal=2)
+
+    def test_generate_start_factors_cov_no_cholesky(self):
+        self.nobs = 200000
+        calc_factors = smo._generate_start_factors(self)
+        df = pd.DataFrame(calc_factors)
+        calc_cov = df.cov().values
+        aaae(calc_cov, self.exp_cov, decimal=2)
+
+    def test_generate_start_factors_cov_cholesky(self):
+        self.nobs = 200000
+        self.me_params = np.array([5, 10, 1, 0.1, 1.99749844])
+        self.cholesky_of_P_zero = True
+        calc_factors = smo._generate_start_factors(self)
+        df = pd.DataFrame(calc_factors)
+        calc_cov = df.cov().values
+        aaae(calc_cov, self.exp_cov, decimal=2)
+
+
+class TestGetEpsilon:
+    def setup(self):
+        self.nperiods = 5
+        self.periods = range(self.nperiods)
+        inter_facs = [
+            np.ones((2, 2)), np.zeros((2, 2)), np.array([[1, 2], [3, 4]]),
+            np.array([[-8, 0], [3, -4]])]
+        self.factors = ['f1', 'f2']
+        self.me_of = 'f2'
+        self._predict_final_factors = Mock(return_value=inter_facs)
+        self._machine_accuracy = Mock(return_value=0.1)
+
+    def test_get_epsilon_centered(self):
+        exp_eps = np.array([0.4641588, 0.0464158, 1.85663533, 1.85663533])
+        calc_eps = smo._get_epsilon(self, centered=True)
+        aaae(calc_eps, exp_eps)
+
+    def test_get_epsilon_uncentered(self):
+        calc_eps = smo._get_epsilon(self, centered=False)
+        exp_eps = np.array([0.3162277, 0.03162277, 1.26491106, 1.26491106])
+        aaae(calc_eps, exp_eps)
+
+
+class TestSelectFinalFactor:
+    def setup(self):
+        self.me_on = 'f2'
+        self.factors = ['f3', 'f1', 'f2']
+        self.final_factors = np.zeros((10, 3))
+        self.final_factors[:, 2] = np.arange(10)
+
+    def test_select_final_factor(self):
+        calc = smo._select_final_factor(self, self.final_factors)
+        aae(calc, np.arange(10))
+
+
+class TestAnchorFinalFactorsAndAnchoringOutcome:
+    def setup(self):
+        self.final_factors = np.ones((10, 3))
+        self.final_factors[:, 2] = 2
+        self.anch_positions = [0, 2]
+        self.al = np.array([0.4, 0, 0.6])
+        self.ai = 2
+        self.exp_anchored_factors = np.ones((10, 3))
+        self.exp_anchored_factors[:, 0] *= 0.4
+        self.exp_anchored_factors[:, 2] = 2
+        self.exp_anchored_factors[:, 2] *= 0.6
+
+    def test_anchor_final_factors_invalid_anchoring_type(self):
+        self.anchoring = True
+        self.anchoring_update_type = 'probit'
+        assert_raises(AssertionError, smo._anchor_final_factors,
+                      self, self.final_factors, self.al)
+
+    def test_anchor_final_factors_no_anchoring(self):
+        # should pass and do nothing
+        self.anchoring = False
+        self.anchoring_update_type = 'anything'
+        calc = smo._anchor_final_factors(self, self.final_factors, self.al)
+        aae(calc, self.final_factors)
+
+    def test_anchor_final_factors_with_linear_anchoring_integration(self):
+        self.anchoring = True
+        self.anchoring_update_type = 'linear'
+        calc = smo._anchor_final_factors(self, self.final_factors, self.al)
+        aae(calc, self.exp_anchored_factors)
+
+    def test_anch_outcome_from_final_factors_with_linear_anchoring(self):
+        self.anchoring = True
+        self.anchoring_update_type = 'linear'
+        self._anchor_final_factors = Mock(
+            return_value=self.exp_anchored_factors)
+        exp = np.ones(10) * 3.6
+        calc = smo._anchoring_outcome_from_final_factors(
+            self, self.final_factors, self.al, self.ai)
+        aae(calc, exp)
+
+    def test_anch_outcome_from_final_factors_invalid_anchoring(self):
+        self.anchoring = True
+        self.anchoring_update_type = 'not_linear'
+        assert_raises(
+            AssertionError, smo._anchoring_outcome_from_final_factors,
+            self, self.final_factors, self.al, self.ai)
+
+    def test_anch_outcome_from_final_factors_no_anchoring(self):
+        self.anchoring = False
+        assert_raises(
+            AssertionError, smo._anchoring_outcome_from_final_factors,
+            self, self.final_factors, self.al, self.ai)
+
+
+def fake_tsp(
+        stage, flat_sigma_points, transition_argument_dicts,
+        transition_function_names,
+        anchoring_type=None, anchoring_positions=None,
+        anch_params=None, intercept=None,
+        psi=None, endog_position=None, correction_func=None):
+
+    flat_sigma_points[:] *= 2
+
+
+class TestPredictFinalFactors:
+    def setup(self):
+        self.change = np.array([1, 2])
+        self.nperiods = 3
+        self.endog_correction = False
+        self.lh_args = \
+            {'predict_args': {
+                'transform_sigma_points_args': {
+                    'transition_argument_dicts': {},
+                    'transition_function_names': []}},
+             'parse_params_args': {}}
+        self.me_at = np.ones((10, 2))
+        self.me_of = 'f1'
+        self.factors = ['f1', 'f2']
+        self.me_params = None
+        self.stagemap = [0, 1, 1]
+
+    def test_predict_final_factors_raises_with_endog(self):
+        self.endog_correction = True
+        assert_raises(AssertionError, smo._predict_final_factors,
+                      self, self.change)
+
+    def test_predict_final_factors_invalid_change(self):
+        invalid_change = np.zeros(5)
+        assert_raises(AssertionError, smo._predict_final_factors,
+                      self, invalid_change)
+
+    @patch('skillmodels.estimation.skill_model.parse_params')
+    @patch('skillmodels.estimation.skill_model.transform_sigma_points')
+    def test_predict_ff_intermediate_false_mocked(self, mock_tsp, mock_pp):
+        mock_tsp.side_effect = fake_tsp
+        self.likelihood_arguments_dict = Mock(return_value=self.lh_args)
+        exp = np.ones((10, 2)) * 4
+        exp[:, 0] = 12
+        calc = smo._predict_final_factors(self, self.change)
+        aaae(calc, exp)
+
+    @patch('skillmodels.estimation.skill_model.parse_params')
+    @patch('skillmodels.estimation.skill_model.transform_sigma_points')
+    def test_predict_ff_intermediate_true_mocked(self, mock_tsp, mock_pp):
+        mock_tsp.side_effect = fake_tsp
+        self.likelihood_arguments_dict = Mock(return_value=self.lh_args)
+        exp1 = np.ones((10, 2))
+        exp2 = np.ones((10, 2)) * 2
+        exp2[:, 0] = 4
+        exp = [exp1, exp2]
+        calc = smo._predict_final_factors(self, self.change, True)
+        for c, e in zip(calc, exp):
+            aaae(c, e)
+
+    @patch('skillmodels.estimation.skill_model.parse_params')
+    @patch('skillmodels.estimation.skill_model.transform_sigma_points')
+    def test_predict_ff_mocked_same_result_in_second(self, mock_tsp, mock_pp):
+        # this test makes sure that y copy arrays where necessary
+        mock_tsp.side_effect = fake_tsp
+        self.likelihood_arguments_dict = Mock(return_value=self.lh_args)
+
+        calc1 = smo._predict_final_factors(self, self.change)
+        calc2 = smo._predict_final_factors(self, self.change)
+        aaae(calc1, calc2)
+
+
+def select_first(arr):
+    return arr[:, 0]
+
+
+def fake_anch(final_factors, anch_loadings):
+    return final_factors * anch_loadings
+
+
+def fake_anch_outcome(final_factors, anch_loadings, anch_intercept):
+    return (final_factors * anch_loadings).sum(axis=1) + anch_intercept
+
+
+class TestMarginalEffectOutcome:
+    def setup(self):
+        self.me_at = np.ones((10, 2))
+
+        self._predict_final_factors = Mock(return_value=self.me_at)
+        self.change = np.zeros(2)
+        self._select_final_factor = Mock(side_effect=select_first)
+        self.nfac = 2
+        self.anch_positions = [0]
+        self.anchored_factors = ['f1']
+        self.factors = ['f1', 'f2']
+
+        sl = {'H': slice(0, 3), 'deltas': slice(3, 5)}
+        self.params_slices = Mock(return_value=sl)
+        self.me_params = np.array([0, 0, 3, 0, 1])
+        self._anchor_final_factors = Mock(side_effect=fake_anch)
+        self._anchoring_outcome_from_final_factors = Mock(
+            side_effect=fake_anch_outcome)
+
+    def test_marginal_effect_outcome_no_anchoring(self):
+        self.anchoring = False
+        exp = np.ones((10))
+        calc = smo._marginal_effect_outcome(self, self.change)
+        aaae(calc, exp)
+
+    def test_marginal_effect_outcome_with_anchoring(self):
+        self.anchoring = True
+        self.me_anchor_on = True
+        self.me_on = 'f1'
+        exp = np.ones((10)) * 3
+        calc = smo._marginal_effect_outcome(self, self.change)
+        aaae(calc, exp)
+
+    def test_marginal_effect_outcome_anch_outcome(self):
+        self.anchoring = True
+        self.me_anchor_on = True
+        self.me_on = 'anch_outcome'
+        exp = np.ones((10)) * 4
+        calc = smo._marginal_effect_outcome(self, self.change)
+        aaae(calc, exp)
+
 if __name__ == '__main__':
     from nose.core import runmodule
     runmodule()

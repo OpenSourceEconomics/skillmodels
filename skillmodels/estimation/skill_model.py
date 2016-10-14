@@ -1897,22 +1897,42 @@ class SkillModel(GenericLikelihoodModel):
 
         # get start covariance matrix
         p_params = self.me_params[slices['P_zero']]
-        p_helper = np.zeros(self.nfac)
+        p_helper = np.zeros((self.nfac, self.nfac))
         p_helper[np.triu_indices(self.nfac)] = p_params
 
         if self.estimator == 'chs' and self.cholesky_of_P_zero is True:
             P_zero = np.dot(p_helper.T, p_helper)
         else:
-            p_helper_2 = p_helper - np.diag(np.diagonal(p_helper)).T
+            p_helper_2 = (p_helper - np.diag(np.diagonal(p_helper))).T
             P_zero = p_helper + p_helper_2
-
         # generate the sample
         start_factors = np.random.multivariate_normal(
             mean=X_zero, cov=P_zero, size=self.nobs)
 
         return start_factors
 
-    def _predict_final_factors(self, change):
+    def _machine_accuracy(self):
+        return np.MachAr().eps
+
+    def _get_epsilon(self, centered):
+        change = np.zeros(self.nperiods - 1)
+        intermediate_factors = self._predict_final_factors(
+            change, return_intermediate=True)
+
+        pos = self.factors.index(self.me_of)
+        epsilon = np.zeros(self.nperiods - 1)
+        for t in self.periods[:-1]:
+            epsilon[t] = np.abs(intermediate_factors[t][:, pos]).max()
+
+        epsilon[epsilon <= 0.1] = 0.1
+
+        accuracy = self._machine_accuracy()
+        exponent = 1 / 2 if centered is False else 1 / 3
+
+        epsilon *= accuracy ** exponent
+        return epsilon
+
+    def _predict_final_factors(self, change, return_intermediate=False):
 
         assert self.endog_correction is False, (
             'Currently, final factors can only be predicted if no '
@@ -1921,31 +1941,38 @@ class SkillModel(GenericLikelihoodModel):
         assert len(change) == self.nperiods - 1, (
             'factor_change must have len nperiods - 1.')
 
+        if return_intermediate is True:
+            intermediate_factors = []
+
         changed_pos = self.factors.index(self.me_of)
         args = self.likelihood_arguments_dict('long')
         tsp_args = args['predict_args']['transform_sigma_points_args']
         pp_args = args['parse_params_args']
         parse_params(self.me_params, **pp_args)
 
-        start_factors = self.me_at
+        factors = self.me_at.copy()
 
         for t, stage in enumerate(self.stagemap[:-1]):
-            start_factors[:, changed_pos] += change[t]
-            transform_sigma_points(stage, start_factors, **tsp_args)
+            if return_intermediate is True:
+                intermediate_factors.append(factors.copy())
+            factors[:, changed_pos] += change[t]
+            transform_sigma_points(stage, factors, **tsp_args)
 
-        return start_factors
+        if return_intermediate is False:
+            return factors
+        else:
+            return intermediate_factors
 
     def _select_final_factor(self, final_factors):
-        assert self.anchoring is True
         pos = self.factors.index(self.me_on)
         return final_factors[:, pos]
 
     def _anchor_final_factors(self, final_factors, anch_loadings):
-        assert self.anchoring_update_type == 'linear', (
-            'Currently, marginal effects only work for linearly anchored '
-            'factors.')
 
         if self.anchoring is True:
+            assert self.anchoring_update_type == 'linear', (
+                'Currently, marginal effects only work for linearly anchored '
+                'factors.')
             anch_func = 'anchor_flat_sigma_points_{}'.format(
                 self.anchoring_update_type)
             getattr(anch, anch_func)(
@@ -1966,7 +1993,8 @@ class SkillModel(GenericLikelihoodModel):
             'be calculated for linear anchoring.')
 
         anchored = self._anchor_final_factors(final_factors, anch_loadings)
-        anch_outcome = np.dot(anchored, anch_loadings) + anch_intercept
+        selector = anch_loadings.astype(bool).astype(int)
+        anch_outcome = np.dot(anchored, selector) + anch_intercept
         return anch_outcome
 
     def _marginal_effect_outcome(self, change):
@@ -1980,7 +2008,7 @@ class SkillModel(GenericLikelihoodModel):
             # construct_anch_loadings and anch_intercept
             slices = self.params_slices('long')
             relevant_params = self.me_params[slices['H']][
-                len(self.anchored_factors):]
+                - len(self.anchored_factors):]
 
             anch_loadings = np.zeros(self.nfac)
             for p, pos in enumerate(self.anch_positions):

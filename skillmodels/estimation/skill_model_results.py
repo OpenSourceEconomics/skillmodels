@@ -127,6 +127,13 @@ class SkillModelResults(GenericLikelihoodModelResults):
 
         The marginal effect will be calculated by numerical differentiation.
 
+        The step size for the numerical differentiation function has to be the
+        same for all individuals in the sample if the satsmodels
+        differentiation tools are used. I decided to use the step size that is
+        optimal for the individual with the largest aboslute factor value in
+        the sample. Taking a step size that is slightly too large for some
+        individuals in the sample shouldn't be a problem for marginal effects.
+
         Args:
             of (str): the name of a factor that causes the marginal effect
             on (str): the last period outcome that is influenced by the effect.
@@ -136,9 +143,12 @@ class SkillModelResults(GenericLikelihoodModelResults):
                 multivariate normal distribution.
             anchor_on (bool): If True and *on* is the name of an anchored
                 factor, *on* will be multiplied with its anchoring loading such
-                that the marginal effect can be interpreted as an effet on
+                that the marginal effect can be interpreted as an effect on
                 the anchoring outcome through a change in *on*.
-            centered ()
+            centered (bool): by default True. If False, forward differentiation
+                is used.
+            complex_step (bool): by default False. Specifies if numerical
+                derivatives with complex step are used.
 
         """
         assert self.model.endog_correction is False, (
@@ -153,10 +163,13 @@ class SkillModelResults(GenericLikelihoodModelResults):
 
         change = np.zeros(self.nperiods - 1)
 
+        epsilon = self.model._get_epsilon(centered)
+
         diff_func = \
             approx_fprime if complex_step is False else approx_fprime_cs
 
-        me = diff_func(change, self.model._marginal_effect_outcome, centered)
+        me = diff_func(x=change, f=self.model._marginal_effect_outcome,
+                       epsilon=epsilon, centered=centered)
 
         return me
 

@@ -2,6 +2,7 @@ from os import system
 
 if __name__ == '__main__':
     normal_tests = [
+        'fast_routines/transform_sigma_points_test',
         'estimation/skill_model_test', 'estimation/parse_params_test',
         'estimation/wa_functions_test', 'fast_routines/kalman_filters_test',
         'fast_routines/choldate_test', 'fast_routines/qr_decomposition_test',
