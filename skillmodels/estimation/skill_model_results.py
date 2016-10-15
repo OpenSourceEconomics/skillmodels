@@ -9,6 +9,19 @@ class NotApplicableError(Exception):
 
 
 class SkillModelResults(GenericLikelihoodModelResults):
+    """Process results of a SkillModel.
+
+    SkillModelResults is a subclass of GenericLikelihoodModelResults from
+    statsmodels and inherits many useful attributes and methods. Examples
+    are statistical tests and several ways of calculating standard errors
+    in a likelihood model.
+
+    Its usage is described in :ref:`basic_usage`.
+
+    In addition it contains a method to calculate marginal effects.
+
+    """
+
     def __init__(self, model, mlefit, optimize_dict=None):
         self.model = model
         self.estimator = model.estimator
@@ -71,14 +84,15 @@ class SkillModelResults(GenericLikelihoodModelResults):
             * standard_errors
             * mean
             * conf_int
+            * pvalues
 
-        I plan to add p_values.
         """
         bs_dict = {}
         bs_dict['covariance_matrix'] = self.covbs
         bs_dict['standard_errors'] = self.bsebs
         bs_dict['mean'] = self.model.bootstrap_mean(self.params)
         bs_dict['conf_int'] = self.model.bootstrap_conf_int(self.params)
+        bs_dict['pvalues'] = self.model.bootstrap_pvalues(self.params)
 
         return bs_dict
 
