@@ -26,3 +26,10 @@ The SkillModel Class
 
 .. automodule:: skillmodels.estimation.skill_model
     :members:
+
+
+The wa_functions Module
+***********************
+
+.. automodule:: skillmodels.estimation.wa_functions
+    :members:

@@ -64,9 +64,11 @@ def intercepts_from_means(data, normalization, loadings):
 
     Returns:
         intercepts (Series): pandas Series with estimated measurement
-            intercepts
+        intercepts
+
+    Returns:
         factor mean: The estimated factor mean if a intercept was normalized
-            or None
+        or None
     """
     measurements = list(data.columns)
 
@@ -120,7 +122,9 @@ def initial_meas_coeffs(y_data, measurements, normalizations):
 
     Returns:
         meas_coeffs (DataFrame): DataFrame with loadings and intercepts of the
-            initial period.
+        initial period.
+
+    Returns:
         X_zero (np.ndarray): numpy array with initial factor means.
 
     """
@@ -155,9 +159,11 @@ def factor_covs_and_measurement_error_variances(
 
     Returns:
         factor_covs (np.ndarray): 1d array with the upper triangular
-            elements of the covariance matrix of the latent factors.
+        elements of the covariance matrix of the latent factors.
+
+    Returns:
         meas_error_variances (Series): variances of errors in measurement
-            equations.
+        equations.
 
     """
     factors = sorted(list(meas_per_factor.keys()))
@@ -209,8 +215,8 @@ def iv_reg_array_dict(depvar_name, indepvar_names, instrument_names,
 
     Returns:
         arr_dict (dict): A dictionary with the keys depvar_arr, indepvars_arr
-            and instruments_arr. The corresponding values are numpy arrays
-            with the data for an iv regression. NaNs are removed.
+        and instruments_arr. The corresponding values are numpy arrays
+        with the data for an iv regression. NaNs are removed.
 
     """
     arr_dict = {}
@@ -239,20 +245,20 @@ def iv_reg_array_dict(depvar_name, indepvar_names, instrument_names,
 def iv_reg(depvar_arr, indepvars_arr, instruments_arr, fit_method='2sls'):
     """Estimate a linear-in-parameters instrumental variable equation via GMM.
 
+    All input arrays must not contain NaNs and constants must be included
+    explicitly in indepvars and instruments.
+
     args:
         depvar (np.ndarray): array of length n, dependent variable.
         indepvars (np.ndarray): array of shape [n, k], independent variables
         instruments (np.ndarray): array of shape [n, >=k]. Instruments
             have to include exogenous variables that are already in indepvars.
-        fit_method (str): takes the values `2sls' or `optimal'. `Optimal' is
+        fit_method (str): takes the values '2sls' or 'optimal'. 'Optimal' is
             computationally  expensive but uses a more efficient weight matrix.
-            The default is `2sls'.
+            The default is '2sls'.
 
-    returns:
-        beta (np.ndarray): array of length k with the estimated parameters
-
-    All input arrays must not contain NaNs and constants must be included
-    explicitly in indepvars and instruments.
+    Returns:
+        beta (np.ndarray): array of length k with the estimated parameters.
 
     """
     y = depvar_arr
@@ -321,6 +327,7 @@ def transition_error_variance_from_u_covs(u_covs, loadings):
 def anchoring_error_variance_from_u_vars(
         u_vars, indepvars_permutations, anch_loadings, meas_loadings,
         anchored_factors):
+
     meas_noise_df = pd.DataFrame(0.0, index=u_vars.index,
                                  columns=anchored_factors)
 

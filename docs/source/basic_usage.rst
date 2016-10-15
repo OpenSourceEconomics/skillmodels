@@ -84,6 +84,8 @@ will return an instance of ``SkillModelResults`` which is a subclass of ``Generi
     pvalues = res.pvalues
     # access the confidence intervals (5 %)
     confidence_intervals = res.conf_int
+    # calculate marginal effects
+    margeff = res.marginal_effects(of='fac2', on='fac1')
 
 For the chs estimator you can also use the many other ways of calculating standard errors documented `here`_. It should already work to use the t-test, f-test and wald-test as described `here`_ but I haven't tested it yet.
 

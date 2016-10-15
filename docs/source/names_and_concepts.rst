@@ -48,11 +48,6 @@ The 'long' version is the normal params vector that contains the parameters of i
 
 'short' refers to a reparameterized version of params used during maximization of the likelihood. Some of its elements were transformed to impose constraints on the parameters, as for example the constraints that the share parameters of the CES production parameters have to sum to one. This particular example lead to the name: for each estimated CES function, the reparameterized params vector becomes one item shorter. Another example is the initial covariance matrix of the factor distribution P_zero. To ensure its positive semi-definiteness the 'short' params contains elements of the cholesky factor of P_zero.
 
+SkillModel.reduceparams and SkillModel.expandparams convert the types of the params vector.
 
-.. _cholesky_factors:
-
-A Note on Cholesky Factors and Matrix Square Roots
-**************************************************
-
-(not yet written)
 

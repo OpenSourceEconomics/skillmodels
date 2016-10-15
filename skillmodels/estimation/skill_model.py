@@ -546,7 +546,7 @@ class SkillModel(GenericLikelihoodModel):
     def _set_bounds_for_trans_coeffs(self, params_slice):
         """Set lower and upper bounds for trans_coeffs.
 
-        Check if src.model_code.transition_functions defines bounds functions
+        Check if the transition_functions module defines bounds functions
         for some types of transition function and call them.
 
         """

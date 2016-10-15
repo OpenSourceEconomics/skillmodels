@@ -42,7 +42,6 @@ Before thinking about how to translate the above example into a model specificat
     #. What are the control variables in each period?
     #. If development stages are used: Which periods belong to which stage?
     #. If anchoring is used: Which factors are anchored and what is the anchoring outcome?
-    #. If endogeneity correction is used: Which factor is endogenous and what is the correction function?
 
 Translate the example to a model dictionary
 *******************************************
@@ -54,16 +53,13 @@ The first three points have to be specified for each latent factor of the model.
 
 The value that corresponds to the ``measurements`` key is a list of lists. It has one sublist for each period of the model. Each sublist consists of the measurement variables of ``fac1`` in the corresponding period. Note that in the example the measurement variables are the same in each period. However, this is extremely rare in actual models. If a measurement measures more than one latent factor, it simply is included in the ``measurements`` list of all factors it measures. As in the Fortran code by CHS it is currently only possible to estimate models with linear measurement system. I plan to add the possibility to incorporate binary variables in a way similar to a probit model but have currently no plans to support arbitrary nonlinear measurement systems.
 
-.. Note:: If the WA estimator is used, factors with constant transition equation can only have measurements in the initial period and all other factors need at least two measurements per period. If the CHS estimator is used these limitations do not hold as long as there are enough measurements to identify the model. If development stages span more than one period, models can be identified even if some factors have no measurements in some periods.
-
 The value that corresponds to the ``normalizations`` key is a dictionary in which the normalizations for factor loadings and intercepts are specified. Its values (for each type of normalization) are lists of lists with one sublist per period. Each sublist has length 2. Its first entry is the name of the measurement whose factor loading is normalized. Its second entry is the value the loading is normalized to. For loadings it is typical to normalize to one but in theory any non-zero value is ok. Intercepts are typically normalized to zero. The example model has no normalizations on intercepts and this is ok due to the known location and scale of the CES production function.
 
 Specifying normalizations is optional. If none are specified, they are generated automatically. The automatic generation takes into account the critique of `Wiswall and Agostinelli <https://dl.dropboxusercontent.com/u/33774399/wiswall_webpage/agostinelli_wiswall_renormalizations.pdf>`_, i.e. uses less normalizations for production functions with known scale and location. Moreover, it uses less normalizations if development stages span more than one period (See: :ref:`normalization_and_stages`).
 
 .. Caution:: If you don't want to use normalizations you have to explicitly specify normalization lists with empty sublists (as in the example model). Simply not specifying normalizations triggers the automatic generation of normalization specifications.
 
-.. Note:: The model shown below uses deliberately too many normalizations in order to make the results comparable with the
-    parameters from the CHS replication files.
+.. Note:: The model shown below deliberately uses too many normalizations in order to make the results comparable with the parameters from the CHS replication files.
 
 The value that corresponds to the ``trans_eq`` key is a dictionary. The ``name`` entry specifies the name of the transition equation. The ``included_factors`` entry specifies which factors enter the transition equation. The transition equations already implemented are:
 
@@ -81,12 +77,14 @@ The value that corresponds to the ``trans_eq`` key is a dictionary. The ``name``
 
 To see how new types of transition equations can be added see :ref:`model_functions`.
 
-The specification for fac2 is very similar and you can look it up in ``src.model_specs``. The specification for fac3 looks a bit different as this factor is only measured in the first period:
+The specification for fac2 is very similar and not reproduced here. The specification for fac3 looks a bit different as this factor is only measured in the first period:
 
 .. literalinclude:: test_model2.json
     :lines: 54-77
 
 Here it is important to note that empty sublists have to be added to the ``measurements`` and ``normalizations`` key if no measurements are available in certain periods. Simply leaving the sublists out will result in an error.
+
+.. Note:: If the WA estimator is used, factors with constant transition equation can only have measurements in the initial period and all other factors need at least two measurements per period. If the CHS estimator is used these limitations do not hold as long as there are enough measurements to identify the model. If development stages span more than one period, models can be identified even if some factors have no measurements in some periods.
 
 Points 4 and 5 are only specified once for all factors by adding entries to the ``time_specific`` key of the model dictionary:
 
