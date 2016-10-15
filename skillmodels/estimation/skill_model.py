@@ -964,27 +964,30 @@ class SkillModel(GenericLikelihoodModel):
         position_helper = self.update_info[self.factors].values.astype(bool)
 
         u_args_list = []
-        k = 0
-        for t in self.periods:
-            nmeas = self.nmeas_list[t]
-            if t == self.periods[-1] and self.anchoring is True:
-                nmeas += 1
-            for j in range(nmeas):
-                u_args = [
-                    initial_quantities['X_zero'],
-                    initial_quantities['P_zero'],
-                    like_vec,
-                    self.y_data[k],
-                    self.c_data[t],
-                    initial_quantities['deltas'][t][j],
-                    initial_quantities['H'][k],
-                    initial_quantities['R'][k: k + 1],
-                    np.arange(self.nfac)[position_helper[k]],
-                    initial_quantities['W_zero']]
-                if self.square_root_filters is False:
-                    u_args.append(np.zeros((self.nobs, self.nfac)))
-                u_args_list.append(u_args)
-                k += 1
+        # this is necessary to make some parts of the likelihood arguments
+        # dictionaries usable to calculate marginal effecs with all estimators.
+        if self.estimator == 'chs':
+            k = 0
+            for t in self.periods:
+                nmeas = self.nmeas_list[t]
+                if t == self.periods[-1] and self.anchoring is True:
+                    nmeas += 1
+                for j in range(nmeas):
+                    u_args = [
+                        initial_quantities['X_zero'],
+                        initial_quantities['P_zero'],
+                        like_vec,
+                        self.y_data[k],
+                        self.c_data[t],
+                        initial_quantities['deltas'][t][j],
+                        initial_quantities['H'][k],
+                        initial_quantities['R'][k: k + 1],
+                        np.arange(self.nfac)[position_helper[k]],
+                        initial_quantities['W_zero']]
+                    if self.square_root_filters is False:
+                        u_args.append(np.zeros((self.nobs, self.nfac)))
+                    u_args_list.append(u_args)
+                    k += 1
         return u_args_list
 
     def _transition_equation_args_dicts(self, initial_quantities):
@@ -1999,9 +2002,6 @@ class SkillModel(GenericLikelihoodModel):
 
     def _marginal_effect_outcome(self, change):
 
-        if self.me_at is None:
-            self.me_at = self.generate_start_factors()
-
         final_factors = self._predict_final_factors(change)
 
         if self.anchoring is True:
@@ -2014,7 +2014,8 @@ class SkillModel(GenericLikelihoodModel):
             for p, pos in enumerate(self.anch_positions):
                 anch_loadings[pos] = relevant_params[p]
 
-            anch_intercept = self.me_params[slices['deltas']][-1]
+            # the last entry of the last delta slice
+            anch_intercept = self.me_params[slices['deltas'][-1]][-1]
 
             if self.me_on == 'anch_outcome':
                 return self._anchoring_outcome_from_final_factors(

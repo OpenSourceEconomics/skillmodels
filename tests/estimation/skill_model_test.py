@@ -1331,7 +1331,7 @@ class TestMarginalEffectOutcome:
         self.anchored_factors = ['f1']
         self.factors = ['f1', 'f2']
 
-        sl = {'H': slice(0, 3), 'deltas': slice(3, 5)}
+        sl = {'H': slice(0, 3), 'deltas': [slice(3, 5)]}
         self.params_slices = Mock(return_value=sl)
         self.me_params = np.array([0, 0, 3, 0, 1])
         self._anchor_final_factors = Mock(side_effect=fake_anch)

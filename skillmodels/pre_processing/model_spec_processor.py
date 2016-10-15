@@ -98,6 +98,7 @@ class ModelSpecProcessor:
         if self.estimator == 'wa':
             self.nemf = 1
             self.cholesky_of_P_zero = False
+            self.square_root_filters = False
         self._set_time_specific_attributes()
         self._check_general_specifications()
         self._generate_save_directories()

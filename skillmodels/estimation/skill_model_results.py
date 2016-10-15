@@ -19,6 +19,7 @@ class SkillModelResults(GenericLikelihoodModelResults):
         self._cache = resettable_cache()
         self.__dict__.update(mlefit.__dict__)
         self.param_names = model.param_names(params_type='long')
+        self.nperiods = self.model.nperiods
 
     @cache_readonly
     def aic(self):
@@ -120,8 +121,8 @@ class SkillModelResults(GenericLikelihoodModelResults):
         raise NotImplementedError(
             'A predict method is not yet implemented for SkillModelResults')
 
-    def marginal_effecs(self, of, on, at=None, anchor_on=True, centered=True,
-                        complex_step=False):
+    def marginal_effects(self, of, on, at=None, anchor_on=True, centered=True,
+                         complex_step=False):
         """
         Marginal effects of a factor in all periods on a last period outcome.
 
@@ -157,9 +158,12 @@ class SkillModelResults(GenericLikelihoodModelResults):
 
         self.model.me_of = of
         self.model.me_on = on
-        self.model.me_at = at
-        self.model.me_anchor_on = anchor_on
         self.model.me_params = self.params
+        if at is not None:
+            self.model.me_at = at
+        else:
+            self.model.me_at = self.model._generate_start_factors()
+        self.model.me_anchor_on = anchor_on
 
         change = np.zeros(self.nperiods - 1)
 
