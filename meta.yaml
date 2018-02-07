@@ -1,6 +1,6 @@
 package:
   name: skillmodels
-  version: "0.0.0277"
+  version: "0.0.0281"
 
 source:
   path: ../skillmodels
@@ -10,10 +10,10 @@ requirements:
     - python
     - setuptools
   run:
-    - python 3.5.2
-    - numba 0.27.0
-    - statsmodels 0.6.1
-    - scipy 0.17.0
+    - python>=3.6
+    - numba
+    - statsmodels
+    - scipy
 
 test:
   files:

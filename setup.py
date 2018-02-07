@@ -2,6 +2,6 @@ from setuptools import setup, find_packages
 
 setup(
     name='skillmodels',
-    version='0.0.0277',
+    version='0.0.0281',
     packages=find_packages()
 )
