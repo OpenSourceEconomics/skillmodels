@@ -38,11 +38,12 @@ This should work for all platforms, but only 64-bit linux is tested.
 Documentation
 -------------
 
-After cloning the repository you can cd to the docs directory and type:
+[The documentation is hosted at readthedocs](https://skillmodels.readthedocs.io/en/latest/)
+
+Alternatively, you can build it locally. After cloning the repository you can cd to the docs directory and type:
 
 make html
 
-to generate detailed documentation.
 
 
 Building the package with conda-build
