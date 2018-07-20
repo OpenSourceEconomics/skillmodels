@@ -33,15 +33,7 @@ The following documentation is ordered from high-level to low-level. To get star
 
 **Citation**
 
-It took countless hours to write skillmodels. I make it available under a very permissive license in the hope that it helps other people to do great research that advances our knowledge about the formation of cognitive and noncognitive siklls. If you find skillmodels helpful, please don't forget to cite it. Below you can find the bibtex entry for a suggested citation. The suggested citation will be updated once the code becomes part of a published paper.
-
-.. code::
-
-    @unpublished{Skillmodels,
-        Author = {Janos Gabler},
-        Note = {\url{https://github.com/janosg/skillmodels}},
-        Title = {A Python Library to Estimate Nonlinear Dynamic Latent Factor Models},
-        Year = {2018}}
+It took countless hours to write skillmodels. I make it available under a very permissive license in the hope that it helps other people to do great research that advances our knowledge about the formation of cognitive and noncognitive siklls. If you find skillmodels helpful, please don't forget to cite it. You can find a suggested citation in the README file on `GitHub`_.
 
 
 **Feedback**
