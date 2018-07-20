@@ -6,7 +6,7 @@ Here I collect Notes on different aspects of the discussion about factor scales 
 
 Wiswall and Agostinelli define a class of transition functions with Known Location and Scale (KLS) that require less normalizations. You should read this definition in their paper.
 
-The critique by Wiswall and Agostinelli invalidates all empirical estimates of CHS, but not their general estimation routine. To get estimates that don't suffer from renormalization you can either use less normalizations or non-KLS transition functions. As there is no natural scale of skills, none of the approaches is better or worse. Nevertheless, I prefer using flexible Non-KLS transition functions with one normalization per period and factor because it is compatible with using development stages.
+The critique by Wiswall and Agostinelli potentially invalidates the empirical estimates of CHS, but not their general estimation routine. To get estimates that don't suffer from renormalization you can either use less normalizations or non-KLS transition functions. As there is no natural scale of skills, none of the approaches is better or worse. Nevertheless, I prefer using flexible Non-KLS transition functions with one normalization per period and factor. Firstly, because they are more compatible with using development stages that span more than one period. Secondly, because picking suitable normalizations might help to give the latent factors a more meaningful scale.
 
 
 .. _KLS_not_constant:
@@ -17,6 +17,8 @@ Why KLS functions don't keep the scales constant
 Skills have no natural scale, but after reading the critique paper by Wiswall and Agostinelli one could easily get the impression that using KLS transition functions and less normalizations is better, because it identifies some sort of natural scale. Moreover in their `estimation`_ paper (p. 7), they write: "We argue that our limited normalization is appropriate for the dynamic setting of child development we analyze.  With our normalization for the initial period only, latent skills  in all periods  share  a common  location  and scale  with  respect to  the one chosen normalizing measure."
 
 The following example intuitively shows firstly that the scale identified with KLS functions is as arbitrary as a scale identified through normalizations and secondly that this scale is not constant over time in general.
+
+The example completely abstracts from measurement and estimation problems and thereby allows to focus essential on the aspects of the problem.
 
 Consider a simple model of financial investments with two latent factors: a stock variable wealth (w) and a flow variable investment (i). Suppose periods last one year and annual interest rate on wealth is 10 percent. New investments are deposited at the end of the year (get interests only in the next year).
 
@@ -40,9 +42,9 @@ The parameters now reflect the actual technology and scale changes between perio
 
 could describe the example system -- just in different combinations of scales.
 
-When latent factor models are estimated, the scales of each factor are usually set through normalizations in each period. The main point of the first paper is that a KLS transition function prohibits to make such normalizations except for the initial period. One could say that after that, the transition function chooses the scale.
+When latent factor models are estimated, the scales of each factor are usually set through normalizations in each period. The main point of the first paper by Wiswall and Agostinelli is that a KLS transition function prohibits to make such normalizations except for the initial period. One could say that after that, the transition function chooses the scale.
 
-The CES function has KLS and contains the subset of all linear functions without intercept and parameters summing to 1 as special cases. It can therefore be used to describe the example system. After setting the scale of both factors to Dollars in the initial period, the CES function would then choose the scales for all other periods.
+The CES function has KLS and contains the subset of all linear functions without intercept whose parameters sum to 1 as special cases. It can therefore be used to describe the example system. After setting the scale of both factors to Dollars in the initial period, the CES function would then choose the scales for all other periods.
 
 The linear function that is a CES function and describes the system is:
 
