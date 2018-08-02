@@ -26,7 +26,7 @@ class Mock(MagicMock):
             return Mock()
 
 MOCK_MODULES = ['numpy', 'pandas', 'numba', 'patsy', 'statsmodels', 'scipy']
-sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
+sys.modules.update({mod_name: Mock() for mod_name in MOCK_MODULES})
 
 
 # -- General configuration ----------------------------------------------------
