@@ -1,2 +1,4 @@
 sphinxcontrib-napoleon
 sphinxcontrib-bibtex
+pandas
+numpy
