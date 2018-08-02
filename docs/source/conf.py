@@ -12,34 +12,21 @@
 
 import sys
 import os
-# from unittest.mock import MagicMock
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-sys.path.insert(0, os.path.abspath("../../skillmodels"))
+print(os.path.abspath("../.."))
 sys.path.insert(0, os.path.abspath("../.."))
-sys.path.insert(0, os.path.abspath("."))
-
-
-# class Mock(MagicMock):
-#     @classmethod
-#     def __getattr__(cls, name):
-#         return MagicMock()
-#
-# MOCK_MODULES = ['numpy', 'pandas', 'numba', 'patsy', 'scipy',
-#                 'numpy.core.umath_tests', 'numpy.linalg',
-#                 'statsmodels.tools.decorators', 'numpy.testing',
-#                 'statsmodels.tools.numdiff', 'statsmodels.tools',
-#                 'statsmodels.tools.sm_exceptions',
-#                 'scipy.optimize']
-# sys.modules.update({mod_name: Mock() for mod_name in MOCK_MODULES})
+print(os.path.abspath("../../skillmodels"))
+sys.path.insert(0, os.path.abspath("../../skillmodels"))
 
 
 # -- General configuration ----------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
-needs_sphinx = "1.1"
+needs_sphinx = "1.6"
+autodoc_mock_imports = ['numpy', 'numba', 'patsy', 'statsmodels']
 
 # Add any Sphinx extension module names here, as strings.
 # They can be extensions coming with Sphinx (named "sphinx.ext.*")
