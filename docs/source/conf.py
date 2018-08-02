@@ -12,7 +12,7 @@
 
 import sys
 import os
-from mock import Mock as MagicMock
+from unittest.mock import MagicMock
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -23,9 +23,13 @@ sys.path.insert(0, os.path.abspath("../.."))
 class Mock(MagicMock):
     @classmethod
     def __getattr__(cls, name):
-            return Mock()
+        return MagicMock()
 
-MOCK_MODULES = ['numpy', 'pandas', 'numba', 'patsy', 'statsmodels', 'scipy']
+MOCK_MODULES = ['numpy', 'pandas', 'numba', 'patsy', 'statsmodels', 'scipy',
+                'numpy.core.umath_tests', 'numpy.linalg',
+                'statsmodels.tools.decorators', 'statsmodels.base.model',
+                'statsmodels.tools.numdiff', 'statsmodels.tools',
+                'scipy.optimize']
 sys.modules.update({mod_name: Mock() for mod_name in MOCK_MODULES})
 
 
