@@ -6,3 +6,4 @@ statsmodels
 patsy
 scipy
 pandas
+sphinx-autodoc
