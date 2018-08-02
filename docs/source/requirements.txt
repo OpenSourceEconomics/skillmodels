@@ -1,2 +1,8 @@
 sphinxcontrib-napoleon
 sphinxcontrib-bibtex
+numpy
+numba
+statsmodels
+patsy
+scipy
+pandas
