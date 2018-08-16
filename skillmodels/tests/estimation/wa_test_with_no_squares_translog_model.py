@@ -63,7 +63,7 @@ def generate_test_data(nobs, factors, periods, included_positions, meas_names,
         df['period'] = t
         df['id'] = np.arange(nobs)
         meas_data.append(df)
-    large_df = pd.concat(meas_data)
+    large_df = pd.concat(meas_data, sort=True)
     large_df.sort_values(by=['id', 'period'], inplace=True)
 
     # print('true cov matrices for generated factor data')

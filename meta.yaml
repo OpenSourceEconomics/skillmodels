@@ -1,18 +1,21 @@
+{% set data = load_setup_py_data() %}
+
 package:
   name: skillmodels
-  version: "0.0.030"
+  version: {{ data.get('version') }}
 
 source:
   path: ../skillmodels
 
 requirements:
   build:
-    - python
+    - python {{ python }}
     - setuptools
   run:
-    - python=3.6
-    - numba
-    - statsmodels
+    - python {{ python }}
+    - numba >=0.27
+    - numpy
+    - statsmodels >=0.6.1
     - scipy
 
 test:
@@ -33,8 +36,7 @@ test:
     - skillmodels/tests/fast_routines/transform_sigma_points_test.py
   requires:
     - nose
-    - numpy
-    - numba
+
 
 about:
   home: https://github.com/suri5471/skillmodels

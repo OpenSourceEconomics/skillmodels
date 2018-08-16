@@ -46,7 +46,7 @@ class TestVariableCheckMethods:
         df1.loc[1, 'var1'] = 1
         df2 = DataFrame(data=np.ones((5, 2)), columns=['period', 'var2'])
         df2.loc[1, 'var2'] = 5
-        self.data = pd.concat([df1, df2], axis=0)
+        self.data = pd.concat([df1, df2], axis=0, sort=True)
         self.missing_variables = 'drop_variable'
         self.variables_without_variance = 'drop_variable'
         self.model_name = 'model'
