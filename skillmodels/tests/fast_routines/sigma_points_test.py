@@ -42,7 +42,7 @@ class TestSigmaPointConstructionAgainstFilterpy:
 
         # these test results have been calculated with the sigma_point
         # function of the filterpy library
-        with open('tests/fast_routines/sigma_points_from_filterpy.json') as f:
+        with open('skillmodels/tests/fast_routines/sigma_points_from_filterpy.json') as f:
             self.fixtures = json.load(f)
 
     def test_julier_sigma_point_construction(self):
