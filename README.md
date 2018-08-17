@@ -30,7 +30,7 @@ Installation
 
 The package can be installed via conda. To do so, type the following in a terminal:
 
-conda install -c suri5471 skillmodels
+conda install -c janosg skillmodels
 
 This should work for all platforms, but only 64-bit linux is tested.
 
