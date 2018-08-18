@@ -1359,7 +1359,3 @@ class TestMarginalEffectOutcome:
         exp = np.ones((10)) * 4
         calc = smo._marginal_effect_outcome(self, self.change)
         aaae(calc, exp)
-
-if __name__ == '__main__':
-    from nose.core import runmodule
-    runmodule()

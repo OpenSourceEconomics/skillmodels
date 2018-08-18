@@ -37,8 +37,3 @@ def test_numba_choldate_with_negative_weight():
     w = -0.1
     tu, uw, er = setup_(weight=w)
     aaae(array_choldate(to_update=tu, update_with=uw, weight=w), er)
-
-
-if __name__ == '__main__':
-    from nose.core import runmodule
-    runmodule()

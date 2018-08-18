@@ -549,8 +549,3 @@ class TestNewTransitionCoeffs:
              [-1, 0, 1, 1, 1],
              [-1, 0, 1, 1, 1]])
         aae(msp.new_trans_coeffs(self), res)
-
-
-if __name__ == '__main__':
-    from nose.core import runmodule
-    runmodule()

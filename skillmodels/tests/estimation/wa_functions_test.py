@@ -300,7 +300,3 @@ class TestTransitionErrorVarianceFromUCovs:
             self.u_covs, self.loadings)
         assert_almost_equal(calc, 0.3734567901234568)
 
-
-if __name__ == '__main__':
-    from nose.core import runmodule
-    runmodule()

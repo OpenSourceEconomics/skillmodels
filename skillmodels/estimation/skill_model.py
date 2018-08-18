@@ -115,9 +115,9 @@ class SkillModel(GenericLikelihoodModel):
     def _initial_deltas(self):
         """List of initial arrays for control variable params in each period.
 
-        The arrays have the shape [nupdates, nr_of_control_variables]
+        The arrays have the shape [nupdates, nr_of_control_variables + 1]
         which is potentially different in each period. They are filled with
-        zeros.
+        zeros or the value of normalized intercepts.
 
         """
         deltas = []

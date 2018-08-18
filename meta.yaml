@@ -19,6 +19,8 @@ requirements:
     - scipy
 
 test:
+  commands:
+    - py.test
   files:
     - skillmodels/tests/fast_routines/kalman_filters_test.py
     - skillmodels/tests/fast_routines/choldate_test.py
@@ -31,10 +33,11 @@ test:
     - skillmodels/tests/estimation/parse_params_test.py
     - skillmodels/tests/estimation/skill_model_test.py
     - skillmodels/tests/estimation/wa_functions_test.py
-    - skillmodels/tests/estimation/wa_test_with_no_squares_translog_model.py
+    - skillmodels/tests/estimation/wa_with_no_squares_translog_model_test.py
     - skillmodels/tests/estimation/no_squares_translog_model.json
     - skillmodels/tests/fast_routines/transform_sigma_points_test.py
   requires:
+    - pytest
     - nose
 
 

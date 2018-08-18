@@ -151,7 +151,7 @@ class ModelSpecProcessor:
             self.stagemap = sm
 
         self.periods = range(self.nperiods)
-        self.stages = list(set(self.stagemap))
+        self.stages = sorted(list(set(self.stagemap)))
         self.nstages = len(self.stages)
         self.stage_length_list = [
             list(self.stagemap[:-1]).count(s) for s in self.stages]

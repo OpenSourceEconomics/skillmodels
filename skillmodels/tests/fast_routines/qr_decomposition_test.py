@@ -25,9 +25,4 @@ class TestRFromQR:
         aaae(a_prime_a(prod), self.expected_prod)
 
 
-if __name__ == '__main__':
-    np.random.seed(2310895471)
-    from nose.core import runmodule
-    runmodule()
-
 

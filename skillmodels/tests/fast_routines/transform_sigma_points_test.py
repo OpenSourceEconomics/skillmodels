@@ -60,7 +60,3 @@ class TestTransformSigmaPoints:
 
         calc = self.flat_sigma_points.copy()
         aaae(calc, exp)
-
-if __name__ == '__main__':
-    from nose.core import runmodule
-    runmodule()

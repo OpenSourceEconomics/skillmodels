@@ -183,8 +183,3 @@ class TestTranslog:
              'translog__1__f2__TFP']
         names = tf.coeff_names_translog(self.incl_fac, 'short', 'f2', 1)
         assert_equal(names, expected_names)
-
-
-if __name__ == '__main__':
-    from nose.core import runmodule
-    runmodule()

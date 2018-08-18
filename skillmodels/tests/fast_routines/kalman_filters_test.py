@@ -300,6 +300,3 @@ class TestUnscentedPredict:
         make_unique(self.out_covs)
         aaae(self.out_covs, self.exp_cholcovs)
 
-if __name__ == '__main__':
-    from nose.core import runmodule
-    runmodule()

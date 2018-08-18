@@ -247,7 +247,3 @@ class TestOfWAEstimator:
             wa_model._calculate_wa_quantities()
 
         aaae(calc_trans_vars.values, self.true_trans_var, decimal=3)
-
-if __name__ == '__main__':
-    from nose.core import runmodule
-    runmodule()

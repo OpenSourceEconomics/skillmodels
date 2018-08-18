@@ -87,7 +87,3 @@ class TestYData:
              np.array([[8, 9, 11]] * 6), np.array([[12, 13, 15]] * 7)])
 
         aae(dc.y_data_chs(self), res)
-
-if __name__ == '__main__':
-    from nose.core import runmodule
-    runmodule()

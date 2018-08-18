@@ -469,7 +469,3 @@ class TestMapParamsToTransCoeffs:
 
         aae(result, np.arange(14) / 2)
 
-
-if __name__ == '__main__':
-    from nose.core import runmodule
-    runmodule()
