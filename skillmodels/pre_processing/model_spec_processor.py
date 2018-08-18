@@ -2,7 +2,6 @@ import pandas as pd
 from pandas import DataFrame
 import numpy as np
 from itertools import product
-import skillmodels.model_functions.transition_functions as tf
 import os
 import warnings
 
@@ -110,7 +109,7 @@ class ModelSpecProcessor:
         self._clean_controls_specification()
         self.nobs = self.obs_to_keep.sum()
         self._set_bootstrap_sample_size()
-        self._check_or_generate_normalization_specification()
+        self._check_and_fill_normalization_specification()
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
         self._nmeas_list()
@@ -568,139 +567,36 @@ class ModelSpecProcessor:
 
         return norm_list
 
-    def _stage_has_fixed_start_period_list(self, norm_type):
-        """Map list of stages to list of boolean values.
-
-        The s_th entry in the resulting list is True if the location
-        (norm_type='intercept') or scale (norm_type='loadings') in the first
-        period of stage s is fixed through normalizations in previous stages
-        or normalization of initial values.
-        """
-        has_fixed = []
-        for s in self.stages:
-            if s == 0:
-                if norm_type == 'intercepts' and self.estimate_X_zeros is False:    # noqa
-                    has_fixed.append(True)
-                else:
-                    has_fixed.append(False)
-
-            elif self.stage_length_list[s - 1] == 1:
-                has_fixed.append(False)
-            else:
-                has_fixed.append(True)
-        return has_fixed
-
-    def _first_period_in_stage(self, period):
-        """Return True if period is the first period in its stage."""
-        if period == 0:
-            return True
-        elif self.stagemap[period] > self.stagemap[period - 1]:
-            return True
-        else:
-            return False
-
-    def needs_normalization(self, factor, norm_type):
-        """Boolean list of length nperiods.
-
-        The t_th entry is True if factor needs a normalization of norm_type
-        in period period t. Else it is False.
-
-        """
-        transition_name = self.transition_names[self.factors.index(factor)]
-
-        needs_normalization = []
-        # first period entry
-        if norm_type == 'loadings' or self.estimate_X_zeros is True:
-            needs_normalization.append(True)
-        else:
-            needs_normalization.append(False)
-
-        if norm_type == 'loadings':
-            func_string = 'output_has_known_scale_{}'
-        else:
-            func_string = 'output_has_known_location_{}'
-
-        no_norm_after_0 = getattr(tf, func_string.format(transition_name))()
-
-        if no_norm_after_0:
-            needs_normalization += [False] * (self.nperiods - 1)
-        elif transition_name == 'ar1':
-            needs_normalization.append(True)
-            needs_normalization += [False] * (self.nperiods - 2)
-        else:
-            has_fixed = self._stage_has_fixed_start_period_list(norm_type)
-            for t in self.periods[1:]:
-                stage = self.stagemap[t]
-                if self._first_period_in_stage(t):
-                    if has_fixed[stage]:
-                        needs_normalization.append(False)
-                    else:
-                        needs_normalization.append(True)
-                # if it is the second period in stage s
-                elif self._first_period_in_stage(t - 1):
-                    needs_normalization.append(True)
-                else:
-                    needs_normalization.append(False)
-        return needs_normalization
-
-    def generate_normalizations_list(self, factor, norm_type):
-        """Generate normalizations automatically.
-
-        If factor needs a normalization of 'loadings' in period t the loading
-        of its first measurement in period t is normalized to 1.
-
-        If factor needs a normalization of 'intercepts' in period t the
-        intercept of its first measurement in period t is normalized
-        to 0.
-
-        args:
-            factor (str): name of factor for which normalizations are generated
-            norm_type (str): specifices the type of normalization. Takes the
-                values 'loadings' or 'intercepts'.
-
-        Returns:
-            list: a normalizations list that has the same form as manually
-            specified counterparts (see description in :ref:`model_specs`)
-
-        """
-        normalizations = []
-        needs_normalization = self.needs_normalization(factor, norm_type)
-        val = 0.0 if norm_type == 'intercepts' else 1.0
-        for t in self.periods:
-            if needs_normalization[t] is True:
-                meas = self.measurements[factor][t][0]
-                normalizations.append([meas, val])
-            else:
-                normalizations.append([])
-        return normalizations
-
-    def _check_or_generate_normalization_specification(self):
-        """Check the normalization specs or generate it for each factor.
+    def _check_and_fill_normalization_specification(self):
+        """Check normalization specs or generate empty ones for each factor.
 
         The result is set as class attribute ``normalizations``.
 
-        Note: normalizations of variances are only checked, never generated
-        as the same effect can be achieved by normalizing loadings.
-
         """
         norm = {}
+        norm_types = ['loadings', 'intercepts', 'variances']
 
         for factor in self.factors:
             norm[factor] = {}
-            for norm_type in ['loadings', 'intercepts', 'variances']:
+
+            for norm_type in norm_types:
                 if 'normalizations' in self._facinf[factor]:
                     norminfo = self._facinf[factor]['normalizations']
                     if norm_type in norminfo:
                         norm_list = norminfo[norm_type]
                         norm[factor][norm_type] = \
                             self._check_normalizations_list(factor, norm_list)
-                    elif norm_type != 'variances':
-                        norm[factor][norm_type] = \
-                            self.generate_normalizations_list(
-                                factor, norm_type)
-                elif norm_type != 'variances':
-                    norm[factor][norm_type] = \
-                        self.generate_normalizations_list(factor, norm_type)
+                    else:
+                        norm[factor][norm_type] = [[]] * self.nperiods
+                else:
+                    norm[factor] = {
+                        nt: [[]] * self.nperiods for nt in norm_types}
+
+        if self.estimator == 'wa':
+            for factor in self.factors:
+                assert norm[factor]['variances'] == [[]] * self.nperiods, \
+                    'Normalized variances and wa estimator are incompatible.'
+
         self.normalizations = norm
 
     def _nmeas_list(self):

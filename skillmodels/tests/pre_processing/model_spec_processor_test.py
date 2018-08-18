@@ -208,129 +208,7 @@ class TestCheckNormalizations:
             f1_norm_list)
 
 
-class TestGenerateNormalizationSpecifications:
-    def setup(self):
-        self.factors = ['fac1', 'fac2', 'fac3']
-        self.transition_names = ['ar1', 'log_ces', 'translog']
-        self.estimate_X_zeros = True
-        self.nperiods = 9
-        self.periods = list(range(self.nperiods))
-        self.stagemap = [0, 0, 0, 1, 1, 2, 3, 3, 3]
-        self.stages = [0, 1, 2, 3]
-        self.stage_length_list = [3, 2, 1, 3]
-
-    def test_has_fixed_start_period_list_loadings(self):
-        expected = [False, True, True, False]
-        calculated = msp._stage_has_fixed_start_period_list(self, 'loadings')
-        assert_equal(expected, calculated)
-
-    def test_has_fixed_start_period_list_intercepts_fixed_x_zeros(self):
-        expected = [True, True, True, False]
-        self.estimate_X_zeros = False
-        calculated = msp._stage_has_fixed_start_period_list(self, 'intercepts')
-        assert_equal(expected, calculated)
-
-    def test_has_fixed_start_period_list_intercepts_free_x_zeros(self):
-        expected = [False, True, True, False]
-        calculated = msp._stage_has_fixed_start_period_list(self, 'intercepts')
-        assert_equal(expected, calculated)
-
-    def test_is_first_period_in_stage_true(self):
-        assert_equal(msp._first_period_in_stage(self, 3), True)
-
-    def test_is_first_period_in_stage_false(self):
-        assert_equal(msp._first_period_in_stage(self, 4), False)
-
-    def test_needs_norm_ar1_case_for_loadings(self):
-        expected = [True, True, False, False, False,
-                    False, False, False, False]
-        result = msp.needs_normalization(self, 'fac1', 'loadings')
-        assert_equal(result, expected)
-
-    def test_needs_norm_ar1_case_for_intercept_fixed_x_zeros(self):
-        self.estimate_X_zeros = False
-        expected = [False, False, False, False, False,
-                    False, False, False, False]
-        result = msp.needs_normalization(self, 'fac1', 'intercepts')
-        assert_equal(result, expected)
-
-    def test_needs_norm_ar1_case_for_intercept_free_x_zeros(self):
-        expected = [True, False, False, False, False,
-                    False, False, False, False]
-        result = msp.needs_normalization(self, 'fac1', 'intercepts')
-        assert_equal(result, expected)
-
-    def test_needs_norm_log_ces_case_for_loadings(self):
-        expected = [True, False, False, False, False,
-                    False, False, False, False]
-        result = msp.needs_normalization(self, 'fac2', 'loadings')
-        assert_equal(result, expected)
-
-    def test_needs_norm_log_ces_case_for_intercepts_fixed_x_zeros(self):
-        expected = [False, False, False, False, False,
-                    False, False, False, False]
-        self.estimate_X_zeros = False
-        result = msp.needs_normalization(self, 'fac2', 'intercepts')
-        assert_equal(result, expected)
-
-    def test_needs_norm_log_ces_case_for_intercepts_free_x_zeros(self):
-        expected = [True, False, False, False, False,
-                    False, False, False, False]
-        result = msp.needs_normalization(self, 'fac2', 'intercepts')
-        assert_equal(result, expected)
-
-    def test_needs_norm_translog_case_for_loadings(self):
-        expected = [True, True, False, False, True, False, True, True, False]
-        self._stage_has_fixed_start_period_list = Mock(
-            return_value=[False, True, True, False])
-        self._first_period_in_stage = Mock(
-            side_effect=[False, True, False, False, True, False, True, True,
-                         True, False, True, False, False])
-        result = msp.needs_normalization(self, 'fac3', 'loadings')
-        assert_equal(result, expected)
-
-    def test_needs_norm_translog_case_for_intercepts_fixed_x_zeros(self):
-        expected = [False, True, False, False, True, False, True, True, False]
-        self.estimate_X_zeros = False
-        self._stage_has_fixed_start_period_list = Mock(
-            return_value=[True, True, True, False])
-        self._first_period_in_stage = Mock(
-            side_effect=[False, True, False, False, True, False, True, True,
-                         True, False, True, False, False])
-        result = msp.needs_normalization(self, 'fac3', 'intercepts')
-        assert_equal(result, expected)
-
-    def test_needs_norm_translog_case_for_intercepts_free_x_zeros(self):
-        expected = [True, True, False, False, True, False, True, True, False]
-        self._stage_has_fixed_start_period_list = Mock(
-            return_value=[False, True, True, False])
-        self._first_period_in_stage = Mock(
-            side_effect=[False, True, False, False, True, False, True, True,
-                         True, False, True, False, False])
-        result = msp.needs_normalization(self, 'fac3', 'intercepts')
-        assert_equal(result, expected)
-
-
-class TestGenerateNormalizationsList:
-    def setup(self):
-        self.measurements = {'f1': [['m1', 'm2'], ['m1', 'm2', 'm3'], ['m2'],
-                                    ['m4'], ['m4']]}
-        self.needs_normalization = Mock(
-            return_value=[True, True, False, False, True])
-        self.periods = list(range(5))
-
-    def test_generate_normalization_list_loadings(self):
-        expected = [['m1', 1], ['m1', 1], [], [], ['m4', 1]]
-        result = msp.generate_normalizations_list(self, 'f1', 'loadings')
-        assert_equal(result, expected)
-
-    def test_generate_normalization_list_intercepts(self):
-        expected = [['m1', 0], ['m1', 0], [], [], ['m4', 0]]
-        result = msp.generate_normalizations_list(self, 'f1', 'intercepts')
-        assert_equal(result, expected)
-
-
-class TestCheckOrGenerateNormalizationSpecifications:
+class TestCheckAndFillNormalizationSpecifications:
     def setup(self):
         self._facinf = {
             'f1': {'normalizations':
@@ -339,22 +217,22 @@ class TestCheckOrGenerateNormalizationSpecifications:
                     'variances': [['a', 1], ['a', 1], ['a', 1]]}},
             'f2': {}}
 
+        self.nperiods = 3
+
         self.factors = sorted(list(self._facinf.keys()))
         self._check_normalizations_list = Mock(
             return_value=[['a', 1], ['a', 1], ['a', 1]])
-        self.generate_normalizations_list = \
-            Mock(return_value=[['b', 1], ['b', 1], ['b', 1]])
+        self.estimator = 'chs'
 
-    def test_check_or_generate_normalization_specifications(self):
+    def test_check_and_fill_normalization_specifications(self):
         res = {'f1': {'loadings': [['a', 1], ['a', 1], ['a', 1]],
                       'intercepts': [['a', 1], ['a', 1], ['a', 1]],
                       'variances': [['a', 1], ['a', 1], ['a', 1]]},
-               'f2': {'loadings': [['b', 1], ['b', 1], ['b', 1]],
-                      'intercepts': [['b', 1], ['b', 1], ['b', 1]]}}
-        msp._check_or_generate_normalization_specification(self)
-        print('calc', '\n\n', self.normalizations)
-        print('exp', '\n\n', res)
+               'f2': {'loadings': [[], [], []],
+                      'intercepts': [[], [], []],
+                      'variances': [[], [], []]}}
 
+        msp._check_and_fill_normalization_specification(self)
         assert_equal(self.normalizations, res)
 
 
