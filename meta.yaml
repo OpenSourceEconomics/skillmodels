@@ -36,6 +36,10 @@ test:
     - skillmodels/tests/estimation/wa_with_no_squares_translog_model_test.py
     - skillmodels/tests/estimation/no_squares_translog_model.json
     - skillmodels/tests/fast_routines/transform_sigma_points_test.py
+    - skillmodels/tests/estimation/likelihood_regression_test.py
+    - skillmodels/tests/estimation/test_model2.json
+    - skillmodels/tests/estimation/chs_test_ex2.dta
+    - skillmodels/tests/estimation/regression_test_fixture.pickle
   requires:
     - pytest
     - nose
