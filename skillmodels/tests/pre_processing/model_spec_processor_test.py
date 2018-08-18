@@ -335,7 +335,8 @@ class TestCheckOrGenerateNormalizationSpecifications:
         self._facinf = {
             'f1': {'normalizations':
                    {'loadings': [['a', 1], ['a', 1], ['a', 1]],
-                    'intercepts': [['a', 1], ['a', 1], ['a', 1]]}},
+                    'intercepts': [['a', 1], ['a', 1], ['a', 1]],
+                    'variances': [['a', 1], ['a', 1], ['a', 1]]}},
             'f2': {}}
 
         self.factors = sorted(list(self._facinf.keys()))
@@ -346,7 +347,8 @@ class TestCheckOrGenerateNormalizationSpecifications:
 
     def test_check_or_generate_normalization_specifications(self):
         res = {'f1': {'loadings': [['a', 1], ['a', 1], ['a', 1]],
-                      'intercepts': [['a', 1], ['a', 1], ['a', 1]]},
+                      'intercepts': [['a', 1], ['a', 1], ['a', 1]],
+                      'variances': [['a', 1], ['a', 1], ['a', 1]]},
                'f2': {'loadings': [['b', 1], ['b', 1], ['b', 1]],
                       'intercepts': [['b', 1], ['b', 1], ['b', 1]]}}
         msp._check_or_generate_normalization_specification(self)

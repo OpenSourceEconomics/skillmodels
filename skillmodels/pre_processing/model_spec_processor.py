@@ -679,23 +679,26 @@ class ModelSpecProcessor:
 
         The result is set as class attribute ``normalizations``.
 
+        Note: normalizations of variances are only checked, never generated
+        as the same effect can be achieved by normalizing loadings.
+
         """
         norm = {}
 
         for factor in self.factors:
             norm[factor] = {}
-            for norm_type in ['loadings', 'intercepts']:
+            for norm_type in ['loadings', 'intercepts', 'variances']:
                 if 'normalizations' in self._facinf[factor]:
                     norminfo = self._facinf[factor]['normalizations']
                     if norm_type in norminfo:
                         norm_list = norminfo[norm_type]
                         norm[factor][norm_type] = \
                             self._check_normalizations_list(factor, norm_list)
-                    else:
+                    elif norm_type != 'variances':
                         norm[factor][norm_type] = \
                             self.generate_normalizations_list(
                                 factor, norm_type)
-                else:
+                elif norm_type != 'variances':
                     norm[factor][norm_type] = \
                         self.generate_normalizations_list(factor, norm_type)
         self.normalizations = norm
@@ -720,9 +723,8 @@ class ModelSpecProcessor:
 
         In the model specs the measurement variables are specified in the way
         I found to be most human readable and least error prone. Here they are
-        tranformed into a pandas DataFrame that is more convenient for the
-        construction of arrays for the likelihood function and identification
-        checks.
+        transformed into a pandas DataFrame that is more convenient for the
+        construction of inputs for the likelihood function.
 
         Each row in the DataFrame corresponds to one Kalman update. Therefore,
         the length of the DataFrame is the total number of updates (nupdates).
