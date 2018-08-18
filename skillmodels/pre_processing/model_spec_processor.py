@@ -508,8 +508,13 @@ class ModelSpecProcessor:
                 'only_estimate_anchoring_equation. Check the specs of ',
                 'model {}'.format(self.model_name))
 
-    def _check_normalizations_list(self, factor, norm_list):
-        """Raise an error if invalid normalizations were specified.
+    def _check_and_clean_normalizations_list(self, factor, norm_list):
+        """Check and clean a list with normalization specifications.
+
+        Raise an error if invalid normalizations were specified.
+
+        Transform the normalization list to the new standard specification
+        (list of dicts) if the old standard (list of lists) was used.
 
         For the correct specification of a normalizations list refer to
         :ref:`model_specs`
@@ -548,14 +553,32 @@ class ModelSpecProcessor:
                 self.model_name, len(norm_list), factor, self.nperiods)
 
         for t, norminfo in enumerate(norm_list):
-            assert len(norminfo) in [0, 2], (
-                'The sublists in the lists of normalizations must be empty or '
-                'have a length of 2. In model {} in period {} you specify a '
-                'list with len {} for factor {}').format(
-                    self.model_name, t, len(norminfo), factor)
+            if type(norminfo) != dict:
+                assert len(norminfo) in [0, 2], (
+                    'The sublists in the normalizations must be empty or have '
+                    'length 2. In model {} in period {} you specify a '
+                    'list with len {} for factor {}').format(
+                        self.model_name, t, len(norminfo), factor)
 
-            if len(norminfo) == 2:
-                normed_meas = norminfo[0]
+                # raise the deprecation warning
+
+        cleaned = []
+        for norminfo in norm_list:
+            if type(norminfo) == dict:
+                cleaned.append(norminfo)
+            else:
+                cleaned.append({norminfo[0]: norminfo[1]})
+
+        if norm_list != cleaned:
+            raise DeprecationWarning(
+                'Using lists of lists instead of lists of dicts for the '
+                'normalization specification is deprecated.')
+
+        norm_list = cleaned
+
+        for t, norminfo in enumerate(norm_list):
+            normed_measurements = list(norminfo.keys())
+            for normed_meas in normed_measurements:
                 if normed_meas not in self.measurements[factor][t]:
                     if normed_meas in self._facinf[factor]['measurements'][t]:
                         raise KeyError(has_been_dropped_message.format(
@@ -585,16 +608,17 @@ class ModelSpecProcessor:
                     if norm_type in norminfo:
                         norm_list = norminfo[norm_type]
                         norm[factor][norm_type] = \
-                            self._check_normalizations_list(factor, norm_list)
+                            self._check_and_clean_normalizations_list(
+                                factor, norm_list)
                     else:
-                        norm[factor][norm_type] = [[]] * self.nperiods
+                        norm[factor][norm_type] = [{}] * self.nperiods
                 else:
                     norm[factor] = {
-                        nt: [[]] * self.nperiods for nt in norm_types}
+                        nt: [{}] * self.nperiods for nt in norm_types}
 
         if self.estimator == 'wa':
             for factor in self.factors:
-                assert norm[factor]['variances'] == [[]] * self.nperiods, \
+                assert norm[factor]['variances'] == [{}] * self.nperiods, \
                     'Normalized variances and wa estimator are incompatible.'
 
         self.normalizations = norm
@@ -671,12 +695,7 @@ class ModelSpecProcessor:
                 measurements.append(self.anch_outcome)
 
             load_norminfo = self.normalizations[factor]['loadings'][t]
-            load_normed_meas, load_norm_value = \
-                load_norminfo if len(load_norminfo) == 2 else [None, None]
-
             intercept_norminfo = self.normalizations[factor]['intercepts'][t]
-            intercept_normed_meas, intercept_norm_value = \
-                intercept_norminfo if len(intercept_norminfo) == 2 else [None, None]    # noqa
 
             for m, meas in enumerate(measurements):
                 # if meas is not the first measurement in period t
@@ -684,11 +703,12 @@ class ModelSpecProcessor:
                 if (f > 0 or m > 0) and meas in df.loc[t].index:
                     # change corresponding row of the DataFrame
                     df.loc[(t, meas), factor] = 1
-                    if meas == load_normed_meas:
-                        df.loc[(t, meas), load_norm_column] = load_norm_value
-                    if meas == intercept_normed_meas:
+                    if meas in load_norminfo:
+                        df.loc[(t, meas), load_norm_column] = \
+                            load_norminfo[meas]
+                    if meas in intercept_norminfo:
                         df.loc[(t, meas), 'intercept_norm_value'] = \
-                            intercept_norm_value
+                            intercept_norminfo[meas]
 
                 else:
                     # add a new row to the DataFrame
@@ -697,10 +717,10 @@ class ModelSpecProcessor:
                     dat = np.zeros((1, len(cols)))
                     df2 = DataFrame(data=dat, columns=cols, index=ind)
                     df2[factor] = 1
-                    if meas == load_normed_meas:
-                        df2[load_norm_column] = load_norm_value
-                    if meas == intercept_normed_meas:
-                        df2['intercept_norm_value'] = intercept_norm_value
+                    if meas in load_norminfo:
+                        df2[load_norm_column] = load_norminfo[meas]
+                    if meas in intercept_norminfo:
+                        df2['intercept_norm_value'] = intercept_norminfo[meas]
                     else:
                         df2['intercept_norm_value'] = np.nan
                     df2['stage'] = stage

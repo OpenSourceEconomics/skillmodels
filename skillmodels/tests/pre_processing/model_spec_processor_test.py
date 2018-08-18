@@ -171,66 +171,73 @@ class TestCleanControlSpecifications:
         assert_raises(ValueError, msp._clean_controls_specification, self)
 
 
-class TestCheckNormalizations:
+class TestCheckAndCleanNormalizations:
     def setup(self):
         self.periods = [0, 1]
         self._facinf = {'f1': {'measurements': [['m1', 'm2', 'm3', 'm4']] * 2}}
-        self.f1_norm_list = [['m1', 1], ['m1', 1]]
+        self.f1_norm_list = [{'m1': 1}, {'m1': 1}]
         self.factors = sorted(list(self._facinf.keys()))
         self.measurements = {'f1': [['m1', 'm2', 'm3', 'm4']] * 2}
         self.model_name = 'model'
         self.dataset_name = 'data'
         self.nperiods = len(self.periods)
 
-    def test_check_normalizations_no_error(self):
-        result = msp._check_normalizations_list(self, 'f1', self.f1_norm_list)
-        assert_equal(result, self.f1_norm_list)
+    def test_check_normalizations_lists(self):
+        assert_raises(DeprecationWarning,
+                      msp._check_and_clean_normalizations_list,
+                      self, 'f1', [['m1', 1], ['m1', 1]])
+
+    def test_check_normalizations_no_error_dictionaries(self):
+        result = msp._check_and_clean_normalizations_list(
+            self, 'f1', self.f1_norm_list)
+        assert_equal(result, [{'m1': 1}, {'m1': 1}])
 
     def test_check_normalizations_not_specified_error(self):
-        f1_norm_list = [['m10', 1], ['m1', 1]]
+        f1_norm_list = [{'m10': 1}, {'m1': 1}]
         assert_raises(
-            KeyError, msp._check_normalizations_list, self, 'f1', f1_norm_list)
+            KeyError, msp._check_and_clean_normalizations_list, self, 'f1',
+            f1_norm_list)
 
     def test_check_normalizations_dropped_error(self):
         self.measurements = {'f1': [['m2', 'm3', 'm4']] * 2}
-        assert_raises(KeyError, msp._check_normalizations_list, self, 'f1',
-                      self.f1_norm_list)
+        assert_raises(KeyError, msp._check_and_clean_normalizations_list, self,
+                      'f1', self.f1_norm_list)
 
     def test_check_normalizations_invalid_length_of_list(self):
         assert_raises(
-            AssertionError, msp._check_normalizations_list, self, 'f1',
-            self.f1_norm_list * 2)
+            AssertionError, msp._check_and_clean_normalizations_list, self,
+            'f1', self.f1_norm_list * 2)
 
     def test_check_normalizations_invalid_length_of_sublst(self):
         f1_norm_list = [['m1'], ['m1', 1]]
         assert_raises(
-            AssertionError, msp._check_normalizations_list, self, 'f1',
-            f1_norm_list)
+            AssertionError, msp._check_and_clean_normalizations_list, self,
+            'f1', f1_norm_list)
 
 
 class TestCheckAndFillNormalizationSpecifications:
     def setup(self):
         self._facinf = {
             'f1': {'normalizations':
-                   {'loadings': [['a', 1], ['a', 1], ['a', 1]],
-                    'intercepts': [['a', 1], ['a', 1], ['a', 1]],
-                    'variances': [['a', 1], ['a', 1], ['a', 1]]}},
+                   {'loadings': [{'a': 1}, {'a': 1}, {'a': 1}],
+                    'intercepts': [{'a': 1}, {'a': 1}, {'a': 1}],
+                    'variances': [{'a': 1}, {'a': 1}, {'a': 1}]}},
             'f2': {}}
 
         self.nperiods = 3
 
         self.factors = sorted(list(self._facinf.keys()))
-        self._check_normalizations_list = Mock(
-            return_value=[['a', 1], ['a', 1], ['a', 1]])
+        self._check_and_clean_normalizations_list = Mock(
+            return_value=[{'a': 1}, {'a': 1}, {'a': 1}])
         self.estimator = 'chs'
 
     def test_check_and_fill_normalization_specifications(self):
-        res = {'f1': {'loadings': [['a', 1], ['a', 1], ['a', 1]],
-                      'intercepts': [['a', 1], ['a', 1], ['a', 1]],
-                      'variances': [['a', 1], ['a', 1], ['a', 1]]},
-               'f2': {'loadings': [[], [], []],
-                      'intercepts': [[], [], []],
-                      'variances': [[], [], []]}}
+        res = {'f1': {'loadings': [{'a': 1}, {'a': 1}, {'a': 1}],
+                      'intercepts': [{'a': 1}, {'a': 1}, {'a': 1}],
+                      'variances': [{'a': 1}, {'a': 1}, {'a': 1}]},
+               'f2': {'loadings': [{}, {}, {}],
+                      'intercepts': [{}, {}, {}],
+                      'variances': [{}, {}, {}]}}
 
         msp._check_and_fill_normalization_specification(self)
         assert_equal(self.normalizations, res)
@@ -257,13 +264,13 @@ class TestUpdateInfoTable:
 
         n = {'f1': {}, 'f2': {}, 'f3': {}}
 
-        n['f1']['loadings'] = [['m1', 2]] * 4
-        n['f2']['loadings'] = [['m3', 1], ['m3', 1], ['m3', 1], ['m5', 5]]
-        n['f3']['loadings'] = [['m5', 4]] * 4
+        n['f1']['loadings'] = [{'m1': 2}] * 4
+        n['f2']['loadings'] = [{'m3': 1}, {'m3': 1}, {'m3': 1}, {'m5': 5}]
+        n['f3']['loadings'] = [{'m5': 4}] * 4
 
-        n['f1']['intercepts'] = [['m1', 0]] * 4
-        n['f2']['intercepts'] = [['m3', 1], ['m3', 1], ['m3', 1], ['m5', 5]]
-        n['f3']['intercepts'] = [['m5', 4]] * 4
+        n['f1']['intercepts'] = [{'m1': 0}] * 4
+        n['f2']['intercepts'] = [{'m3': 1}, {'m3': 1}, {'m3': 1}, {'m5': 5}]
+        n['f3']['intercepts'] = [{'m5': 4}] * 4
 
         self.normalizations = n
 
@@ -294,16 +301,18 @@ class TestUpdateInfoTable:
         df['has_normalized_loading'] = False
         for factor in self.factors:
             norm_col = '{}_loading_norm_value'.format(factor)
-            for t, (n_meas, n_val) in enumerate(
-                    self.normalizations[factor]['loadings']):
+            for t, info in enumerate(self.normalizations[factor]['loadings']):
+                n_meas = list(info.keys())[0]
+                n_val = list(info.values())[0]
                 df.loc[(t, n_meas), norm_col] = n_val
                 df.loc[(t, n_meas), 'has_normalized_loading'] = True
 
         df['has_normalized_intercept'] = False
         df['intercept_norm_value'] = np.nan
         for factor in self.factors:
-            for t, (n_meas, n_val) in enumerate(
-                    self.normalizations[factor]['intercepts']):
+            for t, info in enumerate(self.normalizations[factor]['intercepts']):
+                n_meas = list(info.keys())[0]
+                n_val = list(info.values())[0]
                 df.loc[(t, n_meas), 'intercept_norm_value'] = n_val
                 df.loc[(t, n_meas), 'has_normalized_intercept'] = True
 
