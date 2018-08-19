@@ -508,7 +508,7 @@ class ModelSpecProcessor:
                 'only_estimate_anchoring_equation. Check the specs of ',
                 'model {}'.format(self.model_name))
 
-    def _check_and_clean_normalizations_list(self, factor, norm_list):
+    def _check_and_clean_normalizations_list(self, factor, norm_list, norm_type):
         """Check and clean a list with normalization specifications.
 
         Raise an error if invalid normalizations were specified.
@@ -576,6 +576,7 @@ class ModelSpecProcessor:
 
         norm_list = cleaned
 
+        # check presence of variables
         for t, norminfo in enumerate(norm_list):
             normed_measurements = list(norminfo.keys())
             for normed_meas in normed_measurements:
@@ -587,6 +588,16 @@ class ModelSpecProcessor:
                     else:
                         raise KeyError(was_not_specified_message.format(
                             self.model_name, normed_meas, factor, t))
+
+        # check validity of values
+        for t, norminfo in enumerate(norm_list):
+            for n_meas, n_val in norminfo.items():
+                if norm_type == 'variances':
+                    assert n_val > 0, \
+                        'Variances can only be normalized to a value > 0.'
+                if norm_type == 'loadings':
+                    assert n_val != 0, \
+                        'Loadings cannot be normalized to 0.'
 
         return norm_list
 
@@ -609,7 +620,7 @@ class ModelSpecProcessor:
                         norm_list = norminfo[norm_type]
                         norm[factor][norm_type] = \
                             self._check_and_clean_normalizations_list(
-                                factor, norm_list)
+                                factor, norm_list, norm_type)
                     else:
                         norm[factor][norm_type] = [{}] * self.nperiods
                 else:
@@ -696,6 +707,7 @@ class ModelSpecProcessor:
 
             load_norminfo = self.normalizations[factor]['loadings'][t]
             intercept_norminfo = self.normalizations[factor]['intercepts'][t]
+            variance_norminfo = self.normalizations[factor]['variances'][t]
 
             for m, meas in enumerate(measurements):
                 # if meas is not the first measurement in period t
@@ -709,6 +721,9 @@ class ModelSpecProcessor:
                     if meas in intercept_norminfo:
                         df.loc[(t, meas), 'intercept_norm_value'] = \
                             intercept_norminfo[meas]
+                    if meas in variance_norminfo:
+                        df.loc[(t, meas), 'variance_norm_value'] = \
+                            variance_norminfo[meas]
 
                 else:
                     # add a new row to the DataFrame
@@ -723,15 +738,18 @@ class ModelSpecProcessor:
                         df2['intercept_norm_value'] = intercept_norminfo[meas]
                     else:
                         df2['intercept_norm_value'] = np.nan
+                    if meas in variance_norminfo:
+                        df2['variance_norm_value'] = intercept_norminfo[meas]
+                    else:
+                        df2['variance_norm_value'] = np.nan
+
                     df2['stage'] = stage
 
                     df = df.append(df2)
 
-        # create the has_normalized_loading_column
         df['has_normalized_loading'] = df[norm_cols].sum(axis=1).astype(bool)
-
-        # create the has_normalized_intercept_column
         df['has_normalized_intercept'] = pd.notnull(df['intercept_norm_value'])
+        df['has_normalized_variance'] = pd.notnull(df['variance_norm_value'])
 
         # add the purpose_column
         df['purpose'] = 'measurement'

@@ -185,34 +185,34 @@ class TestCheckAndCleanNormalizations:
     def test_check_normalizations_lists(self):
         assert_raises(DeprecationWarning,
                       msp._check_and_clean_normalizations_list,
-                      self, 'f1', [['m1', 1], ['m1', 1]])
+                      self, 'f1', [['m1', 1], ['m1', 1]], 'loadings')
 
     def test_check_normalizations_no_error_dictionaries(self):
         result = msp._check_and_clean_normalizations_list(
-            self, 'f1', self.f1_norm_list)
+            self, 'f1', self.f1_norm_list, 'loadings')
         assert_equal(result, [{'m1': 1}, {'m1': 1}])
 
     def test_check_normalizations_not_specified_error(self):
         f1_norm_list = [{'m10': 1}, {'m1': 1}]
         assert_raises(
             KeyError, msp._check_and_clean_normalizations_list, self, 'f1',
-            f1_norm_list)
+            f1_norm_list, 'loadings')
 
     def test_check_normalizations_dropped_error(self):
         self.measurements = {'f1': [['m2', 'm3', 'm4']] * 2}
         assert_raises(KeyError, msp._check_and_clean_normalizations_list, self,
-                      'f1', self.f1_norm_list)
+                      'f1', self.f1_norm_list, 'loadings')
 
     def test_check_normalizations_invalid_length_of_list(self):
         assert_raises(
             AssertionError, msp._check_and_clean_normalizations_list, self,
-            'f1', self.f1_norm_list * 2)
+            'f1', self.f1_norm_list * 2, 'loadings')
 
     def test_check_normalizations_invalid_length_of_sublst(self):
         f1_norm_list = [['m1'], ['m1', 1]]
         assert_raises(
             AssertionError, msp._check_and_clean_normalizations_list, self,
-            'f1', f1_norm_list)
+            'f1', f1_norm_list, 'loadings')
 
 
 class TestCheckAndFillNormalizationSpecifications:
@@ -272,6 +272,10 @@ class TestUpdateInfoTable:
         n['f2']['intercepts'] = [{'m3': 1}, {'m3': 1}, {'m3': 1}, {'m5': 5}]
         n['f3']['intercepts'] = [{'m5': 4}] * 4
 
+        n['f1']['variances'] = [{'m1': 1}, {'m1': 1}, {'m1': 1}, {'m1': 1}]
+        n['f2']['variances'] = [{}] * self.nperiods
+        n['f3']['variances'] = [{}] * self.nperiods
+
         self.normalizations = n
 
         self._is_dummy = Mock(side_effect=cycle([False, False, True]))
@@ -316,6 +320,14 @@ class TestUpdateInfoTable:
                 df.loc[(t, n_meas), 'intercept_norm_value'] = n_val
                 df.loc[(t, n_meas), 'has_normalized_intercept'] = True
 
+        df['has_normalized_variance'] = False
+        df['variance_norm_value'] = np.nan
+        for t, info in enumerate(self.normalizations['f1']['variances']):
+            n_meas = list(info.keys())[0]
+            n_val = list(info.values())[0]
+            df.loc[(t, n_meas), 'variance_norm_value'] = n_val
+            df.loc[(t, n_meas), 'has_normalized_variance'] = True
+
         for t in self.periods:
             df.loc[t, 'stage'] = self.stagemap[t]
 
@@ -356,6 +368,17 @@ class TestUpdateInfoTable:
         calc = self.calculated_res['has_normalized_intercept']
         exp = self.expected_res['has_normalized_intercept']
         assert_equal(calc.to_dict(), exp.to_dict())
+
+    def test_update_info_has_normalized_variance(self):
+        calc = self.calculated_res['has_normalized_variance']
+        exp = self.expected_res['has_normalized_variance']
+        assert_equal(calc.to_dict(), exp.to_dict())
+
+    def test_update_info_variance_norm_value(self):
+        calc = self.calculated_res['variance_norm_value']
+        calc = calc[pd.notnull(calc)]
+        exp = self.expected_res['variance_norm_value']
+        exp = exp[pd.notnull(exp)]
 
     def test_update_info_update_type(self):
         calc = self.calculated_res['update_type']
