@@ -96,27 +96,37 @@ class TestMapParamsToH:
         self.test_map_params_to_H_with_psi_transformation()
 
 
-class TestMapParamsToRAndWZero:
+class TestMapParamsToWZero:
     def setup(self):
         self.params = np.arange(100)
         self.slice = slice(15, 20)
         self.initial = np.zeros(5)
 
+    def test_map_params_to_w_zero(self):
+        pp._map_params_to_W_zero(self.params, self.initial, self.slice)
+        aae(self.initial, np.array([15, 16, 17, 18, 19]))
+
+
+class TestMapParamsToR:
+    def setup(self):
+        self.params = np.arange(100)
+        self.slice = slice(15, 20)
+        self.initial = np.zeros(10)
+        self.boo = np.array([True, False] * 5)
+
     def test_map_params_to_r(self):
         self.square_root_filters = False
         pp._map_params_to_R(
-            self.params, self.initial, self.slice, self.square_root_filters)
-        aae(self.initial, np.array([15, 16, 17, 18, 19]))
+            self.params, self.initial, self.slice, self.boo,
+            self.square_root_filters)
+        aae(self.initial, np.array([15, 0, 16, 0, 17, 0, 18, 0, 19, 0]))
 
     def test_map_params_to_r_square_root_filters(self):
         self.square_root_filters = True
         pp._map_params_to_R(
-            self.params, self.initial, self.slice, self.square_root_filters)
-        aae(self.initial, np.sqrt(np.array([15, 16, 17, 18, 19])))
-
-    def test_map_params_to_w_zero(self):
-        pp._map_params_to_W_zero(self.params, self.initial, self.slice)
-        aae(self.initial, np.array([15, 16, 17, 18, 19]))
+            self.params, self.initial, self.slice, self.boo,
+            self.square_root_filters)
+        aae(self.initial, np.sqrt([15, 0, 16, 0, 17, 0, 18, 0, 19, 0]))
 
 
 class TestMapParamsToQ:

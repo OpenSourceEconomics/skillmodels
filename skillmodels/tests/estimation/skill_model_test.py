@@ -276,19 +276,33 @@ class TestRRelatedMethods:
         df['period'] = np.array([0] * 5 + [1] * 7)
         df['name'] = ['m{}'.format(i) for i in range(12)]
         df.set_index(['period', 'name'], inplace=True)
+        df['has_normalized_variance'] = np.array([
+            True, False, False, False, False, True,
+            True, False, False, False, False, True])
+        df['variance_norm_value'] = [
+            1, np.nan, np.nan, np.nan, np.nan, 2,
+            3, np.nan, np.nan, np.nan, np.nan, 4]
         self.update_info = df
+        self.res_bool = np.array([
+            False, True, True, True, True, False,
+            False, True, True, True, True, False])
 
         self.bounds_distance = 0.001
         self.lower_bound = np.empty(100, dtype=object)
         self.lower_bound[:] = None
 
     def test_initial_R(self):
-        aae(smo._initial_R(self), np.zeros(12))
+        res = np.array([1, 0, 0, 0, 0, 2, 3, 0, 0, 0, 0, 4])
+        aae(smo._initial_R(self), res)
+
+    def test_R_bool(self):
+        aae(smo._R_bool(self), self.res_bool)
 
     def test_params_slice_for_R(self):
+        self._R_bool = Mock(return_value=self.res_bool)
         self._general_params_slice = Mock()
         smo._params_slice_for_R(self, params_type='short')
-        self._general_params_slice.assert_has_calls([call(12)])
+        self._general_params_slice.assert_has_calls([call(8)])
 
     def test_set_bounds_for_R_not_robust(self):
         self.robust_bounds = False
@@ -307,9 +321,9 @@ class TestRRelatedMethods:
         aae(self.lower_bound, expected)
 
     def test_R_names(self):
-        periods = [0] * 5 + [1] * 7
-        names = ['m{}'.format(i) for i in range(12)]
-        expected = ['R__{}__{}'.format(p, m) for p, m in zip(periods, names)]
+        self._R_bool = Mock(return_value=self.res_bool)
+        expected = ['R__0__m1', 'R__0__m2', 'R__0__m3', 'R__0__m4',
+                    'R__1__m7', 'R__1__m8', 'R__1__m9', 'R__1__m10']
         assert_equal(smo._R_names(self, params_type='short'), expected)
 
 

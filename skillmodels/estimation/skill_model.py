@@ -286,7 +286,10 @@ class SkillModel(GenericLikelihoodModel):
 
     def _initial_R(self):
         """1d numpy array of length nupdates filled with zeros."""
-        return np.zeros(self.nupdates)
+        return self.update_info['variance_norm_value'].fillna(0).values
+
+    def _R_bool(self):
+        return ~self.update_info['has_normalized_variance'].values
 
     def _params_slice_for_R(self, params_type):
         """A slice object, selecting the part of params mapped to R.
@@ -295,12 +298,16 @@ class SkillModel(GenericLikelihoodModel):
         be called by the user.
 
         """
-        return self._general_params_slice(self.nupdates)
+        return self._general_params_slice(self._R_bool().sum())
 
     def _R_names(self, params_type):
         """List with names for the params mapped to R."""
-        R_names = ['R__{}__{}'.format(t, measure)
-                   for t, measure in list(self.update_info.index)]
+        boo = self._R_bool()
+        R_names = []
+        for b, (t, measure) in zip(boo, self.update_info.index):
+            # == instead of is because of numpy bool problem
+            if b == True:
+                R_names.append('R__{}__{}'.format(t, measure))
         return R_names
 
     def _set_bounds_for_R(self, params_slice):

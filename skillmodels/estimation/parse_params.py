@@ -44,12 +44,12 @@ def _map_params_to_H(params, initial, params_slice, boo, psi_bool_for_H=None,
         initial[psi_bool_for_H] += np.multiply(arr1, psi, out=arr2)
 
 
-def _map_params_to_R(params, initial, params_slice, square_root_filters):
+def _map_params_to_R(params, initial, params_slice, boo, square_root_filters):
     """Map parameters from params to R."""
     if square_root_filters is False:
-        initial[:] = params[params_slice]
+        initial[boo] = params[params_slice]
     else:
-        initial[:] = np.sqrt(params[params_slice])
+        initial[boo] = np.sqrt(params[params_slice])
 
 
 def _map_params_to_Q(params, initial, params_slice, boo, replacements=None):
