@@ -761,6 +761,8 @@ class SkillModel(GenericLikelihoodModel):
             reasons.append('The anchoring mode is not supported in wa.')
         if 'log_ces' in self.transition_names:
             reasons.append('The log_ces cannot be used in wa.')
+        if self.update_info['has_normalized_variance'].any():
+            reasons.append('Normalized variances are incompatible with wa')
 
         can_be_used = False if len(reasons) > 0 else True
 
