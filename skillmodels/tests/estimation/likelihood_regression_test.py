@@ -6,8 +6,10 @@ from skillmodels.estimation.likelihood_function import \
     log_likelihood_per_individual
 
 from numpy.testing import assert_array_almost_equal as aaae
+import pytest
 
 
+# @pytest.mark.xfail
 def test_likelihood_value():
     df = pd.read_stata('skillmodels/tests/estimation/chs_test_ex2.dta')
     with open('skillmodels/tests/estimation/test_model2.json') as j:
@@ -15,6 +17,9 @@ def test_likelihood_value():
 
     mod = SkillModel(model_dict=model_dict, dataset=df, estimator='chs',
                      model_name='test_model')
+    # uinfo = mod.update_info
+    # with open('/home/janos/Dropbox/Projects/skillmodels/test_uinfo.p', 'wb') as p:
+    #     pickle.dump(uinfo, p)
 
     args = mod.likelihood_arguments_dict(params_type='short')
 

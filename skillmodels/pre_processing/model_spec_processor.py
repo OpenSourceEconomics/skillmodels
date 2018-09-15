@@ -86,7 +86,8 @@ class ModelSpecProcessor:
              'bootstrap_nreps': 300,
              'bootstrap_sample_size': None,
              'bootstrap_nprocesses': None,
-             'anchoring_mode': 'only_estimate_anchoring_equation'
+             'anchoring_mode': 'only_estimate_anchoring_equation',
+             'time_invariant_measurement_system': False
              }
 
         if 'general' in model_dict:
@@ -113,6 +114,8 @@ class ModelSpecProcessor:
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
         self._nmeas_list()
+        if self.time_invariant_measurement_system is True:
+            self._check_normalizations_for_time_invariant_measurements()
         if self.estimator == 'wa':
             self._wa_period_weights()
             self._wa_storage_df()
@@ -508,7 +511,8 @@ class ModelSpecProcessor:
                 'only_estimate_anchoring_equation. Check the specs of ',
                 'model {}'.format(self.model_name))
 
-    def _check_and_clean_normalizations_list(self, factor, norm_list, norm_type):
+    def _check_and_clean_normalizations_list(
+            self, factor, norm_list, norm_type):
         """Check and clean a list with normalization specifications.
 
         Raise an error if invalid normalizations were specified.
@@ -680,6 +684,10 @@ class ModelSpecProcessor:
           is True, else 'linear'
         * has_normalized_loading: True if any loading is normalized
         * has_normalized_intercept: True if the intercept is normalized
+        * is_repeated: True if the same measurement equation has appeared
+          in a previous period
+        * first_occurrence: Period in which the same measurement equation has
+          appeared first or np.nan.
 
         The row order within one period is arbitrary except for the last
         period, where the row that corresponds to the anchoring update comes
@@ -689,25 +697,29 @@ class ModelSpecProcessor:
             DataFrame
 
         """
+        to_concat = [
+            self._factor_update_info(),
+            self._normalization_update_info(),
+            self._stage_udpate_info(),
+            self._purpose_update_info(),
+            self._type_update_info(),
+            self._invariance_update_info()]
+
+        df = pd.concat(to_concat, axis=1)
+
+        return df
+
+    def _factor_update_info(self):
         # create an empty DataFrame with and empty MultiIndex
         index = pd.MultiIndex(
             levels=[[], []], labels=[[], []], names=['period', 'name'])
         df = DataFrame(data=None, index=index)
 
-        norm_cols = ['{}_loading_norm_value'.format(f) for f in self.factors]
-        cols = self.factors + norm_cols
-
         # append rows for each update that has to be performed
         for t, (f, factor) in product(self.periods, enumerate(self.factors)):
-            stage = self.stagemap[t]
-            load_norm_column = '{}_loading_norm_value'.format(factor)
             measurements = self.measurements[factor][t].copy()
             if t == self.nperiods - 1 and factor in self.anchored_factors:
                 measurements.append(self.anch_outcome)
-
-            load_norminfo = self.normalizations[factor]['loadings'][t]
-            intercept_norminfo = self.normalizations[factor]['intercepts'][t]
-            variance_norminfo = self.normalizations[factor]['variances'][t]
 
             for m, meas in enumerate(measurements):
                 # if meas is not the first measurement in period t
@@ -715,62 +727,147 @@ class ModelSpecProcessor:
                 if (f > 0 or m > 0) and meas in df.loc[t].index:
                     # change corresponding row of the DataFrame
                     df.loc[(t, meas), factor] = 1
-                    if meas in load_norminfo:
-                        df.loc[(t, meas), load_norm_column] = \
-                            load_norminfo[meas]
-                    if meas in intercept_norminfo:
-                        df.loc[(t, meas), 'intercept_norm_value'] = \
-                            intercept_norminfo[meas]
-                    if meas in variance_norminfo:
-                        df.loc[(t, meas), 'variance_norm_value'] = \
-                            variance_norminfo[meas]
 
                 else:
                     # add a new row to the DataFrame
                     ind = pd.MultiIndex.from_tuples(
                         [(t, meas)], names=['period', 'variable'])
-                    dat = np.zeros((1, len(cols)))
-                    df2 = DataFrame(data=dat, columns=cols, index=ind)
+                    dat = np.zeros((1, self.nfac))
+                    df2 = DataFrame(data=dat, columns=self.factors, index=ind)
                     df2[factor] = 1
-                    if meas in load_norminfo:
-                        df2[load_norm_column] = load_norminfo[meas]
-                    if meas in intercept_norminfo:
-                        df2['intercept_norm_value'] = intercept_norminfo[meas]
-                    else:
-                        df2['intercept_norm_value'] = np.nan
-                    if meas in variance_norminfo:
-                        df2['variance_norm_value'] = intercept_norminfo[meas]
-                    else:
-                        df2['variance_norm_value'] = np.nan
-
-                    df2['stage'] = stage
-
                     df = df.append(df2)
 
-        df['has_normalized_loading'] = df[norm_cols].sum(axis=1).astype(bool)
-        df['has_normalized_intercept'] = pd.notnull(df['intercept_norm_value'])
-        df['has_normalized_variance'] = pd.notnull(df['variance_norm_value'])
-
-        # add the purpose_column
-        df['purpose'] = 'measurement'
-        if self.anchoring is True:
-            anch_index = (self.nperiods - 1, self.anch_outcome)
-            df.loc[anch_index, 'purpose'] = 'anchoring'
-
-        # move anchoring row to end of DataFrame
+        # move anchoring update to last position
+        anch_index = (self.nperiods - 1, self.anch_outcome)
         if self.anchoring is True:
             anch_row = df.loc[anch_index]
             df.drop(anch_index, axis=0, inplace=True)
             df = df.append(anch_row)
-
-        # TODO: test how probit measurements are implemented in the code
-        # add the update_type column
-        df['update_type'] = 'linear'
-        for t, variable in list(df.index):
-            if self._is_dummy(variable, t) and self.probit_measurements is True:    # noqa
-                df.loc[(t, variable), 'update_type'] = 'probit'
-
         return df
+
+    def _normalization_update_info(self):
+        bdf = self._factor_update_info()
+        load_cols = ['{}_loading_norm_value'.format(f) for f in self.factors]
+        # for some reason it affects the likelihood value of a test model
+        # whether the loading norm values have dtype float or int
+        # therefore I fill them with 0.0 to have them explicitly as float.
+        df = pd.DataFrame(index=bdf.index, columns=load_cols).fillna(0.0)
+
+        df['intercept_norm_value'] = np.nan
+        df['variance_norm_value'] = np.nan
+
+        for (t, meas), factor in product(df.index, self.factors):
+            if bdf.loc[(t, meas), factor] == 1:
+                load_norm_column = '{}_loading_norm_value'.format(factor)
+                load_norminfo = self.normalizations[factor]['loadings'][t]
+
+                if meas in load_norminfo:
+                    df.loc[(t, meas), load_norm_column] = load_norminfo[meas]
+
+                msg = 'Incompatible normalizations of {} for {} in period {}'
+                for normtype in ['intercepts', 'variances']:
+                    norminfo = self.normalizations[factor][normtype][t]
+                    if meas in norminfo:
+                        col = '{}_norm_value'.format(normtype[:-1])
+                        if df.loc[(t, meas), col] != norminfo[meas]:
+                            assert np.isnan(df.loc[(t, meas), col]), (
+                                msg.format(normtype, meas, t))
+                        df.loc[(t, meas), col] = norminfo[meas]
+
+        df['has_normalized_loading'] = df[load_cols].sum(axis=1).astype(bool)
+        df['has_normalized_intercept'] = pd.notnull(df['intercept_norm_value'])
+        df['has_normalized_variance'] = pd.notnull(df['variance_norm_value'])
+        return df
+
+    def _stage_udpate_info(self):
+        replace_dict = {t: stage for t, stage in enumerate(self.stagemap)}
+        df = self._factor_update_info()
+        df['period'] = df.index.get_level_values('period')
+        df['stage'] = df['period'].replace(replace_dict)
+        return df['stage']
+
+    def _purpose_update_info(self):
+        factor_uinfo = self._factor_update_info()
+        sr = pd.Series(index=factor_uinfo.index, name='purpose',
+                       data=['measurement'] * len(factor_uinfo))
+        if self.anchoring is True:
+            anch_index = (self.nperiods - 1, self.anch_outcome)
+            sr[anch_index] = 'anchoring'
+        return sr
+
+    def _type_update_info(self):
+        ind = self._factor_update_info().index
+        sr = pd.Series(data='linear', index=ind, name='update_type')
+        for t, meas in ind:
+            if self._is_dummy(meas, t) and self.probit_measurements is True:
+                sr[(t, meas)] = 'probit'
+        return sr
+
+    def _invariance_update_info(self):
+        """Update information relevant for time invariant measurement systems.
+
+        Measurement equations are uniquely identified by their period and the
+        name of their measurement.
+
+        Two measurement equations count as equal if and only if:
+
+        * their measurements have the same name
+        * the same latent factors are measured
+        * they occur in a periods that use the same control variables.
+
+        """
+        factor_uinfo = self._factor_update_info()
+        ind = factor_uinfo.index
+        df = pd.DataFrame(columns=['is_repeated', 'first_occurence'],
+                          index=ind, data=[[False, np.nan]] * len(ind))
+
+        for t, meas in ind:
+            # find first occurrence
+            for t2, meas2 in ind:
+                if meas == meas2 and t2 <= t:
+                    if self.controls[t] == self.controls[t2]:
+                        info1 = factor_uinfo.loc[(t, meas)].values
+                        info2 = factor_uinfo.loc[(t2, meas2)].values
+                        if (info1 == info2).all():
+                            first = t2
+                            break
+
+            if t != first:
+                df.loc[(t, meas), 'is_repeated'] = True
+                df.loc[(t, meas), 'first_occurence'] = first
+        return df
+
+    def _check_normalizations_for_time_invariant_measurements(self):
+        uinfo = self.update_info()
+        for factor in self.factors:
+            normcol = '{}_loading_norm_value'.format(factor)
+            df = uinfo[uinfo['is_repeated'] & (uinfo[normcol] != 0)]
+            print(df)
+
+            for t, meas in df.index:
+                first = int(uinfo.loc[(t, meas), 'first_occurence'])
+                print(first)
+                nval1_ = uinfo.loc[(first, meas), normcol]
+                nval2 = uinfo.loc[(t, meas), normcol]
+                assert nval1_ == nval2, (
+                    'Incompatible normalizations of factor loadings for time '
+                    'invariant measurement system. Check normalizations of '
+                    '{} in periods {} and {} for factor {}'.format(
+                        meas, first, t, factor))
+
+        for norm_type in ['intercepts', 'variances']:
+            normcol = '{}_norm_value'.format(norm_type[:-1])
+            df = uinfo[uinfo['is_repeated'] & uinfo[normcol].notnull()]
+            for t, meas in df.index:
+                first = uinfo.loc[(t, meas), 'first_occurence']
+                nval1 = uinfo.loc[(first, meas), normcol]
+                nval2 = uinfo.loc[(t, meas), normcol]
+                msg = (
+                    'Incompatible normalizations of {} for time invariant '
+                    'measurement system. Check normalizations of {} in '
+                    'periods {} and {}')
+
+                assert nval1 == nval2, msg.format(norm_type, meas, first, t)
 
     def _wa_storage_df(self):
         df = self.update_info().copy(deep=True)

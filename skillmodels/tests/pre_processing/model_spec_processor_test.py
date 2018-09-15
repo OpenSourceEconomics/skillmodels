@@ -7,6 +7,7 @@ from itertools import cycle
 from numpy.testing import assert_array_equal as aae
 from skillmodels.pre_processing.model_spec_processor \
     import ModelSpecProcessor as msp
+from pandas.testing import assert_frame_equal
 
 
 class TestTransitionEquationNames:
@@ -243,24 +244,110 @@ class TestCheckAndFillNormalizationSpecifications:
         assert_equal(self.normalizations, res)
 
 
-class TestUpdateInfoTable:
+def factor_uinfo():
+
+    dat = [[0, 'm1', 1, 0, 0], [0, 'm2', 1, 0, 0], [0, 'm3', 0, 1, 0],
+           [0, 'm4', 0, 1, 0], [0, 'm5', 0, 1, 1], [0, 'm6', 0, 0, 1],
+           [1, 'm1', 1, 0, 0], [1, 'm2', 1, 0, 0], [1, 'm3', 0, 1, 0],
+           [1, 'm4', 0, 1, 0], [1, 'm5', 0, 1, 1], [1, 'm6', 0, 0, 1],
+           [2, 'm1', 1, 0, 0], [2, 'm2', 1, 0, 0], [2, 'm3', 0, 1, 0],
+           [2, 'm4', 0, 1, 0], [2, 'm5', 0, 1, 1], [2, 'm6', 0, 0, 1],
+           [3, 'm1', 1, 0, 0], [3, 'm2', 1, 0, 0], [3, 'm3', 0, 1, 0],
+           [3, 'm4', 0, 1, 0], [3, 'm5', 0, 1, 1], [3, 'm6', 0, 0, 1],
+           [3, 'a', 1, 0, 1]]
+    cols = ['period', 'variable', 'f1', 'f2', 'f3']
+    df = DataFrame(data=dat, columns=cols)
+    df.set_index(['period', 'variable'], inplace=True)
+    return df
+
+
+def norm_uinfo():
+    n = np.nan
+    f = False
+    t = True
+    dat = [[0, 'm1', 2.0, 0.0, 0.0, 0.0, 1.0, t, t, t],
+           [0, 'm2', 0, 0, 0, n, n, f, f, f],
+           [0, 'm3', 0, 1, 0, 1, n, t, t, f],
+           [0, 'm4', 0, 0, 0, n, n, f, f, f],
+           [0, 'm5', 0, 0, 4, 4, n, t, t, f],
+           [0, 'm6', 0, 0, 0, n, n, f, f, f],
+           [1, 'm1', 2, 0, 0, 0, 1, t, t, t],
+           [1, 'm2', 0, 0, 0, n, n, f, f, f],
+           [1, 'm3', 0, 1, 0, 1, n, t, t, f],
+           [1, 'm4', 0, 0, 0, n, n, f, f, f],
+           [1, 'm5', 0, 0, 4, 4, n, t, t, f],
+           [1, 'm6', 0, 0, 0, n, n, f, f, f],
+           [2, 'm1', 2, 0, 0, 0, 1, t, t, t],
+           [2, 'm2', 0, 0, 0, n, n, f, f, f],
+           [2, 'm3', 0, 1, 0, 1, n, t, t, f],
+           [2, 'm4', 0, 0, 0, n, n, f, f, f],
+           [2, 'm5', 0, 0, 4, 4, n, t, t, f],
+           [2, 'm6', 0, 0, 0, n, n, f, f, f],
+           [3, 'm1', 2, 0, 0, 0, 1, t, t, t],
+           [3, 'm2', 0, 0, 0, n, n, f, f, f],
+           [3, 'm3', 0, 0, 0, n, n, f, f, f],
+           [3, 'm4', 0, 0, 0, n, n, f, f, f],
+           [3, 'm5', 0, 5, 4, 4, n, t, t, f],
+           [3, 'm6', 0, 0, 0, n, n, f, f, f],
+           [3, 'a', 0, 0, 0, n, n, f, f, f]]
+    cols = ['period', 'variable', 'f1_loading_norm_value',
+            'f2_loading_norm_value',
+            'f3_loading_norm_value', 'intercept_norm_value',
+            'variance_norm_value', 'has_normalized_loading',
+            'has_normalized_intercept', 'has_normalized_variance']
+
+    df = DataFrame(data=dat, columns=cols)
+    df.set_index(['period', 'variable'], inplace=True)
+    return df
+
+
+def stage_uinfo():
+    ind = factor_uinfo().index
+    dat = [0] * 12 + [1] * 13
+    return pd.Series(index=ind, data=dat, name='stage')
+
+
+def purpose_uinfo():
+    ind = factor_uinfo().index
+    dat = ['measurement'] * 24 + ['anchoring']
+    return pd.Series(index=ind, data=dat, name='purpose')
+
+
+def type_uinfo():
+    ind = factor_uinfo().index
+    dat = ['linear', 'linear', 'probit'] * 8 + ['linear']
+    return pd.Series(data=dat, index=ind, name='type')
+
+
+class TestFactorUpdateInfo:
     def setup(self):
-        self.factors = ['f1', 'f2', 'f3']
         self.periods = [0, 1, 2, 3]
         self.nperiods = len(self.periods)
-        self.stagemap = [0, 0, 1, 1]
-        self.probit_measurements = True
-        self.estimator = 'chs'
-
-        m = {}
-        m['f1'] = [['m1', 'm2']] * 4
-        m['f2'] = [['m3', 'm4', 'm5']] * 4
-        m['f3'] = [['m5', 'm6']] * 4
-        self.measurements = m
-
-        self.anchoring = True
+        self.factors = ['f1', 'f2', 'f3']
+        self.nfac = len(self.factors)
+        self.measurements = {
+            'f1': [['m1', 'm2']] * 4,
+            'f2': [['m3', 'm4', 'm5']] * 4,
+            'f3': [['m5', 'm6']] * 4}
         self.anch_outcome = 'a'
         self.anchored_factors = ['f1', 'f3']
+        self.anchoring = True
+
+    def test_factor_update_info(self):
+        calc = msp._factor_update_info(self)
+        exp = factor_uinfo()
+        assert_frame_equal(calc, exp, check_dtype=False)
+
+    def test_that_anchoring_comes_last(self):
+        calc = msp._factor_update_info(self)
+        meas = list(calc.index.get_level_values('variable'))
+        assert meas[-1] == self.anch_outcome
+
+
+class TestNormalizationUpdateInfo:
+    def setup(self):
+        self._factor_update_info = Mock(return_value=factor_uinfo())
+        self.factors = ['f1', 'f2', 'f3']
 
         n = {'f1': {}, 'f2': {}, 'f3': {}}
 
@@ -269,136 +356,166 @@ class TestUpdateInfoTable:
         n['f3']['loadings'] = [{'m5': 4}] * 4
 
         n['f1']['intercepts'] = [{'m1': 0}] * 4
-        n['f2']['intercepts'] = [{'m3': 1}, {'m3': 1}, {'m3': 1}, {'m5': 5}]
+        # set normalization of m5 to 5 to check correct raising
+        n['f2']['intercepts'] = [{'m3': 1}, {'m3': 1}, {'m3': 1}, {'m5': 4}]
         n['f3']['intercepts'] = [{'m5': 4}] * 4
 
         n['f1']['variances'] = [{'m1': 1}, {'m1': 1}, {'m1': 1}, {'m1': 1}]
-        n['f2']['variances'] = [{}] * self.nperiods
-        n['f3']['variances'] = [{}] * self.nperiods
+        n['f2']['variances'] = [{}] * 4
+        n['f3']['variances'] = [{}] * 4
 
         self.normalizations = n
 
-        self._is_dummy = Mock(side_effect=cycle([False, False, True]))
-
-        cols = self.factors + [
-            '{}_loading_norm_value'.format(f) for f in self.factors]
-        cols += ['stage', 'purpose', 'update_type']
-
-        different_meas = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6']
-
-        ind_tuples = []
-        for t in self.periods:
-            ind_tuples += [(t, d) for d in different_meas]
-        ind_tuples.append((3, 'a'))
-
-        index = pd.MultiIndex.from_tuples(
-            ind_tuples, names=['period', 'variable'])
-
-        dat = np.zeros((25, len(cols)))
-        df = DataFrame(data=dat, columns=cols, index=index)
-
-        for t in self.periods:
-            for factor in self.factors:
-                for m in self.measurements[factor][0]:
-                    df.loc[(t, m), factor] = 1
-
-        df['has_normalized_loading'] = False
-        for factor in self.factors:
-            norm_col = '{}_loading_norm_value'.format(factor)
-            for t, info in enumerate(self.normalizations[factor]['loadings']):
-                n_meas = list(info.keys())[0]
-                n_val = list(info.values())[0]
-                df.loc[(t, n_meas), norm_col] = n_val
-                df.loc[(t, n_meas), 'has_normalized_loading'] = True
-
-        df['has_normalized_intercept'] = False
-        df['intercept_norm_value'] = np.nan
-        for factor in self.factors:
-            for t, info in enumerate(self.normalizations[factor]['intercepts']):
-                n_meas = list(info.keys())[0]
-                n_val = list(info.values())[0]
-                df.loc[(t, n_meas), 'intercept_norm_value'] = n_val
-                df.loc[(t, n_meas), 'has_normalized_intercept'] = True
-
-        df['has_normalized_variance'] = False
-        df['variance_norm_value'] = np.nan
-        for t, info in enumerate(self.normalizations['f1']['variances']):
-            n_meas = list(info.keys())[0]
-            n_val = list(info.values())[0]
-            df.loc[(t, n_meas), 'variance_norm_value'] = n_val
-            df.loc[(t, n_meas), 'has_normalized_variance'] = True
-
-        for t in self.periods:
-            df.loc[t, 'stage'] = self.stagemap[t]
-
-        update_type = ['linear', 'linear', 'probit'] * 9
-        df['update_type'] = np.array(update_type[:len(df)])
-
-        df['purpose'] = np.array(['measurement'] * 24 + ['anchoring'])
-
-        df.loc[(3, 'a'), ['f1', 'f3']] = 1
-        self.expected_res = df
-        self.calculated_res = msp.update_info(self)
-
-    def test_update_info_factor_columns(self):
-        calc = self.calculated_res[self.factors]
-        exp = self.expected_res[self.factors]
-        assert_equal(calc.to_dict(), exp.to_dict())
-
-    def test_update_info_loading_normalization_columns(self):
+    def test_loading_normalizations(self):
         normcols = ['{}_loading_norm_value'.format(f) for f in self.factors]
-        calc = self.calculated_res[normcols]
-        exp = self.expected_res[normcols]
-        assert_equal(calc.to_dict(), exp.to_dict())
+        calc = msp._normalization_update_info(self)[normcols]
+        exp = norm_uinfo()[normcols]
+        for col in calc.columns:
+            assert calc[col].equals(exp[col])
+
+    def test_invalid_intercept_normalizations(self):
+        self.normalizations['f2']['intercepts'][-1] = {'m5': 5}
+        assert_raises(AssertionError, msp._normalization_update_info, self)
+
+    def test_valid_intercept_normalizations(self):
+        calc = msp._normalization_update_info(self)['intercept_norm_value']
+        exp = norm_uinfo()['intercept_norm_value']
+        assert calc.equals(exp)
+
+    def test_variance_normalizations(self):
+        calc = msp._normalization_update_info(self)['variance_norm_value']
+        exp = norm_uinfo()['variance_norm_value']
+        assert calc.equals(exp)
 
     def test_update_info_has_normalized_loading(self):
-        calc = self.calculated_res['has_normalized_loading']
-        exp = self.expected_res['has_normalized_loading']
-        assert_equal(calc.to_dict(), exp.to_dict())
-
-    def test_update_info_intercept_norm_value(self):
-        calc = self.calculated_res['intercept_norm_value']
-        calc = calc[pd.notnull(calc)]
-        exp = self.expected_res['intercept_norm_value']
-        exp = exp[pd.notnull(exp)]
-
-        assert_equal(calc.to_dict(), exp.to_dict())
+        calc = msp._normalization_update_info(self)['has_normalized_loading']
+        exp = norm_uinfo()['has_normalized_loading']
+        assert calc.equals(exp)
 
     def test_update_info_has_normalized_intercept(self):
-        calc = self.calculated_res['has_normalized_intercept']
-        exp = self.expected_res['has_normalized_intercept']
-        assert_equal(calc.to_dict(), exp.to_dict())
+        calc = msp._normalization_update_info(self)['has_normalized_intercept']
+        exp = norm_uinfo()['has_normalized_intercept']
+        assert calc.equals(exp)
 
     def test_update_info_has_normalized_variance(self):
-        calc = self.calculated_res['has_normalized_variance']
-        exp = self.expected_res['has_normalized_variance']
-        assert_equal(calc.to_dict(), exp.to_dict())
+        calc = msp._normalization_update_info(self)['has_normalized_variance']
+        exp = norm_uinfo()['has_normalized_variance']
+        assert calc.equals(exp)
 
-    def test_update_info_variance_norm_value(self):
-        calc = self.calculated_res['variance_norm_value']
-        calc = calc[pd.notnull(calc)]
-        exp = self.expected_res['variance_norm_value']
-        exp = exp[pd.notnull(exp)]
 
-    def test_update_info_update_type(self):
-        calc = self.calculated_res['update_type']
-        exp = self.expected_res['update_type']
-        assert_equal(calc.to_dict(), exp.to_dict())
+class TestStageUpdateInfo:
+    def setup(self):
+        self._factor_update_info = Mock(return_value=factor_uinfo())
+        self.stagemap = [0, 0, 1, 1]
 
-    def test_update_info_stage(self):
-        calc = self.calculated_res['stage']
-        exp = self.expected_res['stage']
-        assert_equal(calc.to_dict(), exp.to_dict())
+    def test_update_info_stages(self):
+        calc = msp._stage_udpate_info(self)
+        exp = stage_uinfo()
+        assert calc.equals(exp)
+
+
+class TestPurposeUpdateInfo:
+    def setup(self):
+        self.anchoring = True
+        self.anch_outcome = 'a'
+        self.nperiods = 4
+        self._factor_update_info = Mock(return_value=factor_uinfo())
 
     def test_update_info_purpose(self):
-        calc = self.calculated_res['purpose']
-        exp = self.expected_res['purpose']
-        assert_equal(calc.to_dict(), exp.to_dict())
+        calc = msp._purpose_update_info(self)
+        exp = purpose_uinfo()
+        assert calc.equals(exp)
 
-    def test_that_anchoring_comes_last(self):
-        calc = list(self.calculated_res['purpose'])
-        exp = ['measurement'] * 24 + ['anchoring']
-        assert_equal(calc, exp)
+
+class TestTypeUpdateInfo:
+    def setup(self):
+        self._factor_update_info = Mock(return_value=factor_uinfo())
+        self.probit_measurements = True
+        self._is_dummy = Mock(side_effect=cycle([False, False, True]))
+
+    def test_update_info_update_type(self):
+        calc = msp._type_update_info(self)
+        exp = type_uinfo()
+        print(calc, '\n\n')
+        print(exp, '\n\n')
+        assert calc.equals(exp)
+
+
+class TestInvarianceUpdateInfo:
+    def setup(self):
+        cols = ['period', 'variable', 'f1', 'f2', 'f3']
+        dat = [[0, 'm1', 1, 0, 1],  # baseline
+               [1, 'm1', 1, 0, 1],  # equal to 0, 'm1'
+               [1, 'm2', 1, 0, 1],  # different name
+               [2, 'm1', 1, 0, 1],  # different controls
+               [3, 'm1', 1, 0, 0],  # different measured factors
+               [4, 'm2', 1, 0, 1],  # equal to 1, 'm2'
+               [4, 'm1', 1, 0, 1]]  # equal to 0, 'm1'
+        df = pd.DataFrame(data=dat, columns=cols)
+        df.set_index(['period', 'variable'], inplace=True)
+        self._factor_update_info = Mock(return_value=df)
+        self.controls = [['a'], ['a'], ['b'], ['a'], ['a']]
+
+        cols = ['is_repeated', 'first_occurence']
+        dat = [[False, np.nan], [True, 0], [False, np.nan],
+               [False, np.nan], [False, np.nan], [True, 1], [True, 0]]
+        df = pd.DataFrame(index=df.index, columns=cols, data=dat)
+
+        self.expected = df
+
+    def test_invariance_update_info(self):
+        calc = msp._invariance_update_info(self)
+        exp = self.expected
+        for col in exp.columns:
+            assert calc[col].equals(exp[col])
+
+
+class TestCheckNormalizationsForTimeInvariantMeasurements:
+    def setup(self):
+        cols = ['period', 'variable', 'f1_loading_norm_value',
+                'intercept_norm_value', 'variance_norm_value',
+                'is_repeated', 'first_occurence']
+        n = np.nan
+        dat_load = [[0, 'm1', 1.0, n, n, False, n],
+                    [1, 'm1', 1.0, n, n, True, 0],
+                    [2, 'm1', 2.0, n, n, True, 0]]
+
+        dat_inter = [[0, 'm1', 0.0, 1, n, False, n],
+                     [1, 'm1', 0.0, 1, n, True, 0],
+                     [2, 'm1', 0.0, 2, n, True, 0]]
+
+        self.df_load_problem = pd.DataFrame(
+            columns=cols, data=dat_load).set_index(['period', 'variable'])
+        self.df_load_ok = self.df_load_problem.head(2)
+
+        self.df_inter_problem = pd.DataFrame(
+            columns=cols, data=dat_inter).set_index(['period', 'variable'])
+        self.df_inter_ok = self.df_inter_problem.head(2)
+        self.factors = ['f1']
+
+    def test_check_normalizations_of_loadings_ok(self):
+        self.update_info = Mock(return_value=self.df_load_ok)
+        msp._check_normalizations_for_time_invariant_measurements(self)
+
+    def test_check_normalizations_of_loadings_error(self):
+        self.update_info = Mock(return_value=self.df_load_problem)
+        assert_raises(
+            AssertionError,
+            msp._check_normalizations_for_time_invariant_measurements,
+            self)
+
+    def test_check_normalizations_of_intercepts_ok(self):
+        self.update_info = Mock(return_value=self.df_inter_ok)
+        msp._check_normalizations_for_time_invariant_measurements(self)
+
+    def test_check_normalizations_of_intercepts_error(self):
+        self.update_info = Mock(return_value=self.df_inter_problem)
+        assert_raises(
+            AssertionError,
+            msp._check_normalizations_for_time_invariant_measurements,
+            self)
+
+
 
 
 class TestWAStorageDf:
