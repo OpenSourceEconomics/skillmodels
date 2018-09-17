@@ -49,6 +49,16 @@ class TestDeltasRelatedMethods:
         df.set_index(['period', 'name'], inplace=True)
         self.update_info = df
 
+        new_params = pd.DataFrame(index=df.index)
+        new_params['intercept'] = ~df['has_normalized_intercept']
+        for var in ['c1', 'c2', 'c3', 'c4']:
+            new_params[var] = True
+            for t in self.periods:
+                if var not in self.controls[t]:
+                    new_params.loc[t, var] = False
+
+        self.new_meas_coeffs = new_params
+
     def test_initial_deltas_without_controls_besides_constant(self):
         self.controls = [[], [], []]
         exp1 = np.array([[3], [0], [0], [4], [0], [0]])
@@ -134,8 +144,8 @@ class TestDeltasRelatedMethods:
     def test_deltas_names_with_controls_and_constant(self):
         self.add_constant = True
 
-        d_boo = [np.ones((6, 2), dtype=bool), np.ones((3, 3), dtype=bool),
-                 np.ones((4, 2), dtype=bool)]
+        d_boo = [np.ones((6, 3), dtype=bool), np.ones((3, 4), dtype=bool),
+                 np.ones((4, 3), dtype=bool)]
         for i in range(3):
             d_boo[i][0, 0] = False
         self._deltas_bool = Mock(return_value=d_boo)
@@ -166,7 +176,11 @@ class TestDeltasRelatedMethods:
              fs.format(2, 'm12', 'constant'), fs.format(2, 'm12', 'c3'),
              fs.format(2, 'm12', 'c4')]
 
-        assert_equal(smo._deltas_names(self, params_type='short'),
+        calc = smo._deltas_names(self, params_type='short')
+        print(calc, '\n\n')
+        print(expected_names, '\n\n')
+
+        assert_equal(calc,
                      expected_names)
 
 

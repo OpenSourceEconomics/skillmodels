@@ -140,13 +140,9 @@ class SkillModel(GenericLikelihoodModel):
         """
         deltas_bool = []
         for t in self.periods:
-            length = len(self.update_info.loc[t])
-            width = len(self.controls[t]) + 1
-            has_normalized = self.update_info.loc[t][
-                'has_normalized_intercept'].astype(int)
-            boo = np.ones((length, width))
-            boo[:, 0] -= has_normalized
-            deltas_bool.append(boo.astype(bool))
+            relevant = ['intercept'] + self.controls[t]
+            boo = self.new_meas_coeffs.loc[t, relevant].astype(bool).values
+            deltas_bool.append(boo)
         return deltas_bool
 
     def _params_slice_for_deltas(self, params_type):
@@ -170,12 +166,10 @@ class SkillModel(GenericLikelihoodModel):
         for t in self.periods:
             updates = list(self.update_info.loc[t].index)
             for u, update in enumerate(updates):
-                if deltas_bool[t][u, 0] == True:
-                    constant_list = ['constant']
-                else:
-                    constant_list = []
-                controls_list = constant_list + self.controls[t]
-                for control in controls_list:
+                all_vars = ['constant'] + self.controls[t]
+                free_vars = [var for v, var in enumerate(all_vars)
+                             if deltas_bool[t][u, v] == True]
+                for control in free_vars:
                     deltas_names.append('delta__{}__{}__{}'.format(
                         t, update, control))
         return deltas_names

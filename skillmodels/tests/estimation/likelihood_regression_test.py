@@ -9,7 +9,7 @@ from numpy.testing import assert_array_almost_equal as aaae
 import pytest
 
 
-# @pytest.mark.xfail
+#@pytest.mark.skip()
 def test_likelihood_value():
     df = pd.read_stata('skillmodels/tests/estimation/chs_test_ex2.dta')
     with open('skillmodels/tests/estimation/test_model2.json') as j:

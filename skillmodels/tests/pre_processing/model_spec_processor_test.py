@@ -555,25 +555,41 @@ class TestNewMeasCoeffs:
         self.factors = ['f1', 'f2']
         self.periods = [0, 1]
         self.controls = [['a', 'b'], ['a']]
+        self.time_invariant_measurement_system = True
 
         cols = ['f1', 'f2', 'intercept', 'variance', 'a', 'b']
-        dat = [[False, False, False, False, True, True],
-               [True, False, True, True, True, True],
-               [False, False, True, True, True, True],
-               [False, True, False, True, True, True],
-               [False] * 6,
-               [False] * 6,
-               [False, False, True, True, True, False],
-               [False, True, False, True, True, False]]
+        dat_with = [[False, False, False, False, True, True],
+                    [True, False, True, True, True, True],
+                    [False, False, True, True, True, True],
+                    [False, True, False, True, True, True],
+                    [False] * 6,
+                    [False] * 6,
+                    [False, False, True, True, True, False],
+                    [False, True, False, True, True, False]]
 
-        df = pd.DataFrame(columns=cols, data=dat, index=df.index)
-        self.expected_res = df
+        dat_without = dat_with.copy()
+        dat_without[4] = [False, False, False, False, True, False]
+        dat_without[5] = [True, False, True, True, True, False]
 
-    def test_new_meas_coeffs(self):
+        df_with = pd.DataFrame(columns=cols, data=dat_with, index=df.index)
+        df_without = pd.DataFrame(
+            columns=cols, data=dat_without, index=df.index)
+        self.expected_res_with = df_with
+        self.expected_res_without = df_without
+
+    def test_new_meas_coeffs_with_invariant_measurement_system(self):
         calc = msp.new_meas_coeffs(self)
-        exp = self.expected_res
+        exp = self.expected_res_with
         for col in exp.columns:
             assert calc[col].equals(exp[col])
+
+    def test_new_meas_coeffs_without_invariant_measurement_system(self):
+        self.time_invariant_measurement_system = False
+        calc = msp.new_meas_coeffs(self)
+        exp = self.expected_res_without
+        for col in exp.columns:
+            assert calc[col].equals(exp[col])
+
 
 
 class TestWAStorageDf:

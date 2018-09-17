@@ -933,12 +933,18 @@ class ModelSpecProcessor:
             not_normalized = ~uinfo[normcol].astype(bool)
             not_repeated = ~uinfo['is_repeated']
             applicable = uinfo[param].astype(bool)
-            new_params[param] = not_normalized & not_repeated & applicable
+            if self.time_invariant_measurement_system is True:
+                new_params[param] = not_normalized & not_repeated & applicable
+            else:
+                new_params[param] = not_normalized & applicable
 
         for param in ['intercept', 'variance']:
             not_normalized = ~uinfo['has_normalized_{}'.format(param)]
             not_repeated = ~uinfo['is_repeated']
-            new_params[param] = not_normalized & not_repeated
+            if self.time_invariant_measurement_system is True:
+                new_params[param] = not_normalized & not_repeated
+            else:
+                new_params[param] = not_normalized
 
         for param in all_controls:
             not_repeated = ~uinfo['is_repeated']
@@ -946,7 +952,10 @@ class ModelSpecProcessor:
             for t in self.periods:
                 if param not in self.controls[t]:
                     applicable[t] = False
-            new_params[param] = not_repeated & applicable
+            if self.time_invariant_measurement_system is True:
+                new_params[param] = not_repeated & applicable
+            else:
+                new_params[param] = applicable
 
         return new_params
 
