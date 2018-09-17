@@ -529,6 +529,53 @@ class TestRewriteNormalizationsForTimeInvariantMeasurements:
             self, self.df_inter_problem)
 
 
+class TestNewMeasCoeffs:
+    def setup(self):
+        cols = ['period', 'variable',
+                'f1', 'f2', 'f1_loading_norm_value', 'f2_loading_norm_value',
+                'intercept_norm_value', 'variance_norm_value',
+                'has_normalized_intercept', 'has_normalized_variance',
+                'is_repeated']
+
+        nan = np.nan
+
+        dat = [[0, 'm1', 1., 0., 1., 0., 0.5, 0.9, True, True, False],
+               [0, 'm2', 1., 0., 0., 0., nan, nan, False, False, False],
+               [0, 'm3', 0., 1., 0., 1.5, nan, nan, False, False, False],
+               [0, 'm4', 0., 1., 0., 0., 0.7, nan, True, False, False],
+               [1, 'm1', 1., 0., 1., 0., 0.5, 0.9, True, True, True],
+               [1, 'm2', 1., 0., 0., 0., nan, nan, False, False, True],
+               [1, 'm3', 0., 1., 0., 1.5, nan, nan, False, False, False],
+               [1, 'm4', 0., 1., 0., 0., 0.7, nan, True, False, False]]
+
+        df = pd.DataFrame(data=dat, columns=cols).set_index(
+            ['period', 'variable'])
+        self.update_info = Mock(return_value=df)
+        self.all_controls_list = Mock(return_value=['a', 'b'])
+        self.factors = ['f1', 'f2']
+        self.periods = [0, 1]
+        self.controls = [['a', 'b'], ['a']]
+
+        cols = ['f1', 'f2', 'intercept', 'variance', 'a', 'b']
+        dat = [[False, False, False, False, True, True],
+               [True, False, True, True, True, True],
+               [False, False, True, True, True, True],
+               [False, True, False, True, True, True],
+               [False] * 6,
+               [False] * 6,
+               [False, False, True, True, True, False],
+               [False, True, False, True, True, False]]
+
+        df = pd.DataFrame(columns=cols, data=dat, index=df.index)
+        self.expected_res = df
+
+    def test_new_meas_coeffs(self):
+        calc = msp.new_meas_coeffs(self)
+        exp = self.expected_res
+        for col in exp.columns:
+            assert calc[col].equals(exp[col])
+
+
 class TestWAStorageDf:
     def setup(self):
         self.factors = ['fac1', 'fac2']

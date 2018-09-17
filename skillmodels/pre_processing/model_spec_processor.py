@@ -923,29 +923,30 @@ class ModelSpecProcessor:
         the type of measurement parameter that is associated with column c.
         Else it is False.
 
-        Reasons for not needing a new parameter are:
-
-        * The parameter type is normalized to a fixed value (e.g. normalized
-        intercepts, loadings, ...)
-        * The parameter type is not applicable (e.g c is a factor that is not
-        measured by meas or if c is a control variable not used in period t
-        * The parameter type reuses a value from previous periods (e.g if a
-        time invariant measurement system is used and the measurement equation
-        in line (t, meas) already appeared in an earlier period)
-
         """
-        # initialize containers
-        update_info = self.update_info()
+        uinfo = self.update_info()
         all_controls = self.all_controls_list()
-        ind = update_info.index
-        cols = self.factors + all_controls + ['intercept', 'variance']
-        new_params = pd.DataFrame(columns=cols, index=ind).fillna(True)
+        new_params = pd.DataFrame(index=uinfo.index)
 
-        for t, meas in ind:
-            pass
+        for param in self.factors:
+            normcol = '{}_loading_norm_value'.format(param)
+            not_normalized = ~uinfo[normcol].astype(bool)
+            not_repeated = ~uinfo['is_repeated']
+            applicable = uinfo[param].astype(bool)
+            new_params[param] = not_normalized & not_repeated & applicable
 
+        for param in ['intercept', 'variance']:
+            not_normalized = ~uinfo['has_normalized_{}'.format(param)]
+            not_repeated = ~uinfo['is_repeated']
+            new_params[param] = not_normalized & not_repeated
 
-
+        for param in all_controls:
+            not_repeated = ~uinfo['is_repeated']
+            applicable = pd.Series(index=uinfo.index, data=True)
+            for t in self.periods:
+                if param not in self.controls[t]:
+                    applicable[t] = False
+            new_params[param] = not_repeated & applicable
 
         return new_params
 
