@@ -230,11 +230,14 @@ class TestHRelatedMethods:
         df = DataFrame(data=dat, columns=cols)
         self.update_info = df
 
+        self.new_meas_coeffs = pd.DataFrame(
+            data=self.res_bool, columns=['f1', 'f2'])
+        self.new_meas_coeffs['bla'] = np.ones(20)
+
     def test_initial_H(self):
         aae(smo._initial_H(self), self.exp_init_H)
 
     def test_H_bool(self):
-        self._initial_H = Mock(return_value=self.exp_init_H)
         aae(smo._H_bool(self), self.res_bool)
 
     def test_params_slice_for_H(self):

@@ -225,10 +225,7 @@ class SkillModel(GenericLikelihoodModel):
         has to be overwritten entries from params.
 
         """
-        measured = self.update_info[self.factors].values.astype(bool)
-        normalized = self._initial_H().astype(bool)
-        boo = np.logical_and(measured, np.logical_not(normalized))
-        return boo
+        return self.new_meas_coeffs[self.factors].values
 
     def _helpers_for_H_transformation_with_psi(self):
         """A boolean array and two empty arrays to store intermediate results.
