@@ -470,52 +470,63 @@ class TestInvarianceUpdateInfo:
             assert calc[col].equals(exp[col])
 
 
-class TestCheckNormalizationsForTimeInvariantMeasurements:
+class TestRewriteNormalizationsForTimeInvariantMeasurements:
     def setup(self):
+        self.time_invariant_measurement_system = True
+        self.factors = ['f1']
         cols = ['period', 'variable', 'f1_loading_norm_value',
                 'intercept_norm_value', 'variance_norm_value',
-                'is_repeated', 'first_occurence']
-        n = np.nan
-        dat_load = [[0, 'm1', 1.0, n, n, False, n],
-                    [1, 'm1', 1.0, n, n, True, 0],
-                    [2, 'm1', 2.0, n, n, True, 0]]
+                'is_repeated', 'first_occurence', 'has_normalized_loading',
+                'has_normalized_intercept', 'has_normalized_variance']
 
-        dat_inter = [[0, 'm1', 0.0, 1, n, False, n],
-                     [1, 'm1', 0.0, 1, n, True, 0],
-                     [2, 'm1', 0.0, 2, n, True, 0]]
+        n = np.nan
+        dat_load = [[0, 'm1', 0.0, n, n, False, n, False, False, False],
+                    [1, 'm1', 1.0, n, n, True, 0, True, False, False],
+                    [2, 'm1', 0.0, n, n, True, 0, False, False, False],
+                    [3, 'm1', 2.0, n, n, True, 0, True, False, False]]
 
         self.df_load_problem = pd.DataFrame(
             columns=cols, data=dat_load).set_index(['period', 'variable'])
-        self.df_load_ok = self.df_load_problem.head(2)
+        self.df_load_ok = self.df_load_problem.head(3).copy(deep=True)
+
+        dat_inter = [[0, 'm1', 0.0, n, n, False, n, False, False, False],
+                     [1, 'm1', 0.0, 1, n, True, 0, False, True, False],
+                     [2, 'm1', 0.0, n, n, True, 0, False, False, False],
+                     [3, 'm1', 0.0, 2, n, True, 0, False, True, False]]
 
         self.df_inter_problem = pd.DataFrame(
             columns=cols, data=dat_inter).set_index(['period', 'variable'])
-        self.df_inter_ok = self.df_inter_problem.head(2)
-        self.factors = ['f1']
+        self.df_inter_ok = self.df_inter_problem.head(3).copy(deep=True)
 
-    def test_check_normalizations_of_loadings_ok(self):
-        self.update_info = Mock(return_value=self.df_load_ok)
-        msp._check_normalizations_for_time_invariant_measurements(self)
+    def test_rewrite_normalizations_of_loadings_ok(self):
+        calc = msp._rewrite_normalizations_for_time_inv_meas_system(
+            self, self.df_load_ok)
+        exp = self.df_load_ok
+        exp['f1_loading_norm_value'] = 1.0
+        exp['has_normalized_loading'] = True
+        for col in ['f1_loading_norm_value', 'has_normalized_loading']:
+            assert calc[col].equals(exp[col])
 
-    def test_check_normalizations_of_loadings_error(self):
-        self.update_info = Mock(return_value=self.df_load_problem)
+    def test_rewrite_normalizations_of_loadings_error(self):
         assert_raises(
             AssertionError,
-            msp._check_normalizations_for_time_invariant_measurements,
-            self)
+            msp._rewrite_normalizations_for_time_inv_meas_system,
+            self, self.df_load_problem)
 
-    def test_check_normalizations_of_intercepts_ok(self):
-        self.update_info = Mock(return_value=self.df_inter_ok)
-        msp._check_normalizations_for_time_invariant_measurements(self)
+    def test_rewrite_normalizations_of_intercepts_ok(self):
+        calc = msp._rewrite_normalizations_for_time_inv_meas_system(
+            self, self.df_inter_ok)
+        exp = self.df_inter_ok
+        exp['intercept_norm_value'] = 1.0
+        exp['has_normalized_intercept'] = True
+        for col in ['intercept_norm_value', 'has_normalized_intercept']:
+            assert calc[col].equals(exp[col])
 
-    def test_check_normalizations_of_intercepts_error(self):
-        self.update_info = Mock(return_value=self.df_inter_problem)
+    def test_rewrite_normalizations_of_intercepts_error(self):
         assert_raises(
             AssertionError,
-            msp._check_normalizations_for_time_invariant_measurements,
-            self)
-
-
+            msp._rewrite_normalizations_for_time_inv_meas_system,
+            self, self.df_inter_problem)
 
 
 class TestWAStorageDf:

@@ -114,8 +114,6 @@ class ModelSpecProcessor:
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
         self._nmeas_list()
-        if self.time_invariant_measurement_system is True:
-            self._check_normalizations_for_time_invariant_measurements()
         if self.estimator == 'wa':
             self._wa_period_weights()
             self._wa_storage_df()
@@ -706,6 +704,8 @@ class ModelSpecProcessor:
             self._invariance_update_info()]
 
         df = pd.concat(to_concat, axis=1)
+        if self.time_invariant_measurement_system is True:
+            df = self._rewrite_normalizations_for_time_inv_meas_system(df)
 
         return df
 
@@ -837,37 +837,126 @@ class ModelSpecProcessor:
                 df.loc[(t, meas), 'first_occurence'] = first
         return df
 
-    def _check_normalizations_for_time_invariant_measurements(self):
-        uinfo = self.update_info()
+    def _rewrite_normalizations_for_time_inv_meas_system(self, df):
+        """Return a copy of df with rewritten normalization info.
+
+        If self.time_invariant_measurement_system is True, make sure that all
+        normalizations that are done in any occurrence of a measurement
+        equation are also present in all other occurrences.
+
+
+        """
+        assert self.time_invariant_measurement_system is True, \
+            'Must not be called if measurement system is not time invariant.'
+        df = df.copy(deep=True)
+
+        loading_msg = (
+            'Incompatible normalizations of factor loadings for time '
+            'invariant measurement system. Check normalizations of '
+            '{} in periods {} and {} for factor {}')
+
+        other_msg = (
+            'Incompatible normalizations of {} for time invariant measurement '
+            'system. Check normalizations of {} in periods {} and {}')
+
+        # check normalizations and write them into first occurrence
         for factor in self.factors:
             normcol = '{}_loading_norm_value'.format(factor)
-            df = uinfo[uinfo['is_repeated'] & (uinfo[normcol] != 0)]
-            print(df)
-
+            norm_dummy = 'has_normalized_loading'
             for t, meas in df.index:
-                first = int(uinfo.loc[(t, meas), 'first_occurence'])
-                print(first)
-                nval1_ = uinfo.loc[(first, meas), normcol]
-                nval2 = uinfo.loc[(t, meas), normcol]
-                assert nval1_ == nval2, (
-                    'Incompatible normalizations of factor loadings for time '
-                    'invariant measurement system. Check normalizations of '
-                    '{} in periods {} and {} for factor {}'.format(
-                        meas, first, t, factor))
+                repeated = df.loc[(t, meas), 'is_repeated'] == True
+                normalized = df.loc[(t, meas), normcol] != 0
+                if repeated and normalized:
+                    first_occ = df.loc[(t, meas), 'first_occurence']
+                    nval = df.loc[(t, meas), normcol]
+                    nval_first = df.loc[(first_occ, meas), normcol]
+                    assert nval_first in [0, nval], loading_msg.format(
+                        meas, first_occ, t, factor)
+                    df.loc[(first_occ, meas), normcol] = nval
+                    df.loc[(first_occ, meas), norm_dummy] = True
 
         for norm_type in ['intercepts', 'variances']:
-            normcol = '{}_norm_value'.format(norm_type[:-1])
-            df = uinfo[uinfo['is_repeated'] & uinfo[normcol].notnull()]
             for t, meas in df.index:
-                first = uinfo.loc[(t, meas), 'first_occurence']
-                nval1 = uinfo.loc[(first, meas), normcol]
-                nval2 = uinfo.loc[(t, meas), normcol]
-                msg = (
-                    'Incompatible normalizations of {} for time invariant '
-                    'measurement system. Check normalizations of {} in '
-                    'periods {} and {}')
+                normcol = '{}_norm_value'.format(norm_type[:-1])
+                norm_dummy = 'has_normalized_{}'.format(norm_type[:-1])
+                repeated = df.loc[(t, meas), 'is_repeated'] == True
+                normalized = df.loc[(t, meas), norm_dummy] == True
+                if repeated and normalized:
+                    first_occ = df.loc[(t, meas), 'first_occurence']
+                    nval = df.loc[(t, meas), normcol]
+                    nval_first = df.loc[(first_occ, meas), normcol]
+                    normalized_first = df.loc[(first_occ, meas), norm_dummy]
+                    if normalized_first == True:
+                        assert nval_first == nval, other_msg.format(
+                            norm_type, meas, first_occ, t)
+                    df.loc[(first_occ, meas), normcol] = nval
+                    df.loc[(first_occ, meas), norm_dummy] = True
 
-                assert nval1 == nval2, msg.format(norm_type, meas, first, t)
+        # copy consolidated normalizations to all other occurrences
+        all_normcols = [
+            '{}_loading_norm_value'.format(factor) for factor in self.factors]
+        all_normcols += ['intercept_norm_value', 'variance_norm_value',
+                         'has_normalized_loading', 'has_normalized_intercept',
+                         'has_normalized_variance']
+
+        for t, meas in df.index:
+            if df.loc[(t, meas), 'is_repeated'] == True:
+                first_occurence = df.loc[(t, meas), 'first_occurence']
+                df.loc[(t, meas), all_normcols] = \
+                    df.loc[(first_occurence, meas), all_normcols]
+
+        return df
+
+    def new_meas_coeffs(self):
+        """DataFrame that indicates if new parameters from params are needed.
+
+        The DataFrame has the same index as update_info. The columns are the
+        union of:
+
+        * the latent factors
+        * all control variables ever used
+        * intercept
+        * variance
+
+        The entry in column c of line (t, meas) is True if the measurement
+        equation of meas in period t needs a new entry from params for
+        the type of measurement parameter that is associated with column c.
+        Else it is False.
+
+        Reasons for not needing a new parameter are:
+
+        * The parameter type is normalized to a fixed value (e.g. normalized
+        intercepts, loadings, ...)
+        * The parameter type is not applicable (e.g c is a factor that is not
+        measured by meas or if c is a control variable not used in period t
+        * The parameter type reuses a value from previous periods (e.g if a
+        time invariant measurement system is used and the measurement equation
+        in line (t, meas) already appeared in an earlier period)
+
+        """
+        # initialize containers
+        update_info = self.update_info()
+        all_controls = self.all_controls_list()
+        ind = update_info.index
+        cols = self.factors + all_controls + ['intercept', 'variance']
+        new_params = pd.DataFrame(columns=cols, index=ind).fillna(True)
+
+        for t, meas in ind:
+            pass
+
+
+
+
+        return new_params
+
+    def _all_controls_list(self):
+        """Control variables without duplicates in order of occurrence."""
+        all_controls = []
+        for cont_list in self.controls:
+            for cont in cont_list:
+                if cont not in all_controls:
+                    all_controls.append(cont)
+        return all_controls
 
     def _wa_storage_df(self):
         df = self.update_info().copy(deep=True)
