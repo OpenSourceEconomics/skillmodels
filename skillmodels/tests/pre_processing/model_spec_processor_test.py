@@ -551,7 +551,7 @@ class TestNewMeasCoeffs:
         df = pd.DataFrame(data=dat, columns=cols).set_index(
             ['period', 'variable'])
         self.update_info = Mock(return_value=df)
-        self.all_controls_list = Mock(return_value=['a', 'b'])
+        self._all_controls_list = Mock(return_value=['a', 'b'])
         self.factors = ['f1', 'f2']
         self.periods = [0, 1]
         self.controls = [['a', 'b'], ['a']]

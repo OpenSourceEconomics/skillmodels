@@ -925,7 +925,7 @@ class ModelSpecProcessor:
 
         """
         uinfo = self.update_info()
-        all_controls = self.all_controls_list()
+        all_controls = self._all_controls_list()
         new_params = pd.DataFrame(index=uinfo.index)
 
         for param in self.factors:
@@ -1055,5 +1055,6 @@ class ModelSpecProcessor:
         public_attributes = {key: val for key, val in all_attributes.items()
                              if not key.startswith('_')}
         public_attributes['update_info'] = self.update_info()
+        public_attributes['new_meas_coeffs'] = self.new_meas_coeffs()
         public_attributes['new_trans_coeffs'] = self.new_trans_coeffs()
         return public_attributes
