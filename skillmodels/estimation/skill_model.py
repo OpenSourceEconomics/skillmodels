@@ -280,7 +280,7 @@ class SkillModel(GenericLikelihoodModel):
         return self.update_info['variance_norm_value'].fillna(0).values
 
     def _R_bool(self):
-        return ~self.update_info['has_normalized_variance'].values
+        return self.new_meas_coeffs['variance']
 
     def _params_slice_for_R(self, params_type):
         """A slice object, selecting the part of params mapped to R.

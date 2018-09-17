@@ -304,6 +304,10 @@ class TestRRelatedMethods:
             False, True, True, True, True, False,
             False, True, True, True, True, False])
 
+        self.new_meas_coeffs = pd.DataFrame(columns=['variance'],
+                                            data=self.res_bool,
+                                            index=self.update_info.index)
+
         self.bounds_distance = 0.001
         self.lower_bound = np.empty(100, dtype=object)
         self.lower_bound[:] = None
