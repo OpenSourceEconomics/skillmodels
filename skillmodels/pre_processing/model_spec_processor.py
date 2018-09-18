@@ -118,6 +118,9 @@ class ModelSpecProcessor:
             self._wa_period_weights()
             self._wa_storage_df()
             self._wa_identified_transition_function_restrictions()
+            assert self.time_invariant_measurement_system is False, (
+                'Time invariant measurement system is not yet supported '
+                'with the wa estimator.')
 
     def _set_bootstrap_sample_size(self):
         if self.bootstrap_samples is not None:
@@ -840,10 +843,8 @@ class ModelSpecProcessor:
     def _rewrite_normalizations_for_time_inv_meas_system(self, df):
         """Return a copy of df with rewritten normalization info.
 
-        If self.time_invariant_measurement_system is True, make sure that all
-        normalizations that are done in any occurrence of a measurement
-        equation are also present in all other occurrences.
-
+        make sure that all normalizations that are done in any occurrence of a
+        measurement equation are also present in all other occurrences.
 
         """
         assert self.time_invariant_measurement_system is True, \

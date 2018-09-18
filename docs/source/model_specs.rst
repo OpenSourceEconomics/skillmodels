@@ -146,6 +146,9 @@ Usually a research project comprises the estimation of more than one model and t
     * ``bootstrap_nreps``: number of bootstrap replications if the standard_error_method of the chosen estimator is bootstrap. Default is 300.
     * ``bootstrap_sample_size``: size of the samples that are drawn from the dataset with replacement if no bootstrap_samples are provided. Default is the number of observations in the dataset nobs.
     * ``bootstrap_nprocesses``: amount of multiprocessing during the calculation of bootstrap standard errors. The default is 'None' which means that all available cores are used.
+    * ``time_invariant_measurement_system``: Takes the values True or False (default). If True, measurement equations that occur in several periods are restricted to have the same parameters across those periods. To determine whether a measurement equation occurs more than once, the notion of equality has to be defined for measurement equations. Measurement equations are equal if and only if: 1) they use the same measurement variable. 2) The same latent factors are measured. 3) They occur in periods that use the same control variables. Currently, time invariant measurement system can only be used with the CHS-estimator.
+
+    .. Note:: If ``time_invariant_measurement_system`` is True, the normalizations across all occurrences of a measurement equation have to be compatible. It is considered compatible if a parameter is normalized in some periods but not in others. It is not compatible if a parameter is normalized to different values. In this case, an error will be raised.
 
 Differences between estimators:
 *******************************
