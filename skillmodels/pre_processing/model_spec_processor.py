@@ -721,8 +721,9 @@ class ModelSpecProcessor:
         # append rows for each update that has to be performed
         for t, (f, factor) in product(self.periods, enumerate(self.factors)):
             measurements = self.measurements[factor][t].copy()
-            if t == self.nperiods - 1 and factor in self.anchored_factors:
-                measurements.append(self.anch_outcome)
+            if self.anchoring is True:
+                if t == self.nperiods - 1 and factor in self.anchored_factors:
+                    measurements.append(self.anch_outcome)
 
             for m, meas in enumerate(measurements):
                 # if meas is not the first measurement in period t
@@ -741,8 +742,8 @@ class ModelSpecProcessor:
                     df = df.append(df2)
 
         # move anchoring update to last position
-        anch_index = (self.nperiods - 1, self.anch_outcome)
         if self.anchoring is True:
+            anch_index = (self.nperiods - 1, self.anch_outcome)
             anch_row = df.loc[anch_index]
             df.drop(anch_index, axis=0, inplace=True)
             df = df.append(anch_row)

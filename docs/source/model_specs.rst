@@ -102,7 +102,7 @@ The anchoring equation is specified as follows:
 .. literalinclude:: test_model2.json
     :lines: 94
 
-Q1 is the anchoring outcome and the list contains all anchored factors. In the example this is just fac1.
+Q1 is the anchoring outcome and the list contains all anchored factors. In the example this is just fac1. If you don't want to anchor the latent factors, simply omit the anchoring part in the model dictionary.
 
 The "general" section of the model dictionary:
 **********************************************
@@ -111,7 +111,7 @@ Usually a research project comprises the estimation of more than one model and t
 
     * ``nemf``: number of elements in the mixture of normals distribution of the latent factors. Usually set to 1 which corresponds to the assumption that the factors are normally distributed. Only used in CHS estimator.
     * ``kappa``: scaling parameter for the sigma_points. Usually set to 2. Only used in CHS estimator.
-    * ``square_root_filters``: takes the values true and false and specifies if square-root implementations of the kalman filters are used. I strongly recommend always using square-root filters. As mentioned in section 3.2.2 of CHS' readme file the standard filters often crash unless very good start values for the maximization are available. Using the square-root filters completely avoids this problem. Only used in CHS estimator.
+    * ``square_root_filters``: takes the values true (default) and false and specifies if square-root implementations of the kalman filters are used. I strongly recommend always using square-root filters. As mentioned in section 3.2.2 of CHS' readme file the standard filters often crash unless very good start values for the maximization are available. Using the square-root filters completely avoids this problem. Only used in CHS estimator.
     * ``missing_variables``: Takes the values "raise_error" or "drop_variable" and specifies what happens if a variable is not in the dataset or has only missing values. Automatically dropping these variables is handy when the same model is estimated with several similar but not exactly equal datasets.
     * ``controls_with_missings``: Takes the values "raise_error", "drop_variable" or "drop_observations". Recall that measurement variables can have missing observations as long as they are missing at random and at least some observations are not missing. For control variables this is not the case and it is necessary to drop the missing observations or the contol variable.
     * ``variables_without_variance``: takes the same values as ``missing_variables`` and specifies what happens if a measurement or anchoring variable has no variance. Control variables without variance are not dropped as this would drop constants.
