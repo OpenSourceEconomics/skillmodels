@@ -45,8 +45,14 @@ class TestDeltasRelatedMethods:
             3, np.nan, np.nan, 4, np.nan, np.nan, 5, 6, np.nan, 7, np.nan,
             np.nan, np.nan]
 
-        df['name'] = ['m{}'.format(number) for number in range(13)]
+        df['name'] = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm1', 'm2', 'm3',
+                      'm1', 'm2', 'm3', 'm4']
+
+        df['is_repeated'] = [False] * 9 + [True] * 4
+        df['first_occurence'] = [np.nan] * 9 + [0.0] * 4
+
         df.set_index(['period', 'name'], inplace=True)
+
         self.update_info = df
 
         new_params = pd.DataFrame(index=df.index)
@@ -124,19 +130,19 @@ class TestDeltasRelatedMethods:
         fs = 'delta__{}__{}__{}'
         expected_names = \
             expected_names = \
-            [fs.format(0, 'm0', 'constant'),
-             fs.format(0, 'm1', 'constant'),
+            [fs.format(0, 'm1', 'constant'),
              fs.format(0, 'm2', 'constant'),
              fs.format(0, 'm3', 'constant'),
              fs.format(0, 'm4', 'constant'),
              fs.format(0, 'm5', 'constant'),
-             fs.format(1, 'm6', 'constant'),
-             fs.format(1, 'm7', 'constant'),
-             fs.format(1, 'm8', 'constant'),
-             fs.format(2, 'm9', 'constant'),
-             fs.format(2, 'm10', 'constant'),
-             fs.format(2, 'm11', 'constant'),
-             fs.format(2, 'm12', 'constant')]
+             fs.format(0, 'm6', 'constant'),
+             fs.format(1, 'm1', 'constant'),
+             fs.format(1, 'm2', 'constant'),
+             fs.format(1, 'm3', 'constant'),
+             fs.format(2, 'm1', 'constant'),
+             fs.format(2, 'm2', 'constant'),
+             fs.format(2, 'm3', 'constant'),
+             fs.format(2, 'm4', 'constant')]
 
         assert_equal(smo._deltas_names(self, params_type='short'),
                      expected_names)
@@ -151,9 +157,7 @@ class TestDeltasRelatedMethods:
         self._deltas_bool = Mock(return_value=d_boo)
         fs = 'delta__{}__{}__{}'
         expected_names = \
-            [fs.format(0, 'm0', 'c1'), fs.format(0, 'm0', 'c2'),
-             fs.format(0, 'm1', 'constant'), fs.format(0, 'm1', 'c1'),
-             fs.format(0, 'm1', 'c2'),
+            [fs.format(0, 'm1', 'c1'), fs.format(0, 'm1', 'c2'),
              fs.format(0, 'm2', 'constant'), fs.format(0, 'm2', 'c1'),
              fs.format(0, 'm2', 'c2'),
              fs.format(0, 'm3', 'constant'), fs.format(0, 'm3', 'c1'),
@@ -162,19 +166,21 @@ class TestDeltasRelatedMethods:
              fs.format(0, 'm4', 'c2'),
              fs.format(0, 'm5', 'constant'), fs.format(0, 'm5', 'c1'),
              fs.format(0, 'm5', 'c2'),
-             fs.format(1, 'm6', 'c1'), fs.format(1, 'm6', 'c2'),
-             fs.format(1, 'm6', 'c3'),
-             fs.format(1, 'm7', 'constant'), fs.format(1, 'm7', 'c1'),
-             fs.format(1, 'm7', 'c2'), fs.format(1, 'm7', 'c3'),
-             fs.format(1, 'm8', 'constant'), fs.format(1, 'm8', 'c1'),
-             fs.format(1, 'm8', 'c2'), fs.format(1, 'm8', 'c3'),
-             fs.format(2, 'm9', 'c3'), fs.format(2, 'm9', 'c4'),
-             fs.format(2, 'm10', 'constant'), fs.format(2, 'm10', 'c3'),
-             fs.format(2, 'm10', 'c4'),
-             fs.format(2, 'm11', 'constant'), fs.format(2, 'm11', 'c3'),
-             fs.format(2, 'm11', 'c4'),
-             fs.format(2, 'm12', 'constant'), fs.format(2, 'm12', 'c3'),
-             fs.format(2, 'm12', 'c4')]
+             fs.format(0, 'm6', 'constant'), fs.format(0, 'm6', 'c1'),
+             fs.format(0, 'm6', 'c2'),
+             fs.format(1, 'm1', 'c1'), fs.format(1, 'm1', 'c2'),
+             fs.format(1, 'm1', 'c3'),
+             fs.format(1, 'm2', 'constant'), fs.format(1, 'm2', 'c1'),
+             fs.format(1, 'm2', 'c2'), fs.format(1, 'm2', 'c3'),
+             fs.format(1, 'm3', 'constant'), fs.format(1, 'm3', 'c1'),
+             fs.format(1, 'm3', 'c2'), fs.format(1, 'm3', 'c3'),
+             fs.format(2, 'm1', 'c3'), fs.format(2, 'm1', 'c4'),
+             fs.format(2, 'm2', 'constant'), fs.format(2, 'm2', 'c3'),
+             fs.format(2, 'm2', 'c4'),
+             fs.format(2, 'm3', 'constant'), fs.format(2, 'm3', 'c3'),
+             fs.format(2, 'm3', 'c4'),
+             fs.format(2, 'm4', 'constant'), fs.format(2, 'm4', 'c3'),
+             fs.format(2, 'm4', 'c4')]
 
         calc = smo._deltas_names(self, params_type='short')
         print(calc, '\n\n')
@@ -182,6 +188,27 @@ class TestDeltasRelatedMethods:
 
         assert_equal(calc,
                      expected_names)
+
+    def test_deltas_replacements_no_time_inv_meas_system(self):
+        self.time_invariant_measurement_system = False
+        exp = []
+        calc = smo._deltas_replacements(self)
+        assert calc == exp
+
+    def test_deltas_replacements_time_inv_but_no_repeated(self):
+        self.time_invariant_measurement_system = True
+        self.update_info['is_repeated'] = False
+        exp = []
+        calc = smo._deltas_replacements(self)
+        assert calc == exp
+
+    def test_deltas_replacements_time_inv_and_repeated(self):
+        self.time_invariant_measurement_system = True
+
+        exp = [[(2, 0), (0, 0)], [(2, 1), (0, 1)], [(2, 2), (0, 2)],
+               [(2, 3), (0, 3)]]
+        calc = smo._deltas_replacements(self)
+        assert calc == exp
 
 
 class TestPsiRelatedMethods:
@@ -228,6 +255,20 @@ class TestHRelatedMethods:
         self.exp_init_H[(6, 13, 19), 1] = 3
 
         df = DataFrame(data=dat, columns=cols)
+        df['period'] = [0] * 6 + [1] * 5 + [2] * 9
+        df['variable'] = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6',
+                          'm1', 'm2', 'm3', 'm4', 'm5',
+                          'm1', 'm3', 'm2', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9']
+
+        repeated = ['False'] * 20
+        repeated[11] = True
+        repeated[12] = True
+        df['is_repeated'] = repeated
+        first = [np.nan] * 20
+        first[11] = 0
+        first[12] = 0
+        df['first_occurence'] = first
+        df.set_index(['period', 'variable'], inplace=True)
         self.update_info = df
 
         self.new_meas_coeffs = pd.DataFrame(
@@ -253,12 +294,10 @@ class TestHRelatedMethods:
         for i in (0, 1, 6, 8, 11, 16, 18):
             res1[i] = True
         res2 = np.zeros((7, 1))
-        res3 = np.zeros((7, 2))
 
-        calc1, calc2, calc3 = smo._helpers_for_H_transformation_with_psi(self)
+        calc1, calc2 = smo._helpers_for_H_transformation_with_psi(self)
         aae(calc1, res1)
         aae(calc2, res2)
-        aae(calc3, res3)
 
     def test_H_names(self):
         self.factors = ['f1', 'f2']
@@ -282,6 +321,25 @@ class TestHRelatedMethods:
             fs.format(1, 'f2', 'm4')]
 
         assert_equal(smo._H_names(self, params_type='short'), expected_names)
+
+    def test_h_replacements_no_time_inv_meas_system(self):
+        self.time_invariant_measurement_system = False
+        exp = []
+        calc = smo._H_replacements(self)
+        assert calc == exp
+
+    def test_h_replacements_time_inv_meas_but_no_repeated(self):
+        self.time_invariant_measurement_system = True
+        exp = []
+        self.update_info['is_repeated'] = False
+        calc = smo._H_replacements(self)
+        assert calc == exp
+
+    def test_h_replacements_time_inv_meas_system(self):
+        self.time_invariant_measurement_system = True
+        exp = [(11, 0), (12, 2)]
+        calc = smo._H_replacements(self)
+        assert calc == exp
 
 
 class TestRRelatedMethods:

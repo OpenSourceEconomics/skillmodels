@@ -15,10 +15,14 @@ from numpy.core.umath_tests import matrix_multiply
 from numpy.linalg import cholesky
 
 
-def _map_params_to_deltas(params, initial, params_slice, boo):
+def _map_params_to_deltas(params, initial, params_slice, boo,
+                          replacements=None):
     """Map paremeters from params to delta for each period."""
     for t, delta in enumerate(initial):
         delta[boo[t]] = params[params_slice[t]]
+    if replacements is not None:
+        for (t_put, pos_put), (t_take, pos_take) in replacements:
+            initial[t_put][pos_put, :] = initial[t_take][pos_take, :]
 
 
 def _map_params_to_psi(params, initial, params_slice, boo):
@@ -27,8 +31,8 @@ def _map_params_to_psi(params, initial, params_slice, boo):
 
 
 def _map_params_to_H(params, initial, params_slice, boo, psi_bool_for_H=None,
-                     psi=None, arr1=None, arr2=None, endog_position=None,
-                     initial_copy=None):
+                     psi=None, arr1=None, endog_position=None,
+                     initial_copy=None, replacements=None):
     """Map parameters from params to H."""
     # the initial H has to be restored if endog_correction is True
     if psi is not None:
@@ -37,19 +41,29 @@ def _map_params_to_H(params, initial, params_slice, boo, psi_bool_for_H=None,
     # fill H with the new parameters
     initial[boo] = params[params_slice]
 
+    # make replacements
+    if replacements is not None:
+        for put_position, take_position in replacements:
+            initial[put_position, :] = initial[take_position, :]
+
     # make some transformations with psi in the case of endog correction
     if psi is not None:
         arr1[:] = initial[psi_bool_for_H, endog_position].reshape(arr1.shape)
         initial[psi_bool_for_H, endog_position] = 0
-        initial[psi_bool_for_H] += np.multiply(arr1, psi, out=arr2)
+        initial[psi_bool_for_H] += np.multiply(arr1, psi)
 
 
-def _map_params_to_R(params, initial, params_slice, boo, square_root_filters):
+def _map_params_to_R(params, initial, params_slice, boo, square_root_filters,
+                     replacements=None):
     """Map parameters from params to R."""
     if square_root_filters is False:
         initial[boo] = params[params_slice]
     else:
         initial[boo] = np.sqrt(params[params_slice])
+
+    if replacements is not None:
+        for put_position, take_position in replacements:
+            initial[put_position] = initial[take_position]
 
 
 def _map_params_to_Q(params, initial, params_slice, boo, replacements=None):

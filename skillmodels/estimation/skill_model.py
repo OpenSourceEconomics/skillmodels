@@ -174,6 +174,28 @@ class SkillModel(GenericLikelihoodModel):
                         t, update, control))
         return deltas_names
 
+    def _deltas_replacements(self):
+        """List of pairs of index tuples.
+
+        The first tuple indicates where to put the row of deltas described
+        by the second index tuple.
+
+        """
+        uinfo = self.update_info
+        replacements = []
+        for t in self.periods:
+            for m, meas in enumerate(uinfo.loc[t].index):
+                if uinfo.loc[(t, meas), 'is_repeated'] == True:
+                    first_occ_period = uinfo.loc[t, meas]['first_occurence']
+                    first_occ_position = \
+                        uinfo.loc[first_occ_period].index.get_loc(meas)
+                    replacements.append(
+                        [(t, m), (first_occ_period, first_occ_position)])
+        if self.time_invariant_measurement_system is True:
+            return replacements
+        else:
+            return []
+
     def _initial_psi(self):
         """Initial psi vector filled with ones."""
         # TODO: Check if psi is needed for endog correction in wa case
@@ -251,8 +273,7 @@ class SkillModel(GenericLikelihoodModel):
         psi_bool = \
             self.update_info[self.endog_factor].values.flatten().astype(bool)
         arr1 = np.zeros((psi_bool.sum(), 1))
-        arr2 = np.zeros((psi_bool.sum(), self.nfac))
-        return psi_bool, arr1, arr2
+        return psi_bool, arr1
 
     def _params_slice_for_H(self, params_type):
         """A slice object, selecting the part of params mapped to H.
@@ -274,6 +295,26 @@ class SkillModel(GenericLikelihoodModel):
                     H_names.append('H__{}__{}__{}'.format(
                         period, factor, measure))
         return H_names
+
+    def _H_replacements(self):
+        """List of tuples with index positions.
+
+        The first entry in each tuple indicates where to put the row of H
+        described by the second entry.
+
+        """
+        uinfo = self.update_info
+        replacements = []
+        for put_position, (t, meas) in enumerate(uinfo.index):
+            if uinfo.loc[(t, meas), 'is_repeated'] == True:
+                first_occurence = uinfo.loc[(t, meas), 'first_occurence']
+                take_position = uinfo.index.get_loc((first_occurence, meas))
+                replacements.append((put_position, take_position))
+
+        if self.time_invariant_measurement_system is True:
+            return replacements
+        else:
+            return []
 
     def _initial_R(self):
         """1d numpy array of length nupdates filled with zeros."""
@@ -300,6 +341,15 @@ class SkillModel(GenericLikelihoodModel):
             if b == True:
                 R_names.append('R__{}__{}'.format(t, measure))
         return R_names
+
+    def _R_replacements(self):
+        """List of tuples with index positions.
+
+        The first entry in each tuple indicates where to put the element of R
+        described by the second entry.
+
+        """
+        return self._H_replacements()
 
     def _set_bounds_for_R(self, params_slice):
         """Set lower bounds for params mapped to R."""
@@ -933,7 +983,6 @@ class SkillModel(GenericLikelihoodModel):
             pp['H_args']['psi'] = initial_quantities['psi']
             pp['H_args']['psi_bool_for_H'] = helpers[0]
             pp['H_args']['arr1'] = helpers[1]
-            pp['H_args']['arr2'] = helpers[2]
             pp['H_args']['endog_position'] = self.endog_position
             pp['H_args']['initial_copy'] = initial_quantities['H'].copy()
 

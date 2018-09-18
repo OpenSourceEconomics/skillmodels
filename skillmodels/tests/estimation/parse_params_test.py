@@ -5,7 +5,7 @@ import numpy as np
 import scipy.linalg as sl
 
 
-class TestMapParamsToDeltas:
+class TestMapParamsToDeltasWithoutReplacments:
     def setup(self):
         self.params = np.arange(200)
         self.initial = [np.zeros((4, 3)), np.zeros((6, 2))]
@@ -18,7 +18,7 @@ class TestMapParamsToDeltas:
 
         self.slices = [slice(10, 21), slice(21, 32)]
 
-    def test_map_params_to_deltas(self):
+    def test_map_params_to_deltas_without_replacements(self):
 
         expected0 = np.array(
             [[10, 11, 12], [13, 14, 15], [0, 16, 17], [18, 19, 20]])
@@ -27,6 +27,33 @@ class TestMapParamsToDeltas:
 
         pp._map_params_to_deltas(self.params, self.initial,
                                  self.slices, self.bools)
+
+        aae(self.initial[0], expected0)
+        aae(self.initial[1], expected1)
+
+
+class TestMapParamToDeltasWithReplacements:
+    def setup(self):
+        t = True
+        f = False
+        self.params = np.arange(200)
+        self.initial = [np.zeros((4, 3)), np.zeros((6, 3))]
+        boo1 = np.array([[f, t, t], [t, t, t], [f, t, t], [t, t, t]])
+        boo2 = np.array([[f, f, f], [f, f, f], [f, t, t], [t, t, t], [f, t, t],
+                         [t, t, t]])
+        self.bools = [boo1, boo2]
+        self.slices = [slice(10, 20), slice(20, 30)]
+        self.replacements = [[(1, 0), (0, 0)], [(1, 1), (0, 1)]]
+
+    def test_map_params_to_deltas_with_replacements(self):
+        expected0 = np.array(
+            [[0, 10, 11], [12, 13, 14], [0, 15, 16], [17, 18, 19]])
+        expected1 = np.array(
+            [[0, 10, 11], [12, 13, 14], [0, 20, 21], [22, 23, 24],
+             [0, 25, 26], [27, 28, 29]])
+
+        pp._map_params_to_deltas(self.params, self.initial,
+                                 self.slices, self.bools, self.replacements)
 
         aae(self.initial[0], expected0)
         aae(self.initial[1], expected1)
@@ -49,13 +76,14 @@ class TestMapParamsToH:
     def setup(self):
         self.params = np.arange(100)
 
-        self.initial = np.zeros((5, 3))
+        self.initial = np.zeros((6, 3))
         self.initial[2, 1] = 3
 
         self.boo = np.zeros_like(self.initial, dtype=bool)
         self.boo[[0, 3], 0] = True
         self.boo[[1, 4], 1] = True
         self.boo[[2, 3, 4], 2] = True
+        self.boo[5, :] = False
 
         self.slice = slice(10, 17)
         self.initial_copy = self.initial.copy()
@@ -66,28 +94,44 @@ class TestMapParamsToH:
             [0, 11, 0],
             [0, 3, 12],
             [13, 0, 14],
-            [0, 15, 16]])
+            [0, 15, 16],
+            [0, 0, 0]])
         pp._map_params_to_H(params=self.params, initial=self.initial,
                             params_slice=self.slice, boo=self.boo)
         aae(self.initial, expected)
 
+    def test_map_params_to_H_without_psi_but_with_replacements(self):
+        expected = np.array([
+            [10, 0, 0],
+            [0, 11, 0],
+            [0, 3, 12],
+            [13, 0, 14],
+            [0, 15, 16],
+            [13, 0, 14]])
+
+        replacements = [(5, 3)]
+        pp._map_params_to_H(params=self.params, initial=self.initial,
+                            params_slice=self.slice, boo=self.boo,
+                            replacements=replacements)
+        aae(self.initial, expected)
+
     def test_map_params_to_H_with_psi_transformation(self):
-        psi_boo = np.array([True, False, False, True, False])
+        psi_boo = np.array([True, False, False, True, False, False])
         psi = np.array([1, 5, 8])
         arr1 = np.zeros((2, 1))
-        arr2 = np.zeros((2, 3))
 
         expected = np.array([
             [10, 50, 80],
             [0, 11, 0],
             [0, 3, 12],
             [13, 65, 118],
-            [0, 15, 16]])
+            [0, 15, 16],
+            [0, 0, 0]])
 
         pp._map_params_to_H(params=self.params, initial=self.initial,
                             params_slice=self.slice, boo=self.boo,
                             psi_bool_for_H=psi_boo, psi=psi, arr1=arr1,
-                            arr2=arr2, endog_position=0,
+                            endog_position=0,
                             initial_copy=self.initial_copy)
         aae(self.initial, expected)
 
@@ -114,19 +158,30 @@ class TestMapParamsToR:
         self.initial = np.zeros(10)
         self.boo = np.array([True, False] * 5)
 
-    def test_map_params_to_r(self):
+    def test_map_params_to_r_without_replacements(self):
         self.square_root_filters = False
         pp._map_params_to_R(
             self.params, self.initial, self.slice, self.boo,
             self.square_root_filters)
         aae(self.initial, np.array([15, 0, 16, 0, 17, 0, 18, 0, 19, 0]))
 
-    def test_map_params_to_r_square_root_filters(self):
+    def test_map_params_to_r_square_root_filters_without_replacements(self):
         self.square_root_filters = True
         pp._map_params_to_R(
             self.params, self.initial, self.slice, self.boo,
             self.square_root_filters)
         aae(self.initial, np.sqrt([15, 0, 16, 0, 17, 0, 18, 0, 19, 0]))
+
+    def test_map_params_to_r_with_replacements(self):
+        self.square_root_filters = False
+        self.boo = np.array([True, False] * 3 + [False] * 4)
+        self.slice = slice(15, 18)
+        self.replacements = [(6, 0), (8, 2)]
+        expected = np.array([15, 0, 16, 0, 17, 0, 15, 0, 16, 0])
+        pp._map_params_to_R(
+            self.params, self.initial, self.slice, self.boo,
+            self.square_root_filters, self.replacements)
+        aae(self.initial, expected)
 
 
 class TestMapParamsToQ:
