@@ -186,9 +186,10 @@ class SkillModel(GenericLikelihoodModel):
         for t in self.periods:
             for m, meas in enumerate(uinfo.loc[t].index):
                 if uinfo.loc[(t, meas), 'is_repeated'] == True:
-                    first_occ_period = uinfo.loc[t, meas]['first_occurence']
-                    first_occ_position = \
-                        uinfo.loc[first_occ_period].index.get_loc(meas)
+                    first_occ_period = int(
+                        uinfo.loc[t, meas]['first_occurence'])
+                    first_occ_position = int(
+                        uinfo.loc[first_occ_period].index.get_loc(meas))
                     replacements.append(
                         [(t, m), (first_occ_period, first_occ_position)])
         if self.time_invariant_measurement_system is True:
@@ -307,7 +308,8 @@ class SkillModel(GenericLikelihoodModel):
         replacements = []
         for put_position, (t, meas) in enumerate(uinfo.index):
             if uinfo.loc[(t, meas), 'is_repeated'] == True:
-                first_occurence = uinfo.loc[(t, meas), 'first_occurence']
+                first_occurence = int(
+                    uinfo.loc[(t, meas), 'first_occurence'])
                 take_position = uinfo.index.get_loc((first_occurence, meas))
                 replacements.append((put_position, take_position))
 
@@ -321,7 +323,7 @@ class SkillModel(GenericLikelihoodModel):
         return self.update_info['variance_norm_value'].fillna(0).values
 
     def _R_bool(self):
-        return self.new_meas_coeffs['variance']
+        return self.new_meas_coeffs['variance'].values
 
     def _params_slice_for_R(self, params_type):
         """A slice object, selecting the part of params mapped to R.
