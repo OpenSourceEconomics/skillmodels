@@ -101,7 +101,7 @@ class TestOfWAEstimator:
         self.true_intercepts = np.arange(start=-0.665, stop=0.665, step=0.05)
         self.true_X_zero = np.array([5, 7.5, 30])
 
-    @pytest.mark.skip(reason='Slow')
+    # @pytest.mark.skip(reason='Slow')
     def test_loadings_intercepts_transparams_anchparams_and_xzeros(self):
         self.nobs = 5000
         self.base_meas_sd = 0.00001
@@ -148,7 +148,7 @@ class TestOfWAEstimator:
         assert_almost_equal(anch_intercept, 3.0, places=1)
         aaae(anch_loadings, self.anch_loadings, decimal=2)
 
-    @pytest.mark.skip(reason='Slow')
+    # @pytest.mark.skip(reason='Slow')
     def test_pzero_and_measurement_variances(self):
         self.nobs = 20000
 
@@ -213,7 +213,7 @@ class TestOfWAEstimator:
         aaae(calc_epsilon_variances[:9], self.true_meas_var[:9], decimal=2)
         assert_almost_equal(np.sqrt(anch_variance), self.anch_sd, places=1)
 
-    @pytest.mark.skip(reason='Slow')
+    # @pytest.mark.skip(reason='Slow')
     def test_transition_variances(self):
         self.nobs = 5000
         self.base_meas_sd = 0.00001

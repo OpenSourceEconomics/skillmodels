@@ -604,7 +604,8 @@ def general_model_coeffs_from_iv_coeffs(
 
     # get coeff sum
     if coeff_sum_value is None:
-        load_norm_y, load_norm_val = loading_norminfo
+        load_norm_y = list(loading_norminfo.keys())[0]
+        load_norm_val = list(loading_norminfo.values())[0]
         iv_sum = iv_coeffs.loc[load_norm_y].values[all_but_intercept].sum()
         coeff_sum_value = iv_sum / load_norm_val
         newly_identified_coeff_sum_value = coeff_sum_value
@@ -621,7 +622,8 @@ def general_model_coeffs_from_iv_coeffs(
         trans_intercept_value = 0
         newly_identified_trans_intercept_value = None
     elif trans_intercept_value is None:
-        intercept_norm_y, intercept_norm_val = intercept_norminfo
+        intercept_norm_y = list(intercept_norminfo.keys())[0]
+        intercept_norm_val = list(intercept_norminfo.values())[0]
         intercept_coeff = list(
             iv_coeffs.loc[intercept_norm_y])[iv_intercept_position]
         corresponding_loading = meas_coeffs.loc[intercept_norm_y, 'loadings']

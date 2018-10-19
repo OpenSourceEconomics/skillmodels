@@ -182,6 +182,7 @@ class TestCheckAndCleanNormalizations:
         self.model_name = 'model'
         self.dataset_name = 'data'
         self.nperiods = len(self.periods)
+        self.estimator = 'chs'
 
     def test_check_normalizations_lists(self):
         assert_raises(DeprecationWarning,

@@ -565,9 +565,8 @@ class ModelSpecProcessor:
                     'list with len {} for factor {}').format(
                         self.model_name, t, len(norminfo), factor)
 
-                # raise the deprecation warning
-
         cleaned = []
+
         for norminfo in norm_list:
             if type(norminfo) == dict:
                 cleaned.append(norminfo)
@@ -603,6 +602,14 @@ class ModelSpecProcessor:
                 if norm_type == 'loadings':
                     assert n_val != 0, \
                         'Loadings cannot be normalized to 0.'
+
+        if self.estimator == 'wa':
+            for norminfo in norm_list:
+                msg = ('The wa estimator currently allows at most one '
+                       'normalization of {} in each period. This is '
+                       'violated for factor {}: {}')
+                assert len(norminfo) <= 1, msg.format(
+                    norm_type, factor, norminfo)
 
         return norm_list
 

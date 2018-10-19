@@ -25,7 +25,7 @@ class TestInitialLoadingsAndIntercepts:
             index=self.data.columns)
 
     def test_loadings_from_covs_normalized_to_true_value(self):
-        true_normalization = ['m1', 1]
+        true_normalization = {'m1': 1}
         calculated_loadings = wf.loadings_from_covs(self.data,
                                                     true_normalization)
         expected_loadings = self.true_loadings_series
@@ -33,7 +33,7 @@ class TestInitialLoadingsAndIntercepts:
 
     def test_loadings_from_covs_normalized_to_different_value(self):
         multiple = 1.5
-        different_normalization = ['m2', multiple * 2]
+        different_normalization = {'m2': multiple * 2}
         calculated_loadings = wf.loadings_from_covs(self.data,
                                                     different_normalization)
         expected_loadings = (multiple * self.true_loadings_series)
@@ -41,7 +41,7 @@ class TestInitialLoadingsAndIntercepts:
 
     def test_intercepts_from_means_with_true_normalization(self):
         expected_intercepts = self.true_intercepts_series
-        true_normalization = ['m3', 2.0]
+        true_normalization = {'m3': 2.0}
         calc_intercepts, calc_mean = wf.intercepts_from_means(
             self.data, true_normalization, self.true_loadings_series)
         assert_series_equal(calc_intercepts, expected_intercepts)
@@ -49,7 +49,7 @@ class TestInitialLoadingsAndIntercepts:
 
     def test_intercepts_from_means_with_different_normalization(self):
         difference = 4
-        different_normalization = ['m2', 0 + difference]
+        different_normalization = {'m2': 0 + difference}
         expected_mean = -2.0
         expected_intercepts = pd.Series(
             data=[6., 4, 8, 9], index=self.true_intercepts_series.index,
@@ -74,8 +74,8 @@ class TestInitialMeasCoeffsIntegrationTest:
             'f1': [['y1', 'y2', 'y3']],
             'f2': [['y4', 'y5', 'y6']]}
         self.normalizations = {
-            'f1': {'intercepts': [['y1', 4]], 'loadings': [['y2', 2]]},
-            'f2': {'intercepts': [['y4', 2]], 'loadings': [['y5', 4]]}}
+            'f1': {'intercepts': [{'y1': 4}], 'loadings': [{'y2': 2}]},
+            'f2': {'intercepts': [{'y4': 2}], 'loadings': [{'y5': 4}]}}
 
         self.true_loadings = np.array([[1., 2., 0.5], [3, 4, 1]])
         self.true_intercepts = np.array([[4., 0, 1], [2, 1, 0.0]])
@@ -103,13 +103,15 @@ class TestInitialMeasCoeffsIntegrationTest:
             index=['y1', 'y2', 'y3', 'y4', 'y5', 'y6'])
 
         self.expected_x_zeros = np.array([0.0, 0.0])
-        self.calc_meas_coeffs, self.calc_x_zeros = wf.initial_meas_coeffs(
-            self.y_data, self.measurements, self.normalizations)
 
     def test_initial_meas_coeffs(self):
+        self.calc_meas_coeffs, self.calc_x_zeros = wf.initial_meas_coeffs(
+            self.y_data, self.measurements, self.normalizations)
         assert_frame_equal(self.expected_meas_coeffs, self.calc_meas_coeffs)
 
     def test_x_zeros(self):
+        self.calc_meas_coeffs, self.calc_x_zeros = wf.initial_meas_coeffs(
+            self.y_data, self.measurements, self.normalizations)
         aaae(self.expected_x_zeros, self.calc_x_zeros, decimal=2)
 
 

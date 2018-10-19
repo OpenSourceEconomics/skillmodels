@@ -30,7 +30,8 @@ def loadings_from_covs(data, normalization):
         'measurements are needed.')
 
     cov = data.cov()
-    load_norm, load_norm_val = normalization
+    load_norm = list(normalization.keys())[0]
+    load_norm_val = list(normalization.values())[0]
     loadings = pd.Series(index=measurements, name='loadings')
 
     for m in measurements:
@@ -58,8 +59,8 @@ def intercepts_from_means(data, normalization, loadings):
     Args:
         data (DataFrame): pandas DataFrame with the measurement data for one
             factor in one period.
-        normalization (list): The first value is the name of a normalized
-            measurement, the second is the value it is normalized to.
+        normalization (dict): The key is the name of a normalized
+            measurement, the value is the value it is normalized to.
         loadings (Series): pandas Series with estimated factor loadings
 
     Returns:
@@ -77,7 +78,8 @@ def intercepts_from_means(data, normalization, loadings):
         factor_mean = None
     else:
         intercepts = pd.Series(index=measurements, name='intercepts')
-        intercept_norm, intercept_norm_val = normalization
+        intercept_norm = list(normalization.keys())[0]
+        intercept_norm_val = list(normalization.values())[0]
         loading = loadings[intercept_norm]
         factor_mean = \
             (data[intercept_norm].mean() - intercept_norm_val) / loading
