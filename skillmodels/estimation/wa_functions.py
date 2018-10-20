@@ -16,8 +16,9 @@ def loadings_from_covs(data, normalization):
     Args:
         data (DataFrame): pandas DataFrame with the measurement data for one
             factor in one period.
-        normalization (list): The first value is the name of a normalized
-            measurement, the second is the value it is normalized to.
+        normalization (dict): Dictionary of length one. The key is the name of
+            a measurment with normalized loading. The value is the value it is
+            normalized to.
 
     Returns:
         loadings (Series): pandas Series with estimated factor loadings
@@ -59,8 +60,8 @@ def intercepts_from_means(data, normalization, loadings):
     Args:
         data (DataFrame): pandas DataFrame with the measurement data for one
             factor in one period.
-        normalization (dict): The key is the name of a normalized
-            measurement, the value is the value it is normalized to.
+        normalization (dict): The key is the name of a measurement with
+            normalized intercept. The value is the value it is normalized to.
         loadings (Series): pandas Series with estimated factor loadings
 
     Returns:
