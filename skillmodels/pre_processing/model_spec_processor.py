@@ -87,7 +87,8 @@ class ModelSpecProcessor:
              'bootstrap_sample_size': None,
              'bootstrap_nprocesses': None,
              'anchoring_mode': 'only_estimate_anchoring_equation',
-             'time_invariant_measurement_system': False
+             'time_invariant_measurement_system': False,
+             'base_color': '#035096'
              }
 
         if 'general' in model_dict:
@@ -153,7 +154,7 @@ class ModelSpecProcessor:
             sm[-1] = sm[-2]
             self.stagemap = sm
 
-        self.periods = range(self.nperiods)
+        self.periods = list(range(self.nperiods))
         self.stages = sorted(list(set(self.stagemap)))
         self.nstages = len(self.stages)
         self.stage_length_list = [
@@ -230,7 +231,7 @@ class ModelSpecProcessor:
 
         Construct a list with the positions of included factors in the
         alphabetically ordered factor list and set the result as class
-        attribute ``included_positions.
+        attribute ``included_positions``.
 
         """
         included_factors = []

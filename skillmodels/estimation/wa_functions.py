@@ -52,7 +52,7 @@ def loadings_from_covs(data, normalization):
 def intercepts_from_means(data, normalization, loadings):
     """Calculate intercepts and factor means for 1 factor in the first period.
 
-    If the normalization list is not empty, it is assumed that the factor
+    If the normalization dict is empty, it is assumed that the factor
     mean is not normalized and has to be estimated. In this case, the factor
     mean is calculated first and appended to the mean_list. Later the
     non-normalized intercepts are calculated and stored in storage_df.

@@ -6,8 +6,12 @@ from skillmodels.estimation.wa_functions import initial_meas_coeffs, \
     prepend_index_level, factor_covs_and_measurement_error_variances, \
     iv_reg_array_dict, iv_reg, large_df_for_iv_equations, \
     transition_error_variance_from_u_covs, anchoring_error_variance_from_u_vars
+from skillmodels.visualization.table_functions import statsmodels_results_to_df
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
+import statsmodels.formula.api as smf
+import statsmodels.api as sm
+
 from skillmodels.estimation.skill_model_results import \
     SkillModelResults, NotApplicableError
 from skillmodels.fast_routines.transform_sigma_points import \
@@ -25,6 +29,10 @@ import pandas as pd
 import json
 from multiprocessing import Pool
 import warnings
+
+import matplotlib
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 class SkillModel(GenericLikelihoodModel):
@@ -67,9 +75,10 @@ class SkillModel(GenericLikelihoodModel):
             model_name=model_name, dataset_name=dataset_name,
             save_path=save_path, bootstrap_samples=bootstrap_samples)
         specs_dict = specs.public_attribute_dict()
-        data = DataProcessor(specs_dict)
-        self.c_data = data.c_data() if self.estimator == 'chs' else None
-        self.y_data = data.y_data()
+        data_proc = DataProcessor(specs_dict)
+        self.data_proc = data_proc
+        self.c_data = data_proc.c_data() if self.estimator == 'chs' else None
+        self.y_data = data_proc.y_data()
         self.__dict__.update(specs_dict)
 
         if bootstrap_samples is not None:
@@ -2078,3 +2087,246 @@ class SkillModel(GenericLikelihoodModel):
 
         else:
             return self._select_final_factor(final_factors)
+
+    def _basic_heatmap_args(self):
+        args = {'cmap': 'coolwarm', 'center': 0.0, 'vmax': 0.5, 'vmin': -0.5,
+                'annot': True}
+        return args
+
+    def _basic_pairplot_args(self):
+        args = {'plot_kws': {'alpha': 0.2, 'color': self.base_color},
+                'kind': 'scatter', 'diag_kind': 'kde'}
+        return args
+
+    def _basic_regplot_args(self):
+        args = {'scatter_kws': {'alpha': 0.2}, 'fit_reg': True,
+                'lowess': True, 'color': self.base_color}
+        return args
+
+    def measurement_heatmap(
+            self, periods='all', factors='all', figsize=None, sns_args={},
+            save_path=None, dpi=200):
+
+        df = self.data_proc.measurements_df(periods=periods, factors=factors)
+        corr = df.corr()
+
+        if figsize is None:
+            figsize = (len(corr), 0.8 * len(corr))
+
+        kwargs = self._basic_heatmap_args()
+        kwargs.update(sns_args)
+        fig, ax = plt.subplots(figsize=figsize)
+        ax = sns.heatmap(data=corr, ax=ax, **kwargs)
+
+        if save_path is not None:
+            fig.savefig(save_path, dpi=dpi)
+        return fig, ax
+
+    def measurement_pairplot(
+            self, periods='all', factors='all', group=None,
+            sns_args={}, save_path=None, dpi=200):
+
+        if group is None:
+            other_vars = []
+        else:
+            other_vars = [group]
+
+        df = self.data_proc.measurements_df(
+            periods=periods, factors=factors, other_vars=other_vars)
+
+        kwargs = self._basic_pairplot_args()
+        kwargs.update(sns_args)
+
+        grid = sns.pairplot(data=df, hue=group, **kwargs)
+
+        if save_path is not None:
+            grid.savefig(save_path, dpi=dpi)
+        return grid
+
+    def score_heatmap(
+            self, periods='all', factors='all', agg_method='means',
+            figsize=None, sns_args={}, save_path=None, dpi=200):
+
+        df = self.data_proc.score_df(periods=periods, factors=factors,
+                                     order='by_factor', agg_method=agg_method)
+        corr = df.corr()
+
+        if figsize is None:
+            figsize = (len(corr), 0.8 * len(corr))
+
+        kwargs = self._basic_heatmap_args()
+        kwargs.update(sns_args)
+        fig, ax = plt.subplots(figsize=figsize)
+        ax = sns.heatmap(data=corr, ax=ax, **kwargs)
+
+        if save_path is not None:
+            fig.savefig(save_path, dpi=dpi)
+        return fig, ax
+
+    def score_pairplot(
+            self, periods='all', factors='all', agg_method='means', group=None,
+            sns_args={}, save_path=None, dpi=200):
+
+        if group is None:
+            other_vars = []
+        else:
+            other_vars = [group]
+
+        df = self.data_proc.score_df(
+            periods=periods, factors=factors, other_vars=other_vars,
+            agg_method=agg_method)
+
+        kwargs = self._basic_pairplot_args()
+        kwargs.update(sns_args)
+
+        grid = sns.pairplot(data=df, hue=group, **kwargs)
+
+        if save_path is not None:
+            grid.savefig(save_path, dpi=dpi)
+        return grid
+
+    def autoregression_plot(
+            self, period, factor, agg_method='mean', sns_args={},
+            figsize=(10, 8), save_path=None, dpi=200):
+
+        kwargs = self._basic_regplot_args()
+        kwargs.update(sns_args)
+
+        df = self.data_proc.score_df(
+            factors=factor, periods=[period, period + 1],
+            agg_method=agg_method)
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        x = '{}_{}'.format(factor, period)
+        y = '{}_{}'.format(factor, period + 1)
+
+        sns.regplot(x=x, y=y, data=df, ax=ax, **kwargs)
+
+        if save_path is not None:
+            fig.savefig(save_path, dpi=dpi)
+
+        return fig, ax
+
+    def score_regression_influence_plot(
+            self, period, factor, controls=[], agg_method='mean', sns_args={},
+            save_path=None, figsize=(12, 8), dpi=200):
+
+        mod = self._score_regression_model(
+            period=period, factor=factor, controls=controls,
+            agg_method=agg_method)
+
+        fig, ax = plt.subplots(figsize=(12, 8))
+        fig = sm.graphics.influence_plot(
+            mod.fit(), ax=ax, criterion='DFFITS', alpha=1e-10, size=0.1)
+        return fig, ax
+
+    def score_regression_residual_plot(
+            self, factor, period=None, stage=None, controls=[], other_vars=[],
+            agg_method='mean', sns_args={}, save_path=None):
+
+        mod = self._score_regression_model(
+            period=period, stage=stage, factor=factor, controls=controls,
+            agg_method=agg_method)
+
+        res = mod.fit()
+
+        data = self.data_proc.reg_df(
+            factor=factor, period=period, stage=stage,
+            controls=controls + other_vars,
+            agg_method=agg_method)
+
+        data['residuals'] = res.resid
+        data['fitted'] = res.fittedvalues
+
+        y_name = '{}_t_plusone'.format(factor)
+        to_plot = [col for col in data.columns if col not in ['residuals', y_name]]
+        figsize = (10, len(to_plot) * 5)
+        fig, axes = plt.subplots(nrows=len(to_plot), figsize=figsize)
+
+        kwargs = self._basic_regplot_args()
+        kwargs.update(sns_args)
+        for ax, var in zip(axes, to_plot):
+            sns.regplot(y='residuals', x=var, ax=ax, data=data, **kwargs)
+
+        return fig
+
+    def score_regression_table(
+            self, periods=None, stages=None, controls=[], output='df',
+            agg_method='mean'):
+
+        assert periods is None or stages is None, (
+            'You cannot specify periods and stages for a score regression.')
+
+        assert not (periods is None and stages is None), (
+            'You have to specify periods or stages for a score regression')
+
+        if periods == 'all':
+            periods = self.periods
+
+        if stages == 'all':
+            stages = self.stages
+
+        if periods is not None:
+            time = periods
+
+        if isinstance(periods, int) or isinstance(periods, float):
+            periods = [periods]
+
+        if isinstance(stages, int) or isinstance(stages, float):
+            stages = [stages]
+
+        if periods is not None:
+            time = periods
+            time_name = 'period'
+        else:
+            time = stages
+            time_name = 'stage'
+
+        results = []
+        for t in time:
+            for factor in self.factors:
+                mod_kwargs = {'factor': factor, 'controls': controls,
+                              'agg_method': agg_method, time_name: t}
+
+                mod = self._score_regression_model(**mod_kwargs)
+                res = mod.fit()
+                res.name = factor
+                res.period = t
+                results.append(res)
+
+        df = statsmodels_results_to_df(res_list=results, decimals=3)
+
+        if output != 'df':
+            raise NotImplementedError('tex output not yet supported.')
+
+        return df
+
+    def _score_regression_model(self, factor, period=None, stage=None,
+                                controls=[], agg_method='mean'):
+
+        df = self.data_proc.reg_df(factor=factor, period=period, stage=stage,
+                                   controls=controls, agg_method=agg_method)
+
+        ind = self.factors.index(factor)
+        included = self.included_factors[ind]
+
+        y_var = '{}_{}'.format(factor, 't_plusone')
+        x_vars = ['{}_{}'.format(var, 't')
+                  for var in included + controls]
+
+        formula = y_var + ' ~ ' + ' + '.join(x_vars)
+
+        mod = smf.ols(formula=formula, data=df)
+        return mod
+
+    def visualize_model(self, save_path, write_tex=False, sns_args={}):
+        # savefig
+        pass
+
+    # def _score_regression_formulae(self, controls, add_suffix=False):
+    #     pass
+
+
+
+
