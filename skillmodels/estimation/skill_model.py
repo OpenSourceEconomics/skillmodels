@@ -7,10 +7,11 @@ from skillmodels.estimation.wa_functions import initial_meas_coeffs, \
     iv_reg_array_dict, iv_reg, large_df_for_iv_equations, \
     transition_error_variance_from_u_covs, anchoring_error_variance_from_u_vars
 from skillmodels.visualization.table_functions import statsmodels_results_to_df
+from skillmodels.visualization.text_functions import (
+    title_text, write_figure_tex_snippet, get_preamble)
 from statsmodels.base.model import GenericLikelihoodModel
 from statsmodels.base.model import LikelihoodModelResults
 import statsmodels.formula.api as smf
-import statsmodels.api as sm
 
 from skillmodels.estimation.skill_model_results import \
     SkillModelResults, NotApplicableError
@@ -30,9 +31,9 @@ import json
 from multiprocessing import Pool
 import warnings
 
-import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
+from os.path import join
 
 
 class SkillModel(GenericLikelihoodModel):
@@ -2104,93 +2105,187 @@ class SkillModel(GenericLikelihoodModel):
         return args
 
     def measurement_heatmap(
-            self, periods='all', factors='all', figsize=None, sns_args={},
-            save_path=None, dpi=200):
+            self, periods='all', factors='all', figsize=None, heatmap_kws={},
+            save_path=None, dpi=200, write_tex=False, width=None, height=None):
+        """Heatmap of the correlation matrix of measurements.
 
+        Args:
+            periods: periods to include. Can be the name of one period, a list
+                like object with periods or 'all'.
+            factors: factors to include. Can be the name of one factor, a list
+                like object with factors or 'all'.
+            figsize (tuple): size of the matplotlib figure. If None provided,
+                the figure automatically scales with the size of the
+                correlation matrix.
+            heatmap_kws (dict): dictionary with arguments for sns.heatmap()
+            save_path (str): path where the plot will be saved. Needs a valid
+                file extension (.png, .jpg, .eps, ...); Other documents are
+                saved in the same directory.
+            dpi (int): resolution of the plot
+            write_tex (bool): if True, a tex file with the plot is written.
+
+         """
+        if write_tex is True:
+            assert save_path is not None, (
+                'To write a tex file, please provide a save_path')
         df = self.data_proc.measurements_df(periods=periods, factors=factors)
         corr = df.corr()
 
         if figsize is None:
             figsize = (len(corr), 0.8 * len(corr))
 
+        if width is None and height is None:
+            if len(corr) <= 5:
+                width = 0.5
+            elif len(corr) <= 9:
+                width = 0.8
+            else:
+                width = 1
+
         kwargs = self._basic_heatmap_args()
-        kwargs.update(sns_args)
+        kwargs.update(heatmap_kws)
         fig, ax = plt.subplots(figsize=figsize)
         ax = sns.heatmap(data=corr, ax=ax, **kwargs)
 
+        base_title = 'Correlations of Measurements'
+        title = title_text(
+            basic_name=base_title, periods=periods, factors=factors)
+
         if save_path is not None:
             fig.savefig(save_path, dpi=dpi)
+
+        if write_tex is True:
+            write_figure_tex_snippet(
+                save_path, title, width=width, height=height)
         return fig, ax
-
-    def measurement_pairplot(
-            self, periods='all', factors='all', group=None,
-            sns_args={}, save_path=None, dpi=200):
-
-        if group is None:
-            other_vars = []
-        else:
-            other_vars = [group]
-
-        df = self.data_proc.measurements_df(
-            periods=periods, factors=factors, other_vars=other_vars)
-
-        kwargs = self._basic_pairplot_args()
-        kwargs.update(sns_args)
-
-        grid = sns.pairplot(data=df, hue=group, **kwargs)
-
-        if save_path is not None:
-            grid.savefig(save_path, dpi=dpi)
-        return grid
 
     def score_heatmap(
             self, periods='all', factors='all', agg_method='means',
-            figsize=None, sns_args={}, save_path=None, dpi=200):
+            figsize=None, heatmap_kws={}, save_path=None, dpi=200,
+            write_tex=False, width=None, height=None):
+
+        if write_tex is True:
+            assert save_path is not None, (
+                'To write a tex file, please provide a save_path')
 
         df = self.data_proc.score_df(periods=periods, factors=factors,
                                      order='by_factor', agg_method=agg_method)
         corr = df.corr()
 
+        if width is None and height is None:
+            if len(corr) <= 5:
+                width = 0.5
+            elif len(corr) <= 9:
+                width = 0.8
+            else:
+                width = 1
+
         if figsize is None:
             figsize = (len(corr), 0.8 * len(corr))
 
         kwargs = self._basic_heatmap_args()
-        kwargs.update(sns_args)
+        kwargs.update(heatmap_kws)
         fig, ax = plt.subplots(figsize=figsize)
         ax = sns.heatmap(data=corr, ax=ax, **kwargs)
 
+        base_title = 'Correlations of Factor Scores'
+        title = title_text(
+            basic_name=base_title, periods=periods, factors=factors)
+
         if save_path is not None:
             fig.savefig(save_path, dpi=dpi)
+
+        if write_tex is True:
+            write_figure_tex_snippet(
+                save_path, title, width=width, height=height)
         return fig, ax
 
-    def score_pairplot(
-            self, periods='all', factors='all', agg_method='means', group=None,
-            sns_args={}, save_path=None, dpi=200):
+    def measurement_pairplot(
+            self, periods='all', factors='all', group=None,
+            pair_kws={}, save_path=None, dpi=200, write_tex=False,
+            width=None, height=None):
+
+        if write_tex is True:
+            assert save_path is not None, (
+                'To write a tex file, please provide a save_path')
 
         if group is None:
             other_vars = []
         else:
             other_vars = [group]
+
+        if width is None and height is None:
+            width = 1
+
+        df = self.data_proc.measurements_df(
+            periods=periods, factors=factors, other_vars=other_vars)
+
+        kwargs = self._basic_pairplot_args()
+        kwargs.update(pair_kws)
+
+        grid = sns.pairplot(data=df, hue=group, **kwargs)
+
+        base_title = 'Joint Distribution of Measurements'
+        title = title_text(base_title, periods=periods, factors=factors)
+
+        if write_tex is True:
+            write_figure_tex_snippet(
+                save_path, title, width=width, height=height)
+
+        if save_path is not None:
+            grid.savefig(save_path, dpi=dpi)
+        return grid
+
+    def score_pairplot(
+            self, periods='all', factors='all', agg_method='means', group=None,
+            pair_kws={}, save_path=None, dpi=200, write_tex=False, width=None,
+            height=None):
+
+        if write_tex is True:
+            assert save_path is not None, (
+                'To write a tex file, please provide a save_path')
+
+        if group is None:
+            other_vars = []
+        else:
+            other_vars = [group]
+
+        if width is None and height is None:
+            width = 1
 
         df = self.data_proc.score_df(
             periods=periods, factors=factors, other_vars=other_vars,
             agg_method=agg_method)
 
         kwargs = self._basic_pairplot_args()
-        kwargs.update(sns_args)
+        kwargs.update(pair_kws)
 
         grid = sns.pairplot(data=df, hue=group, **kwargs)
+
+        base_title = 'Joint Distribution of Factor Scores'
+        title = title_text(base_title, periods=periods, factors=factors)
+
+        if write_tex is True:
+            write_figure_tex_snippet(
+                save_path, title, width=width, height=height)
 
         if save_path is not None:
             grid.savefig(save_path, dpi=dpi)
         return grid
 
     def autoregression_plot(
-            self, period, factor, agg_method='mean', sns_args={},
-            figsize=(10, 8), save_path=None, dpi=200):
+            self, period, factor, agg_method='mean', reg_kws={},
+            figsize=(10, 5), save_path=None, dpi=200, write_tex=False,
+            width=None, height=None):
+
+        if write_tex is True:
+            assert save_path is not None, (
+                'To write a tex file, please provide a save_path')
+        if width is None and height is None:
+            width = 0.8
 
         kwargs = self._basic_regplot_args()
-        kwargs.update(sns_args)
+        kwargs.update(reg_kws)
 
         df = self.data_proc.score_df(
             factors=factor, periods=[period, period + 1],
@@ -2203,27 +2298,28 @@ class SkillModel(GenericLikelihoodModel):
 
         sns.regplot(x=x, y=y, data=df, ax=ax, **kwargs)
 
+        base_title = 'Autoregression Plot'
+        title = title_text(base_title, periods=period, factors=factor)
+
+        if write_tex is True:
+            write_figure_tex_snippet(
+                save_path, title, width=width, height=height)
+
         if save_path is not None:
             fig.savefig(save_path, dpi=dpi)
 
         return fig, ax
 
-    def score_regression_influence_plot(
-            self, period, factor, controls=[], agg_method='mean', sns_args={},
-            save_path=None, figsize=(12, 8), dpi=200):
-
-        mod = self._score_regression_model(
-            period=period, factor=factor, controls=controls,
-            agg_method=agg_method)
-
-        fig, ax = plt.subplots(figsize=(12, 8))
-        fig = sm.graphics.influence_plot(
-            mod.fit(), ax=ax, criterion='DFFITS', alpha=1e-10, size=0.1)
-        return fig, ax
-
     def score_regression_residual_plot(
             self, factor, period=None, stage=None, controls=[], other_vars=[],
-            agg_method='mean', sns_args={}, save_path=None):
+            agg_method='mean', reg_kws={}, save_path=None, write_tex=False,
+            width=None, height=None, dpi=200):
+
+        if write_tex is True:
+            assert save_path is not None, (
+                'To write a tex file, please provide a save_path')
+        if width is None and height is None:
+            height = 1
 
         mod = self._score_regression_model(
             period=period, stage=stage, factor=factor, controls=controls,
@@ -2240,14 +2336,26 @@ class SkillModel(GenericLikelihoodModel):
         data['fitted'] = res.fittedvalues
 
         y_name = '{}_t_plusone'.format(factor)
-        to_plot = [col for col in data.columns if col not in ['residuals', y_name]]
+        to_plot = [col for col in data.columns
+                   if col not in ['residuals', y_name]]
         figsize = (10, len(to_plot) * 5)
         fig, axes = plt.subplots(nrows=len(to_plot), figsize=figsize)
 
         kwargs = self._basic_regplot_args()
-        kwargs.update(sns_args)
+        kwargs.update(reg_kws)
         for ax, var in zip(axes, to_plot):
             sns.regplot(y='residuals', x=var, ax=ax, data=data, **kwargs)
+
+        base_title = 'Residual Plot'
+        title = title_text(base_title, periods=period, factors=factor,
+                           stages=stage)
+
+        if write_tex is True:
+            write_figure_tex_snippet(
+                save_path, title, width=width, height=height)
+
+        if save_path is not None:
+            fig.savefig(save_path, dpi=dpi)
 
         return fig
 
@@ -2320,13 +2428,117 @@ class SkillModel(GenericLikelihoodModel):
         mod = smf.ols(formula=formula, data=df)
         return mod
 
-    def visualize_model(self, save_path, write_tex=False, sns_args={}):
-        # savefig
-        pass
+    def visualize_model(self, save_path):
+        """Visualize a SkillModel.
 
-    # def _score_regression_formulae(self, controls, add_suffix=False):
-    #     pass
+        Generate plots and tables that illustrate how well the measurements
+        fit together, how stable factors are over time and how strong the
+        transition equation deviate from linearity.
 
+        Args:
+            save_path (str): path to a directory in which plots and tex output
+                is saved.
 
+        """
+        tex_lines = []
+        tex_input = '\input{{{}}}'
+        cp = '\n' + r'\clearpage' + '\n'
+        float_barrier = r'\FloatBarrier' + '\n'
+        section = cp + float_barrier + r'\section{{{}}}' + '\n'
+        subsection = float_barrier + r'\subsection{{{}}}' + '\n'
+        maketitle = '\maketitle\n'
+        title = r'\title{{{}}}' + '\n'
+        title = title.format('Visualization of {}'.format(
+            self.model_name.replace('_', ' ')))
 
+        tex_lines.append(section.format(
+            'Visualization of the Measurement System'))
+        tex_lines.append(subsection.format('Correlations by Period'))
 
+        for period in self.periods:
+            base_name = 'meas_heat_in_period_{}'.format(period)
+            path = join(save_path, '{}.png'.format(base_name))
+            self.measurement_heatmap(
+                periods=period, save_path=path, write_tex=True)
+            # plt.show()
+            plt.close()
+            tex_lines.append(tex_input.format(base_name + '.tex'))
+            for factor in self.factors:
+                if len(self.measurements[factor][period]) >= 2:
+                    base_name = 'meas_pair_in_period_{}_for_factor_{}'.format(
+                        period, factor)
+                    path = join(save_path, '{}.png'.format(base_name))
+                    self.measurement_pairplot(
+                        periods=period, factors=factor, save_path=path,
+                        write_tex=True)
+                    plt.close()
+                    tex_lines.append(tex_input.format(base_name + '.tex'))
+
+        tex_lines.append(subsection.format('Correlations by Factor'))
+
+        for factor in self.factors:
+            base_name = 'meas_heat_for_factor_{}'.format(factor)
+            path = join(save_path, '{}.png'.format(base_name))
+            self.measurement_heatmap(
+                factors=factor, save_path=path, write_tex=True)
+            # plt.show()
+            plt.close()
+            tex_lines.append(tex_input.format(base_name + '.tex'))
+
+        tex_lines.append(section.format('Visualization of Factor Scores'))
+
+        tex_lines.append(subsection.format('Correlations by Factor'))
+        for factor in self.factors:
+            base_name = 'score_heat_for_factor_{}'.format(factor)
+            path = join(save_path, '{}.png'.format(base_name))
+            self.score_heatmap(factors=factor, save_path=path, write_tex=True)
+            plt.close()
+            tex_lines.append(tex_input.format(base_name + '.tex'))
+
+        tex_lines.append(subsection.format('Joint Distribution by Period'))
+        for period in self.periods:
+            base_name = 'score_pair_in_period_{}'.format(period)
+            path = join(save_path, base_name + '.png')
+            self.score_pairplot(periods=period, save_path=path, write_tex=True)
+            plt.close()
+            tex_lines.append(tex_input.format(base_name + '.tex'))
+
+        tex_lines.append(section.format('Persistence of Factor Scores'))
+
+        for factor in self.factors:
+            for period in self.periods[:-1]:
+                base_name = 'autoreg_for_factor_{}_in_period_{}'.format(
+                    factor, period)
+                path = join(save_path, '{}.png'.format(base_name))
+                self.autoregression_plot(period=period, factor=factor,
+                                         save_path=path, write_tex=True)
+                plt.close()
+                tex_lines.append(tex_input.format(base_name + '.tex'))
+
+        tex_lines.append(section.format(
+            'OLS Estimates of Transition Equations'))
+
+        tex_lines.append(subsection.format('Residual Plots'))
+        for factor in self.factors:
+            for stage in self.stages:
+                base_name = 'resid_for_factor_{}_in_stage_{}'.format(
+                    factor, stage)
+                path = join(save_path, '{}.png'.format(base_name))
+                self.score_regression_residual_plot(
+                    factor=factor, stage=stage, save_path=path,
+                    write_tex=True)
+                plt.close()
+                tex_lines.append(tex_input.format(base_name + '.tex'))
+
+        preamble = get_preamble()
+
+        base_name = 'visualization_of_{}.tex'.format(self.model_name)
+
+        with open(join(save_path, base_name), 'w') as t:
+            t.write(preamble + '\n\n\n')
+            t.write(title)
+            t.write(maketitle)
+            for line in tex_lines:
+                t.write(line + '\n')
+
+            t.write('\n\n\n\end{document}\n')

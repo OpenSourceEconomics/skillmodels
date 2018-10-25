@@ -28,7 +28,7 @@ def statsmodels_results_to_df(res_list, decimals=3):
 
     period_dfs = []
     for period in periods:
-        to_concat = [sr for sr in sr_list if sr.index.levels[0][0] == period]
+        to_concat = [s for s in sr_list if sr.index.levels[0][0] == period]
         df = pd.concat(to_concat, axis=1)
         period_dfs.append(df)
 
@@ -40,3 +40,4 @@ def statsmodels_results_to_df(res_list, decimals=3):
 def skillmodels_to_df():
     # do I need an extra function here?
     pass
+
