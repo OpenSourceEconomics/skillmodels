@@ -7,12 +7,33 @@ import pandas as pd
 from skillmodels.estimation.wa_functions import prepend_index_level
 
 
-def tex_from_df():
-    pass
+def df_to_tex_table(df, title):
+    start = r'\begin{table}[h!]\centering' + '\n'
+    caption = r'\caption{{{}}}' + '\n'
+
+    end = r'\end{table}' + '\n'
+
+    table = start + caption.format(title) + df.to_latex() + end
+    return table
 
 
-def rst_from_df():
-    pass
+def statsmodels_result_to_string_series(res, decimals):
+    if hasattr(res, 'name'):
+        res_col = res.name
+    else:
+        res_col = 'params'
+
+    params = res.params
+    params.name = 'params'
+    df = params.to_frame()
+    df['p'] = res.pvalues
+    df['stars'] = pd.cut(df['p'], bins=[-1, 0.01, 0.05, 0.1, 2],
+                         labels=['***', '**', '*', ''])
+    df[res_col] = df['params'].round(decimals).astype(str)
+    df[res_col].replace({'-0': '0', '-0.0': '0'}, inplace=True)
+    df[res_col] += df['stars'].astype(str)
+
+    return df[res_col]
 
 
 def statsmodels_results_to_df(res_list, decimals=3):
@@ -20,21 +41,25 @@ def statsmodels_results_to_df(res_list, decimals=3):
     periods = sorted(list(set([res.period for res in res_list])))
 
     for res in res_list:
-        sr = res.params
+        sr = statsmodels_result_to_string_series(res, decimals=decimals)
         sr.name = res.name
-        sr = prepend_index_level(sr, res.period)
-        sr = sr.round(decimals)
+        if len(periods) > 1:
+            sr = prepend_index_level(sr, res.period)
         sr_list.append(sr)
 
-    period_dfs = []
-    for period in periods:
-        to_concat = [s for s in sr_list if sr.index.levels[0][0] == period]
-        df = pd.concat(to_concat, axis=1)
-        period_dfs.append(df)
+    if len(periods) == 1:
+        result = pd.concat(sr_list, axis=1, sort=True)
+    else:
+        period_dfs = []
+        for period in periods:
+            to_concat = [s for s in sr_list if s.index.levels[0][0] == period]
+            df = pd.concat(to_concat, axis=1, sort=True)
+            period_dfs.append(df)
 
-    df = pd.concat(period_dfs, axis=0)
-    df.fillna('', inplace=True)
-    return df
+        result = pd.concat(period_dfs, axis=0, sort=True)
+
+    result.fillna('', inplace=True)
+    return result
 
 
 def skillmodels_to_df():

@@ -6,7 +6,8 @@ from skillmodels.estimation.wa_functions import initial_meas_coeffs, \
     prepend_index_level, factor_covs_and_measurement_error_variances, \
     iv_reg_array_dict, iv_reg, large_df_for_iv_equations, \
     transition_error_variance_from_u_covs, anchoring_error_variance_from_u_vars
-from skillmodels.visualization.table_functions import statsmodels_results_to_df
+from skillmodels.visualization.table_functions import (
+    statsmodels_results_to_df, df_to_tex_table)
 from skillmodels.visualization.text_functions import (
     title_text, write_figure_tex_snippet, get_preamble)
 from statsmodels.base.model import GenericLikelihoodModel
@@ -2319,7 +2320,7 @@ class SkillModel(GenericLikelihoodModel):
             assert save_path is not None, (
                 'To write a tex file, please provide a save_path')
         if width is None and height is None:
-            height = 1
+            height = 0.9
 
         mod = self._score_regression_model(
             period=period, stage=stage, factor=factor, controls=controls,
@@ -2360,8 +2361,8 @@ class SkillModel(GenericLikelihoodModel):
         return fig
 
     def score_regression_table(
-            self, periods=None, stages=None, controls=[], output='df',
-            agg_method='mean'):
+            self, periods=None, stages=None, controls=[],
+            agg_method='mean', write_tex=False, save_path=None):
 
         assert periods is None or stages is None, (
             'You cannot specify periods and stages for a score regression.')
@@ -2369,8 +2370,11 @@ class SkillModel(GenericLikelihoodModel):
         assert not (periods is None and stages is None), (
             'You have to specify periods or stages for a score regression')
 
+        if write_tex is True:
+            assert save_path is not None
+
         if periods == 'all':
-            periods = self.periods
+            periods = self.periods[:-1]
 
         if stages == 'all':
             stages = self.stages
@@ -2405,8 +2409,16 @@ class SkillModel(GenericLikelihoodModel):
 
         df = statsmodels_results_to_df(res_list=results, decimals=3)
 
-        if output != 'df':
-            raise NotImplementedError('tex output not yet supported.')
+        base_title = 'OLS Estimation of Transition Equations'
+        title = title_text(base_title, periods=periods, stages=stages,
+                           factors='all')
+
+        if write_tex is True:
+            with open(save_path, 'w') as t:
+                t.write(df_to_tex_table(df, title))
+
+        # base_name =
+        # if output == 'tex':
 
         return df
 
@@ -2447,6 +2459,7 @@ class SkillModel(GenericLikelihoodModel):
         section = cp + float_barrier + r'\section{{{}}}' + '\n'
         subsection = float_barrier + r'\subsection{{{}}}' + '\n'
         maketitle = '\maketitle\n'
+        toc = r'\tableofcontents' + '\n'
         title = r'\title{{{}}}' + '\n'
         title = title.format('Visualization of {}'.format(
             self.model_name.replace('_', ' ')))
@@ -2473,7 +2486,6 @@ class SkillModel(GenericLikelihoodModel):
                         write_tex=True)
                     plt.close()
                     tex_lines.append(tex_input.format(base_name + '.tex'))
-
         tex_lines.append(subsection.format('Correlations by Factor'))
 
         for factor in self.factors:
@@ -2518,6 +2530,21 @@ class SkillModel(GenericLikelihoodModel):
         tex_lines.append(section.format(
             'OLS Estimates of Transition Equations'))
 
+        tex_lines.append(subsection.format('Parameter Estimates'))
+
+        base_name = 'reg_table_by_{}.tex'
+        path = join(save_path, base_name.format('periods'))
+        self.score_regression_table(periods='all', write_tex=True,
+                                    save_path=path)
+        tex_lines.append(tex_input.format(base_name.format('periods')))
+
+        path = join(save_path, base_name.format('stages'))
+        self.score_regression_table(stages='all', write_tex=True,
+                                    save_path=path)
+        tex_lines.append(tex_input.format(base_name.format('stages')))
+
+        tex_lines.append(cp + float_barrier)
+
         tex_lines.append(subsection.format('Residual Plots'))
         for factor in self.factors:
             for stage in self.stages:
@@ -2538,6 +2565,7 @@ class SkillModel(GenericLikelihoodModel):
             t.write(preamble + '\n\n\n')
             t.write(title)
             t.write(maketitle)
+            t.write(toc)
             for line in tex_lines:
                 t.write(line + '\n')
 
