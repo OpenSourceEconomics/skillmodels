@@ -32,6 +32,7 @@ import json
 from multiprocessing import Pool
 import warnings
 
+import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from os.path import join
@@ -2153,7 +2154,7 @@ class SkillModel(GenericLikelihoodModel):
             basic_name=base_title, periods=periods, factors=factors)
 
         if save_path is not None:
-            fig.savefig(save_path, dpi=dpi)
+            fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
 
         if write_tex is True:
             write_figure_tex_snippet(
@@ -2194,7 +2195,7 @@ class SkillModel(GenericLikelihoodModel):
             basic_name=base_title, periods=periods, factors=factors)
 
         if save_path is not None:
-            fig.savefig(save_path, dpi=dpi)
+            fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
 
         if write_tex is True:
             write_figure_tex_snippet(
@@ -2234,7 +2235,7 @@ class SkillModel(GenericLikelihoodModel):
                 save_path, title, width=width, height=height)
 
         if save_path is not None:
-            grid.savefig(save_path, dpi=dpi)
+            grid.savefig(save_path, dpi=dpi, bbox_inches='tight')
         return grid
 
     def score_pairplot(
@@ -2271,7 +2272,7 @@ class SkillModel(GenericLikelihoodModel):
                 save_path, title, width=width, height=height)
 
         if save_path is not None:
-            grid.savefig(save_path, dpi=dpi)
+            grid.savefig(save_path, dpi=dpi, bbox_inches='tight')
         return grid
 
     def autoregression_plot(
@@ -2307,7 +2308,7 @@ class SkillModel(GenericLikelihoodModel):
                 save_path, title, width=width, height=height)
 
         if save_path is not None:
-            fig.savefig(save_path, dpi=dpi)
+            fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
 
         return fig, ax
 
@@ -2356,7 +2357,7 @@ class SkillModel(GenericLikelihoodModel):
                 save_path, title, width=width, height=height)
 
         if save_path is not None:
-            fig.savefig(save_path, dpi=dpi)
+            fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
 
         return fig
 

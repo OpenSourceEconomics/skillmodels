@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from skillmodels.estimation.wa_functions import prepend_index_level
 
 
 class DataProcessor:
@@ -237,7 +238,11 @@ class DataProcessor:
                 periods=p + 1, factors=factor, agg_method=agg_method)
             df_new.rename(mapper=lambda x: x + '_t_plusone',
                           axis=1, inplace=True)
-            period_dfs.append(pd.concat([df_new, df_old], axis=1))
+            df = pd.concat([df_new, df_old], axis=1)
+
+            df = prepend_index_level(df, p)
+
+            period_dfs.append(df)
 
         reg_df = pd.concat(period_dfs, axis=0)
         return reg_df
