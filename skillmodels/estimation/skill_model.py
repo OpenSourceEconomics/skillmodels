@@ -2097,13 +2097,17 @@ class SkillModel(GenericLikelihoodModel):
         return args
 
     def _basic_pairplot_args(self):
-        args = {'plot_kws': {'alpha': 0.2, 'color': self.base_color},
-                'kind': 'scatter', 'diag_kind': 'kde'}
+        plot_kws = self._basic_regplot_args()
+        del plot_kws['order']
+        args = {'plot_kws': plot_kws,
+                'kind': 'reg',
+                'diag_kind': 'kde'}
         return args
 
     def _basic_regplot_args(self):
         args = {'scatter_kws': {'alpha': 0.2}, 'fit_reg': True,
-                'lowess': True, 'color': self.base_color}
+                'order': 5, 'color': self.base_color,
+                'truncate': True}
         return args
 
     def measurement_heatmap(
@@ -2225,7 +2229,9 @@ class SkillModel(GenericLikelihoodModel):
         kwargs = self._basic_pairplot_args()
         kwargs.update(pair_kws)
 
-        grid = sns.pairplot(data=df, hue=group, **kwargs)
+        vars = [col for col in df.columns if col != group]
+
+        grid = sns.pairplot(data=df, vars=vars, hue=group, **kwargs)
 
         base_title = 'Joint Distribution of Measurements'
         title = title_text(base_title, periods=periods, factors=factors)
@@ -2262,7 +2268,9 @@ class SkillModel(GenericLikelihoodModel):
         kwargs = self._basic_pairplot_args()
         kwargs.update(pair_kws)
 
-        grid = sns.pairplot(data=df, hue=group, **kwargs)
+        vars = [col for col in df.columns if col != group]
+
+        grid = sns.pairplot(data=df, hue=group, vars=vars, **kwargs)
 
         base_title = 'Joint Distribution of Factor Scores'
         title = title_text(base_title, periods=periods, factors=factors)
@@ -2361,6 +2369,39 @@ class SkillModel(GenericLikelihoodModel):
 
         return fig
 
+    def factor_score_dynamics_plot(self, factor, agg_method='mean', group=None,
+                                   figsize=None, write_tex=False, dpi=200,
+                                   save_path=None, width=None, height=None):
+
+        if figsize is None:
+            figsize = (12, 8)
+        to_concat = []
+        for period in self.periods:
+            df = self.data_proc.score_df(
+                periods=period, factors=factor,
+                other_vars=[group, self.period_identifier],
+                agg_method=agg_method)
+            to_concat.append(df)
+
+        data = pd.concat(to_concat, axis=0, sort=True)
+
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.pointplot(x=self.period_identifier, y=factor, hue=group, data=data,
+                      ax=ax, kind='bar', dodge=0.15, join=True, capsize=0.05)
+        sns.despine(fig=fig, ax=ax)
+
+        base_title = 'Factor Score Dynamics'
+        title = title_text(base_title, periods='all', factors=factor)
+
+        if write_tex is True:
+            write_figure_tex_snippet(
+                save_path, title, width=width, height=height)
+
+        if save_path is not None:
+            fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
+
+        return fig, ax
+
     def score_regression_table(
             self, periods=None, stages=None, controls=[],
             agg_method='mean', write_tex=False, save_path=None):
@@ -2399,16 +2440,20 @@ class SkillModel(GenericLikelihoodModel):
         results = []
         for t in time:
             for factor in self.factors:
-                mod_kwargs = {'factor': factor, 'controls': controls,
-                              'agg_method': agg_method, time_name: t}
+                ind = self.factors.index(factor)
+                trans_name = self.transition_names[ind]
+                if trans_name != 'constant':
+                    mod_kwargs = {'factor': factor, 'controls': controls,
+                                  'agg_method': agg_method, time_name: t}
 
-                mod = self._score_regression_model(**mod_kwargs)
-                res = mod.fit()
-                res.name = factor
-                res.period = t
-                results.append(res)
+                    mod = self._score_regression_model(**mod_kwargs)
+                    res = mod.fit()
+                    res.name = factor
+                    res.period = t
+                    results.append(res)
 
-        df = statsmodels_results_to_df(res_list=results, decimals=3)
+        df = statsmodels_results_to_df(
+            res_list=results, decimals=3, period_name=time_name.capitalize())
 
         base_title = 'OLS Estimation of Transition Equations'
         title = title_text(base_title, periods=periods, stages=stages,
@@ -2502,11 +2547,15 @@ class SkillModel(GenericLikelihoodModel):
 
         tex_lines.append(subsection.format('Correlations by Factor'))
         for factor in self.factors:
-            base_name = 'score_heat_for_factor_{}'.format(factor)
-            path = join(save_path, '{}.png'.format(base_name))
-            self.score_heatmap(factors=factor, save_path=path, write_tex=True)
-            plt.close()
-            tex_lines.append(tex_input.format(base_name + '.tex'))
+            ind = self.factors.index(factor)
+            trans_name = self.transition_names[ind]
+            if trans_name != 'constant':
+                base_name = 'score_heat_for_factor_{}'.format(factor)
+                path = join(save_path, '{}.png'.format(base_name))
+                self.score_heatmap(
+                    factors=factor, save_path=path, write_tex=True)
+                plt.close()
+                tex_lines.append(tex_input.format(base_name + '.tex'))
 
         tex_lines.append(subsection.format('Joint Distribution by Period'))
         for period in self.periods:
@@ -2519,14 +2568,17 @@ class SkillModel(GenericLikelihoodModel):
         tex_lines.append(section.format('Persistence of Factor Scores'))
 
         for factor in self.factors:
-            for period in self.periods[:-1]:
-                base_name = 'autoreg_for_factor_{}_in_period_{}'.format(
-                    factor, period)
-                path = join(save_path, '{}.png'.format(base_name))
-                self.autoregression_plot(period=period, factor=factor,
-                                         save_path=path, write_tex=True)
-                plt.close()
-                tex_lines.append(tex_input.format(base_name + '.tex'))
+            ind = self.factors.index(factor)
+            trans_name = self.transition_names[ind]
+            if trans_name != 'constant':
+                for period in self.periods[:-1]:
+                    base_name = 'autoreg_for_factor_{}_in_period_{}'.format(
+                        factor, period)
+                    path = join(save_path, '{}.png'.format(base_name))
+                    self.autoregression_plot(period=period, factor=factor,
+                                             save_path=path, write_tex=True)
+                    plt.close()
+                    tex_lines.append(tex_input.format(base_name + '.tex'))
 
         tex_lines.append(section.format(
             'OLS Estimates of Transition Equations'))
@@ -2548,15 +2600,18 @@ class SkillModel(GenericLikelihoodModel):
 
         tex_lines.append(subsection.format('Residual Plots'))
         for factor in self.factors:
-            for stage in self.stages:
-                base_name = 'resid_for_factor_{}_in_stage_{}'.format(
-                    factor, stage)
-                path = join(save_path, '{}.png'.format(base_name))
-                self.score_regression_residual_plot(
-                    factor=factor, stage=stage, save_path=path,
-                    write_tex=True)
-                plt.close()
-                tex_lines.append(tex_input.format(base_name + '.tex'))
+            ind = self.factors.index(factor)
+            trans_name = self.transition_names[ind]
+            if trans_name != 'constant':
+                for stage in self.stages:
+                    base_name = 'resid_for_factor_{}_in_stage_{}'.format(
+                        factor, stage)
+                    path = join(save_path, '{}.png'.format(base_name))
+                    self.score_regression_residual_plot(
+                        factor=factor, stage=stage, save_path=path,
+                        write_tex=True)
+                    plt.close()
+                    tex_lines.append(tex_input.format(base_name + '.tex'))
 
         preamble = get_preamble()
 

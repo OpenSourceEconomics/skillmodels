@@ -13,7 +13,7 @@ def df_to_tex_table(df, title):
 
     end = r'\end{table}' + '\n'
 
-    table = start + caption.format(title) + df.to_latex() + end
+    table = start + caption.format(title) + df.to_latex(escape=False) + end
     return table
 
 
@@ -31,12 +31,15 @@ def statsmodels_result_to_string_series(res, decimals):
                          labels=['***', '**', '*', ''])
     df[res_col] = df['params'].round(decimals).astype(str)
     df[res_col].replace({'-0': '0', '-0.0': '0'}, inplace=True)
+    df['phantom'] = '$\phantom{-}$'
+    df[res_col] = df[res_col].where(df['params'] < 0,
+                                    df['phantom'] + df[res_col])
     df[res_col] += df['stars'].astype(str)
 
     return df[res_col]
 
 
-def statsmodels_results_to_df(res_list, decimals=3):
+def statsmodels_results_to_df(res_list, decimals=3, period_name='Period'):
     sr_list = []
     periods = sorted(list(set([res.period for res in res_list])))
 
@@ -44,6 +47,7 @@ def statsmodels_results_to_df(res_list, decimals=3):
         sr = statsmodels_result_to_string_series(res, decimals=decimals)
         sr.name = res.name
         if len(periods) > 1:
+            sr.index = ('\hspace{0.5cm} ' + sr.index).str.replace('_', '\_')
             sr = prepend_index_level(sr, res.period)
         sr_list.append(sr)
 
@@ -54,6 +58,13 @@ def statsmodels_results_to_df(res_list, decimals=3):
         for period in periods:
             to_concat = [s for s in sr_list if s.index.levels[0][0] == period]
             df = pd.concat(to_concat, axis=1, sort=True)
+            bold_period = r'\textbf{{{}}}'.format(
+                period_name + ' ' + str(period))
+            ind = pd.MultiIndex.from_tuples([(period, bold_period)])
+            first_row = pd.DataFrame(
+                index=ind, columns=df.columns)
+            df = pd.concat([first_row, df], axis=0)
+            df = df.loc[period]
             period_dfs.append(df)
 
         result = pd.concat(period_dfs, axis=0, sort=True)
