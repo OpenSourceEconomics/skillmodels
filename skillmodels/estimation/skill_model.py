@@ -2453,7 +2453,7 @@ class SkillModel(GenericLikelihoodModel):
                     results.append(res)
 
         df = statsmodels_results_to_df(
-            res_list=results, decimals=3, period_name=time_name.capitalize())
+            res_list=results, decimals=2, period_name=time_name.capitalize())
 
         base_title = 'OLS Estimation of Transition Equations'
         title = title_text(base_title, periods=periods, stages=stages,

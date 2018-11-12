@@ -17,7 +17,7 @@ def df_to_tex_table(df, title):
     return table
 
 
-def statsmodels_result_to_string_series(res, decimals):
+def statsmodels_result_to_string_series(res, decimals, report_se=True):
     if hasattr(res, 'name'):
         res_col = res.name
     else:
@@ -31,15 +31,21 @@ def statsmodels_result_to_string_series(res, decimals):
                          labels=['***', '**', '*', ''])
     df[res_col] = df['params'].round(decimals).astype(str)
     df[res_col].replace({'-0': '0', '-0.0': '0'}, inplace=True)
-    df['phantom'] = '$\phantom{-}$'
+    df['phantom'] = '\textcolor{white}{-}'
     df[res_col] = df[res_col].where(df['params'] < 0,
                                     df['phantom'] + df[res_col])
     df[res_col] += df['stars'].astype(str)
 
+    if report_se is True:
+        se_col = res.bse.round(decimals).astype(str)
+        se_col = ' (' + se_col + ')'
+        df[res_col] += se_col
+
     return df[res_col]
 
 
-def statsmodels_results_to_df(res_list, decimals=3, period_name='Period'):
+def statsmodels_results_to_df(
+        res_list, decimals=2, period_name='Period', report_se=True):
     sr_list = []
     periods = sorted(list(set([res.period for res in res_list])))
 
