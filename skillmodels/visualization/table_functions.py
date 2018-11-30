@@ -17,7 +17,7 @@ def df_to_tex_table(df, title):
     return table
 
 
-def statsmodels_result_to_string_series(res, decimals, report_se=True):
+def statsmodels_result_to_string_series(res, decimals=2, report_se=True):
     if hasattr(res, 'name'):
         res_col = res.name
     else:
@@ -27,20 +27,26 @@ def statsmodels_result_to_string_series(res, decimals, report_se=True):
     params.name = 'params'
     df = params.to_frame()
     df['p'] = res.pvalues
-    df['stars'] = pd.cut(df['p'], bins=[-1, 0.01, 0.05, 0.1, 2],
-                         labels=['***', '**', '*', ''])
-    df[res_col] = df['params'].round(decimals).astype(str)
-    df[res_col].replace({'-0': '0', '-0.0': '0'}, inplace=True)
-    df['phantom'] = '\textcolor{white}{-}'
-    df[res_col] = df[res_col].where(df['params'] < 0,
-                                    df['phantom'] + df[res_col])
+    white_star = r'\textcolor{white}{*}'
+    df['stars'] = pd.cut(
+        df['p'], bins=[-1, 0.01, 0.05, 0.1, 2],
+        labels=['***', '**' + white_star, '*' + 2 * white_star, 3 * white_star])
+    fmt_str = '{:,.' + str(decimals) + 'f}'
+    df[res_col] = params.map(fmt_str.format)
+    df['phantom'] = r'\textcolor{white}{-}'
+    df[res_col] = df[res_col].where(params < 0, df['phantom'] + df[res_col])
     df[res_col] += df['stars'].astype(str)
 
     if report_se is True:
-        se_col = res.bse.round(decimals).astype(str)
+        se_col = res.bse.map(fmt_str.format)
         se_col = ' (' + se_col + ')'
         df[res_col] += se_col
 
+    df.loc['number of obs.', res_col] = str(int(res.nobs))
+    try:
+        df.loc['adj. R$^$', res_col] = fmt_str.format(res.rsquared_adj)
+    except AttributeError:
+        pass
     return df[res_col]
 
 
@@ -82,4 +88,3 @@ def statsmodels_results_to_df(
 def skillmodels_to_df():
     # do I need an extra function here?
     pass
-
