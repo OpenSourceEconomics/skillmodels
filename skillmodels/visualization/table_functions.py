@@ -10,10 +10,11 @@ from skillmodels.estimation.wa_functions import prepend_index_level
 def df_to_tex_table(df, title):
     start = r'\begin{table}[h!]\centering' + '\n'
     caption = r'\caption{{{}}}' + '\n'
-
+    old_max_width = pd.get_option('display.max_colwidth')
+    pd.set_option('display.max_colwidth', -1)
     end = r'\end{table}' + '\n'
-
     table = start + caption.format(title) + df.to_latex(escape=False) + end
+    pd.set_option('display.max_colwidth', old_max_width)
     return table
 
 
@@ -42,11 +43,14 @@ def statsmodels_result_to_string_series(res, decimals=2, report_se=True):
         se_col = ' (' + se_col + ')'
         df[res_col] += se_col
 
-    df.loc['number of obs.', res_col] = str(int(res.nobs))
-    try:
-        df.loc['adj. R$^$', res_col] = fmt_str.format(res.rsquared_adj)
-    except AttributeError:
-        pass
+    # this has a bug. it does not ensure that r_squared and nobs is moved
+    # to the end and it breaks my tex build
+
+    # df.loc['number of obs.', res_col] = str(int(res.nobs))
+    # try:
+    #     df.loc['adj. $R^2$', res_col] = fmt_str.format(res.rsquared_adj)
+    # except AttributeError:
+    #     pass
     return df[res_col]
 
 
