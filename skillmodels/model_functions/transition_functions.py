@@ -198,6 +198,48 @@ def output_has_known_scale_linear():
 def output_has_known_location_linear():
     return True
 
+
+# =============================================================================
+# linear with constant
+# =============================================================================
+
+
+def linear_with_constant(sigma_points, coeffs, included_positions):
+    without_constant = linear(sigma_points, coeffs[:-1], included_positions)
+    return coeffs[-1] + without_constant
+
+
+def nr_coeffs_linear_with_constant(included_factors, params_type):
+    return len(included_factors) + 1
+
+
+def coeff_names_linear_with_constant(
+        included_factors, params_type, factor, stage):
+    names = coeff_names_linear(
+        included_factors, params_type, factor, stage)
+    fs = 'lincoeff__{}__{}__constant'
+    names.append(fs.format(stage, factor))
+    return names
+
+
+def iv_formular_linear_with_constant(x_list, z_list):
+    raise NotImplementedError
+
+
+def model_coeffs_from_iv_coeffs_linear_with_constant(
+        iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
+        coeff_sum_value=None, trans_intercept_value=None):
+    raise NotImplementedError
+
+
+def output_has_known_scale_linear_with_constant():
+    return False
+
+
+def output_has_known_location_linear_with_constant():
+    return False
+
+
 # =============================================================================
 # constant
 # =============================================================================
