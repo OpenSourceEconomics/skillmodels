@@ -115,7 +115,7 @@ class SkillModelResults(GenericLikelihoodModelResults):
         if self.model.standard_error_method == 'bootstrap':
             return self.model.bootstrap_pvalues(self.params)
         else:
-            return super(SkillModelResults, self).pvalues()
+            return super(SkillModelResults, self).pvalues
 
     def save(self, fname, remove_data=False):
         raise NotImplementedError(

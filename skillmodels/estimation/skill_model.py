@@ -2402,6 +2402,51 @@ class SkillModel(GenericLikelihoodModel):
 
         return fig, ax
 
+    def anchoring_plot(self, period, anchor_var, agg_method='mean',
+                       reg_kws={}, figsize=None, write_tex=False, dpi=200,
+                       save_path=None, width=None, height=None):
+
+        if figsize is None:
+            figsize = (12, 7)
+
+        kwargs = self._basic_regplot_args()
+        kwargs['order'] = 1
+        kwargs.update(reg_kws)
+
+        if width is None:
+            width = 1
+
+        if height is None:
+            height = 1
+
+        nonconstant_factors = []
+        for factor, trans_name in zip(self.factors, self.transition_names):
+            if trans_name != 'constant':
+                nonconstant_factors.append(factor)
+
+        data = self.data_proc.score_df(
+            periods=period, factors=nonconstant_factors,
+            other_vars=[anchor_var], agg_method=agg_method)
+
+        fig, axes = plt.subplots(
+            figsize=figsize, ncols=len(nonconstant_factors), sharey=True)
+
+        for ax, factor in zip(axes, nonconstant_factors):
+            sns.regplot(data=data, y=anchor_var, x=factor, ax=ax, **kwargs)
+            sns.despine(fig=fig, ax=ax)
+
+        title = 'Relationship of Factor Scores and {} in Period {}'.format(
+            anchor_var, period)
+
+        if write_tex is True:
+            write_figure_tex_snippet(
+                save_path, title, width=width, height=height)
+
+        if save_path is not None:
+            fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
+
+        return fig, ax
+
     def score_regression_table(
             self, periods=None, stages=None, controls=[],
             agg_method='mean', write_tex=False, save_path=None):
@@ -2486,7 +2531,7 @@ class SkillModel(GenericLikelihoodModel):
         mod = smf.ols(formula=formula, data=df)
         return mod
 
-    def visualize_model(self, save_path):
+    def visualize_model(self, save_path, anchor_var=None):
         """Visualize a SkillModel.
 
         Generate plots and tables that illustrate how well the measurements
@@ -2579,6 +2624,18 @@ class SkillModel(GenericLikelihoodModel):
                                              save_path=path, write_tex=True)
                     plt.close()
                     tex_lines.append(tex_input.format(base_name + '.tex'))
+
+        if anchor_var is not None:
+            tex_lines.append(section.format('Anchoring'))
+            for period in self.periods:
+                base_name = 'anchorplot_in_period_{}'.format(period)
+                path = join(save_path, '{}.png'.format(base_name))
+                self.anchoring_plot(
+                    period=period, anchor_var=anchor_var,
+                    write_tex=True, save_path=path)
+
+                plt.close()
+                tex_lines.append(tex_input.format(base_name + '.tex'))
 
         tex_lines.append(section.format(
             'OLS Estimates of Transition Equations'))
