@@ -1239,7 +1239,8 @@ class SkillModel(GenericLikelihoodModel):
 
         Args:
             period (int): the period for which the list is generated
-            factor (str): the factor for which the list is generated
+            factor (str): the factor for which the list is generated. If None,
+                the list is generated for the anchoring equation.
 
         Returns:
             varlist (list): List of lists with one sublist for each factor
@@ -1250,18 +1251,12 @@ class SkillModel(GenericLikelihoodModel):
 
         """
         suffix = "_resid"
-        last_period = self.periods[-1]
+        anchoring = factor is None
 
-        if period != last_period:
-            assert factor is not None, (
-                "all_variables_for_iv_equations needs the argument factor if "
-                "it is not called for the anchoring equation."
-            )
-        if period != last_period:
+        if anchoring is False:
             f = self.factors.index(factor)
             inc_facs = self.included_factors[f]
         else:
-            # the function is called for anchoring
             inc_facs = self.anchored_factors
 
         varlist = []
