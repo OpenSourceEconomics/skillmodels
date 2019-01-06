@@ -10,7 +10,7 @@ from skillmodels.estimation.wa_functions import (
     large_df_for_iv_equations,
     transition_error_variance_from_u_covs,
     anchoring_error_variance_from_u_vars,
-    all_variables_for_iv_equations)
+    variable_permutations_for_iv_equations)
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -1233,63 +1233,22 @@ class SkillModel(GenericLikelihoodModel):
         else:
             return params
 
-    def variable_permutations_for_iv_equations(self, period, factor=None):
-        """Nested lists with permutations of variable names for iv equations.
-
-        In the WA estimator, the transition equations are rewritten in an
-        errors-in-variables specification in which latent factors are
-        approximated by residual measurements and then instrumented by other
-        measurements. The get the closed form estimator with the highest
-        statistical efficiency, iv equations with all possible permutations of
-        residual measurements and instruments are estimated and their results
-        will be averaged.
-
-        Args:
-            period (int): the period for which the lists are generated
-            factor (str): the factor for which the lists are generated
-
-        Returns:
-            indepvar_permutations (list): contains one sublist for each iv
-            equation that has to be estimated for *factor* in *period*.
-            Each sublist contains the names of the measurements that are
-            used to form the residual measurements for that iv equation.
-            The length of each sublist is the number of factors that are
-            included in the right hand side of the transition equation of
-            *factor*.
-
-        Returns:
-            instrument_permutations (list): has the same length as x_list and
-            contains the instruments for each transition equation. The
-            instruments are lists of lists with one sublist for each
-            included factor.
-
-        """
-        all_variables_for_indepvars = all_variables_for_iv_equations(self.factors, self.included_factors,
-                                                                     self.transition_names, self.measurements, period,
-                                                                     factor, self.anchored_factors)
-        indepvar_permutations = list(map(list, product(*all_variables_for_indepvars)))
-
-        instrument_permutations = []
-        for x in indepvar_permutations:
-            z = []
-            for sublist in all_variables_for_indepvars:
-                z.append([m[:-6] for m in sublist if m not in x])
-            instrument_permutations.append(z)
-
-        return indepvar_permutations, instrument_permutations
-
     def number_of_iv_parameters(self, factor=None, anch_equation=False):
         """Number of parameters in the IV equation of a factor."""
         if anch_equation is False:
             assert factor is not None, ""
             f = self.factors.index(factor)
             trans_name = self.transition_names[f]
-            x_list, z_list = self.variable_permutations_for_iv_equations(0, factor)
+            x_list, z_list = variable_permutations_for_iv_equations(self.factors, self.included_factors,
+                                                                    self.transition_names, self.measurements,
+                                                                    self.anchored_factors, 0, factor)
         else:
             trans_name = "linear"
-            x_list, z_list = self.variable_permutations_for_iv_equations(
-                self.periods[-1], None
-            )
+            x_list, z_list = variable_permutations_for_iv_equations(self.factors, self.included_factors,
+                                                                    self.transition_names, self.measurements,
+                                                                    self.anchored_factors,
+                                                                    self.periods[-1], None
+                                                                    )
 
         example_x, example_z = x_list[0], z_list[0]
         x_formula, _ = getattr(tf, "iv_formula_{}".format(trans_name))(
@@ -1370,9 +1329,13 @@ class SkillModel(GenericLikelihoodModel):
         if period != last_period:
             assert factor is not None, ""
 
-        indep_permutations, instr_permutations = self.variable_permutations_for_iv_equations(
-            period, factor
-        )
+        indep_permutations, instr_permutations = variable_permutations_for_iv_equations(self.factors,
+                                                                                        self.included_factors,
+                                                                                        self.transition_names,
+                                                                                        self.measurements,
+                                                                                        self.anchored_factors,
+                                                                                        period, factor
+                                                                                        )
 
         if period != last_period:
             nr_deltas = self.number_of_iv_parameters(factor)
@@ -1560,9 +1523,13 @@ class SkillModel(GenericLikelihoodModel):
             deltas = iv_coeffs.mean().values
             anch_intercept = deltas[-1]
             anch_loadings = deltas[:-1]
-            indep_permutations, instr_permutations = self.variable_permutations_for_iv_equations(
-                period=t, factor=None
-            )
+            indep_permutations, instr_permutations = variable_permutations_for_iv_equations(self.factors,
+                                                                                            self.included_factors,
+                                                                                            self.transition_names,
+                                                                                            self.measurements,
+                                                                                            self.anchored_factors,
+                                                                                            period=t, factor=None
+                                                                                            )
             anch_variance = anchoring_error_variance_from_u_vars(
                 u_vars=u_var_sr,
                 indepvars_permutations=indep_permutations,

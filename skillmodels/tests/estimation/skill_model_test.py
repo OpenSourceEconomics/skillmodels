@@ -11,7 +11,7 @@ from pandas.util.testing import assert_frame_equal
 from pandas.util.testing import assert_series_equal
 
 from skillmodels import SkillModel as smo
-from skillmodels.estimation.wa_functions import all_variables_for_iv_equations
+from skillmodels.estimation.wa_functions import all_variables_for_iv_equations, variable_permutations_for_iv_equations
 
 
 class TestGeneralParamsSlice:
@@ -932,7 +932,7 @@ class TestAllVariablesForIVEquations:
             ['y14_resid', 'y15_resid'], ['y07_copied_resid', 'y08_copied_resid']]
         assert_equal(calc_meas_list, expected_meas_list)
 
-    @patch('skillmodels.estimation.skill_model.all_variables_for_iv_equations')
+    @patch('skillmodels.estimation.wa_functions.all_variables_for_iv_equations')
     def test_indepvar_permutations(self, mock_allvars):
         ret_val = [['y1', 'y2'], ['y3', 'y4']]
         self.anchored_factors = []
@@ -940,10 +940,11 @@ class TestAllVariablesForIVEquations:
 
         expected_xs = [
             ['y1', 'y3'], ['y1', 'y4'], ['y2', 'y3'], ['y2', 'y4']]
-        calc_xs = smo.variable_permutations_for_iv_equations(self, 1, 1)[0]
+        calc_xs = variable_permutations_for_iv_equations(self.factors, self.included_factors, self.transition_names,
+                                                         self.measurements, self.anchored_factors, 1, 1)[0]
         assert_equal(calc_xs, expected_xs)
 
-    @patch('skillmodels.estimation.skill_model.all_variables_for_iv_equations')
+    @patch('skillmodels.estimation.wa_functions.all_variables_for_iv_equations')
     def test_instrument_permutations(self, mock_allvars):
         self.anchored_factors = []
         ret_val = [['y1_resid', 'y2_resid'], ['y3_resid', 'y4_resid']]
@@ -954,7 +955,8 @@ class TestAllVariablesForIVEquations:
             [['y2'], ['y3']],
             [['y1'], ['y4']],
             [['y1'], ['y3']]]
-        calc_zs = smo.variable_permutations_for_iv_equations(self, 1, 1)[1]
+        calc_zs = variable_permutations_for_iv_equations(self.factors, self.included_factors, self.transition_names,
+                                                         self.measurements, self.anchored_factors, 1, 1)[1]
 
         assert_equal(calc_zs, expected_zs)
 
@@ -963,19 +965,27 @@ class TestNumberOfIVParameters:
     def setup(self):
         self.factors = ['f1', 'f2', 'f3']
         self.transition_names = ['bla', 'bla', 'blubb']
-        ret = (['correct', 'wrong'], ['correct2', 'wrong2'])
-        self.variable_permutations_for_iv_equations = Mock(return_value=ret)
+        self.included_factors = []
+        self.measurements = []
+        self.anchored_factors = []
 
+    @patch('skillmodels.estimation.skill_model.variable_permutations_for_iv_equations')
     @patch('skillmodels.estimation.skill_model.tf')
-    def test_number_of_iv_parameters(self, mock_tf):
+    def test_number_of_iv_parameters(self, mock_tf, mock_permut):
         mock_tf.iv_formula_bla.return_value = ('1 + 2 + 3 + 4', '_')
+        ret = (['correct', 'wrong'], ['correct2', 'wrong2'])
+        mock_permut.return_value = ret
+
         expected_param_nr = 4
         calc_res = smo.number_of_iv_parameters(self, 'f1')
         assert_equal(calc_res, expected_param_nr)
 
+    @patch('skillmodels.estimation.skill_model.variable_permutations_for_iv_equations')
     @patch('skillmodels.estimation.skill_model.tf')
-    def test_right_calls(self, mock_tf):
+    def test_right_calls(self, mock_tf, mock_permut):
         mock_tf.iv_formula_bla.return_value = ('1 + 2 + 3 + 4', '_')
+        ret = (['correct', 'wrong'], ['correct2', 'wrong2'])
+        mock_permut.return_value = ret
         smo.number_of_iv_parameters(self, 'f1')
         mock_tf.iv_formula_bla.assert_has_calls([call('correct', 'correct2')])
 
