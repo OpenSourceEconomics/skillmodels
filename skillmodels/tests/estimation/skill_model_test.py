@@ -917,17 +917,16 @@ class TestAllVariablesForIVEquations:
         self.periods = [0, 1, 2]
 
     def test_all_variables_for_iv_equations_constant_factor(self):
-        calc_meas_list = smo.all_variables_for_iv_equations(
-            self, 1, 'f1', 'test')
+        calc_meas_list = smo.all_variables_for_iv_equations(self, 1, 'f1')
         expected_meas_list = [
-            ['y11_test', 'y12_test'],
-            ['y07_copied_test', 'y08_copied_test']]
+            ['y11_resid', 'y12_resid'],
+            ['y07_copied_resid', 'y08_copied_resid']]
         assert_equal(calc_meas_list, expected_meas_list)
 
     def test_all_variables_for_iv_equations_non_constant(self):
-        calc_meas_list = smo.all_variables_for_iv_equations(self, 1, 'f2', '')
+        calc_meas_list = smo.all_variables_for_iv_equations(self, 1, 'f2')
         expected_meas_list = [
-            ['y14', 'y15'], ['y07_copied', 'y08_copied']]
+            ['y14_resid', 'y15_resid'], ['y07_copied_resid', 'y08_copied_resid']]
         assert_equal(calc_meas_list, expected_meas_list)
 
     def test_indepvar_permutations(self):

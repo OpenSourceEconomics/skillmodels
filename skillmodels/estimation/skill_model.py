@@ -1234,14 +1234,12 @@ class SkillModel(GenericLikelihoodModel):
         else:
             return params
 
-    def all_variables_for_iv_equations(self, period, factor=None, suffix=""):
+    def all_variables_for_iv_equations(self, period, factor=None):
         """List of lists with names of measurements of included factors.
 
         Args:
             period (int): the period for which the list is generated
             factor (str): the factor for which the list is generated
-            suffix (str): a suffix that is appended to all measurement names in
-                the list. It is separated from the actual name by underscore.
 
         Returns:
             varlist (list): List of lists with one sublist for each factor
@@ -1251,7 +1249,7 @@ class SkillModel(GenericLikelihoodModel):
             factor.
 
         """
-        suffix = "_" + suffix if suffix != "" else suffix
+        suffix = "_resid"
         last_period = self.periods[-1]
 
         if period != last_period:
@@ -1311,9 +1309,7 @@ class SkillModel(GenericLikelihoodModel):
             included factor.
 
         """
-        all_variables_for_indepvars = self.all_variables_for_iv_equations(
-            period, factor, suffix="resid"
-        )
+        all_variables_for_indepvars = self.all_variables_for_iv_equations(period, factor)
         indepvar_permutations = list(map(list, product(*all_variables_for_indepvars)))
 
         instrument_permutations = []
