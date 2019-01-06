@@ -344,3 +344,46 @@ def anchoring_error_variance_from_u_vars(
     anch_variance_estimates = u_vars - meas_noise_df.sum(axis=1)
     anch_variance = anch_variance_estimates.mean()
     return anch_variance
+
+
+def all_variables_for_iv_equations(factors, included_factors, transition_names, measurements, period, factor=None,
+                                   anchored_factors=None):
+    """List of lists with names of measurements of included factors.
+
+    Args:
+        period (int): the period for which the list is generated
+        factor (str): the factor for which the list is generated. If None,
+            the list is generated for the anchoring equation.
+
+    Returns:
+        varlist (list): List of lists with one sublist for each factor
+        that appears on the right hand side of the transition equation
+        of *factor*. Each sublist contains the names of all
+        measurements in *period* of the corresponding right-hand-side
+        factor.
+
+    """
+    suffix = "_resid"
+    anchoring = factor is None
+    if anchoring is True:
+        assert anchored_factors is not None
+
+    if anchoring is False:
+        f = factors.index(factor)
+        inc_facs = included_factors[f]
+    else:
+        inc_facs = anchored_factors
+
+    varlist = []
+    for inc in inc_facs:
+        trans_name = transition_names[factors.index(inc)]
+        if trans_name == "constant" and period > 0:
+            form_string = "{}_copied" + suffix
+            sublist = [form_string.format(m) for m in measurements[inc][0]]
+        else:
+            form_string = "{}" + suffix
+            sublist = [
+                form_string.format(m) for m in measurements[inc][period]
+            ]
+        varlist.append(sublist)
+    return varlist

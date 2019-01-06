@@ -11,6 +11,7 @@ from pandas.util.testing import assert_frame_equal
 from pandas.util.testing import assert_series_equal
 
 from skillmodels import SkillModel as smo
+from skillmodels.estimation.wa_functions import all_variables_for_iv_equations
 
 
 class TestGeneralParamsSlice:
@@ -917,30 +918,36 @@ class TestAllVariablesForIVEquations:
         self.periods = [0, 1, 2]
 
     def test_all_variables_for_iv_equations_constant_factor(self):
-        calc_meas_list = smo.all_variables_for_iv_equations(self, 1, 'f1')
+        calc_meas_list = all_variables_for_iv_equations(self.factors, self.included_factors, self.transition_names,
+                                                        self.measurements, 1, 'f1')
         expected_meas_list = [
             ['y11_resid', 'y12_resid'],
             ['y07_copied_resid', 'y08_copied_resid']]
         assert_equal(calc_meas_list, expected_meas_list)
 
     def test_all_variables_for_iv_equations_non_constant(self):
-        calc_meas_list = smo.all_variables_for_iv_equations(self, 1, 'f2')
+        calc_meas_list = all_variables_for_iv_equations(self.factors, self.included_factors, self.transition_names,
+                                                        self.measurements, 1, 'f2')
         expected_meas_list = [
             ['y14_resid', 'y15_resid'], ['y07_copied_resid', 'y08_copied_resid']]
         assert_equal(calc_meas_list, expected_meas_list)
 
-    def test_indepvar_permutations(self):
+    @patch('skillmodels.estimation.skill_model.all_variables_for_iv_equations')
+    def test_indepvar_permutations(self, mock_allvars):
         ret_val = [['y1', 'y2'], ['y3', 'y4']]
-        self.all_variables_for_iv_equations = Mock(return_value=ret_val)
+        self.anchored_factors = []
+        mock_allvars.return_value = ret_val
 
         expected_xs = [
             ['y1', 'y3'], ['y1', 'y4'], ['y2', 'y3'], ['y2', 'y4']]
         calc_xs = smo.variable_permutations_for_iv_equations(self, 1, 1)[0]
         assert_equal(calc_xs, expected_xs)
 
-    def test_instrument_permutations(self):
+    @patch('skillmodels.estimation.skill_model.all_variables_for_iv_equations')
+    def test_instrument_permutations(self, mock_allvars):
+        self.anchored_factors = []
         ret_val = [['y1_resid', 'y2_resid'], ['y3_resid', 'y4_resid']]
-        self.all_variables_for_iv_equations = Mock(return_value=ret_val)
+        mock_allvars.return_value = ret_val
 
         expected_zs = [
             [['y2'], ['y4']],

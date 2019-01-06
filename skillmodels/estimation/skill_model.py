@@ -10,7 +10,7 @@ from skillmodels.estimation.wa_functions import (
     large_df_for_iv_equations,
     transition_error_variance_from_u_covs,
     anchoring_error_variance_from_u_vars,
-)
+    all_variables_for_iv_equations)
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -43,7 +43,6 @@ import json
 from multiprocessing import Pool
 import warnings
 
-import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from os.path import join
@@ -1234,45 +1233,6 @@ class SkillModel(GenericLikelihoodModel):
         else:
             return params
 
-    def all_variables_for_iv_equations(self, period, factor=None):
-        """List of lists with names of measurements of included factors.
-
-        Args:
-            period (int): the period for which the list is generated
-            factor (str): the factor for which the list is generated. If None,
-                the list is generated for the anchoring equation.
-
-        Returns:
-            varlist (list): List of lists with one sublist for each factor
-            that appears on the right hand side of the transition equation
-            of *factor*. Each sublist contains the names of all
-            measurements in *period* of the corresponding right-hand-side
-            factor.
-
-        """
-        suffix = "_resid"
-        anchoring = factor is None
-
-        if anchoring is False:
-            f = self.factors.index(factor)
-            inc_facs = self.included_factors[f]
-        else:
-            inc_facs = self.anchored_factors
-
-        varlist = []
-        for inc in inc_facs:
-            trans_name = self.transition_names[self.factors.index(inc)]
-            if trans_name == "constant" and period > 0:
-                form_string = "{}_copied" + suffix
-                sublist = [form_string.format(m) for m in self.measurements[inc][0]]
-            else:
-                form_string = "{}" + suffix
-                sublist = [
-                    form_string.format(m) for m in self.measurements[inc][period]
-                ]
-            varlist.append(sublist)
-        return varlist
-
     def variable_permutations_for_iv_equations(self, period, factor=None):
         """Nested lists with permutations of variable names for iv equations.
 
@@ -1304,7 +1264,9 @@ class SkillModel(GenericLikelihoodModel):
             included factor.
 
         """
-        all_variables_for_indepvars = self.all_variables_for_iv_equations(period, factor)
+        all_variables_for_indepvars = all_variables_for_iv_equations(self.factors, self.included_factors,
+                                                                     self.transition_names, self.measurements, period,
+                                                                     factor, self.anchored_factors)
         indepvar_permutations = list(map(list, product(*all_variables_for_indepvars)))
 
         instrument_permutations = []
