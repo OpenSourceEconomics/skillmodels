@@ -1,14 +1,16 @@
-from nose.tools import assert_equal, assert_raises, assert_almost_equal
-from unittest.mock import Mock, call, patch
-from skillmodels import SkillModel as smo
-import numpy as np
-from pandas import DataFrame
-from numpy.testing import assert_array_equal as aae
-from numpy.testing import assert_array_almost_equal as aaae
 import json
+from unittest.mock import Mock, call, patch
+
+import numpy as np
 import pandas as pd
-from pandas.util.testing import assert_series_equal
+from nose.tools import assert_equal, assert_raises, assert_almost_equal
+from numpy.testing import assert_array_almost_equal as aaae
+from numpy.testing import assert_array_equal as aae
+from pandas import DataFrame
 from pandas.util.testing import assert_frame_equal
+from pandas.util.testing import assert_series_equal
+
+from skillmodels import SkillModel as smo
 
 
 class TestGeneralParamsSlice:
@@ -25,7 +27,6 @@ class TestGeneralParamsSlice:
     def test_side_effect_of_general_params_slice_on_param_counter(self):
         sl = smo._general_params_slice(self, 10) # noqa
         assert_equal(self.param_counter, 20)
-
 
 class TestDeltasRelatedMethods:
     def setup(self):
