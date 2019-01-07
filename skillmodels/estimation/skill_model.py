@@ -5,12 +5,11 @@ from skillmodels.estimation.wa_functions import (
     initial_meas_coeffs,
     prepend_index_level,
     factor_covs_and_measurement_error_variances,
-    iv_reg_array_dict,
-    iv_reg,
     large_df_for_iv_equations,
     transition_error_variance_from_u_covs,
     anchoring_error_variance_from_u_vars,
-    variable_permutations_for_iv_equations, number_of_iv_parameters, extended_meas_coeffs, residual_measurements)
+    variable_permutations_for_iv_equations, extended_meas_coeffs, residual_measurements,
+    all_iv_estimates)
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -1233,96 +1232,6 @@ class SkillModel(GenericLikelihoodModel):
         else:
             return params
 
-    def all_iv_estimates(self, period, data, factor=None):
-        """Coeffs and residual covs for all IV equations of factor in period.
-
-        Args:
-            period (int): period identifier
-            factor (str): name of a latent factor
-            data (DataFrames): see large_df_for_iv_equations in wa_functions
-
-        Returns:
-            iv_coeffs (DataFrame): pandas DataFrame with the estimated
-            coefficients of all IV equations of factor in period. The
-            DataFrame has a Multiindex. The first level are the names of
-            the dependent variables (next period measurements) of the
-            estimated equations. The second level consists of integers that
-            identify the different combinations of independent variables.
-
-        Returns:
-            u_cov_df (DataFrame): pandas DataFrame with covariances of iv
-            residuals u with alternative dependent variables. The index is
-            the same Multiindex as in iv_coeffs. The columns are all
-            possible dependent variables of *factor* in *period*.
-
-        """
-        last_period = self.periods[-1]
-        if period != last_period:
-            assert factor is not None, ""
-
-        indep_permutations, instr_permutations = variable_permutations_for_iv_equations(self.factors,
-                                                                                        self.included_factors,
-                                                                                        self.transition_names,
-                                                                                        self.measurements,
-                                                                                        self.anchored_factors,
-                                                                                        period, factor
-                                                                                        )
-
-        if period != last_period:
-            nr_deltas = number_of_iv_parameters(self.factors, self.transition_names, self.included_factors,
-                                                self.measurements, self.anchored_factors, self.periods, factor)
-            trans_name = self.transition_names[self.factors.index(factor)]
-            depvars = self.measurements[factor][period + 1]
-        else:
-            nr_deltas = number_of_iv_parameters(self.factors, self.transition_names, self.included_factors,
-                                                self.measurements, self.anchored_factors, self.periods,
-                                                anch_equation=True)
-            trans_name = "linear"
-            depvars = [self.anch_outcome]
-
-        iv_columns = ["delta_{}".format(i) for i in range(nr_deltas)]
-        u_cov_columns = ["cov_u_{}".format(y) for y in depvars]
-
-        ind_tuples = [
-            (dep_name, indep_loc)
-            for dep_name, indep_loc in product(depvars, range(len(indep_permutations)))
-        ]
-        index = pd.MultiIndex.from_tuples(ind_tuples)
-
-        iv_coeffs = pd.DataFrame(data=0.0, index=index, columns=iv_columns)
-        if period != last_period:
-            u_cov_df = pd.DataFrame(data=0.0, index=index, columns=u_cov_columns)
-        else:
-            u_var_sr = pd.Series(
-                data=0.0, index=range(len(indep_permutations)), name="u_var"
-            )
-
-        for dep in depvars:
-            counter = 0
-            for indep, instr in zip(indep_permutations, instr_permutations):
-                iv_arrs = iv_reg_array_dict(dep, indep, instr, trans_name, data)
-                non_missing_index = iv_arrs.pop("non_missing_index")
-                deltas = iv_reg(**iv_arrs)
-                iv_coeffs.loc[(dep, counter)] = deltas
-                y, x = iv_arrs["depvar_arr"], iv_arrs["indepvars_arr"]
-                u = pd.Series(data=y - np.dot(x, deltas), index=non_missing_index)
-
-                if period != last_period:
-                    for dep2 in depvars:
-                        if dep2 != dep:
-                            u_cov_df.loc[(dep, counter), dep2] = u.cov(
-                                data[("y", dep2)]
-                            )
-                        else:
-                            u_cov_df.loc[(dep, counter), dep2] = np.nan
-                else:
-                    u_var_sr[counter] = u.var()
-                counter += 1
-        if period != last_period:
-            return iv_coeffs, u_cov_df
-        else:
-            return iv_coeffs, u_var_sr
-
     def model_coeffs_from_iv_coeffs_args_dict(self, period, factor):
         """Dictionary with optional arguments of model_coeffs_from_iv_coeffs.
 
@@ -1415,7 +1324,9 @@ class SkillModel(GenericLikelihoodModel):
                 trans_name = self.transition_names[f]
                 if trans_name != "constant":
                     # get iv estimates (parameters and residual covariances)
-                    iv_coeffs, u_cov_df = self.all_iv_estimates(t, iv_data, factor)
+                    iv_coeffs, u_cov_df = all_iv_estimates(self.periods, self.factors, self.included_factors,
+                                                           self.transition_names, self.measurements,
+                                                           self.anchored_factors, self.anch_outcome, t, iv_data, factor)
 
                     # get model parameters from iv parameters
                     model_coeffs_func = getattr(
@@ -1455,7 +1366,9 @@ class SkillModel(GenericLikelihoodModel):
                 indepvars_data=resid_meas,
                 instruments_data=self.y_data[t],
             )
-            iv_coeffs, u_var_sr = self.all_iv_estimates(t, iv_data)
+            iv_coeffs, u_var_sr = all_iv_estimates(self.periods, self.factors, self.included_factors,
+                                                   self.transition_names, self.measurements, self.anchored_factors,
+                                                   self.anch_outcome, t, iv_data)
             deltas = iv_coeffs.mean().values
             anch_intercept = deltas[-1]
             anch_loadings = deltas[:-1]
