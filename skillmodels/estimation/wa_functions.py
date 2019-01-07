@@ -634,3 +634,26 @@ def model_coeffs_from_iv_coeffs_args_dict(normalizations, stagemap, identified_r
             args[rtype] = restriction
 
     return args
+
+
+def update_identified_restrictions(identified_restrictions, stage, factor, coeff_sum, intercept):
+    """Update self.identified_restrictions if necessary.
+
+    Identified restrictions are sums of coefficients of transition
+    equations or intercepts of transition equations. They are used in the
+    wa estimator to calculate model coefficients from the IV regression
+    coefficients.
+
+    Using restrictions that were identified in earlier periods of a stage
+    to calculate the model parameters of later periods in a stage makes
+    it possible to use development stages without over-normalization.
+
+    """
+    if coeff_sum is not None:
+        identified_restrictions["coeff_sum_value"].loc[
+            stage, factor
+        ] = coeff_sum
+    if intercept is not None:
+        identified_restrictions["trans_intercept_value"].loc[
+            stage, factor
+        ] = intercept

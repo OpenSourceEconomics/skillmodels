@@ -9,7 +9,7 @@ from skillmodels.estimation.wa_functions import (
     transition_error_variance_from_u_covs,
     anchoring_error_variance_from_u_vars,
     variable_permutations_for_iv_equations, extended_meas_coeffs, residual_measurements,
-    all_iv_estimates, model_coeffs_from_iv_coeffs_args_dict)
+    all_iv_estimates, model_coeffs_from_iv_coeffs_args_dict, update_identified_restrictions)
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -1232,28 +1232,6 @@ class SkillModel(GenericLikelihoodModel):
         else:
             return params
 
-    def update_identified_restrictions(self, stage, factor, coeff_sum, intercept):
-        """Update self.identified_restrictions if necessary.
-
-        Identified restrictions are sums of coefficients of transition
-        equations or intercepts of transition equations. They are used in the
-        wa estimator to calculate model coefficients from the IV regression
-        coefficients.
-
-        Using restrictions that were identified in earlier periods of a stage
-        to calculate the model parameters of later periods in a stage makes
-        it possible to use development stages without over-normalization.
-
-        """
-        if coeff_sum is not None:
-            self.identified_restrictions["coeff_sum_value"].loc[
-                stage, factor
-            ] = coeff_sum
-        if intercept is not None:
-            self.identified_restrictions["trans_intercept_value"].loc[
-                stage, factor
-            ] = intercept
-
     def _calculate_wa_quantities(self):
         """Helper function.
 
@@ -1319,9 +1297,9 @@ class SkillModel(GenericLikelihoodModel):
                     weight = self.wa_period_weights.loc[t, factor]
                     trans_coeff_storage[f][stage] += weight * gammas
 
-                    self.update_identified_restrictions(
-                        stage, factor, n_i_coeff_sum, n_i_intercept
-                    )
+                    update_identified_restrictions(self.identified_restrictions,
+                                                   stage, factor, n_i_coeff_sum, n_i_intercept
+                                                   )
 
                     # get transition error variance from residual covariances
                     trans_var_df.loc[stage, factor] += (
