@@ -6,6 +6,8 @@ import pandas as pd
 import skillmodels.model_functions.transition_functions as tf
 from patsy import dmatrix
 
+from skillmodels.model_functions import transition_functions
+
 
 def loadings_from_covs(data, normalization):
     """Factor loadings of measurements of one factor in the first.
@@ -435,3 +437,28 @@ def variable_permutations_for_iv_equations(factors, included_factors, transition
         instrument_permutations.append(z)
 
     return indepvar_permutations, instrument_permutations
+
+
+def number_of_iv_parameters(factors, transition_names, included_factors, measurements, anchored_factors, periods,
+                            factor=None, anch_equation=False):
+    """Number of parameters in the IV equation of a factor."""
+    if anch_equation is False:
+        assert factor is not None, ""
+        f = factors.index(factor)
+        trans_name = transition_names[f]
+        x_list, z_list = variable_permutations_for_iv_equations(factors, included_factors,
+                                                                transition_names, measurements,
+                                                                anchored_factors, 0, factor)
+    else:
+        trans_name = "linear"
+        x_list, z_list = variable_permutations_for_iv_equations(factors, included_factors,
+                                                                transition_names, measurements,
+                                                                anchored_factors,
+                                                                periods[-1], None
+                                                                )
+
+    example_x, example_z = x_list[0], z_list[0]
+    x_formula, _ = getattr(tf, "iv_formula_{}".format(trans_name))(
+        example_x, example_z
+    )
+    return x_formula.count("+") + 1

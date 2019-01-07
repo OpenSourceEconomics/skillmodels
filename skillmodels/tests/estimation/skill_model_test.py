@@ -11,7 +11,8 @@ from pandas.util.testing import assert_frame_equal
 from pandas.util.testing import assert_series_equal
 
 from skillmodels import SkillModel as smo
-from skillmodels.estimation.wa_functions import all_variables_for_iv_equations, variable_permutations_for_iv_equations
+from skillmodels.estimation.wa_functions import all_variables_for_iv_equations, variable_permutations_for_iv_equations, \
+    number_of_iv_parameters
 
 
 class TestGeneralParamsSlice:
@@ -968,25 +969,28 @@ class TestNumberOfIVParameters:
         self.included_factors = []
         self.measurements = []
         self.anchored_factors = []
+        self.periods = []
 
-    @patch('skillmodels.estimation.skill_model.variable_permutations_for_iv_equations')
-    @patch('skillmodels.estimation.skill_model.tf')
+    @patch('skillmodels.estimation.wa_functions.variable_permutations_for_iv_equations')
+    @patch('skillmodels.estimation.wa_functions.tf')
     def test_number_of_iv_parameters(self, mock_tf, mock_permut):
         mock_tf.iv_formula_bla.return_value = ('1 + 2 + 3 + 4', '_')
         ret = (['correct', 'wrong'], ['correct2', 'wrong2'])
         mock_permut.return_value = ret
 
         expected_param_nr = 4
-        calc_res = smo.number_of_iv_parameters(self, 'f1')
+        calc_res = number_of_iv_parameters(self.factors, self.transition_names, self.included_factors,
+                                           self.measurements, self.anchored_factors, self.periods, 'f1')
         assert_equal(calc_res, expected_param_nr)
 
-    @patch('skillmodels.estimation.skill_model.variable_permutations_for_iv_equations')
-    @patch('skillmodels.estimation.skill_model.tf')
+    @patch('skillmodels.estimation.wa_functions.variable_permutations_for_iv_equations')
+    @patch('skillmodels.estimation.wa_functions.tf')
     def test_right_calls(self, mock_tf, mock_permut):
         mock_tf.iv_formula_bla.return_value = ('1 + 2 + 3 + 4', '_')
         ret = (['correct', 'wrong'], ['correct2', 'wrong2'])
         mock_permut.return_value = ret
-        smo.number_of_iv_parameters(self, 'f1')
+        number_of_iv_parameters(self.factors, self.transition_names, self.included_factors, self.measurements,
+                                self.anchored_factors, self.periods, 'f1')
         mock_tf.iv_formula_bla.assert_has_calls([call('correct', 'correct2')])
 
 

@@ -10,7 +10,7 @@ from skillmodels.estimation.wa_functions import (
     large_df_for_iv_equations,
     transition_error_variance_from_u_covs,
     anchoring_error_variance_from_u_vars,
-    variable_permutations_for_iv_equations)
+    variable_permutations_for_iv_equations, number_of_iv_parameters)
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -1233,29 +1233,6 @@ class SkillModel(GenericLikelihoodModel):
         else:
             return params
 
-    def number_of_iv_parameters(self, factor=None, anch_equation=False):
-        """Number of parameters in the IV equation of a factor."""
-        if anch_equation is False:
-            assert factor is not None, ""
-            f = self.factors.index(factor)
-            trans_name = self.transition_names[f]
-            x_list, z_list = variable_permutations_for_iv_equations(self.factors, self.included_factors,
-                                                                    self.transition_names, self.measurements,
-                                                                    self.anchored_factors, 0, factor)
-        else:
-            trans_name = "linear"
-            x_list, z_list = variable_permutations_for_iv_equations(self.factors, self.included_factors,
-                                                                    self.transition_names, self.measurements,
-                                                                    self.anchored_factors,
-                                                                    self.periods[-1], None
-                                                                    )
-
-        example_x, example_z = x_list[0], z_list[0]
-        x_formula, _ = getattr(tf, "iv_formula_{}".format(trans_name))(
-            example_x, example_z
-        )
-        return x_formula.count("+") + 1
-
     def extended_meas_coeffs(self, coeff_type, period):
         """Series of coefficients for construction of residual measurements.
 
@@ -1338,11 +1315,14 @@ class SkillModel(GenericLikelihoodModel):
                                                                                         )
 
         if period != last_period:
-            nr_deltas = self.number_of_iv_parameters(factor)
+            nr_deltas = number_of_iv_parameters(self.factors, self.transition_names, self.included_factors,
+                                                self.measurements, self.anchored_factors, self.periods, factor)
             trans_name = self.transition_names[self.factors.index(factor)]
             depvars = self.measurements[factor][period + 1]
         else:
-            nr_deltas = self.number_of_iv_parameters(anch_equation=True)
+            nr_deltas = number_of_iv_parameters(self.factors, self.transition_names, self.included_factors,
+                                                self.measurements, self.anchored_factors, self.periods,
+                                                anch_equation=True)
             trans_name = "linear"
             depvars = [self.anch_outcome]
 
