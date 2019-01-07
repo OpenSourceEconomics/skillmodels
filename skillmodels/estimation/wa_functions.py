@@ -462,3 +462,31 @@ def number_of_iv_parameters(factors, transition_names, included_factors, measure
         example_x, example_z
     )
     return x_formula.count("+") + 1
+
+
+def extended_meas_coeffs(storage_df, transition_names, factors, measurements, coeff_type, period):
+    """Series of coefficients for construction of residual measurements.
+
+    Args:
+        coeff_type (str): takes values 'loadings' and 'intercepts'
+        period (int): period identifier
+
+    Returns:
+        coeffs (Series): Series of measurement coefficients in period
+        extendend with period zero coefficients of constant factors.
+
+    """
+    coeffs = storage_df.loc[period, coeff_type]
+    if period > 0 and "constant" in transition_names:
+        initial_meas = []
+        for f, factor in enumerate(factors):
+            if transition_names[f] == "constant":
+                initial_meas += measurements[factor][0]
+        constant_factor_coeffs = storage_df.loc[0, coeff_type].loc[
+            initial_meas
+        ]
+        constant_factor_coeffs.index = [
+            "{}_copied".format(m) for m in constant_factor_coeffs.index
+        ]
+        coeffs = coeffs.append(constant_factor_coeffs)
+    return coeffs

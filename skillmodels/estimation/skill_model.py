@@ -10,7 +10,7 @@ from skillmodels.estimation.wa_functions import (
     large_df_for_iv_equations,
     transition_error_variance_from_u_covs,
     anchoring_error_variance_from_u_vars,
-    variable_permutations_for_iv_equations, number_of_iv_parameters)
+    variable_permutations_for_iv_equations, number_of_iv_parameters, extended_meas_coeffs)
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -1233,33 +1233,6 @@ class SkillModel(GenericLikelihoodModel):
         else:
             return params
 
-    def extended_meas_coeffs(self, coeff_type, period):
-        """Series of coefficients for construction of residual measurements.
-
-        Args:
-            coeff_type (str): takes values 'loadings' and 'intercepts'
-            period (int): period identifier
-
-        Returns:
-            coeffs (Series): Series of measurement coefficients in period
-            extendend with period zero coefficients of constant factors.
-
-        """
-        coeffs = self.storage_df.loc[period, coeff_type]
-        if period > 0 and "constant" in self.transition_names:
-            initial_meas = []
-            for f, factor in enumerate(self.factors):
-                if self.transition_names[f] == "constant":
-                    initial_meas += self.measurements[factor][0]
-            constant_factor_coeffs = self.storage_df.loc[0, coeff_type].loc[
-                initial_meas
-            ]
-            constant_factor_coeffs.index = [
-                "{}_copied".format(m) for m in constant_factor_coeffs.index
-            ]
-            coeffs = coeffs.append(constant_factor_coeffs)
-        return coeffs
-
     def residual_measurements(self, period):
         """Residual measurements for the wa estimator in one period.
 
@@ -1272,8 +1245,10 @@ class SkillModel(GenericLikelihoodModel):
             period.
 
         """
-        loadings = self.extended_meas_coeffs("loadings", period)
-        intercepts = self.extended_meas_coeffs("intercepts", period)
+        loadings = extended_meas_coeffs(self.storage_df, self.transition_names, self.factors, self.measurements,
+                                        "loadings", period)
+        intercepts = extended_meas_coeffs(self.storage_df, self.transition_names, self.factors, self.measurements,
+                                          "intercepts", period)
 
         res_meas = (self.y_data[period] - intercepts) / loadings
         res_meas.columns = [col + "_resid" for col in res_meas.columns]
@@ -1525,7 +1500,8 @@ class SkillModel(GenericLikelihoodModel):
         # calculate measurement error variances and factor covariance matrices
         factor_cov_list = []
         for t in self.periods:
-            loadings = self.extended_meas_coeffs(period=t, coeff_type="loadings")
+            loadings = extended_meas_coeffs(self.storage_df, self.transition_names, self.factors, self.measurements,
+                                            period=t, coeff_type="loadings")
             all_meas = list(loadings.index)
             meas_cov = self.y_data[t][all_meas].cov()
             # loadings = self.storage_df.loc[t, 'loadings']

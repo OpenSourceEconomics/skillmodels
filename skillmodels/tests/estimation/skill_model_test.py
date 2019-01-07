@@ -12,7 +12,7 @@ from pandas.util.testing import assert_series_equal
 
 from skillmodels import SkillModel as smo
 from skillmodels.estimation.wa_functions import all_variables_for_iv_equations, variable_permutations_for_iv_equations, \
-    number_of_iv_parameters
+    number_of_iv_parameters, extended_meas_coeffs
 
 
 class TestGeneralParamsSlice:
@@ -1011,7 +1011,8 @@ class TestExtendedMeasCoeffs:
 
     def test_extended_meas_coeffs_no_constant_factor_and_intercepts_case(self):
         coeff_type = 'intercepts'
-        calc_intercepts = smo.extended_meas_coeffs(self, coeff_type, 0)
+        calc_intercepts = extended_meas_coeffs(self.storage_df, self.transition_names, self.factors, self.measurements,
+                                               coeff_type, 0)
         expected_intercepts = pd.Series(
             data=[0.8, 1.2, 1.6, 2.0],
             name='intercepts', index=['y01', 'y02', 'y03', 'y04'])
@@ -1019,7 +1020,8 @@ class TestExtendedMeasCoeffs:
 
     def test_extendend_meas_coeffs_constant_factor_and_loadings_case(self):
         coeff_type = 'loadings'
-        calc_loadings = smo.extended_meas_coeffs(self, coeff_type, 1)
+        calc_loadings = extended_meas_coeffs(self.storage_df, self.transition_names, self.factors, self.measurements,
+                                             coeff_type, 1)
         expected_loadings = pd.Series(
             data=[2.2, 2.6, 1.4, 1.8],
             name='loadings',
@@ -1033,13 +1035,18 @@ class TestResidualMeasurements:
             [3.0, 2.0], name='intercepts', index=['m2', 'm1'])
         loadings = pd.Series(
             [2.0, 0.5], name='loadings', index=['m1', 'm2'])
-        self.extended_meas_coeffs = Mock(side_effect=[loadings, intercepts])
-
+        self.side_effect = [loadings, intercepts]
         d = pd.DataFrame(data=np.array([[5, 4], [3, 2]]), columns=['m1', 'm2'])
 
         self.y_data = ['dummy', d, 'dummy']
+        self.storage_df = pd.DataFrame()
+        self.transition_names = []
+        self.factors = []
+        self.measurements = []
 
-    def test_residual_measurements(self):
+    @patch('skillmodels.estimation.skill_model.extended_meas_coeffs')
+    def test_residual_measurements(self, mock_extcoeffs):
+        mock_extcoeffs.side_effect = self.side_effect
         expected_data = np.array([
             [1.5, 2],
             [0.5, -2]])
