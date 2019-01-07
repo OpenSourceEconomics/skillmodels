@@ -657,3 +657,166 @@ def update_identified_restrictions(identified_restrictions, stage, factor, coeff
         identified_restrictions["trans_intercept_value"].loc[
             stage, factor
         ] = intercept
+
+
+def _measurement_per_factor_dict(factors, transition_names, measurements, period, include_copied=True):
+    d = {}
+    for f, factor in enumerate(factors):
+        if transition_names[f] != "constant" or period == 0:
+            d[factor] = measurements[factor][period]
+        elif include_copied is True:
+            initial_meas = measurements[factor][0]
+            d[factor] = ["{}_copied".format(m) for m in initial_meas]
+    return d
+
+
+def calculate_wa_estimated_quantities(identified_restrictions, y_data, measurements, normalizations, storage_df, factors,
+                                      transition_names, included_factors, nstages, stages, periods, stagemap, anchored_factors,
+                                      anch_outcome, wa_period_weights, anchoring):
+    """Helper function.
+
+    In this function the wa estimates are calculated, but not yet written
+    into a single params vector that can be used for later processing.
+
+    """
+    identified_restrictions["coeff_sum_value"][:] = None
+    identified_restrictions["trans_intercept_value"][:] = None
+    t = 0
+    # identify measurement system and factor means in initial period
+    meas_coeffs, X_zero = initial_meas_coeffs(
+        y_data=y_data[t],
+        measurements=measurements,
+        normalizations=normalizations,
+    )
+    storage_df.update(prepend_index_level(meas_coeffs, t))
+
+    # generate variables to store trans_coeffs and transition variances
+    trans_coeff_storage = []
+    for f, factor in enumerate(factors):
+        func = "nr_coeffs_{}".format(transition_names[f])
+        width = getattr(tf, func)(
+            included_factors=included_factors[f], params_type='short'
+        )
+        trans_coeff_storage.append(np.zeros((nstages, int(width))))
+    trans_var_cols = [
+        fac
+        for f, fac in enumerate(factors)
+        if transition_names[f] != "constant"
+    ]
+    trans_var_df = pd.DataFrame(data=0.0, columns=trans_var_cols, index=stages)
+
+    # apply the WA IV approach in all period for all factors and calculate
+    # all model parameters of interest from the iv parameters
+    for t, stage in zip(periods[:-1], stagemap[:-1]):
+        # generate the large IV DataFrame for period t
+        resid_meas = residual_measurements(storage_df, transition_names, factors, measurements,
+                                           y_data, period=t)
+        iv_data = large_df_for_iv_equations(
+            depvar_data=y_data[t + 1],
+            indepvars_data=resid_meas,
+            instruments_data=y_data[t],
+        )
+
+        for f, factor in enumerate(factors):
+            trans_name = transition_names[f]
+            if trans_name != "constant":
+                # get iv estimates (parameters and residual covariances)
+                iv_coeffs, u_cov_df = all_iv_estimates(periods, factors, included_factors,
+                                                       transition_names, measurements,
+                                                       anchored_factors, anch_outcome, t, iv_data, factor)
+
+                # get model parameters from iv parameters
+                model_coeffs_func = getattr(
+                    tf, "model_coeffs_from_iv_coeffs_" + trans_name
+                )
+
+                optional_args = model_coeffs_from_iv_coeffs_args_dict(normalizations, stagemap,
+                                                                      identified_restrictions,
+                                                                      period=t + 1, factor=factor
+                                                                      )
+
+                meas_coeffs, gammas, n_i_coeff_sum, n_i_intercept = model_coeffs_func(
+                    iv_coeffs=iv_coeffs, **optional_args
+                )
+
+                storage_df.update(prepend_index_level(meas_coeffs, t + 1))
+                weight = wa_period_weights.loc[t, factor]
+                trans_coeff_storage[f][stage] += weight * gammas
+
+                update_identified_restrictions(identified_restrictions,
+                                               stage, factor, n_i_coeff_sum, n_i_intercept
+                                               )
+
+                # get transition error variance from residual covariances
+                trans_var_df.loc[stage, factor] += (
+                    weight
+                    * transition_error_variance_from_u_covs(
+                        u_cov_df, meas_coeffs["loadings"]
+                    )
+                )
+
+    if anchoring is True:
+        t = periods[-1]
+        resid_meas = residual_measurements(storage_df, transition_names, factors, measurements,
+                                           y_data, period=t)
+        iv_data = large_df_for_iv_equations(
+            depvar_data=y_data[t],
+            indepvars_data=resid_meas,
+            instruments_data=y_data[t],
+        )
+        iv_coeffs, u_var_sr = all_iv_estimates(periods, factors, included_factors,
+                                               transition_names, measurements, anchored_factors,
+                                               anch_outcome, t, iv_data)
+        deltas = iv_coeffs.mean().values
+        anch_intercept = deltas[-1]
+        anch_loadings = deltas[:-1]
+        indep_permutations, instr_permutations = variable_permutations_for_iv_equations(factors,
+                                                                                        included_factors,
+                                                                                        transition_names,
+                                                                                        measurements,
+                                                                                        anchored_factors,
+                                                                                        period=t, factor=None
+                                                                                        )
+        anch_variance = anchoring_error_variance_from_u_vars(
+            u_vars=u_var_sr,
+            indepvars_permutations=indep_permutations,
+            anch_loadings=anch_loadings,
+            meas_loadings=storage_df.loc[t, "loadings"],
+            anchored_factors=anchored_factors,
+        )
+    else:
+        anch_intercept = None
+        anch_loadings = None
+        anch_variance = None
+
+    # calculate measurement error variances and factor covariance matrices
+    factor_cov_list = []
+    for t in periods:
+        loadings = extended_meas_coeffs(storage_df, transition_names, factors, measurements,
+                                        period=t, coeff_type="loadings")
+        all_meas = list(loadings.index)
+        meas_cov = y_data[t][all_meas].cov()
+        # loadings = self.storage_df.loc[t, 'loadings']
+        meas_per_f = _measurement_per_factor_dict(factors, transition_names, measurements, period=t)
+
+        p, meas_error_variances = factor_covs_and_measurement_error_variances(
+            meas_cov=meas_cov, loadings=loadings, meas_per_factor=meas_per_f
+        )
+        factor_cov_list.append(p)
+        storage_df.update(prepend_index_level(meas_error_variances, t))
+    P_zero = factor_cov_list[0]
+
+    # print('calculated_cov_matrices')
+    # for cov_mat in factor_cov_list:
+    #     print(cov_mat)
+
+    return (
+        storage_df,
+        X_zero,
+        P_zero,
+        trans_coeff_storage,
+        trans_var_df,
+        anch_intercept,
+        anch_loadings,
+        anch_variance,
+    )

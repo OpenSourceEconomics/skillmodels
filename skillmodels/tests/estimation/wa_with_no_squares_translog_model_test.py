@@ -2,6 +2,8 @@ from skillmodels import SkillModel
 import json
 import pandas as pd
 import numpy as np
+
+from skillmodels.estimation.wa_functions import calculate_wa_estimated_quantities
 from skillmodels.model_functions.transition_functions import \
     no_squares_translog
 from numpy.testing import assert_array_almost_equal as aaae
@@ -135,7 +137,11 @@ class TestOfWAEstimator:
 
         calc_storage_df, calc_X_zero, calc_P_zero, calc_gammas, trans_vars, \
             anch_intercept, anch_loadings, anch_variance = \
-            wa_model._calculate_wa_quantities()
+            calculate_wa_estimated_quantities(wa_model.identified_restrictions, wa_model.y_data, wa_model.measurements,
+                                              wa_model.normalizations, wa_model.storage_df, wa_model.factors,
+                                              wa_model.transition_names, wa_model.included_factors, wa_model.nstages,
+                                              wa_model.stages, wa_model.periods, wa_model.stagemap, wa_model.anchored_factors,
+                                              wa_model.anch_outcome, wa_model.wa_period_weights, wa_model.anchoring)
 
         calc_loadings = calc_storage_df['loadings']
         calc_intercepts = calc_storage_df['intercepts']
@@ -195,7 +201,11 @@ class TestOfWAEstimator:
 
         calc_storage_df, calc_X_zero, calc_P_zero, calc_gammas, trans_vars, \
             anch_intercept, anch_loadings, anch_variance = \
-            wa_model._calculate_wa_quantities()
+            calculate_wa_estimated_quantities(wa_model.identified_restrictions, wa_model.y_data, wa_model.measurements,
+                                              wa_model.normalizations, wa_model.storage_df, wa_model.factors,
+                                              wa_model.transition_names, wa_model.included_factors, wa_model.nstages,
+                                              wa_model.stages, wa_model.periods, wa_model.stagemap, wa_model.anchored_factors,
+                                              wa_model.anch_outcome, wa_model.wa_period_weights, wa_model.anchoring)
 
         # df = calc_storage_df.copy(deep=True)
         # df['true_meas_var'] = self.true_meas_var
@@ -248,6 +258,10 @@ class TestOfWAEstimator:
 
         calc_storage_df, calc_X_zero, calc_P_zero, calc_gammas, \
             calc_trans_vars, anch_intercept, anch_loadings, anch_variance = \
-            wa_model._calculate_wa_quantities()
+            calculate_wa_estimated_quantities(wa_model.identified_restrictions, wa_model.y_data, wa_model.measurements,
+                                              wa_model.normalizations, wa_model.storage_df, wa_model.factors,
+                                              wa_model.transition_names, wa_model.included_factors, wa_model.nstages,
+                                              wa_model.stages, wa_model.periods, wa_model.stagemap, wa_model.anchored_factors,
+                                              wa_model.anch_outcome, wa_model.wa_period_weights, wa_model.anchoring)
 
         aaae(calc_trans_vars.values, self.true_trans_var, decimal=3)
