@@ -12,7 +12,7 @@ from pandas.util.testing import assert_series_equal
 
 from skillmodels import SkillModel as smo
 from skillmodels.estimation.wa_functions import all_variables_for_iv_equations, variable_permutations_for_iv_equations, \
-    number_of_iv_parameters, extended_meas_coeffs
+    number_of_iv_parameters, extended_meas_coeffs, residual_measurements
 
 
 class TestGeneralParamsSlice:
@@ -1044,7 +1044,7 @@ class TestResidualMeasurements:
         self.factors = []
         self.measurements = []
 
-    @patch('skillmodels.estimation.skill_model.extended_meas_coeffs')
+    @patch('skillmodels.estimation.wa_functions.extended_meas_coeffs')
     def test_residual_measurements(self, mock_extcoeffs):
         mock_extcoeffs.side_effect = self.side_effect
         expected_data = np.array([
@@ -1052,7 +1052,8 @@ class TestResidualMeasurements:
             [0.5, -2]])
         expected_resid = pd.DataFrame(
             expected_data, columns=['m1_resid', 'm2_resid'])
-        calc_resid = smo.residual_measurements(self, period=1)
+        calc_resid = residual_measurements(self.storage_df, self.transition_names, self.factors, self.measurements,
+                                           self.y_data, period=1)
         assert_frame_equal(calc_resid, expected_resid)
 
 

@@ -10,7 +10,7 @@ from skillmodels.estimation.wa_functions import (
     large_df_for_iv_equations,
     transition_error_variance_from_u_covs,
     anchoring_error_variance_from_u_vars,
-    variable_permutations_for_iv_equations, number_of_iv_parameters, extended_meas_coeffs)
+    variable_permutations_for_iv_equations, number_of_iv_parameters, extended_meas_coeffs, residual_measurements)
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -1233,27 +1233,6 @@ class SkillModel(GenericLikelihoodModel):
         else:
             return params
 
-    def residual_measurements(self, period):
-        """Residual measurements for the wa estimator in one period.
-
-        Args:
-            period (int): period identifier
-
-        Returns
-            res_meas (DataFrame): residual measurements from period, extended
-            with residual measurements of constant factors from initial
-            period.
-
-        """
-        loadings = extended_meas_coeffs(self.storage_df, self.transition_names, self.factors, self.measurements,
-                                        "loadings", period)
-        intercepts = extended_meas_coeffs(self.storage_df, self.transition_names, self.factors, self.measurements,
-                                          "intercepts", period)
-
-        res_meas = (self.y_data[period] - intercepts) / loadings
-        res_meas.columns = [col + "_resid" for col in res_meas.columns]
-        return res_meas
-
     def all_iv_estimates(self, period, data, factor=None):
         """Coeffs and residual covs for all IV equations of factor in period.
 
@@ -1424,7 +1403,8 @@ class SkillModel(GenericLikelihoodModel):
         # all model parameters of interest from the iv parameters
         for t, stage in zip(self.periods[:-1], self.stagemap[:-1]):
             # generate the large IV DataFrame for period t
-            resid_meas = self.residual_measurements(period=t)
+            resid_meas = residual_measurements(self.storage_df, self.transition_names, self.factors, self.measurements,
+                                               self.y_data, period=t)
             iv_data = large_df_for_iv_equations(
                 depvar_data=self.y_data[t + 1],
                 indepvars_data=resid_meas,
@@ -1468,7 +1448,8 @@ class SkillModel(GenericLikelihoodModel):
 
         if self.anchoring is True:
             t = self.periods[-1]
-            resid_meas = self.residual_measurements(period=t)
+            resid_meas = residual_measurements(self.storage_df, self.transition_names, self.factors, self.measurements,
+                                               self.y_data, period=t)
             iv_data = large_df_for_iv_equations(
                 depvar_data=self.y_data[t],
                 indepvars_data=resid_meas,

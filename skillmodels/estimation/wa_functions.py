@@ -490,3 +490,25 @@ def extended_meas_coeffs(storage_df, transition_names, factors, measurements, co
         ]
         coeffs = coeffs.append(constant_factor_coeffs)
     return coeffs
+
+
+def residual_measurements(storage_df, transition_names, factors, measurements, y_data, period):
+    """Residual measurements for the wa estimator in one period.
+
+    Args:
+        period (int): period identifier
+
+    Returns
+        res_meas (DataFrame): residual measurements from period, extended
+        with residual measurements of constant factors from initial
+        period.
+
+    """
+    loadings = extended_meas_coeffs(storage_df, transition_names, factors, measurements,
+                                    "loadings", period)
+    intercepts = extended_meas_coeffs(storage_df, transition_names, factors, measurements,
+                                      "intercepts", period)
+
+    res_meas = (y_data[period] - intercepts) / loadings
+    res_meas.columns = [col + "_resid" for col in res_meas.columns]
+    return res_meas
