@@ -606,3 +606,31 @@ def all_iv_estimates(periods, factors, included_factors, transition_names, measu
         return iv_coeffs, u_cov_df
     else:
         return iv_coeffs, u_var_sr
+
+
+def model_coeffs_from_iv_coeffs_args_dict(normalizations, stagemap, identified_restrictions, period, factor):
+    """Dictionary with optional arguments of model_coeffs_from_iv_coeffs.
+
+    The arguments contain the normalizations and identified restrictions
+    that are needed to identify the model coefficients of interest.
+
+    """
+    args = {}
+
+    load_norm = normalizations[factor]["loadings"][period]
+    if len(load_norm) == 0:
+        load_norm = None
+    args["loading_norminfo"] = load_norm
+
+    inter_norm = normalizations[factor]["intercepts"][period]
+    if len(inter_norm) == 0:
+        inter_norm = None
+    args["intercept_norminfo"] = inter_norm
+
+    stage = stagemap[period]
+    for rtype in ["coeff_sum_value", "trans_intercept_value"]:
+        restriction = identified_restrictions[rtype].loc[stage, factor]
+        if restriction is not None:
+            args[rtype] = restriction
+
+    return args

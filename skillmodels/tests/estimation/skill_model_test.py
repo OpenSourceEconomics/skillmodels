@@ -12,7 +12,7 @@ from pandas.util.testing import assert_series_equal
 
 from skillmodels import SkillModel as smo
 from skillmodels.estimation.wa_functions import all_variables_for_iv_equations, variable_permutations_for_iv_equations, \
-    number_of_iv_parameters, extended_meas_coeffs, residual_measurements
+    number_of_iv_parameters, extended_meas_coeffs, residual_measurements, model_coeffs_from_iv_coeffs_args_dict
 
 
 class TestGeneralParamsSlice:
@@ -1072,7 +1072,8 @@ class TestWANorminfoDict:
     def test_wa_norminfo_dict(self):
         expected = {'loading_norminfo': ['y2', 5],
                     'intercept_norminfo': ['y5', 8]}
-        calculated = smo.model_coeffs_from_iv_coeffs_args_dict(self, 1, 'f1')
+        calculated = model_coeffs_from_iv_coeffs_args_dict(self.normalizations, self.stagemap,
+                                                           self.identified_restrictions, 1, 'f1')
         assert_equal(calculated, expected)
 
 

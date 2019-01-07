@@ -9,7 +9,7 @@ from skillmodels.estimation.wa_functions import (
     transition_error_variance_from_u_covs,
     anchoring_error_variance_from_u_vars,
     variable_permutations_for_iv_equations, extended_meas_coeffs, residual_measurements,
-    all_iv_estimates)
+    all_iv_estimates, model_coeffs_from_iv_coeffs_args_dict)
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -1232,33 +1232,6 @@ class SkillModel(GenericLikelihoodModel):
         else:
             return params
 
-    def model_coeffs_from_iv_coeffs_args_dict(self, period, factor):
-        """Dictionary with optional arguments of model_coeffs_from_iv_coeffs.
-
-        The arguments contain the normalizations and identified restrictions
-        that are needed to identify the model coefficients of interest.
-
-        """
-        args = {}
-
-        load_norm = self.normalizations[factor]["loadings"][period]
-        if len(load_norm) == 0:
-            load_norm = None
-        args["loading_norminfo"] = load_norm
-
-        inter_norm = self.normalizations[factor]["intercepts"][period]
-        if len(inter_norm) == 0:
-            inter_norm = None
-        args["intercept_norminfo"] = inter_norm
-
-        stage = self.stagemap[period]
-        for rtype in ["coeff_sum_value", "trans_intercept_value"]:
-            restriction = self.identified_restrictions[rtype].loc[stage, factor]
-            if restriction is not None:
-                args[rtype] = restriction
-
-        return args
-
     def update_identified_restrictions(self, stage, factor, coeff_sum, intercept):
         """Update self.identified_restrictions if necessary.
 
@@ -1333,9 +1306,10 @@ class SkillModel(GenericLikelihoodModel):
                         tf, "model_coeffs_from_iv_coeffs_" + trans_name
                     )
 
-                    optional_args = self.model_coeffs_from_iv_coeffs_args_dict(
-                        period=t + 1, factor=factor
-                    )
+                    optional_args = model_coeffs_from_iv_coeffs_args_dict(self.normalizations, self.stagemap,
+                                                                          self.identified_restrictions,
+                                                                          period=t + 1, factor=factor
+                                                                          )
 
                     meas_coeffs, gammas, n_i_coeff_sum, n_i_intercept = model_coeffs_func(
                         iv_coeffs=iv_coeffs, **optional_args
