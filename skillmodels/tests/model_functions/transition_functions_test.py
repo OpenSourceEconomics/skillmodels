@@ -2,7 +2,11 @@ from nose.tools import assert_equal
 import skillmodels.model_functions.transition_functions as tf
 import numpy as np
 from numpy.testing import assert_array_almost_equal as aaae
+import pytest
 
+# **************************************************************************************
+# Nose version of tests for linear transition function
+# **************************************************************************************
 
 class TestLinear:
     def setup(self):
@@ -40,6 +44,40 @@ class TestLinear:
         assert_equal(tf.coeff_names_linear(self.incl_fac, 'short', 'f1', 3),
                      expected)
 
+
+# **************************************************************************************
+# pytest version of linear transition function
+# **************************************************************************************
+@pytest.fixture
+def setup_linear():
+    nemf, nind, nsigma, nfac = 2, 10, 7, 3
+    sigma_points = np.ones((nemf, nind, nsigma, nfac))
+    sigma_points[1] *= 2
+    sigma_points[:, :, 0, :] = 3
+    sigma_points = sigma_points.reshape(nemf * nind * nsigma, nfac)
+
+    args = {
+        'sigma_points': sigma_points,
+        'coeffs': np.array([0.5, 1.0, 1.5]),
+        'included_positions': np.array([0, 1, 2])
+    }
+    return args
+
+
+@pytest.fixture
+def expected_linear():
+    nemf, nind, nsigma = 2, 10, 7
+    expected_result = np.ones((nemf, nind, nsigma)) * 3
+    expected_result[1, :, :] *= 2
+    expected_result[:, :, 0] = 9
+    expected_result = expected_result.flatten()
+    return expected_result
+
+
+def test_linear(setup_linear, expected_linear):
+    aaae(tf.linear(**setup_linear), expected_linear)
+
+# **************************************************************************************
 
 class TestAR1:
     def setup(self):
