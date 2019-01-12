@@ -14,7 +14,7 @@ Each function takes the following arguments:
 
 """
 
-#anchoring part one
+
 def anchor_flat_sigma_points_linear(flat_sigma_points, positions,
                                     anch_params=None, intercept=None):
     if anch_params is not None and intercept is not None:
