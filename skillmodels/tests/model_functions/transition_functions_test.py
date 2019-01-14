@@ -77,6 +77,65 @@ def test_coeff_names_linear(setup_coeffs_names_linear):
     assert tf.coeff_names_linear(**setup_coeffs_names_linear) == expected
 
 # **************************************************************************************
+#test of linear with constant function
+@pytest.fixture
+def setup_linear_with_constant():
+    nemf, nind, nsigma, nfac = 2, 10, 7, 3
+    sigma_points = np.ones((nemf, nind, nsigma, nfac))
+    sigma_points[1] *= 2
+    sigma_points[:, :, 0, :] = 3
+    sigma_points = sigma_points.reshape(nemf * nind * nsigma, nfac)
+    coeffs = np.array([0.5, 1.0, 1.5])
+    included_positions = np.array([0, 1, 2])
+    
+    args = {
+        'sigma_points': sigma_points,
+        'coeffs': coeffs,
+        'included_positions': included_positions
+    }
+    return args 
+
+@pytest.fixture
+def expected_linear_with_constant():
+    nemf, nind, nsigma, nfac = 2, 10, 7, 3
+    sigma_points = np.ones((nemf, nind, nsigma, nfac))
+    sigma_points[1] *= 2
+    sigma_points[:, :, 0, :] = 3
+    sigma_points = sigma_points.reshape(nemf * nind * nsigma, nfac)
+    coeffs = np.array([0.5, 1.0, 1.5])
+    included_positions = np.array([0, 1, 2])
+    without_constant = tf.linear(sigma_points, coeffs[:-1], included_positions[:-1])
+    expected_result = coeffs[-1] + without_constant
+    return expected_result
+
+def test_linear_with_constant(setup_linear_with_constant, expected_linear_with_constant):
+    aaae(tf.linear_with_constant(**setup_linear_with_constant), expected_linear_with_constant)
+
+# **************************************************************************************
+class TestAR1:
+    def setup(self):
+        self.nemf = 2
+        self.nind = 10
+        self.nfac = 3
+        self.nsigma = 7
+
+        self.incl_pos = [1]
+        self.incl_fac = ['f2']
+
+        self.coeffs = np.array([3])
+
+        self.sp = np.ones((self.nemf * self.nind * self.nsigma, self.nfac))
+
+    def test_ar1_transition_equation(self):
+        expected_result = np.ones((self.nemf * self.nind * self.nsigma)) * 3
+        aaae(tf.ar1(self.sp, self.coeffs, self.incl_pos), expected_result)
+
+    def test_ar1_coeff_names(self):
+        assert_equal(tf.coeff_names_ar1(self.incl_fac, 'short', 'f2', 3),
+                     ['ar1_coeff__3__f2__f2'])
+        
+# **************************************************************************************
+    
 class TestLogCes:
 
     def setup(self):
