@@ -71,44 +71,12 @@ def setup_coeffs_names_linear():
     }
     return args
 
-@pytest.fixture
-def expected_coeffs_names_linear():
-    expected_result = np.array(['lincoeff__3__f1__f1', 'lincoeff__3__f1__f2',
-                    'lincoeff__3__f1__f3'])
-    expected_result.astype('<U19')
-    return expected_result
+def test_coeff_names_linear(setup_coeffs_names_linear):
+    expected = ['lincoeff__3__f1__f1', 'lincoeff__3__f1__f2',
+                    'lincoeff__3__f1__f3']  
+    assert tf.coeff_names_linear(**setup_coeffs_names_linear) == expected
 
-
-def test_coeff_names_linear(setup_coeffs_names_linear, expected_coeffs_names_linear):
-        aaae(tf.coeff_names_linear(**setup_coeffs_names_linear), 
-                     expected_coeffs_names_linear)
-    
-    
 # **************************************************************************************
-
-class TestAR1:
-    def setup(self):
-        self.nemf = 2
-        self.nind = 10
-        self.nfac = 3
-        self.nsigma = 7
-
-        self.incl_pos = [1]
-        self.incl_fac = ['f2']
-
-        self.coeffs = np.array([3])
-
-        self.sp = np.ones((self.nemf * self.nind * self.nsigma, self.nfac))
-
-    def test_ar1_transition_equation(self):
-        expected_result = np.ones((self.nemf * self.nind * self.nsigma)) * 3
-        aaae(tf.ar1(self.sp, self.coeffs, self.incl_pos), expected_result)
-
-    def test_ar1_coeff_names(self):
-        assert_equal(tf.coeff_names_ar1(self.incl_fac, 'short', 'f2', 3),
-                     ['ar1_coeff__3__f2__f2'])
-
-
 class TestLogCes:
 
     def setup(self):
@@ -180,7 +148,7 @@ class TestLogCes:
 
         names = tf.coeff_names_log_ces(self.incl_fac, 'long', 'f1', 0)
         assert_equal(names, expected)
-
+# **************************************************************************************
 
 class TestTranslog:
     def setup(self):
