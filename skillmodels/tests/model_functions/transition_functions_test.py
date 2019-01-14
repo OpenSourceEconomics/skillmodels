@@ -4,50 +4,7 @@ import numpy as np
 from numpy.testing import assert_array_almost_equal as aaae
 import pytest
 
-# **************************************************************************************
-# Nose version of tests for linear transition function - to be converted
-# **************************************************************************************
-
-class TestLinear:
-    def setup(self):
-        self.nemf = 2
-        self.nind = 10
-        self.nfac = 3
-        self.nsigma = 7
-        self.incl_pos = [0, 1, 2]
-        self.incl_fac = ['f1', 'f2', 'f3']
-
-        self.coeffs = np.array([0.5, 1.0, 1.5])
-
-        self.sp = np.ones((self.nemf, self.nind, self.nsigma, self.nfac))
-        self.sp[1, :, :, :] *= 2
-        self.sp[:, :, 0, :] = 3
-        self.sp = self.sp.reshape(
-            self.nemf * self.nind * self.nsigma, self.nfac)
-
-    def test_linear_transition_equation(self):
-
-        expected_result = np.ones((self.nemf, self.nind, self.nsigma)) * 3
-        expected_result[1, :, :] *= 2
-        expected_result[:, :, 0] = 9
-        expected_result = expected_result.flatten()
-        aaae(tf.linear(self.sp, self.coeffs, self.incl_pos),
-             expected_result)
-
-    def test_nr_coeffs_linear(self):
-        assert_equal(tf.nr_coeffs_linear(self.incl_fac, 'short'), 3)
-
-    def test_coeff_names_linear(self):
-        expected = ['lincoeff__3__f1__f1', 'lincoeff__3__f1__f2',
-                    'lincoeff__3__f1__f3']
-
-        assert_equal(tf.coeff_names_linear(self.incl_fac, 'short', 'f1', 3),
-                     expected)
-
-
-# **************************************************************************************
-# pytest version of linear transition function
-# **************************************************************************************
+#test of linear version function
 @pytest.fixture
 def setup_linear():
     nemf, nind, nsigma, nfac = 2, 10, 7, 3
@@ -73,35 +30,53 @@ def expected_linear():
     expected_result = expected_result.flatten()
     return expected_result
 
-
 def test_linear(setup_linear, expected_linear):
     aaae(tf.linear(**setup_linear), expected_linear)
 
+#test for number of linear coefficients
+@pytest.fixture
+def setup_nr_coeffs_linear():
+    included_factors = ['f1', 'f2', 'f3']
+    params_type = 'short'
+    
+    args = {
+        'included_factors': included_factors, 
+        'params_type': params_type
+    }
+        
+    return args
+
+@pytest.fixture
+def expected_nr_coeffs_linear():
+    included_factors = ['f1', 'f2', 'f3']
+    expected_result = len(included_factors)
+    return expected_result
+
+def test_nr_coeffs_linear(setup_nr_coeffs_linear, expected_nr_coeffs_linear):
+    aaae(tf.nr_coeffs_linear(**setup_nr_coeffs_linear), expected_nr_coeffs_linear)
+
+#test for coefficient names linear
+@pytest.fixture
+def setup_coeffs_names_linear():
+    included_factors = ['f1', 'f2', 'f3']
+    params_type = 'short'
+    factor = 'f1'
+    stage = 3
+    
+    args = {
+        'included_factors': included_factors, 
+        'params_type': params_type,
+        'factor': factor,
+        'stage': stage
+    }
+    return args
+
+def test_coeff_names_linear(setup_coeffs_names_linear):
+    expected = ['lincoeff__3__f1__f1', 'lincoeff__3__f1__f2',
+                    'lincoeff__3__f1__f3']  
+    assert tf.coeff_names_linear(**setup_coeffs_names_linear) == expected
+
 # **************************************************************************************
-
-class TestAR1:
-    def setup(self):
-        self.nemf = 2
-        self.nind = 10
-        self.nfac = 3
-        self.nsigma = 7
-
-        self.incl_pos = [1]
-        self.incl_fac = ['f2']
-
-        self.coeffs = np.array([3])
-
-        self.sp = np.ones((self.nemf * self.nind * self.nsigma, self.nfac))
-
-    def test_ar1_transition_equation(self):
-        expected_result = np.ones((self.nemf * self.nind * self.nsigma)) * 3
-        aaae(tf.ar1(self.sp, self.coeffs, self.incl_pos), expected_result)
-
-    def test_ar1_coeff_names(self):
-        assert_equal(tf.coeff_names_ar1(self.incl_fac, 'short', 'f2', 3),
-                     ['ar1_coeff__3__f2__f2'])
-
-
 class TestLogCes:
 
     def setup(self):
@@ -173,7 +148,7 @@ class TestLogCes:
 
         names = tf.coeff_names_log_ces(self.incl_fac, 'long', 'f1', 0)
         assert_equal(names, expected)
-
+# **************************************************************************************
 
 class TestTranslog:
     def setup(self):
