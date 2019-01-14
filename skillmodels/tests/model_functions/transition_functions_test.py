@@ -5,7 +5,7 @@ from numpy.testing import assert_array_almost_equal as aaae
 import pytest
 
 # **************************************************************************************
-# The nose version of tests for linear transition function.
+# Nose version of tests for linear transition function
 # **************************************************************************************
 
 class TestLinear:
