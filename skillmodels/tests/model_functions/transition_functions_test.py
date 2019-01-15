@@ -85,28 +85,24 @@ def setup_linear_with_constant():
     sigma_points[1] *= 2
     sigma_points[:, :, 0, :] = 3
     sigma_points = sigma_points.reshape(nemf * nind * nsigma, nfac)
-    coeffs = np.array([0.5, 1.0, 1.5])
-    included_positions = np.array([0, 1, 2])
     
     args = {
         'sigma_points': sigma_points,
-        'coeffs': coeffs,
-        'included_positions': included_positions
+        'coeffs': np.array([0.5, 1.0, 1.5, 0.5]),
+        'included_positions': np.array([0, 1, 2])
     }
-    return args 
+    return args
 
 @pytest.fixture
 def expected_linear_with_constant():
-    nemf, nind, nsigma, nfac = 2, 10, 7, 3
-    sigma_points = np.ones((nemf, nind, nsigma, nfac))
-    sigma_points[1] *= 2
-    sigma_points[:, :, 0, :] = 3
-    sigma_points = sigma_points.reshape(nemf * nind * nsigma, nfac)
-    coeffs = np.array([0.5, 1.0, 1.5])
-    included_positions = np.array([0, 1, 2])
-    without_constant = tf.linear(sigma_points, coeffs[:-1], included_positions[:-1])
-    expected_result = coeffs[-1] + without_constant
-    return expected_result
+    nemf, nind, nsigma = 2, 10, 7
+    coeffs = [0.5, 1.0, 1.5, 0.5]
+    expected_result = np.ones((nemf, nind, nsigma))*3
+    expected_result[1, :, :] *= 2
+    expected_result[:, :, 0] = 9
+    expected_result = expected_result.flatten()
+    
+    return coeffs[-1] + expected_result
 
 def test_linear_with_constant(setup_linear_with_constant, expected_linear_with_constant):
     aaae(tf.linear_with_constant(**setup_linear_with_constant), expected_linear_with_constant)
