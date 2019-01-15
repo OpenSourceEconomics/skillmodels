@@ -102,6 +102,8 @@ def test_linear_with_constant(setup_linear_with_constant, expected_linear_with_c
     aaae(tf.linear_with_constant(**setup_linear_with_constant), expected_linear_with_constant)
 
 # **************************************************************************************
+#tests ar1
+    
 #test for ar1 transition equation function
 @pytest.fixture
 def setup_ar1_transition_equation():
@@ -154,78 +156,60 @@ def test_ar1_coeff_names(setup_ar1_coeff_names, expected_ar1_coeff_names):
                      expected_ar1_coeff_names)
         
 # **************************************************************************************
+#tests LogCes  
+
+#test LogCes function
+@pytest.fixture
+def setup_log_ces():
+    nsigma = 5
+    sigma_points = np.array([[3, 7.5]] * nsigma)
+
+    args = {
+        'sigma_points': sigma_points,
+        'coeffs': np.array([0.4, 0.6, 2]),
+        'included_positions': [0, 1]
+    }
+    return args
+
+
+@pytest.fixture
+def expected_log_ces():
+    nsigma = 5
+    expected_result = np.ones(nsigma) * 7.244628323025
+    return expected_result        
+
+def test_log_ces(setup_log_ces, expected_log_ces):
+        aaae(tf.log_ces(**setup_log_ces), expected_log_ces) 
+        
+#test for logces number of coeffs short
+@pytest.fixture
+def setup_log_ces_nr_coeffs_short():
     
-class TestLogCes:
+    args = {
+        'included_factors': ['f1', 'f2'], 
+        'params_type': 'short'
+    }
+    return args
 
-    def setup(self):
-        self.nemf = 2
-        self.nind = 10
-        self.nfac = 2
-        self.nsigma = 5
-        self.incl_pos = [0, 1]
-        self.incl_fac = ['f1', 'f2']
+def test_log_ces_nr_coeffs_short(setup_log_ces_nr_coeffs_short):
+        aaae(tf.nr_coeffs_log_ces(**setup_log_ces_nr_coeffs_short), 2)
+        
+#test for logces number of coeffs long
+@pytest.fixture
+def setup_log_ces_nr_coeffs_long():
+    
+    args = {
+        'included_factors': ['f1', 'f2'], 
+        'params_type': 'long'
+    }
+    return args
 
-        self.coeffs = np.array([0.4, 0.6, 2])
-        self.sp = np.zeros((self.nemf, self.nind, self.nsigma, self.nfac))
-        self.sp[:] = np.array([[3, 7.5]] * self.nsigma)
-        self.sp = self.sp.reshape(
-            self.nemf * self.nind * self.nsigma, self.nfac)
+def test_log_ces_nr_coeffs_long(setup_log_ces_nr_coeffs_long):
+        aaae(tf.nr_coeffs_log_ces(**setup_log_ces_nr_coeffs_long), 3)
+   
+     
 
-    def test_log_ces(self):
-        expected_result = \
-            np.ones(self.nemf * self.nind * self.nsigma) * 7.244628323025
-        aaae(tf.log_ces(self.sp, self.coeffs, self.incl_pos), expected_result)
 
-    def test_log_ces_nr_coeffs_short(self):
-        assert_equal(tf.nr_coeffs_log_ces(self.incl_fac, 'short'), 2)
-
-    def test_log_ces_nr_coeffs_long(self):
-        assert_equal(tf.nr_coeffs_log_ces(self.incl_fac, 'long'), 3)
-
-    def test_transform_coeffs_log_ces_short_to_long(self):
-        big_out = np.zeros((2, 3))
-        small_out = big_out[0, :]
-
-        coeffs = np.array([1, 3])
-
-        tf.transform_coeffs_log_ces(
-            coeffs, self.incl_fac, 'short_to_long', small_out)
-
-        expected = np.zeros((2, 3))
-        expected[0, :] = np.array([0.5, 0.5, 3])
-        aaae(big_out, expected)
-
-    def test_transform_coeffs_log_ces_long_to_short(self):
-        big_out = np.zeros((2, 2))
-        small_out = big_out[0, :]
-        coeffs = np.array([0.5, 0.5, 3])
-
-        tf.transform_coeffs_log_ces(
-            coeffs, self.incl_fac, 'long_to_short', small_out)
-
-        expected = np.zeros((2, 2))
-        expected[0, :] = np.array([1, 3])
-        aaae(big_out, expected)
-
-    def test_bounds_log_ces(self):
-        expected_lb = [0, None]
-        expected_ub = [None, None]
-
-        lb, ub = tf.bounds_log_ces(self.incl_fac)
-        assert_equal(list(lb), expected_lb)
-        assert_equal(list(ub), expected_ub)
-
-    def test_coeff_names_log_ces_short(self):
-        expected = ['gamma__0__f1__f1', 'phi__0__f1__Phi']
-
-        names = tf.coeff_names_log_ces(self.incl_fac, 'short', 'f1', 0)
-        assert_equal(names, expected)
-
-    def test_coeff_names_log_ces_long(self):
-        expected = ['gamma__0__f1__f1', 'gamma__0__f1__f2', 'phi__0__f1__Phi']
-
-        names = tf.coeff_names_log_ces(self.incl_fac, 'long', 'f1', 0)
-        assert_equal(names, expected)
 # **************************************************************************************
 
 class TestTranslog:

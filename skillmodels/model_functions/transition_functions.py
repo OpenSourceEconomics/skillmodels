@@ -313,7 +313,6 @@ def output_has_known_location_ar1():
 # log_ces (KLS-Verion)
 # =============================================================================
 
-
 def log_ces(sigma_points, coeffs, included_positions):
     nfac = sigma_points.shape[1]
     phi = coeffs[-1]
