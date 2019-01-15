@@ -36,12 +36,10 @@ def test_linear(setup_linear, expected_linear):
 #test for number of linear coefficients
 @pytest.fixture
 def setup_nr_coeffs_linear():
-    included_factors = ['f1', 'f2', 'f3']
-    params_type = 'short'
     
     args = {
-        'included_factors': included_factors, 
-        'params_type': params_type
+        'included_factors': ['f1', 'f2', 'f3'], 
+        'params_type': 'short'
     }
         
     return args
@@ -58,16 +56,12 @@ def test_nr_coeffs_linear(setup_nr_coeffs_linear, expected_nr_coeffs_linear):
 #test for coefficient names linear
 @pytest.fixture
 def setup_coeffs_names_linear():
-    included_factors = ['f1', 'f2', 'f3']
-    params_type = 'short'
-    factor = 'f1'
-    stage = 3
-    
+   
     args = {
-        'included_factors': included_factors, 
-        'params_type': params_type,
-        'factor': factor,
-        'stage': stage
+        'included_factors': ['f1', 'f2', 'f3'], 
+        'params_type': 'short',
+        'factor': 'f1',
+        'stage': 3
     }
     return args
 
@@ -108,27 +102,56 @@ def test_linear_with_constant(setup_linear_with_constant, expected_linear_with_c
     aaae(tf.linear_with_constant(**setup_linear_with_constant), expected_linear_with_constant)
 
 # **************************************************************************************
-class TestAR1:
-    def setup(self):
-        self.nemf = 2
-        self.nind = 10
-        self.nfac = 3
-        self.nsigma = 7
+#test for ar1 transition equation function
+@pytest.fixture
+def setup_ar1_transition_equation():
+    nemf, nind, nsigma, nfac = 2, 10, 7, 3
 
-        self.incl_pos = [1]
-        self.incl_fac = ['f2']
+    args = {
+            
+        'sigma_points': np.ones((nemf * nind * nsigma, nfac)),
+        'coeffs': np.array([3]),
+        'included_positions': [1]
+        
+    }
+    
+    return args
 
-        self.coeffs = np.array([3])
+@pytest.fixture
+def expected_ar1_transition_equation():
+    nemf, nind, nsigma = 2, 10, 7
+    expected_result = np.ones(nemf * nind * nsigma) * 3
+        
+    return expected_result
 
-        self.sp = np.ones((self.nemf * self.nind * self.nsigma, self.nfac))
+def test_ar1_transition_equation(setup_ar1_transition_equation,
+                                 expected_ar1_transition_equation):
+        aaae(tf.ar1(**setup_ar1_transition_equation), 
+                                 expected_ar1_transition_equation)
 
-    def test_ar1_transition_equation(self):
-        expected_result = np.ones((self.nemf * self.nind * self.nsigma)) * 3
-        aaae(tf.ar1(self.sp, self.coeffs, self.incl_pos), expected_result)
+#test for ar1 coeff names function
+@pytest.fixture
+def setup_ar1_coeff_names():
+    
+    args = {
+            
+        'included_factors': ['f2'],
+        'params_type': 'short',
+        'factor': 'f2',
+        'stage': 3
+        
+    }
+    
+    return args
 
-    def test_ar1_coeff_names(self):
-        assert_equal(tf.coeff_names_ar1(self.incl_fac, 'short', 'f2', 3),
-                     ['ar1_coeff__3__f2__f2'])
+@pytest.fixture
+def expected_ar1_coeff_names():
+    expected_result = ['ar1_coeff__3__f2__f2']
+    return expected_result
+
+def test_ar1_coeff_names(setup_ar1_coeff_names, expected_ar1_coeff_names):
+        assert_equal(tf.coeff_names_ar1(**setup_ar1_coeff_names),
+                     expected_ar1_coeff_names)
         
 # **************************************************************************************
     
