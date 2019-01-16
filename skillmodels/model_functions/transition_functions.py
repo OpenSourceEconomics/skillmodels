@@ -202,8 +202,6 @@ def output_has_known_location_linear():
 # =============================================================================
 # linear with constant
 # =============================================================================
-
-
 def linear_with_constant(sigma_points, coeffs, included_positions):
     without_constant = linear(sigma_points, coeffs[:-1], included_positions)
     return coeffs[-1] + without_constant
@@ -314,7 +312,6 @@ def output_has_known_location_ar1():
 # =============================================================================
 # log_ces (KLS-Verion)
 # =============================================================================
-
 
 def log_ces(sigma_points, coeffs, included_positions):
     nfac = sigma_points.shape[1]
