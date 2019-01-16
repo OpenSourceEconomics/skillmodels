@@ -76,9 +76,11 @@ def generate_start_factors_and_control_variables(
         for this general case.
 
     """
-    assert np.sum(weights)==1, 'weights dont sum up to one!' 
+    assert np.sum(weights)==1, 'weights should sum up to one' 
     nfac = len(factor_names)
     ncont = len(control_names)
+    assert np.shape(covs)[1] == np.shape(covs)[2] ==nfac+ncont , 'each cov matrix should be of shape (nfac+ncont,nfac+ncont)'
+    assert covs.diagonal(0,1,2).all() > 0, 'variances should be positive numbers'
     out=np.zeros(nobs,nfac+ncont)
     weights_cum = np.cumsum(weights) # 1d array of length len(mixture components)
     u = uniform(0,1,(nobs,1)) 
