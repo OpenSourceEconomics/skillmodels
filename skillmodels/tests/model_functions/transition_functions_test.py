@@ -36,29 +36,33 @@ def test_linear(setup_linear, expected_linear):
 #test for number of linear coefficients
 @pytest.fixture
 def setup_nr_coeffs_linear():
-    
+
     args = {
-        'included_factors': ['f1', 'f2', 'f3'], 
+        'included_factors': ['f1', 'f2', 'f3'],
         'params_type': 'short'
     }
-        
+
     return args
 
 @pytest.fixture
 def expected_nr_coeffs_linear():
+    # here we could either just return 3 or not even use a fixture at all (janosg)
     included_factors = ['f1', 'f2', 'f3']
     expected_result = len(included_factors)
     return expected_result
 
 def test_nr_coeffs_linear(setup_nr_coeffs_linear, expected_nr_coeffs_linear):
+    # aaae is to assert that two arrays with floating point imprecisions are
+    # approximately equal. Here we can just use assert ... == ...
+    # this might be the case in more places, please check (janosg)
     aaae(tf.nr_coeffs_linear(**setup_nr_coeffs_linear), expected_nr_coeffs_linear)
 
 #test for coefficient names linear
 @pytest.fixture
 def setup_coeffs_names_linear():
-   
+
     args = {
-        'included_factors': ['f1', 'f2', 'f3'], 
+        'included_factors': ['f1', 'f2', 'f3'],
         'params_type': 'short',
         'factor': 'f1',
         'stage': 3
@@ -67,19 +71,22 @@ def setup_coeffs_names_linear():
 
 def test_coeff_names_linear(setup_coeffs_names_linear):
     expected = ['lincoeff__3__f1__f1', 'lincoeff__3__f1__f2',
-                    'lincoeff__3__f1__f3']  
+                    'lincoeff__3__f1__f3']
     assert tf.coeff_names_linear(**setup_coeffs_names_linear) == expected
 
 # **************************************************************************************
 #test for linear with constant function
 @pytest.fixture
 def setup_linear_with_constant():
+    # here we could probably re-use setup_linear and just change the
+    # vector of coefficients. This could either work by using nested fixtures
+    # or by just modifying the original fixture in the test. (janosg)
     nemf, nind, nsigma, nfac = 2, 10, 7, 3
     sigma_points = np.ones((nemf, nind, nsigma, nfac))
     sigma_points[1] *= 2
     sigma_points[:, :, 0, :] = 3
     sigma_points = sigma_points.reshape(nemf * nind * nsigma, nfac)
-    
+
     args = {
         'sigma_points': sigma_points,
         'coeffs': np.array([0.5, 1.0, 1.5, 0.5]),
@@ -89,61 +96,66 @@ def setup_linear_with_constant():
 
 @pytest.fixture
 def expected_linear_with_constant():
+    # here we could also re-use the fixture from the linear case and just
+    # add the intercept. see previous comment (janosg)
     nemf, nind, nsigma = 2, 10, 7
     coeffs = [0.5, 1.0, 1.5, 0.5]
     expected_result = np.ones((nemf, nind, nsigma))*3
     expected_result[1, :, :] *= 2
     expected_result[:, :, 0] = 9
     expected_result = expected_result.flatten()
-    
+
     return coeffs[-1] + expected_result
 
 def test_linear_with_constant(setup_linear_with_constant, expected_linear_with_constant):
     aaae(tf.linear_with_constant(**setup_linear_with_constant), expected_linear_with_constant)
 
+# we also need tests for number of coefficients and coefficient names (janosg)
 # **************************************************************************************
 #tests ar1
-    
+
 #test for ar1 transition equation function
 @pytest.fixture
 def setup_ar1_transition_equation():
+    # we can abstract from the nemf, nind, nsigma here and just fix a
+    # value for nemf * nind * nsigma. This holds for all tests of ar1 (janosg)
     nemf, nind, nsigma, nfac = 2, 10, 7, 3
 
     args = {
-            
+
         'sigma_points': np.ones((nemf * nind * nsigma, nfac)),
         'coeffs': np.array([3]),
         'included_positions': [1]
-        
+
     }
-    
+
     return args
 
 @pytest.fixture
 def expected_ar1_transition_equation():
     nemf, nind, nsigma = 2, 10, 7
     expected_result = np.ones(nemf * nind * nsigma) * 3
-        
+
     return expected_result
 
 def test_ar1_transition_equation(setup_ar1_transition_equation,
                                  expected_ar1_transition_equation):
-        aaae(tf.ar1(**setup_ar1_transition_equation), 
+        aaae(tf.ar1(**setup_ar1_transition_equation),
                                  expected_ar1_transition_equation)
 
 #test for ar1 coeff names function
 @pytest.fixture
 def setup_ar1_coeff_names():
-    
+
     args = {
-            
+
         'included_factors': ['f2'],
         'params_type': 'short',
         'factor': 'f2',
         'stage': 3
-        
+
     }
-    
+
     return args
 
 @pytest.fixture
@@ -152,11 +164,13 @@ def expected_ar1_coeff_names():
     return expected_result
 
 def test_ar1_coeff_names(setup_ar1_coeff_names, expected_ar1_coeff_names):
+        # the assert_equal should be replaced with assert ... == ...
+        # this was only needed for nose.
         assert_equal(tf.coeff_names_ar1(**setup_ar1_coeff_names),
                      expected_ar1_coeff_names)
-        
+
 # **************************************************************************************
-#tests LogCes  
+#tests LogCes
 
 #test LogCes function
 @pytest.fixture
@@ -176,37 +190,41 @@ def setup_log_ces():
 def expected_log_ces():
     nsigma = 5
     expected_result = np.ones(nsigma) * 7.244628323025
-    return expected_result        
+    return expected_result
 
 def test_log_ces(setup_log_ces, expected_log_ces):
-        aaae(tf.log_ces(**setup_log_ces), expected_log_ces) 
-        
+        aaae(tf.log_ces(**setup_log_ces), expected_log_ces)
+
 #test for logces number of coeffs short
 @pytest.fixture
 def setup_log_ces_nr_coeffs_short():
-    
+
     args = {
-        'included_factors': ['f1', 'f2'], 
+        'included_factors': ['f1', 'f2'],
         'params_type': 'short'
     }
     return args
 
 def test_log_ces_nr_coeffs_short(setup_log_ces_nr_coeffs_short):
+        # use assert ... == ... (janosg)
         aaae(tf.nr_coeffs_log_ces(**setup_log_ces_nr_coeffs_short), 2)
-        
+
 #test for logces number of coeffs long
+
+# we could use parameterize test in pytest to do avoid code duplication.
+# remind me at the next meeting to explain how! (janosg)
 @pytest.fixture
 def setup_log_ces_nr_coeffs_long():
-    
+
     args = {
-        'included_factors': ['f1', 'f2'], 
+        'included_factors': ['f1', 'f2'],
         'params_type': 'long'
     }
     return args
 
 def test_log_ces_nr_coeffs_long(setup_log_ces_nr_coeffs_long):
         aaae(tf.nr_coeffs_log_ces(**setup_log_ces_nr_coeffs_long), 3)
-        
+
 #test for transform of logces from short to long function **needs revision**
 @pytest.fixture
 def setup_transform_coeffs_log_ces_short_to_long():
@@ -220,7 +238,7 @@ def expected_transform_coeffs_log_ces_short_to_long():
     big_out = np.zeros((2, 3))
     return (big_out)
 
-def test_transform_coeffs_log_ces_short_to_long(setup_transform_coeffs_log_ces_short_to_long, 
+def test_transform_coeffs_log_ces_short_to_long(setup_transform_coeffs_log_ces_short_to_long,
                                                 expected_transform_coeffs_log_ces_short_to_long):
     big_out = np.zeros((2, 3))
     aaae(big_out, expected_transform_coeffs_log_ces_short_to_long)
@@ -233,46 +251,47 @@ def setup_transform_coeffs_log_ces_long_to_short():
     tf.transform_coeffs_log_ces(
             np.array([0.5, 0.5, 3]), ['f1', 'f2'], 'long_to_short', small_out)
 
+
 @pytest.fixture
 def expected_transform_coeffs_log_ces_long_to_short():
     big_out = np.zeros((2, 2))
     return (big_out)
 
-def test_transform_coeffs_log_ces_long_to_short(setup_transform_coeffs_log_ces_long_to_short, 
+def test_transform_coeffs_log_ces_long_to_short(setup_transform_coeffs_log_ces_long_to_short,
                                                 expected_transform_coeffs_log_ces_long_to_short):
     big_out = np.zeros((2, 2))
     aaae(big_out, expected_transform_coeffs_log_ces_long_to_short)
-    
+
 #test bound logces
-def test_bounds_log_ces(): 
+def test_bounds_log_ces():
           expected_lb = [0, None]
           expected_ub = [None, None]
-          
+
           inlcuded_factors = ['f1', 'f2']
           lb, ub = tf.bounds_log_ces(inlcuded_factors)
           assert (list(lb)) == expected_lb
           assert (list(ub)) == expected_ub
-          
+
 #test coeffs names log ces long
 def test_coeff_names_log_ces_short():
     expected = ['gamma__0__f1__f1', 'phi__0__f1__Phi']
     inlcuded_factors = ['f1', 'f2']
     names = tf.coeff_names_log_ces(inlcuded_factors, 'short', 'f1', 0)
-    
+    # why the brackets around names? (janosg)
     assert (names) == expected
-    
+
 #test coeffs names log ces short
 def test_coeff_names_log_ces_long():
     expected = ['gamma__0__f1__f1', 'gamma__0__f1__f2', 'phi__0__f1__Phi']
     inlcuded_factors = ['f1', 'f2']
 
     names = tf.coeff_names_log_ces(inlcuded_factors, 'long', 'f1', 0)
-    
+
     assert (names) == expected
 
 # **************************************************************************************
 #tests for Translog
-    
+
 #test for translog function
 @pytest.fixture
 def setup_translog():
@@ -280,10 +299,10 @@ def setup_translog():
             [[2, 0, 5, 0], [0, 3, 5, 0], [0, 0, 7, 4], [0, 0, 1, 0],
              [1, 1, 10, 1], [0, -3, -100, 0], [-1, -1, -1, -1],
              [1.5, -2, 30, 1.8], [12, -34, 50, 48]])
-    
+
     coeffs = np.array(
             [0.2, 0.1, 0.12, 0.08, 0.05, 0.04, 0.03, 0.06, 0.05, 0.04])
-    
+
     included_positions = [0, 1, 3]
 
     args = {
@@ -303,12 +322,13 @@ def expected_translog():
 
 def test_translog(setup_translog, expected_translog):
     aaae(tf.translog(**setup_translog), expected_translog)
-    
+
 #test for number of coefficients short
 def test_translog_nr_coeffs_short():
         included_factors = ['f1', 'f2', 'f4']
+        # use assert .. == ... (janosg)
         aaae(tf.nr_coeffs_translog(included_factors, 'short'), 10)
-        
+
 #test for translog coefficient names
 def test_coeff_names_translog():
     included_factors = ['f1', 'f2', 'f4']
@@ -324,6 +344,6 @@ def test_coeff_names_translog():
              'translog__1__f2__f4-squared',
              'translog__1__f2__TFP']
     names = tf.coeff_names_translog(included_factors, 'short', 'f2', 1)
-    
+
     assert (names) == expected_names
 # **************************************************************************************
