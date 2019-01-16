@@ -243,45 +243,32 @@ def test_transform_coeffs_log_ces_long_to_short(setup_transform_coeffs_log_ces_l
     big_out = np.zeros((2, 2))
     aaae(big_out, expected_transform_coeffs_log_ces_long_to_short)
     
-#tests stil to be transformed
-class TestLogCes:
-
-    def setup(self):
-        self.nemf = 2
-        self.nind = 10
-        self.nfac = 2
-        self.nsigma = 5
-        self.incl_pos = [0, 1]
-        self.incl_fac = ['f1', 'f2']
-
-        self.coeffs = np.array([0.4, 0.6, 2])
-        self.sp = np.zeros((self.nemf, self.nind, self.nsigma, self.nfac))
-        self.sp[:] = np.array([[3, 7.5]] * self.nsigma)
-        self.sp = self.sp.reshape(
-            self.nemf * self.nind * self.nsigma, self.nfac)
-
+#test bound logces
+def test_bounds_log_ces(): 
+          expected_lb = [0, None]
+          expected_ub = [None, None]
+          
+          inlcuded_factors = ['f1', 'f2']
+          lb, ub = tf.bounds_log_ces(inlcuded_factors)
+          assert (list(lb)) == expected_lb
+          assert (list(ub)) == expected_ub
+          
+#test coeffs names log ces long
+def test_coeff_names_log_ces_short():
+    expected = ['gamma__0__f1__f1', 'phi__0__f1__Phi']
+    inlcuded_factors = ['f1', 'f2']
+    names = tf.coeff_names_log_ces(inlcuded_factors, 'short', 'f1', 0)
     
-    def test_bounds_log_ces(self):
-        expected_lb = [0, None]
-        expected_ub = [None, None]
+    assert (names) == expected
+    
+#test coeffs names log ces short
+def test_coeff_names_log_ces_long():
+    expected = ['gamma__0__f1__f1', 'gamma__0__f1__f2', 'phi__0__f1__Phi']
+    inlcuded_factors = ['f1', 'f2']
 
-        lb, ub = tf.bounds_log_ces(self.incl_fac)
-        assert_equal(list(lb), expected_lb)
-        assert_equal(list(ub), expected_ub)
-
-    def test_coeff_names_log_ces_short(self):
-        expected = ['gamma__0__f1__f1', 'phi__0__f1__Phi']
-
-        names = tf.coeff_names_log_ces(self.incl_fac, 'short', 'f1', 0)
-        assert_equal(names, expected)
-
-    def test_coeff_names_log_ces_long(self):
-        expected = ['gamma__0__f1__f1', 'gamma__0__f1__f2', 'phi__0__f1__Phi']
-
-        names = tf.coeff_names_log_ces(self.incl_fac, 'long', 'f1', 0)
-        assert_equal(names, expected)
-  
-
+    names = tf.coeff_names_log_ces(inlcuded_factors, 'long', 'f1', 0)
+    
+    assert (names) == expected
 
 # **************************************************************************************
 
