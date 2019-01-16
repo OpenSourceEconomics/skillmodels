@@ -4,7 +4,7 @@ import numpy as np
 from numpy.testing import assert_array_almost_equal as aaae
 import pytest
 
-#test of linear version function
+#test for linear version function
 @pytest.fixture
 def setup_linear():
     nemf, nind, nsigma, nfac = 2, 10, 7, 3
@@ -71,7 +71,7 @@ def test_coeff_names_linear(setup_coeffs_names_linear):
     assert tf.coeff_names_linear(**setup_coeffs_names_linear) == expected
 
 # **************************************************************************************
-#test of linear with constant function
+#test for linear with constant function
 @pytest.fixture
 def setup_linear_with_constant():
     nemf, nind, nsigma, nfac = 2, 10, 7, 3
@@ -271,41 +271,48 @@ def test_coeff_names_log_ces_long():
     assert (names) == expected
 
 # **************************************************************************************
-
-class TestTranslog:
-    def setup(self):
-        self.nemf = 1
-        self.nind = 10
-        self.nfac = 4
-        self.nsigma = 9
-        self.incl_pos = [0, 1, 3]
-        self.incl_fac = ['f1', 'f2', 'f4']
-
-        self.coeffs = np.array(
-            [0.2, 0.1, 0.12, 0.08, 0.05, 0.04, 0.03, 0.06, 0.05, 0.04])
-        input_values = np.array(
+#tests for Translog
+    
+#test for translog function
+@pytest.fixture
+def setup_translog():
+    sigma_points = np.array(
             [[2, 0, 5, 0], [0, 3, 5, 0], [0, 0, 7, 4], [0, 0, 1, 0],
              [1, 1, 10, 1], [0, -3, -100, 0], [-1, -1, -1, -1],
              [1.5, -2, 30, 1.8], [12, -34, 50, 48]])
-        self.sp = np.zeros((self.nemf, self.nind, self.nsigma, self.nfac))
-        self.sp[:] = input_values
-        self.sp = self.sp.reshape(
-            self.nemf * self.nind * self.nsigma, self.nfac)
+    
+    coeffs = np.array(
+            [0.2, 0.1, 0.12, 0.08, 0.05, 0.04, 0.03, 0.06, 0.05, 0.04])
+    
+    included_positions = [0, 1, 3]
 
-    def test_translog(self):
-        expected_result = np.zeros((self.nemf, self.nind, self.nsigma))
-        expected_result[:] = np.array(
+    args = {
+        'sigma_points': sigma_points,
+        'coeffs': coeffs,
+        'included_positions': included_positions
+    }
+    return args
+
+
+@pytest.fixture
+def expected_translog():
+    expected_result = np.array(
             [0.76, 0.61, 1.32, 0.04, 0.77, 0.01, -0.07, 0.56, 70.92])
-        expected_result = expected_result.reshape(
-            self.nemf * self.nind * self.nsigma)
-        calculated_result = tf.translog(self.sp, self.coeffs, self.incl_pos)
-        aaae(calculated_result, expected_result)
 
-    def test_translog_nr_coeffs_short(self):
-        assert_equal(tf.nr_coeffs_translog(self.incl_fac, 'short'), 10)
+    return expected_result
 
-    def test_coeff_names_translog(self):
-        expected_names = \
+def test_translog(setup_translog, expected_translog):
+    aaae(tf.translog(**setup_translog), expected_translog)
+    
+#test for number of coefficients short
+def test_translog_nr_coeffs_short():
+        included_factors = ['f1', 'f2', 'f4']
+        aaae(tf.nr_coeffs_translog(included_factors, 'short'), 10)
+        
+#test for translog coefficient names
+def test_coeff_names_translog():
+    included_factors = ['f1', 'f2', 'f4']
+    expected_names = \
             ['translog__1__f2__f1',
              'translog__1__f2__f2',
              'translog__1__f2__f4',
@@ -316,5 +323,7 @@ class TestTranslog:
              'translog__1__f2__f2-f4',
              'translog__1__f2__f4-squared',
              'translog__1__f2__TFP']
-        names = tf.coeff_names_translog(self.incl_fac, 'short', 'f2', 1)
-        assert_equal(names, expected_names)
+    names = tf.coeff_names_translog(included_factors, 'short', 'f2', 1)
+    
+    assert (names) == expected_names
+# **************************************************************************************
