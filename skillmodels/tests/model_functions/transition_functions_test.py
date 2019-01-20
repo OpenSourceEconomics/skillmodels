@@ -3,6 +3,7 @@ import numpy as np
 from numpy.testing import assert_array_almost_equal as aaae
 import pytest
 
+
 # test for linear version function
 @pytest.fixture
 def setup_linear():
@@ -170,53 +171,31 @@ def test_log_ces_nr_coeffs_long_short(included_factors, params_type, result):
 
 
 # test for transform of logces from short to long function
+def test_transform_coeffs_log_ces_short_to_long():
+    full_out = np.zeros((2, 3))
+    small_out = full_out[0, :]
 
+    coeffs = np.array([1, 3])
 
-@pytest.fixture
-def setup_transform_coeffs_log_ces_short_to_long():
-    big_out = np.zeros((2, 3))
-    small_out = big_out[0, :]
     tf.transform_coeffs_log_ces(
-        np.array([2, 3]), ["f1", "f2"], "short_to_long", small_out
-    )
+        coeffs, ['f1', 'f2'], 'short_to_long', small_out)
+
+    expected = np.zeros((2, 3))
+    expected[0, :] = np.array([0.5, 0.5, 3])
+    aaae(full_out, expected)
 
 
-@pytest.fixture
-def expected_transform_coeffs_log_ces_short_to_long():
-    big_out = np.zeros((2, 3))
-    return big_out
+def test_transform_coeffs_log_ces_long_to_short():
+    full_out = np.zeros((2, 2))
+    small_out = full_out[0, :]
+    coeffs = np.array([0.5, 0.5, 3])
 
-
-def test_transform_coeffs_log_ces_short_to_long(
-    setup_transform_coeffs_log_ces_short_to_long,
-    expected_transform_coeffs_log_ces_short_to_long,
-):
-    big_out = np.zeros((2, 3))
-    aaae(big_out, expected_transform_coeffs_log_ces_short_to_long)
-
-
-# test for transform of logces from short to long function
-@pytest.fixture
-def setup_transform_coeffs_log_ces_long_to_short():
-    big_out = np.zeros((2, 2))
-    small_out = big_out[0, :]
     tf.transform_coeffs_log_ces(
-        np.array([0.5, 0.5, 3]), ["f1", "f2"], "long_to_short", small_out
-    )
+        coeffs, ['f1', 'f2'], 'long_to_short', small_out)
 
-
-@pytest.fixture
-def expected_transform_coeffs_log_ces_long_to_short():
-    big_out = np.zeros((2, 2))
-    return big_out
-
-
-def test_transform_coeffs_log_ces_long_to_short(
-    setup_transform_coeffs_log_ces_long_to_short,
-    expected_transform_coeffs_log_ces_long_to_short,
-):
-    big_out = np.zeros((2, 2))
-    aaae(big_out, expected_transform_coeffs_log_ces_long_to_short)
+    expected = np.zeros((2, 2))
+    expected[0, :] = np.array([1, 3])
+    aaae(full_out, expected)
 
 
 # test bound logces
