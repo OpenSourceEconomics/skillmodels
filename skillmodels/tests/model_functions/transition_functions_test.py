@@ -35,28 +35,32 @@ def test_linear(setup_linear, expected_linear):
     aaae(tf.linear(**setup_linear), expected_linear)
 
 
-# test for number of linear coefficients
-def test_nr_coeffs_linear():
-    included_factors = ["f1", "f2", "f3"]
-    assert (tf.nr_coeffs_linear(included_factors, "short")) == 3
+# test for number of linear coefficients short & long
+parameters = [(["f1", "f2", "f3"], "short", 3), (["f1", "f2", "f3"], "long", 3)]
+
+
+@pytest.mark.parametrize("included_factors, params_type, result", parameters)
+def test_nr_coeffs_linear(included_factors, params_type, result):
+    assert tf.nr_coeffs_linear(included_factors, params_type) == result
 
 
 # test for coefficient names linear
-@pytest.fixture
-def setup_coeffs_names_linear():
+parameters = [
+    (
+        ["f1", "f2", "f3"],
+        "short",
+        "f1",
+        3,
+        ["lincoeff__3__f1__f1", "lincoeff__3__f1__f2", "lincoeff__3__f1__f3"],
+    )
+]
 
-    args = {
-        "included_factors": ["f1", "f2", "f3"],
-        "params_type": "short",
-        "factor": "f1",
-        "stage": 3,
-    }
-    return args
 
-
-def test_coeff_names_linear(setup_coeffs_names_linear):
-    expected = ["lincoeff__3__f1__f1", "lincoeff__3__f1__f2", "lincoeff__3__f1__f3"]
-    assert tf.coeff_names_linear(**setup_coeffs_names_linear) == expected
+@pytest.mark.parametrize(
+    "included_factors, params_type, factor, stage, result", parameters
+)
+def test_coeff_names_linear(included_factors, params_type, factor, stage, result):
+    assert tf.coeff_names_linear(included_factors, params_type, factor, stage) == result
 
 
 # **************************************************************************************
@@ -79,21 +83,44 @@ def test_linear_with_constant(setup_linear, expected_linear):
     aaae(tf.linear_with_constant(**setup_linear), expected_linear_with_constant)
 
 
-# test for number of linear coefficients
-def test_nr_coeffs_linear_constant():
-    included_factors = ["f1", "f2", "f3"]
-    assert (tf.nr_coeffs_linear_with_constant(included_factors, "short")) == 4
+# test for number of linear coefficients short and long
+parameters = [(["f1", "f2", "f3"], "short", 4), (["f1", "f2", "f3"], "long", 4)]
+
+
+@pytest.mark.parametrize("included_factors, params_type, result", parameters)
+def test_nr_coeffs_linear_constant(included_factors, params_type, result):
+    assert tf.nr_coeffs_linear_with_constant(included_factors, params_type) == result
 
 
 # test names of coefficients in linear with constant
-def test_coeff_names_linear_constant(setup_coeffs_names_linear):
-    expected = [
-        "lincoeff__3__f1__f1",
-        "lincoeff__3__f1__f2",
-        "lincoeff__3__f1__f3",
-        "lincoeff__3__f1__constant",
-    ]
-    assert tf.coeff_names_linear_with_constant(**setup_coeffs_names_linear) == expected
+parameters = [
+    (
+        ["f1", "f2", "f3"],
+        "short",
+        "f1",
+        3,
+        [
+            "lincoeff__3__f1__f1",
+            "lincoeff__3__f1__f2",
+            "lincoeff__3__f1__f3",
+            "lincoeff__3__f1__constant",
+        ],
+    )
+]
+
+
+@pytest.mark.parametrize(
+    "included_factors, params_type, factor, stage, result", parameters
+)
+def test_coeff_names_linear_constant(
+    included_factors, params_type, factor, stage, result
+):
+    assert (
+        tf.coeff_names_linear_with_constant(
+            included_factors, params_type, factor, stage
+        )
+        == result
+    )
 
 
 # **************************************************************************************
@@ -128,14 +155,19 @@ def test_ar1_transition_equation(
 
 
 # test for ar1 coeff names function
-def test_ar1_coeff_names():
-    included_factors = ["f2"]
-    expected_result = ["ar1_coeff__3__f2__f2"]
-    assert (tf.coeff_names_ar1(included_factors, "short", "f2", 3)) == expected_result
+parameters = [(["f2"], "short", "f2", 3, ["ar1_coeff__3__f2__f2"])]
+
+
+@pytest.mark.parametrize(
+    "included_factors, params_type, factor, stage, result", parameters
+)
+def test_ar1_coeff_names(included_factors, params_type, factor, stage, result):
+    assert tf.coeff_names_ar1(included_factors, params_type, factor, stage) == result
 
 
 # **************************************************************************************
 # tests LogCes
+
 # test LogCes function
 @pytest.fixture
 def setup_log_ces():
@@ -161,7 +193,7 @@ def test_log_ces(setup_log_ces, expected_log_ces):
     aaae(tf.log_ces(**setup_log_ces), expected_log_ces)
 
 
-# test for logces number of coeffs short& long
+# test for logces number of coeffs short & long
 parameters = [(["f1", "f2"], "short", 2), (["f1", "f2"], "long", 3)]
 
 
@@ -177,8 +209,7 @@ def test_transform_coeffs_log_ces_short_to_long():
 
     coeffs = np.array([1, 3])
 
-    tf.transform_coeffs_log_ces(
-        coeffs, ['f1', 'f2'], 'short_to_long', small_out)
+    tf.transform_coeffs_log_ces(coeffs, ["f1", "f2"], "short_to_long", small_out)
 
     expected = np.zeros((2, 3))
     expected[0, :] = np.array([0.5, 0.5, 3])
@@ -190,8 +221,7 @@ def test_transform_coeffs_log_ces_long_to_short():
     small_out = full_out[0, :]
     coeffs = np.array([0.5, 0.5, 3])
 
-    tf.transform_coeffs_log_ces(
-        coeffs, ['f1', 'f2'], 'long_to_short', small_out)
+    tf.transform_coeffs_log_ces(coeffs, ["f1", "f2"], "long_to_short", small_out)
 
     expected = np.zeros((2, 2))
     expected[0, :] = np.array([1, 3])
@@ -210,21 +240,27 @@ def test_bounds_log_ces():
 
 
 # test coeffs names log ces long
-# use parametrize (janosg)
-def test_coeff_names_log_ces_short():
-    expected = ["gamma__0__f1__f1", "phi__0__f1__Phi"]
-    inlcuded_factors = ["f1", "f2"]
-    names = tf.coeff_names_log_ces(inlcuded_factors, "short", "f1", 0)
-    assert names == expected
+parameters = [
+    (["f1", "f2"], "short", "f1", 0, ["gamma__0__f1__f1", "phi__0__f1__Phi"]),
+    (
+        ["f1", "f2"],
+        "long",
+        "f1",
+        0,
+        ["gamma__0__f1__f1", "gamma__0__f1__f2", "phi__0__f1__Phi"],
+    ),
+]
 
 
-# test coeffs names log ces short
-# use parametrize (janosg)
-def test_coeff_names_log_ces_long():
-    expected = ["gamma__0__f1__f1", "gamma__0__f1__f2", "phi__0__f1__Phi"]
-    inlcuded_factors = ["f1", "f2"]
-    names = tf.coeff_names_log_ces(inlcuded_factors, "long", "f1", 0)
-    assert names == expected
+@pytest.mark.parametrize(
+    "included_factors, params_type, factor, stage, result", parameters
+)
+def test_log_ces_nr_coeffs_names_long_short(
+    included_factors, params_type, factor, stage, result
+):
+    assert (
+        tf.coeff_names_log_ces(included_factors, params_type, factor, stage) == result
+    )
 
 
 # **************************************************************************************
@@ -270,30 +306,45 @@ def test_translog(setup_translog, expected_translog):
     aaae(tf.translog(**setup_translog), expected_translog)
 
 
-# test for number of coefficients short
-def test_translog_nr_coeffs_short():
-    included_factors = ["f1", "f2", "f4"]
-    assert (tf.nr_coeffs_translog(included_factors, "short")) == 10
+# test for number of coefficients short & long
+parameters = [(["f1", "f2", "f4"], "short", 10), (["f1", "f2", "f4"], "short", 10)]
+
+
+@pytest.mark.parametrize("included_factors, params_type, result", parameters)
+def test_translog_nr_coeffs_short(included_factors, params_type, result):
+    assert tf.nr_coeffs_translog(included_factors, params_type) == result
 
 
 # test for translog coefficient names
-def test_coeff_names_translog():
-    included_factors = ["f1", "f2", "f4"]
-    expected_names = [
-        "translog__1__f2__f1",
-        "translog__1__f2__f2",
-        "translog__1__f2__f4",
-        "translog__1__f2__f1-squared",
-        "translog__1__f2__f1-f2",
-        "translog__1__f2__f1-f4",
-        "translog__1__f2__f2-squared",
-        "translog__1__f2__f2-f4",
-        "translog__1__f2__f4-squared",
-        "translog__1__f2__TFP",
-    ]
-    names = tf.coeff_names_translog(included_factors, "short", "f2", 1)
+parameters = [
+    (
+        ["f1", "f2", "f4"],
+        "short",
+        "f2",
+        1,
+        [
+            "translog__1__f2__f1",
+            "translog__1__f2__f2",
+            "translog__1__f2__f4",
+            "translog__1__f2__f1-squared",
+            "translog__1__f2__f1-f2",
+            "translog__1__f2__f1-f4",
+            "translog__1__f2__f2-squared",
+            "translog__1__f2__f2-f4",
+            "translog__1__f2__f4-squared",
+            "translog__1__f2__TFP",
+        ],
+    )
+]
 
-    assert names == expected_names
+
+@pytest.mark.parametrize(
+    "included_factors, params_type, factor, stage, result", parameters
+)
+def test_coeff_names_translog(included_factors, params_type, factor, stage, result):
+    assert (
+        tf.coeff_names_translog(included_factors, params_type, factor, stage) == result
+    )
 
 
 # **************************************************************************************
