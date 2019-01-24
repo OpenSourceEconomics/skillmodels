@@ -17,7 +17,7 @@ def make_unique(qr_result_arr):
 
 #test linear update with nans
 @pytest.fixture
-def setup_sqrt_state_with_nans():
+def setup_linear_update():
     out = {}
             
     nemf, nind, nfac = 2, 6, 3
@@ -32,7 +32,10 @@ def setup_sqrt_state_with_nans():
                                                 axes=(0, 1, 3, 2))
     out['mcovs'] = mcovs
     
-       
+    #cholcovs = mcovs[:, :, 1:, 1:]
+    #make_unique(cholcovs.reshape(12, 3, 3))
+    #out['cholcovs'] = cholcovs
+    
     out['like_vector'] = np.ones(nind)        
     
     out['y'] = np.array([3.5, 2.3, np.nan, 3.1, 4, np.nan])
@@ -47,6 +50,10 @@ def setup_sqrt_state_with_nans():
     
     out['positions'] = np.array([0, 1, 2])
     
+    out['r'] = np.array([0.3])
+    
+    out['kf'] = np.zeros((nind, nfac))
+    
     weights = np.ones((nind, nemf))
     weights[:, 0] *= 0.4
     weights[:, 1] *= 0.6
@@ -55,8 +62,11 @@ def setup_sqrt_state_with_nans():
     return out
 
 @pytest.fixture
-def expected_sqrt_state_with_nans():
-    return np.array(
+def expected_linear_update():
+    
+    out = {}
+    
+    out['expected_states'] = np.array(
             [[[1.00000000, 1.00000000, 1.00000000],
               [0.81318681, 0.81318681, 1.87912088]],
              [[0.55164835, 0.55164835, 0.70989011],
@@ -69,76 +79,19 @@ def expected_sqrt_state_with_nans():
               [1.00000000, 1.00000000, 2.00000000]],
              [[1.00000000, 1.00000000, 1.00000000],
               [1.00000000, 1.00000000, 2.00000000]]])
-
     
-def test_sqrt_state_update_with_nans(setup_sqrt_state_with_nans,
-                                     expected_sqrt_state_with_nans):
-    kf.sqrt_linear_update(**setup_sqrt_state_with_nans)
-    modified_states = setup_sqrt_state_with_nans['state']
-    aaae(modified_states, expected_sqrt_state_with_nans)
-    
-class TestLinearUpdate:
-    def setup(self):
-        nemf = 2
-        nind = 6
-        nfac = 3
-
-        self.states = np.ones((nind, nemf, nfac))
-        self.states[:, 1, 2] *= 2
-
-        self.covs = np.zeros((nind, nemf, nfac, nfac))
-        self.covs[:] = np.ones((nfac, nfac)) * 0.1 + np.eye(nfac) * .6
-
-        self.mcovs = np.zeros((nind, nemf, nfac + 1, nfac + 1))
-
-        self.mcovs[:, :, 1:, 1:] = np.transpose(np.linalg.cholesky(self.covs),
-                                                axes=(0, 1, 3, 2))
-
-        self.weights = np.ones((nind, nemf))
-        self.weights[:, 0] *= 0.4
-        self.weights[:, 1] *= 0.6
-
-        self.like_vec = np.ones(nind)
-        self.y = np.array([3.5, 2.3, np.nan, 3.1, 4, np.nan])
-
-        self.c = np.ones((nind, 2))
-
-        self.delta = np.ones(2) / 2
-
-        self.h = np.array([1, 1, 0.5])
-        self.positions = np.array([0, 1, 2])
-
-        self.sqrt_r = np.sqrt(np.array([0.3]))
-        self.r = np.array([0.3])
-
-        self.kf = np.zeros((nind, nfac))
-
-        self.exp_states = np.array(
-            [[[1.00000000, 1.00000000, 1.00000000],
-              [0.81318681, 0.81318681, 1.87912088]],
-             [[0.55164835, 0.55164835, 0.70989011],
-              [0.36483516, 0.36483516, 1.58901099]],
-             [[1.00000000, 1.00000000, 1.00000000],
-              [1.00000000, 1.00000000, 2.00000000]],
-             [[0.85054945, 0.85054945, 0.90329670],
-              [0.66373626, 0.66373626, 1.78241758]],
-             [[1.18681319, 1.18681319, 1.12087912],
-              [1.00000000, 1.00000000, 2.00000000]],
-             [[1.00000000, 1.00000000, 1.00000000],
-              [1.00000000, 1.00000000, 2.00000000]]])
-
-        self.exp_weights = np.array(
+    out['exp_weights'] = np.array(
             [[0.41325632, 0.58674368],
              [0.47831766, 0.52168234],
              [0.40000000, 0.60000000],
              [0.43472272, 0.56527728],
              [0.38688853, 0.61311147],
              [0.40000000, 0.60000000]])
-
-        self.expected_like_vec = np.array(
+    
+    out['expected_like_vec'] = np.array(
             [0.25601173, 0.16118176, 1., 0.23496064, 0.25883987, 1.])
-
-        self.exp_covs = np.array(
+    
+    exp_covs = np.array(
             [[[[0.38241758, -0.21758242, -0.10549451],
                [-0.21758242, 0.38241758, -0.10549451],
                [-0.10549451, -0.10549451, 0.56703297]],
@@ -175,62 +128,32 @@ class TestLinearUpdate:
               [[0.7, 0.1, 0.1],
                [0.1, 0.7, 0.1],
                [0.1, 0.1, 0.7]]]])
-
-        self.exp_cholcovs = np.transpose(np.linalg.cholesky(self.exp_covs),
+    out['exp_covs'] = exp_covs
+    
+    out['exp_cholcovs'] = np.transpose(np.linalg.cholesky(exp_covs),
                                          axes=(0, 1, 3, 2))
+  
+    
+    return out
 
-    def test_sqrt_state_update_with_nans(self):
-        kf.sqrt_linear_update(
-            self.states, self.mcovs, self.like_vec, self.y, self.c,
-            self.delta, self.h, self.sqrt_r, self.positions, self.weights)
-
-        aaae(self.states, self.exp_states)
-
-    def test_sqrt_cov_update_with_nans(self):
-        kf.sqrt_linear_update(
-            self.states, self.mcovs, self.like_vec, self.y, self.c,
-            self.delta, self.h, self.sqrt_r, self.positions, self.weights)
-        cholcovs = self.mcovs[:, :, 1:, 1:]
-        make_unique(cholcovs.reshape(12, 3, 3))
-        aaae(cholcovs, self.exp_cholcovs)
-
-    def test_sqrt_like_vec_update_with_nans(self):
-        kf.sqrt_linear_update(
-            self.states, self.mcovs, self.like_vec, self.y, self.c,
-            self.delta, self.h, self.sqrt_r, self.positions, self.weights)
-        aaae(self.like_vec, self.expected_like_vec)
-
-    def test_sqrt_weight_update_with_nans(self):
-        kf.sqrt_linear_update(
-            self.states, self.mcovs, self.like_vec, self.y, self.c,
-            self.delta, self.h, self.sqrt_r, self.positions, self.weights)
-        aaae(self.weights, self.exp_weights)
-
-    def test_normal_state_update_with_nans(self):
-        kf.normal_linear_update(
-            self.states, self.covs, self.like_vec, self.y, self.c,
-            self.delta, self.h, self.r, self.positions, self.weights, self.kf)
-
-        aaae(self.states, self.exp_states)
-
-    def test_normal_cov_update_with_nans(self):
-        kf.normal_linear_update(
-            self.states, self.covs, self.like_vec, self.y, self.c,
-            self.delta, self.h, self.r, self.positions, self.weights, self.kf)
-        aaae(self.covs, self.exp_covs)
-
-    def test_normal_like_vec_update_with_nans(self):
-        kf.normal_linear_update(
-            self.states, self.covs, self.like_vec, self.y, self.c,
-            self.delta, self.h, self.r, self.positions, self.weights, self.kf)
-        aaae(self.like_vec, self.expected_like_vec)
-
-    def test_normal_weight_update_with_nans(self):
-        kf.normal_linear_update(
-            self.states, self.covs, self.like_vec, self.y, self.c,
-            self.delta, self.h, self.r, self.positions, self.weights, self.kf)
-        aaae(self.weights, self.exp_weights)
-
+    
+def test_sqrt_state_update_with_nans(setup_linear_update, expected_linear_update):
+    d = setup_linear_update
+    kf.sqrt_linear_update(d['state'], d['mcovs'], d['like_vector'], d['y'], d['c'], d['delta'],
+                          d['h'], d['sqrt_r'], d['positions'], d['weights'])
+    modified_states = setup_linear_update['state']
+    aaae(modified_states, expected_linear_update['expected_states'])
+    
+def test_sqrt_cov_update_with_nans(setup_linear_update, expected_linear_update):
+    d = setup_linear_update
+    kf.sqrt_linear_update(
+            d['state'], d['mcovs'], d['like_vector'], d['y'], d['c'],
+            ['delta'], ['h'], d['sqrt_r'], d['positions'], d['weights'])
+    cholcovs = d.mcovs[:, :, 1:, 1:]
+    make_unique(cholcovs.reshape(12, 3, 3))
+    #cholcovs = d['cholcovs']
+    aaae(cholcovs, d['exp_cholcovs'])
+    
 
 class TestUnscentedPredict:
     def setup(self):
