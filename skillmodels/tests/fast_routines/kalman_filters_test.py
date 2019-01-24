@@ -2,6 +2,8 @@ import skillmodels.fast_routines.kalman_filters as kf
 from numpy.testing import assert_array_almost_equal as aaae
 import numpy as np
 from unittest.mock import patch
+import pytest
+
 
 
 def make_unique(qr_result_arr):
@@ -13,6 +15,68 @@ def make_unique(qr_result_arr):
                     qr_result_arr[u, j, k] *= -1
 
 
+#test linear update with nans
+@pytest.fixture
+def setup_sqrt_state_with_nans():
+    out = {}
+            
+    nemf, nind, nfac = 2, 6, 3
+    states = np.ones((nind, nemf, nfac))
+    states[:, 1, 2] *= 2
+    out['state'] = states
+    
+    covs = np.zeros((nind, nemf, nfac, nfac))
+    covs[:] = np.ones((nfac, nfac)) * 0.1 + np.eye(nfac) * .6
+    mcovs = np.zeros((nind, nemf, nfac + 1, nfac + 1))
+    mcovs[:, :, 1:, 1:] = np.transpose(np.linalg.cholesky(covs),
+                                                axes=(0, 1, 3, 2))
+    out['mcovs'] = mcovs
+    
+       
+    out['like_vector'] = np.ones(nind)        
+    
+    out['y'] = np.array([3.5, 2.3, np.nan, 3.1, 4, np.nan])
+    
+    out['c'] = np.ones((nind, 2))
+    
+    out['delta'] = np.ones(2) / 2
+    
+    out['h'] = np.array([1, 1, 0.5])
+    
+    out['sqrt_r'] = np.sqrt(np.array([0.3]))
+    
+    out['positions'] = np.array([0, 1, 2])
+    
+    weights = np.ones((nind, nemf))
+    weights[:, 0] *= 0.4
+    weights[:, 1] *= 0.6
+    out['weights'] = weights
+    
+    return out
+
+@pytest.fixture
+def expected_sqrt_state_with_nans():
+    return np.array(
+            [[[1.00000000, 1.00000000, 1.00000000],
+              [0.81318681, 0.81318681, 1.87912088]],
+             [[0.55164835, 0.55164835, 0.70989011],
+              [0.36483516, 0.36483516, 1.58901099]],
+             [[1.00000000, 1.00000000, 1.00000000],
+              [1.00000000, 1.00000000, 2.00000000]],
+             [[0.85054945, 0.85054945, 0.90329670],
+              [0.66373626, 0.66373626, 1.78241758]],
+             [[1.18681319, 1.18681319, 1.12087912],
+              [1.00000000, 1.00000000, 2.00000000]],
+             [[1.00000000, 1.00000000, 1.00000000],
+              [1.00000000, 1.00000000, 2.00000000]]])
+
+    
+def test_sqrt_state_update_with_nans(setup_sqrt_state_with_nans,
+                                     expected_sqrt_state_with_nans):
+    kf.sqrt_linear_update(**setup_sqrt_state_with_nans)
+    modified_states = setup_sqrt_state_with_nans['state']
+    aaae(modified_states, expected_sqrt_state_with_nans)
+    
 class TestLinearUpdate:
     def setup(self):
         nemf = 2

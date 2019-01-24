@@ -124,6 +124,8 @@ def sqrt_linear_update(state, cov, like_vec, y, c, delta, h, sqrt_r,
              ('(nemf, nfac), (nemf, nfac, nfac), (), (), (ncon), '
               '(ncon), (nfac), (), (ninc), (nemf), (nfac)'),
              target='cpu', nopython=True)
+
+             
 def normal_linear_update(state, cov, like_vec, y, c, delta, h, r, positions,
                          weights, kf):
     """Make a linear Kalman update and evaluate likelihood.
