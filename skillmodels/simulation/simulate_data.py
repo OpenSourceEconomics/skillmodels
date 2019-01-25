@@ -30,7 +30,7 @@ import sys
 sys.path.append('../model_functions/')
 import transition_functions as tf
 #import skillmodels.model_functions.transition_functions as tf
-from numpy.random import multivariate_normal, uniform
+from numpy.random import multivariate_normal, uniform, multinomial
 import numpy as np
 import pandas as pd
 
@@ -76,25 +76,65 @@ def generate_start_factors_and_control_variables(
         for this general case.
 
     """
-    assert np.sum(weights)==1 and  all(i >= 0 for i in weights), 'weights should be non-negative numbers summing up to one' 
+    assert np.sum(weights) == 1 and all(i >= 0 for i in weights)
     nfac = len(factor_names)
     ncont = len(control_names)
-    assert np.shape(covs)[1] == np.shape(covs)[2] ==nfac+ncont , 'each cov matrix should be of shape (nfac+ncont,nfac+ncont)'
-    assert covs.diagonal(0,1,2).all() > 0, 'variances should be positive numbers'
-    out=np.zeros((nobs,nfac+ncont))
+    assert np.shape(covs)[1] == np.shape(covs)[2] == nfac+ncont, 'each cov matrix should be of shape (nfac+ncont,nfac+ncont)'
+    out = np.zeros((nobs,nfac+ncont))
     weights_cum = np.cumsum(weights) # 1d array of length len(mixture components)
     u = uniform(0,1,(nobs,1)) 
     for i in range(nobs):
-        """ Draw vector of [states,controls] from distr j if cum_weights[j-1]<u[i]<=cum_weights[j]:
-            Pr(cum_weights[j-1]<u[i]<=cum_weights[j])=cum_weights[j]-cum_weights[j-1]
-            =weight[j]=Pr(the draw is from subpopulation j)
-        
-        """
-        out[i] = multivariate_normal(means[np.argmax(weights_cum>=u[i])],covs[np.argmax(weights_cum>=u[i])])
-    start_factors = pd.DataFrame(data=out[:,0:nfac], columns=factor_names)
-    controls =  pd.DataFrame(data=out[:,nfac:], columns=control_names) 
+        # Draw vector of [states,controls] from distr j if cum_weights[j-1]<u[i]<=cum_weights[j]:
+        #    Pr(cum_weights[j-1]<u[i]<=cum_weights[j])=cum_weights[j]-cum_weights[j-1]
+        #    =weight[j]=Pr(the draw is from subpopulation j)
+        out[i] = multivariate_normal(means[np.argmax(weights_cum >= u[i])],covs[np.argmax(weights_cum >= u[i])])
+    start_factors = pd.DataFrame(data=out[:,0:nfac], columns = factor_names)
+    controls = pd.DataFrame(data = out[:,nfac:], columns = control_names) 
     
     return start_factors, controls 
+
+
+#version 2: 
+    
+def generate_start_factors_and_control_variables_v2(
+        means, covs, weights, nobs, factor_names, control_names):
+    """Draw initial states and control variables from a (mixture of) normals.
+
+    Args:
+        means (np.ndarray): size (nemf, nfac + ncontrols)
+        covs (np.ndarray): size (nemf, nfac + ncontrols, nfac + ncontrols)
+        weights (np.ndarray): size (nemf). The weight of each mixture element.
+        nobs (int): number of observations
+
+    Returns:
+        start_factors (pd.DataFrame): shape (nobs, nfac),
+            columns are factor_names
+        controls (pd.DataFrame): shape (nobs, ncontrols),
+            columns are control names
+
+    Notes:
+        In the long run I would like to generalize this to drawing from a mixture of
+        elliptical distributions: https://en.wikipedia.org/wiki/Elliptical_distribution
+        This contains the multivariate normal as a special case.
+        It would require an interface change because the elliptical distribution has more
+        parameters than just mean and covariance. It would be great if you make a proposal
+        for this general case.
+
+    """
+    assert np.sum(weights) == 1 and all(i >= 0 for i in weights)
+    nfac = len(factor_names)
+    ncont = len(control_names)
+    assert np.shape(covs)[1] == np.shape(covs)[2] == nfac+ncont, 'each cov matrix should be of shape (nfac+ncont,nfac+ncont)'
+    out = np.zeros((nobs,nfac+ncont))
+    weights=weights.reshape(weights.size) #weights should be a 1d array
+    helper_array=np.nonzero(multinomial(1,weights,size=nobs))[1]
+    for i in range(nobs):
+        out[i] = multivariate_normal(means[helper_array[i]],covs[helper_array[i]])
+    start_factors = pd.DataFrame(data=out[:,0:nfac], columns = factor_names)
+    controls = pd.DataFrame(data = out[:,nfac:], columns = control_names) 
+    
+    return start_factors, controls 
+
 
 
 def next_period_factors(
@@ -132,6 +172,13 @@ def next_period_factors(
 
 
     """
+    nobs=factors.shape[0]
+    nfac=factors.shape[1]
+    factors_nexp = np.empty ((nobs,nfac))
+    for i in range(nfac):
+       factors_nexp[:,i]=getattr(tf,transition_names[i])(**transition_argument_dicts[:][i])
+    
+    
     pass
 
 
