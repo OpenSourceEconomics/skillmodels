@@ -136,6 +136,52 @@ def generate_start_factors_and_control_variables_v2(
     return start_factors, controls 
 
 
+#version 3. Avoids loops: 
+    
+def generate_start_factors_and_control_variables_v3(
+        means, covs, weights, nobs, factor_names, control_names):
+    """Draw initial states and control variables from a (mixture of) normals.
+
+    Args:
+        means (np.ndarray): size (nemf, nfac + ncontrols)
+        covs (np.ndarray): size (nemf, nfac + ncontrols, nfac + ncontrols)
+        weights (np.ndarray): size (nemf). The weight of each mixture element.
+        nobs (int): number of observations
+
+    Returns:
+        start_factors (pd.DataFrame): shape (nobs, nfac),
+            columns are factor_names
+        controls (pd.DataFrame): shape (nobs, ncontrols),
+            columns are control names
+
+    Notes:
+        In the long run I would like to generalize this to drawing from a mixture of
+        elliptical distributions: https://en.wikipedia.org/wiki/Elliptical_distribution
+        This contains the multivariate normal as a special case.
+        It would require an interface change because the elliptical distribution has more
+        parameters than just mean and covariance. It would be great if you make a proposal
+        for this general case.
+
+    """
+    assert np.sum(weights) == 1 and all(i >= 0 for i in weights)
+    nfac = len(factor_names)
+    ncont = len(control_names)
+    assert np.shape(covs)[1] == np.shape(covs)[2] == nfac+ncont, 'each cov matrix should be of shape (nfac+ncont,nfac+ncont)'
+   # out = np.zeros((nobs,nfac+ncont))
+    weights=weights.reshape(weights.size) #weights should be a 1d array
+    helper_array=np.nonzero(multinomial(1,weights,size=nobs))[1]
+    #Draw the entire sample from  multivariate nomal of size nobs*(nfac+ncont) with covariance matrix given by covariance matrices of each mixture on the diagonal
+    agg_means=means[helper_array]
+    agg_cov=np.zeros((nobs*(nfac+ncont),nobs*(nfac+ncont)))
+    agg_cov[0::nfac+ncont]=covs[helper_array]
+    out=multivariate_normal(agg_means,agg_cov).reshape(nobs,nfac+ncont)
+    start_factors = pd.DataFrame(data=out[:,0:nfac], columns = factor_names)
+    controls = pd.DataFrame(data = out[:,nfac:], columns = control_names) 
+    
+    return start_factors, controls 
+
+
+
 
 def next_period_factors(
         factors, transition_names, transition_argument_dicts, shock_variances):
