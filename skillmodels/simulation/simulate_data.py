@@ -172,7 +172,7 @@ def generate_start_factors_and_control_variables_v3(
     weights=weights.reshape(weights.size) #weights should be a 1d array
     helper_array=np.nonzero(multinomial(1,weights,size=nobs))[1]
     #Draw the entire sample from  multivariate nomal of size nobs*(nfac+ncont) with covariance matrix given by covariance matrices of each mixture on the diagonal
-    agg_means=means[helper_array]
+    agg_means=means[helper_array].reshape(nobs*(weights.size))
     agg_cov=splin.block_diag(*covs[helper_array])
     out=multivariate_normal(agg_means,agg_cov).reshape(nobs,nfac+ncont)
     start_factors = pd.DataFrame(data=out[:,0:nfac], columns = factor_names)
