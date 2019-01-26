@@ -321,7 +321,7 @@ def test_normal_weight_update_with_nans(setup_linear_update, expected_linear_upd
     aaae(d["weights"], expected_linear_update["expected_weights"])
 
 
-#tests for unscented predict functions
+# tests for unscented predict functions
 @pytest.fixture
 def setup_unscented_predict():
     out = {}
