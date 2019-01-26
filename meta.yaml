@@ -45,6 +45,7 @@ test:
   requires:
     - pytest
     - nose
+    - pytest-mock
 
 
 about:
