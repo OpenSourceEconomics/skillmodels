@@ -232,8 +232,9 @@ def next_period_factors(
     for i in range(nfac):
        factors_tp1[:,i]=getattr(tf,transition_names[i])(sigma_points,\
                   **transition_argument_dicts[i])
-    errors = multivariate_normal(np.array([0]*nfac),np.diag(shock_variances))
-    factors_tp1 = factors_tp1 + errors.reshape(1,nfac)
+    #Assumption: In general err_{Obs_j,Fac_i}!=err{Obs_k,Fac_i}, where j!=k
+    errors = multivariate_normal([0]*nfac,np.diag(shock_variances),nobs).reshape(nobs,1,nfac)
+    factors_tp1 = factors_tp1 + errors
     next_factors=pd.DataFrame(data = factors_tp1, columns = factors.columns)
     
     return next_factors
@@ -268,6 +269,7 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances, me
     nfac = factors.shape[1]
     ncontrols = controls.shape[1]
     nmeas = len(measurement_names)
+    #Assumption: In general eps_{Obs_j,Meas_i}!=eps_{Obs_k,Meas_i} 
     epsilon = multivariate_normal([0]*nmeas,np.diag(variances),nobs).reshape(nobs,1,nmeas) 
     states = factors.values.reshape(nobs,1,nfac)
     conts = controls.values.reshape(nobs,1,ncontrols)
