@@ -177,8 +177,12 @@ def generate_start_factors_and_control_variables_v3(
         2] == nfac + ncont, 'each cov matrix should be of shape (nfac+ncont,nfac+ncont)'
    # out = np.zeros((nobs,nfac+ncont))
     weights = weights.reshape(weights.size)  # weights should be a 1d array
+    # for each obs randomly choose the normal distribution to draw  initial state+conts from,
+    #probabilities given by the vector of weights
     helper_array = np.nonzero(multinomial(1, weights, size=nobs))[1]
-    # Draw the entire sample from  multivariate nomal of size nobs*(nfac+ncont) with covariance matrix given by covariance matrices of each mixture on the diagonal
+    # Draw the entire sample from  multivariate nomal of size nobs*(nfac+ncont)
+    # with covariance matrix given by covariance matrices of each element (a mv normal) 
+    #of mixture on the diagonal
     agg_means = means[helper_array].reshape(nobs * (weights.size))
     agg_cov = splin.block_diag(*covs[helper_array])
     out = multivariate_normal(agg_means, agg_cov).reshape(nobs, nfac + ncont)
@@ -235,7 +239,7 @@ def next_period_factors(
     #Assumption: In general err_{Obs_j,Fac_i}!=err{Obs_k,Fac_i}, where j!=k
     errors = multivariate_normal([0]*nfac,np.diag(shock_variances),nobs).reshape(nobs,1,nfac)
     factors_tp1 = factors_tp1 + errors
-    next_factors=pd.DataFrame(data = factors_tp1, columns = factors.columns)
+    next_factors = pd.DataFrame(data = factors_tp1, columns = factors.columns)
     
     return next_factors
 
@@ -269,7 +273,7 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances, me
     nfac = factors.shape[1]
     ncontrols = controls.shape[1]
     nmeas = len(measurement_names)
-    #Assumption: In general eps_{Obs_j,Meas_i}!=eps_{Obs_k,Meas_i} 
+    #Assumption: In general eps_{Obs_j,Meas_i}!=eps_{Obs_k,Meas_i}  where j!=k
     epsilon = multivariate_normal([0]*nmeas,np.diag(variances),nobs).reshape(nobs,1,nmeas) 
     states = factors.values.reshape(nobs,1,nfac)
     conts = controls.values.reshape(nobs,1,ncontrols)
