@@ -271,7 +271,7 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances, me
     epsilon = multivariate_normal([0]*nmeas,np.diag(variances),nobs).reshape(nobs,1,nmeas) 
     states = factors.values.reshape(nobs,1,nfac)
     conts = controls.values.reshape(nobs,1,ncontrols)
-    meas = np.dot(states,loadings) + np.dot(conts,deltas) + epsilon
+    meas = np.dot(states,loadings.T) + np.dot(conts,deltas.T) + epsilon
     measurements = pd.DataFrame(data = meas,columns = measurement_names)
     
     return measurements
