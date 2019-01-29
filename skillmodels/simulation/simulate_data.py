@@ -105,7 +105,7 @@ def simulate_datasets(factor_names, control_names, meas_names, nobs, nper, means
     
     observed_data = pd.DataFrame(
                          data = np.concatenate(
-                                 [out[:,:,0:2],out[:,:,(nfac+ncont+1):],out[:,:,(nfac+1):(nfac+ncont+1)]],
+                                 [out[:,:,0:2],out[:,:,(nfac+ncont+2):],out[:,:,(nfac+1):(nfac+ncont+1)]],
                                         axis = 2).reshape(nobs*nper,2+nmeas+ncont),
                         columns = ['period_t','child_id'] + meas_names + control_names
                         )
@@ -247,7 +247,7 @@ def generate_start_factors_and_control_variables_v3(
     # Draw the entire sample from  multivariate nomal of size nobs*(nfac+ncont)
     # with block diagonal covariance matrix given by covariance matrices of each element (a mv normal) 
     # of mixture on the diagonal
-    agg_means = means[helper_array].reshape(nobs * (weights.size))
+    agg_means = means[helper_array].reshape(nobs * (nfac+ncont))
     agg_cov = splin.block_diag(*covs[helper_array])
     out = multivariate_normal(agg_means, agg_cov).reshape(nobs, nfac + ncont)
     start_factors = pd.DataFrame(data=out[:, 0:nfac], columns=factor_names)
