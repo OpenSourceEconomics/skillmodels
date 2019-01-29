@@ -87,7 +87,8 @@ def simulate_datasets(factor_names, control_names, meas_names, nobs, nper, means
     out[:,:,(nfac+2):(nfac+ncont+2)] = generate_start_factors_and_control_variables_v3(
                                    means, covs, weights, nobs, factor_names,
                                    control_names)[1].values
-   
+            
+    #generate next period data recursively from per_1 to per_(nper-1)
     for i in range(1,nper):
         df = pd.DataFrame(data = out[i-1,:,2:(nfac+2)])
         out[i,:,2:(nfac+2)] = next_period_factors(
@@ -95,21 +96,23 @@ def simulate_datasets(factor_names, control_names, meas_names, nobs, nper, means
                                   transition_names, transition_argument_dicts, 
                                   shock_variances
                                   ).values
-                
+    #generate measurements            
     out[:,:,(nfac+ncont+2):] = measurements_from_factors(out[:,:,2:(nfac+2)].reshape(nobs*nper,nfac),
                                               out[:,:,(nfac+2):(nfac+ncont+2)].reshape(nobs*nper,ncont),
                                               loadings, deltas,meas_variances, 
                                               meas_names).values.reshape(nper,nobs,nmeas)
+    #create column of time periods
     out[:,:,0] = np.repeat(range(nper),nobs).reshape(nper,nobs)
+    #create the column of child_ids (observation) 
     out[:,:,1] = np.array(range(nobs))
-    
+    #retreive period, child_id, measurements and controls columns, combine into obs. data DataFrame
     observed_data = pd.DataFrame(
                          data = np.concatenate(
                                  [out[:,:,0:2],out[:,:,(nfac+ncont+2):],out[:,:,(nfac+2):(nfac+ncont+2)]],
                                         axis = 2).reshape(nobs*nper,2+nmeas+ncont),
                         columns = ['period_t','child_id'] + meas_names + control_names
                         )
-                         
+    #retreive period, child_id and factors(latent state) columns, combine into latent data DataFrame                 
     latent_data = pd.DataFrame(
                          data = out[:,:,0:(nfac+2)].reshape(nobs*nper,2+nfac),
                         columns = ['period_t','child_id'] + factor_names
