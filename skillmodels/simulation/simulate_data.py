@@ -26,10 +26,10 @@ Notes:
 
 """
 
-from scipy import linalg as splin
 import pandas as pd
 import numpy as np
 from numpy.random import multivariate_normal, uniform, multinomial
+from scipy import linalg as splin
 import sys
 sys.path.append('../model_functions/')
 import transition_functions as tf
@@ -111,7 +111,7 @@ def simulate_datasets(factor_names, control_names, meas_names, nobs, nper, means
                         )
                          
     latent_data = pd.DataFrame(
-                         data = out[:,:,0:(nfac+2)].reshape(nobs*nper,2+nmeas+ncont),
+                         data = out[:,:,0:(nfac+2)].reshape(nobs*nper,2+nfac),
                         columns = ['period_t','child_id'] + factor_names
                         )
                         
