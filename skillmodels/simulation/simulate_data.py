@@ -105,7 +105,7 @@ def simulate_datasets(factor_names, control_names, meas_names, nobs, nper, means
     
     observed_data = pd.DataFrame(
                          data = np.concatenate(
-                                 [out[:,:,0:2],out[:,:,(nfac+ncont+2):],out[:,:,(nfac+1):(nfac+ncont+1)]],
+                                 [out[:,:,0:2],out[:,:,(nfac+ncont+2):],out[:,:,(nfac+2):(nfac+ncont+2)]],
                                         axis = 2).reshape(nobs*nper,2+nmeas+ncont),
                         columns = ['period_t','child_id'] + meas_names + control_names
                         )
