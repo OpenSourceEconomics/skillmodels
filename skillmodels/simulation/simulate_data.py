@@ -296,17 +296,16 @@ def next_period_factors(
 
 
     """
-    nobs = factors.shape[0]
-    nfac = factors.shape[1]
-    sigma_points = factors.values
+    nobs, nfac = factors.shape
+    #sigma_points = factors
     factors_tp1 = np.zeros((nobs,nfac))
     for i in range(nfac):
-       factors_tp1[:,i]=getattr(tf,transition_names[i])(sigma_points,\
+       factors_tp1[:,i]=getattr(tf,transition_names[i])(factors,\
                   **transition_argument_dicts[i])
     #Assumption: In general err_{Obs_j,Fac_i}!=err{Obs_k,Fac_i}, where j!=k
     errors = multivariate_normal([0]*nfac,np.diag(shock_variances),nobs).reshape(nobs,nfac)
-    factors_tp1 = factors_tp1 + errors
-    next_factors = pd.DataFrame(data = factors_tp1, columns = factors.columns)
+    next_factors = factors_tp1 + errors
+    #next_factors = pd.DataFrame(data = factors_tp1, columns = factors.columns)
     
     return next_factors
 
