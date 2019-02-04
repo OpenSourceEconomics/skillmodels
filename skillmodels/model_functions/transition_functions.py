@@ -205,7 +205,7 @@ def output_has_known_location_linear():
 
 
 def linear_with_constant(sigma_points, coeffs, included_positions):
-    without_constant = linear(sigma_points, coeffs[:-1], included_positions[:-1]) # Mariam: impose equal sizes of coeffs and positions
+    without_constant = linear(sigma_points, coeffs[:-1], included_positions) 
     return coeffs[-1] + without_constant
 
 
