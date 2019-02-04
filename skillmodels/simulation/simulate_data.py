@@ -336,21 +336,14 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances, me
         - Try to express as much as possible in matrix products. This will lead to concise and
             fast code.
     """
-    nobs = factors.shape[0]
-    nfac = factors.shape[1]
+    nobs, nfac = factors.shape
     ncontrols = controls.shape[1]
     nmeas = len(measurement_names)
     #Assumption: In general eps_{Obs_j,Meas_i}!=eps_{Obs_k,Meas_i}  where j!=k
     epsilon = multivariate_normal([0]*nmeas,np.diag(variances),nobs).reshape(nobs,1,nmeas)
-    if isinstance(factors, pd.DataFrame):
-       states = factors.values.reshape(nobs,1,nfac)
-    else:
-        states = factors.reshape(nobs,1,nfac)
-    if isinstance(controls, pd.DataFrame):
-        conts = controls.values.reshape(nobs,1,ncontrols)
-    else:
-        conts = controls.reshape(nobs,1,ncontrols)
+    states = factors.reshape(nobs,1,nfac)
+    conts = controls.reshape(nobs,1,ncontrols)
     meas = np.dot(states,loadings.T) + np.dot(conts,deltas.T) + epsilon
-    measurements = pd.DataFrame(data = meas.reshape(nobs,nmeas),columns = measurement_names)
+    #measurements = pd.DataFrame(data = meas.reshape(nobs,nmeas),columns = measurement_names)
     
-    return measurements
+    return meas.reshape(nobs,nmeas)
