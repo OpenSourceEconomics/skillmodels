@@ -42,23 +42,18 @@ from os.path import join
 
 class SkillModel(GenericLikelihoodModel):
     """Estimate dynamic nonlinear latent factor models.
-
     SkillModel is a subclass of GenericLikelihoodModel from statsmodels and
     inherits many useful methods such as statistical tests and the calculation
     of standard errors from its parent class. Its usage is described in
     :ref:`basic_usage`.
-
     When initialized, all public attributes of ModelSpecProcessor and the
     arrays with c_data and y_data from DataProcessor are set as attributes.
-
     In addition to the methods inherited from GenericLikelihoodModel,
     SkillModel contains methods to:
-
     * determine how the params vector has to be parsed
     * calculate wa estimates
     * construct arguments for the likelihood function of the chs estimator
     * calculate covariance matrices of the estimated parameters
-
     Args:
         model_dict (dict): see :ref:`basic_usage`.
         dataset (DataFrame): datset in long format. see :ref:`basic_usage`.
@@ -67,7 +62,6 @@ class SkillModel(GenericLikelihoodModel):
         dataset_name (str): same as model_name
         save_path (str): specifies where intermediate results are saved.
         bootstrap_samples (list): optional, see docs of bootstrap functions.
-
     """
 
     def __init__(
@@ -118,15 +112,12 @@ class SkillModel(GenericLikelihoodModel):
 
     def _general_params_slice(self, length):
         """Slice object for params taking the "next" *length* elements.
-
         The class attribute param_counter is used to determine which are the
         "next" elements. It keeps track of which entries from the parameter
         vector params already have been used to construct quantities that are
         needed in the likelihood function.
-
         The method has a side effect on self.param_counter and should never
         be called by the user.
-
         """
         assert hasattr(self, "param_counter"), (
             "Users must not call any of the private _params_slice methods "
@@ -139,11 +130,9 @@ class SkillModel(GenericLikelihoodModel):
 
     def _initial_deltas(self):
         """List of initial arrays for control variable params in each period.
-
         The arrays have the shape [nupdates, nr_of_control_variables + 1]
         which is potentially different in each period. They are filled with
         zeros or the value of normalized intercepts.
-
         """
         deltas = []
         for t in self.periods:
@@ -156,11 +145,9 @@ class SkillModel(GenericLikelihoodModel):
 
     def _deltas_bool(self):
         """List of length nperiods with boolean arrays.
-
         The arrays have the same shape as the corresponding initial_delta and
         are True where the initial_delta has to be overwritten with
         entries from the params vector.
-
         """
         deltas_bool = []
         for t in self.periods:
@@ -171,10 +158,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _params_slice_for_deltas(self, params_type):
         """A slice object, selecting the part of params mapped to deltas.
-
         The method has a side effect on self.param_counter and should never
         be called by the user.
-
         """
         deltas_bool = self._deltas_bool()
         params_slices = []
@@ -202,10 +187,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _deltas_replacements(self):
         """List of pairs of index tuples.
-
         The first tuple indicates where to put the row of deltas described
         by the second index tuple.
-
         """
         uinfo = self.update_info
         replacements = []
@@ -231,19 +214,15 @@ class SkillModel(GenericLikelihoodModel):
 
     def _psi_bool(self):
         """Boolean array.
-
         It has the same shape as initial_psi and is True where initial_psi
         has to be overwritten entries from params.
-
         """
         return np.array(self.factors) != self.endog_factor
 
     def _params_slice_for_psi(self, params_type):
         """A slice object, selecting the part of params mapped to psi.
-
         The method has a side effect on self.param_counter and should never
         be called by the user.
-
         """
         length = self.nfac - 1
         return self._general_params_slice(length)
@@ -258,11 +237,9 @@ class SkillModel(GenericLikelihoodModel):
 
     def _initial_H(self):
         """Initial H array filled with zeros and normalized factor loadings.
-
         The array has the form [nupdates, nfac]. Most entries
         are zero, but if the factor loading of factor f in update equation
         u is normalized to some value then arr[u, f] is equal to this value.
-
         """
         column_list = ["{}_loading_norm_value".format(f) for f in self.factors]
         df = self.update_info[column_list]
@@ -270,27 +247,20 @@ class SkillModel(GenericLikelihoodModel):
 
     def _H_bool(self):
         """Boolean array.
-
         It has the same shape as initial_H and is True where initial_H
         has to be overwritten entries from params.
-
         """
         return self.new_meas_coeffs[self.factors].values
 
     def _helpers_for_H_transformation_with_psi(self):
         """A boolean array and two empty arrays to store intermediate results.
-
         To reduce the number of computations when using endogeneity correction,
         some vectors with factor loadings (i.e. some rows of H) are transformed
         using psi.
-
         Returns:
             boolean array that indicates which rows are transformed
-
             numpy array to store intermediate results
-
             numpy arrey to store intermediate results
-
         """
         # TODO: remove this. It didn't bring the time improvement I hoped for
         assert self.endog_correction is True, (
@@ -304,10 +274,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _params_slice_for_H(self, params_type):
         """A slice object, selecting the part of params mapped to H.
-
         The method has a side effect on self.param_counter and should never
         be called by the user.
-
         """
         length = self._H_bool().sum()
         return self._general_params_slice(length)
@@ -324,10 +292,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _H_replacements(self):
         """List of tuples with index positions.
-
         The first entry in each tuple indicates where to put the row of H
         described by the second entry.
-
         """
         uinfo = self.update_info
         replacements = []
@@ -351,10 +317,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _params_slice_for_R(self, params_type):
         """A slice object, selecting the part of params mapped to R.
-
         The method has a side effect on self.param_counter and should never
         be called by the user.
-
         """
         return self._general_params_slice(self._R_bool().sum())
 
@@ -370,10 +334,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _R_replacements(self):
         """List of tuples with index positions.
-
         The first entry in each tuple indicates where to put the element of R
         described by the second entry.
-
         """
         return self._H_replacements()
 
@@ -387,10 +349,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _Q_bool(self):
         """Boolean array.
-
         It has the same shape as initial_Q and is True where initial_Q
         has to be overwritten entries from params.
-
         """
         Q_bool = np.zeros((self.nstages, self.nfac, self.nfac), dtype=bool)
         for s in self.stages:
@@ -399,10 +359,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _params_slice_for_Q(self, params_type):
         """A slice object, selecting the part of params mapped to Q.
-
         The method has a side effect on self.param_counter and should never
         be called by the user.
-
         """
         length = self._Q_bool().sum()
         return self._general_params_slice(length)
@@ -417,10 +375,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _Q_replacements(self):
         """List of pairs of index tuples.
-
         The first tuple indicates where to put the Element of Q described
         by the second index tuple.
-
         """
         replacements = []
         for s, f in product(self.stages, range(self.nfac)):
@@ -444,19 +400,15 @@ class SkillModel(GenericLikelihoodModel):
 
     def _params_slice_for_X_zero(self, params_type):
         """A slice object, selecting the part of params mapped to X_zero.
-
         The method has a side effect on self.param_counter and should never
         be called by the user.
-
         """
         return self._general_params_slice(self.nemf * self.nfac)
 
     def _X_zero_replacements(self):
         """List of pairs of index tuples.
-
         The first tuple indicates where to add the Element of X_zero described
         by the second index tuple.
-
         """
         replacements = []
         if self.nemf > 1:
@@ -490,10 +442,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _params_slice_for_W_zero(self, params_type):
         """A slice object, selecting the part of params mapped to W_zero.
-
         The method has a side effect on self.param_counter and should never
         be called by the user.
-
         """
         return self._general_params_slice(self.nemf)
 
@@ -520,10 +470,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _P_zero_bool(self):
         """Boolean array.
-
         It has the same shape as P_zero_filler and is True where P_zero_filler
         has to be overwritten entries from params.
-
         """
         helper = np.zeros((self.nfac, self.nfac), dtype=bool)
         helper[np.triu_indices(self.nfac)] = True
@@ -533,10 +481,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _params_slice_for_P_zero(self, params_type):
         """A slice object, selecting the part of params mapped to P_zero.
-
         The method has a side effect on self.param_counter and should never
         be called by the user.
-
         """
         nr_upper_triangular_elements = 0.5 * self.nfac * (self.nfac + 1)
         if self.restrict_P_zeros is True or self.estimator == "wa":
@@ -597,10 +543,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _params_slice_for_trans_coeffs(self, params_type):
         """A slice object, selecting the part of params mapped to trans_coeffs.
-
         The method has a side effect on self.param_counter and should never
         be called by the user.
-
         """
         slices = [[] for factor in self.factors]
         for f, s in product(range(self.nfac), self.stages):
@@ -616,10 +560,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _set_bounds_for_trans_coeffs(self, params_slice):
         """Set lower and upper bounds for trans_coeffs.
-
         Check if the transition_functions module defines bounds functions
         for some types of transition function and call them.
-
         """
         new_info = self.new_trans_coeffs
         for f, s in product(range(self.nfac), self.stages):
@@ -652,11 +594,9 @@ class SkillModel(GenericLikelihoodModel):
 
     def _transform_trans_coeffs_funcs(self):
         """List of length nfac.
-
         Holds the name of the function used to expand or reduce the parameters
         of the transition function for each factor or None if no such function
         exists.
-
         """
         funcs = []
         for f, factor in enumerate(self.factors):
@@ -669,15 +609,12 @@ class SkillModel(GenericLikelihoodModel):
 
     def params_slices(self, params_type):
         """A dictionary with slice objects for each params_quant.
-
         args:
             params_type (str): Takes the values 'short' and 'long'. See
                 :ref:`params_type`.
-
         Returns:
             dict: The keys are the params_quants. The values are slice objects
             that map params to the corresponding quantity.
-
         """
         self.param_counter = 0
         slices = {}
@@ -898,11 +835,9 @@ class SkillModel(GenericLikelihoodModel):
 
     def _generate_wa_based_start_params(self):
         """Use wa estimates to construct a start_params vector for chs.
-
         Fit the model with the wa estimator and use reduceparams to get a
         params vector of type short. Then replace all estimated variances that
         are below 0.05 with 0.05 for robustness reasons.
-
         """
         long_params = self.estimate_params_wa
         short_params = self.reduceparams(long_params)
@@ -920,11 +855,9 @@ class SkillModel(GenericLikelihoodModel):
 
     def generate_start_params(self):
         """Vector with start values for the optimization.
-
         If valid start_params are provided in the model dictionary, these will
         be used. Else, if the model is compatible with the wa estimator, the
         wa estimates will be used. Else, naive start_params are generated.
-
         """
         len_correct = self._correct_len_of_start_params()
         if hasattr(self, "start_params") and len_correct is True:
@@ -1140,19 +1073,15 @@ class SkillModel(GenericLikelihoodModel):
 
     def nloglikeobs(self, params, args):
         """Negative log likelihood function per individual.
-
         This is the function used to calculate the standard errors based on
         the outer product of gradients.
-
         """
         return -log_likelihood_per_individual(params, **args)
 
     def nloglike(self, params, args):
         """Negative log likelihood function.
-
         This is the function used to fit the model as numeric optimization
         methods are implemented as minimizers.
-
         """
         if self.save_intermediate_optimization_results is True:
             path = self.save_path + "/opt_results/iteration{}.json"
@@ -1173,7 +1102,6 @@ class SkillModel(GenericLikelihoodModel):
         self, start_params=None, params_type="short", return_optimize_dict=True
     ):
         """Estimate the params vector with the chs estimator.
-
         Args:
             start_params (np.ndarray): start values that take precedence over
                 all other ways of specifying start values.
@@ -1182,7 +1110,6 @@ class SkillModel(GenericLikelihoodModel):
             return_optimize_dict (bool): if True, in addition to the params
                 vector a dictionary with information from the numerical
                 optimization is returned.
-
         """
         if start_params is None:
             start_params = self.generate_start_params()
@@ -1306,7 +1233,6 @@ class SkillModel(GenericLikelihoodModel):
 
     def score(self, params):
         """Gradient of loglike with respect to each parameter.
-
         To calculate the gradient, simple numerical derivatives are used.
         """
         if self.estimator == "wa":
@@ -1323,9 +1249,7 @@ class SkillModel(GenericLikelihoodModel):
 
     def score_obs(self, params):
         """Gradient of loglikeobs with respect to each parameter.
-
         To calculate the gradient, simple numerical derivatives are used.
-
         """
         if self.estimator == "wa":
             raise NotApplicableError(
@@ -1340,9 +1264,7 @@ class SkillModel(GenericLikelihoodModel):
 
     def hessian(self, params):
         """Hessian matrix of loglike.
-
         To calculate the hessian, simple numerical derivatives are used.
-
         """
         if self.estimator == "wa":
             raise NotApplicableError(
@@ -1422,10 +1344,8 @@ class SkillModel(GenericLikelihoodModel):
 
     def _generate_bs_samples(self):
         """List of lists.
-
         Each sublist contains the 'person_identifiers' of the individuals that
         were sampled from the dataset with replacement.
-
         """
         individuals = np.array(self.data[self.person_identifier].unique())
         selected_indices = np.random.randint(
@@ -1507,13 +1427,10 @@ class SkillModel(GenericLikelihoodModel):
 
     def all_bootstrap_params(self, params):
         """Return a DataFrame of all bootstrap parameters.
-
         Create the resampled datasets from lists of person identifiers and fit
         re-fit the model.
-
         The boostrap replications are estimated in parallel, using the
         Multiprocessing module from the Python Standard Library.
-
         """
         assert len(params) == self.len_params("long"), (
             "Standard errors can only be calculated for params vectors of the "
@@ -1536,17 +1453,14 @@ class SkillModel(GenericLikelihoodModel):
 
     def bootstrap_conf_int(self, params, alpha=0.05):
         """Parameter confidence intervals from bootstrap parametres.
-
         args:
             bootstrap_params (df): pandas DataFrame where each column gives the
                 parameters from one bootstrap replication.
             alpha (float): the significance level of the confidence interval.
-
         Returns:
             conf_int_df (df): pandas DataFrame with two columns that give the
             lower and upper bound of the confidence interval based on the
             distribution of the bootstrap parameters.
-
         """
         bs_params = self.all_bootstrap_params(params)
 
@@ -1594,11 +1508,9 @@ class SkillModel(GenericLikelihoodModel):
 
     def _generate_start_factors(self):
         """Start factors for simulations or marginal effects.
-
         Returns:
             start_factors (np.ndarray): array of size (self.nobs, self.nfac)
                 with a simulated sample of initial latent factors.
-
         """
         assert self.nemf == 1, (
             "Start factors for simulation can currently only be generated "
@@ -1789,7 +1701,6 @@ class SkillModel(GenericLikelihoodModel):
         height=None,
     ):
         """Heatmap of the correlation matrix of measurements.
-
         Args:
             periods: periods to include. Can be the name of one period, a list
                 like object with periods or 'all'.
@@ -1804,7 +1715,6 @@ class SkillModel(GenericLikelihoodModel):
                 saved in the same directory.
             dpi (int): resolution of the plot
             write_tex (bool): if True, a tex file with the plot is written.
-
          """
         if write_tex is True:
             assert (
@@ -2312,15 +2222,12 @@ class SkillModel(GenericLikelihoodModel):
 
     def visualize_model(self, save_path, anchor_var=None):
         """Visualize a SkillModel.
-
         Generate plots and tables that illustrate how well the measurements
         fit together, how stable factors are over time and how strong the
         transition equation deviate from linearity.
-
         Args:
             save_path (str): path to a directory in which plots and tex output
                 is saved.
-
         """
         tex_lines = []
         tex_input = "\input{{{}}}"
