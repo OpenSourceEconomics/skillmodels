@@ -28,8 +28,7 @@ Notes:
 
 import pandas as pd
 import numpy as np
-from numpy.random import multivariate_normal, uniform, multinomial
-from scipy import linalg as splin
+from numpy.random import multivariate_normal, choice
 import sys
 sys.path.append('../model_functions/')
 import transition_functions as tf
@@ -77,188 +76,82 @@ def simulate_datasets(factor_names, control_names, meas_names, nobs, nper, means
     """
     ncont = len(control_names)
     nfac = len(factor_names)
-    nmeas = len(meas_names)
-    out = np.zeros((nper,nobs,nfac+ncont+nmeas+2))
-    
-    #initialize states and conts (are constant over time????)
-    out[0,:,2:(nfac+2)] = generate_start_factors_and_control_variables_v3(
-                                   means, covs, weights, nobs, factor_names,
-                                   control_names)[0].values
-    out[:,:,(nfac+2):(nfac+ncont+2)] = generate_start_factors_and_control_variables_v3(
-                                   means, covs, weights, nobs, factor_names,
-                                   control_names)[1].values
+    out_fac = [np.zeros((nobs,nfac))]*nper
+    out_id = np.array([range(nobs)]*nper).reshape(nobs*nper) #array of id_s repeated n_per times
+    out_fac[0], out_cont = generate_start_factors_and_control_variables(
+                                   means, covs, weights, nobs, nfac,
+                                   ncont)
+    out_cont = pd.DataFrame(
+                            data=np.array([out_cont]*nper).reshape(nobs*nper,ncont),
+                            columns=control_names, 
+                            index=out_id
+                            )
             
-    #generate next period data recursively from per_1 to per_(nper-1)
     for i in range(1,nper):
-        df = pd.DataFrame(data = out[i-1,:,2:(nfac+2)])
-        out[i,:,2:(nfac+2)] = next_period_factors(
-                                  df, 
-                                  transition_names, transition_argument_dicts, 
+        out_fac[i] = next_period_factors(
+                                  out_fac[i-1], 
+                                  transition_names,
+                                  transition_argument_dicts, 
                                   shock_variances
-                                  ).values
-    #generate measurements            
-    out[:,:,(nfac+ncont+2):] = measurements_from_factors(out[:,:,2:(nfac+2)].reshape(nobs*nper,nfac),
-                                              out[:,:,(nfac+2):(nfac+ncont+2)].reshape(nobs*nper,ncont),
-                                              loadings, deltas,meas_variances, 
-                                              meas_names).values.reshape(nper,nobs,nmeas)
-    #create column of time periods
-    out[:,:,0] = np.repeat(range(nper),nobs).reshape(nper,nobs)
-    #create the column of child_ids (observation) 
-    out[:,:,1] = np.array(range(nobs))
-    #retreive period, child_id, measurements and controls columns, combine into obs. data DataFrame
-    observed_data = pd.DataFrame(
-                         data = np.concatenate(
-                                 [out[:,:,0:2],out[:,:,(nfac+ncont+2):],out[:,:,(nfac+2):(nfac+ncont+2)]],
-                                        axis = 2).reshape(nobs*nper,2+nmeas+ncont),
-                        columns = ['period_t','child_id'] + meas_names + control_names
-                        )
-    #retreive period, child_id and factors(latent state) columns, combine into latent data DataFrame                 
-    latent_data = pd.DataFrame(
-                         data = out[:,:,0:(nfac+2)].reshape(nobs*nper,2+nfac),
-                        columns = ['period_t','child_id'] + factor_names
-                        )
-                        
+                                  )
+    out_meas = pd.DataFrame(
+                      data = measurements_from_factors(
+                                       np.array(out_fac).reshape(nobs*nper,nfac),
+                                       out_cont.values,
+                                       loadings,
+                                       deltas,
+                                       meas_variances, 
+                                       meas_names
+                                ), 
+                     columns=meas_names, 
+                     index=out_id
+            )
+    out_t = pd.DataFrame(np.repeat(range(nper),nobs),columns=['time_period'],index=out_id)
+    observed_data = pd.concat([out_t,out_meas,out_cont],axis=1)
+    latent_data = pd.DataFrame(data = np.array(out_fac).reshape(nobs*nper,nfac),columns=factor_names,index=out_id)
+    latent_data = pd.concat([out_t,latent_data],axis=1)
+    
     return observed_data, latent_data
 
+
+
+def generate_start_factors_and_control_variables(means, covs, weights, nobs, nfac, ncont):
+    """Draw initial states and control variables from a (mixture of) normals.
+
+    Args:
+        means (np.ndarray): size (nemf, nfac + ncontrols)
+        covs (np.ndarray): size (nemf, nfac + ncontrols, nfac + ncontrols)
+        weights (np.ndarray): size (nemf). The weight of each mixture element.
+        nobs (int): number of observations
+        nfac (int): number of factor (latent) variables
+        ncont (int): number of control variables
+
+    Returns:
+        start_factors (np.ndarray): shape (nobs, nfac),
+        controls (np.ndarray): shape (nobs, ncontrols),
+
+    Notes:
+        In the long run I would like to generalize this to drawing from a mixture of
+        elliptical distributions: https://en.wikipedia.org/wiki/Elliptical_distribution
+        This contains the multivariate normal as a special case.
+        It would require an interface change because the elliptical distribution has more
+        parameters than just mean and covariance. It would be great if you make a proposal
+        for this general case.
+
+    """
     
-def generate_start_factors_and_control_variables(
-        means, covs, weights, nobs, factor_names, control_names):
-    """Draw initial states and control variables from a (mixture of) normals.
-
-    Args:
-        means (np.ndarray): size (nemf, nfac + ncontrols)
-        covs (np.ndarray): size (nemf, nfac + ncontrols, nfac + ncontrols)
-        weights (np.ndarray): size (nemf). The weight of each mixture element.
-        nobs (int): number of observations
-
-    Returns:
-        start_factors (pd.DataFrame): shape (nobs, nfac),
-            columns are factor_names
-        controls (pd.DataFrame): shape (nobs, ncontrols),
-            columns are control names
-
-    Notes:
-        In the long run I would like to generalize this to drawing from a mixture of
-        elliptical distributions: https://en.wikipedia.org/wiki/Elliptical_distribution
-        This contains the multivariate normal as a special case.
-        It would require an interface change because the elliptical distribution has more
-        parameters than just mean and covariance. It would be great if you make a proposal
-        for this general case.
-
-    """
-    assert np.sum(weights) == 1 and all(i >= 0 for i in weights)
-    nfac = len(factor_names)
-    ncont = len(control_names)
-    assert np.shape(covs)[1] == np.shape(covs)[
-        2] == nfac + ncont, 'each cov matrix should be of shape (nfac+ncont,nfac+ncont)'
     out = np.zeros((nobs, nfac + ncont))
-    # 1d array of length len(mixture components)
-    weights_cum = np.cumsum(weights)
-    u = uniform(0, 1, (nobs, 1))
-    for i in range(nobs):
-        # Draw vector of [states,controls] from distr j if cum_weights[j-1]<u[i]<=cum_weights[j]:
-        #    Pr(cum_weights[j-1]<u[i]<=cum_weights[j])=cum_weights[j]-cum_weights[j-1]
-        #    =weight[j]=Pr(the draw is from subpopulation j)
-        out[i] = multivariate_normal(
-            means[np.argmax(weights_cum >= u[i])], covs[np.argmax(weights_cum >= u[i])])
-    start_factors = pd.DataFrame(data=out[:, 0:nfac], columns=factor_names)
-    controls = pd.DataFrame(data=out[:, nfac:], columns=control_names)
-
-    return start_factors, controls
-
-
-# version 2:
-
-def generate_start_factors_and_control_variables_v2(
-        means, covs, weights, nobs, factor_names, control_names):
-    """Draw initial states and control variables from a (mixture of) normals.
-
-    Args:
-        means (np.ndarray): size (nemf, nfac + ncontrols)
-        covs (np.ndarray): size (nemf, nfac + ncontrols, nfac + ncontrols)
-        weights (np.ndarray): size (nemf). The weight of each mixture element.
-        nobs (int): number of observations
-
-    Returns:
-        start_factors (pd.DataFrame): shape (nobs, nfac),
-            columns are factor_names
-        controls (pd.DataFrame): shape (nobs, ncontrols),
-            columns are control names
-
-    Notes:
-        In the long run I would like to generalize this to drawing from a mixture of
-        elliptical distributions: https://en.wikipedia.org/wiki/Elliptical_distribution
-        This contains the multivariate normal as a special case.
-        It would require an interface change because the elliptical distribution has more
-        parameters than just mean and covariance. It would be great if you make a proposal
-        for this general case.
-
-    """
-    assert np.sum(weights) == 1 and all(i >= 0 for i in weights)
-    nfac = len(factor_names)
-    ncont = len(control_names)
-    assert np.shape(covs)[1] == np.shape(covs)[
-        2] == nfac + ncont, 'each cov matrix should be of shape (nfac+ncont,nfac+ncont)'
-    out = np.zeros((nobs, nfac + ncont))
-    weights = weights.reshape(weights.size)  # weights should be a 1d array
-    helper_array = np.nonzero(multinomial(1, weights, size=nobs))[1]
-    for i in range(nobs):
-        out[i] = multivariate_normal(
+    if np.size(weights)!=1:
+       helper_array = choice(np.arange(len(weights)),p=weights,size=nobs) 
+       for i in range(nobs):
+           out[i] = multivariate_normal(
             means[helper_array[i]], covs[helper_array[i]])
-    start_factors = pd.DataFrame(data=out[:, 0:nfac], columns=factor_names)
-    controls = pd.DataFrame(data=out[:, nfac:], columns=control_names)
+    else:
+       out = multivariate_normal(means,covs,nobs)
+    start_factors = out[:, 0:nfac]
+    controls = out[:, nfac:]
 
     return start_factors, controls
-
-
-# version 3. Avoids loops:
-
-def generate_start_factors_and_control_variables_v3(
-        means, covs, weights, nobs, factor_names, control_names):
-    """Draw initial states and control variables from a (mixture of) normals.
-
-    Args:
-        means (np.ndarray): size (nemf, nfac + ncontrols)
-        covs (np.ndarray): size (nemf, nfac + ncontrols, nfac + ncontrols)
-        weights (np.ndarray): size (nemf). The weight of each mixture element.
-        nobs (int): number of observations
-
-    Returns:
-        start_factors (pd.DataFrame): shape (nobs, nfac),
-            columns are factor_names
-        controls (pd.DataFrame): shape (nobs, ncontrols),
-            columns are control names
-
-    Notes:
-        In the long run I would like to generalize this to drawing from a mixture of
-        elliptical distributions: https://en.wikipedia.org/wiki/Elliptical_distribution
-        This contains the multivariate normal as a special case.
-        It would require an interface change because the elliptical distribution has more
-        parameters than just mean and covariance. It would be great if you make a proposal
-        for this general case.
-
-    """
-    assert np.sum(weights) == 1 and all(i >= 0 for i in weights)
-    nfac = len(factor_names)
-    ncont = len(control_names)
-    assert np.shape(covs)[1] == np.shape(covs)[
-        2] == nfac + ncont, 'each cov matrix should be of shape (nfac+ncont,nfac+ncont)'
-    weights = weights.reshape(weights.size)  # weights should be a 1d array
-    # for each obs randomly choose the normal distribution to draw  initial state+conts from,
-    # probabilities given by the vector of weights
-    helper_array = np.nonzero(multinomial(1, weights, size=nobs))[1]
-    # Draw the entire sample from  multivariate nomal of size nobs*(nfac+ncont)
-    # with block diagonal covariance matrix given by covariance matrices of each element (a mv normal) 
-    # of mixture on the diagonal
-    agg_means = means[helper_array].reshape(nobs * (nfac+ncont))
-    agg_cov = splin.block_diag(*covs[helper_array])
-    out = multivariate_normal(agg_means, agg_cov).reshape(nobs, nfac + ncont)
-    start_factors = pd.DataFrame(data=out[:, 0:nfac], columns=factor_names)
-    controls = pd.DataFrame(data=out[:, nfac:], columns=control_names)
-
-    return start_factors, controls
-
-
 
 
 def next_period_factors(
@@ -266,7 +159,7 @@ def next_period_factors(
     """Apply transition function to factors and add shocks.
 
     Args:
-        factors (pd.DataFrame): shape (nobs, nfac)
+        factors (np.ndarray): shape (nobs, nfac)
         transition_names (list): list of strings with the names of the transition
             function of each factor.
         transition_argument_dicts (list): list of dictionaries of length nfac with
@@ -276,7 +169,7 @@ def next_period_factors(
         shock_variances (np.ndarray): numpy array of length nfac.
 
     Returns:
-        next_factors (pd.DataFrame):
+        next_factors (np.ndarray): shape(nobs,nfac)
 
     Notes:
         - You can look at the module `transform_sigma_points` to see how you can use
