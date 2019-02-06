@@ -160,9 +160,9 @@ def generate_start_factors_and_control_variables(
 
     """
 
-    out = np.zeros((nobs, nfac + ncont))
     if np.size(weights) != 1:
         helper_array = choice(np.arange(len(weights)), p=weights, size=nobs)
+        out = np.zeros((nobs, nfac + ncont))
         for i in range(nobs):
             out[i] = multivariate_normal(means[helper_array[i]], covs[helper_array[i]])
     else:
