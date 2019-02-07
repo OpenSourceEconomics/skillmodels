@@ -95,11 +95,11 @@ def simulate_datasets(
     obs_id = np.array([range(nobs)] * nper).reshape(
         nobs * nper
     )  # array of id_s repeated n_per times
-    
+
     fac[0], cont = generate_start_factors_and_control_variables(
-        means, covs, weights , nobs, nfac, ncont
+        means, covs, weights, nobs, nfac, ncont
     )
-    
+
     cont = pd.DataFrame(
         data=np.array([cont] * nper).reshape(nobs * nper, ncont),
         columns=control_names,
@@ -110,7 +110,7 @@ def simulate_datasets(
         fac[i] = next_period_factors(
             fac[i - 1], transition_names, transition_argument_dicts, shock_variances
         )
-        
+
     meas = pd.DataFrame(
         data=measurements_from_factors(
             np.array(fac).reshape(nobs * nper, nfac),
@@ -123,18 +123,18 @@ def simulate_datasets(
         columns=meas_names,
         index=obs_id,
     )
-        
+
     t = pd.DataFrame(
         np.repeat(range(nper), nobs), columns=["time_period"], index=obs_id
     )
-    
+
     observed_data = pd.concat([t, meas, cont], axis=1)
     latent_data = pd.DataFrame(
         data=np.array(fac).reshape(nobs * nper, nfac),
         columns=factor_names,
         index=obs_id,
     )
-    
+
     latent_data = pd.concat([t, latent_data], axis=1)
 
     return observed_data, latent_data
@@ -167,7 +167,7 @@ def generate_start_factors_and_control_variables(
 
     """
 
-    if  np.size(weights) == 1:
+    if np.size(weights) == 1:
         out = multivariate_normal(means, covs, nobs)
     else:
         helper_array = choice(np.arange(len(weights)), p=weights, size=nobs)
@@ -233,9 +233,7 @@ def next_period_factors(
     return next_factors
 
 
-def measurements_from_factors(
-    factors, controls, loadings, deltas, variances, nmeas
-):
+def measurements_from_factors(factors, controls, loadings, deltas, variances, nmeas):
     """Generate the variables that would be observed in practice.
 
     This generates the data for only one period. Let nmeas be the number of measurements in that period.
