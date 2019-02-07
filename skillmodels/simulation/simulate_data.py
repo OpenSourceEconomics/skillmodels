@@ -81,10 +81,10 @@ def simulate_datasets(factor_names, control_names, meas_names, nobs, nper, means
     out = np.zeros((nper,nobs,nfac+ncont+nmeas+2))
     
     #initialize states and conts (are constant over time????)
-    out[0,:,2:(nfac+2)] = generate_start_factors_and_control_variables_v3(
+    out[0,:,2:(nfac+2)] = generate_start_factors_and_control_variables_v2(
                                    means, covs, weights, nobs, factor_names,
                                    control_names)[0].values
-    out[:,:,(nfac+2):(nfac+ncont+2)] = generate_start_factors_and_control_variables_v3(
+    out[:,:,(nfac+2):(nfac+ncont+2)] = generate_start_factors_and_control_variables_v2(
                                    means, covs, weights, nobs, factor_names,
                                    control_names)[1].values
             
