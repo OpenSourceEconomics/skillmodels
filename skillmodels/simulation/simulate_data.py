@@ -97,7 +97,7 @@ def simulate_datasets(
     )  # array of id_s repeated n_per times
     
     fac[0], cont = generate_start_factors_and_control_variables(
-        means, covs, weights, nobs, nfac, ncont
+        means, covs, weights , nobs, nfac, ncont
     )
     
     cont = pd.DataFrame(
@@ -167,13 +167,13 @@ def generate_start_factors_and_control_variables(
 
     """
 
-    if np.size(weights) != 1:
+    if  np.size(weights) == 1:
+        out = multivariate_normal(means, covs, nobs)
+    else:
         helper_array = choice(np.arange(len(weights)), p=weights, size=nobs)
         out = np.zeros((nobs, nfac + ncont))
         for i in range(nobs):
             out[i] = multivariate_normal(means[helper_array[i]], covs[helper_array[i]])
-    else:
-        out = multivariate_normal(means, covs, nobs)
     start_factors = out[:, 0:nfac]
     controls = out[:, nfac:]
 
