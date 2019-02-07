@@ -90,6 +90,7 @@ def simulate_datasets(
     """
     ncont = len(control_names)
     nfac = len(factor_names)
+    nmeas=len(meas_names)
     out_fac = [np.zeros((nobs, nfac))] * nper
     out_id = np.array([range(nobs)] * nper).reshape(
         nobs * nper
@@ -114,7 +115,7 @@ def simulate_datasets(
             loadings,
             deltas,
             meas_variances,
-            meas_names,
+            nmeas,
         ),
         columns=meas_names,
         index=out_id,
@@ -227,7 +228,7 @@ def next_period_factors(
 
 
 def measurements_from_factors(
-    factors, controls, loadings, deltas, variances, measurement_names
+    factors, controls, loadings, deltas, variances, nmeas
 ):
     """Generate the variables that would be observed in practice.
 
@@ -240,7 +241,8 @@ def measurements_from_factors(
         deltas (np.ndarray): numpy array of size (nmeas, ncontrols)
         variances (np.ndarray): numpy array of size (nmeas) with the variances of the
             measurements. Measurement error is assumed to be independent across measurements
-        measurement_names (list): list of length nmeas with the names of the measurements
+        instead: measurement_names (list): list of length nmeas with the names of the measurements
+        read: nmeas (int): number of measurments 
 
     Returns:
         measurements (pd.DataFrame): DataFrame of shape (nobs, nmeas) with measurement
@@ -255,7 +257,6 @@ def measurements_from_factors(
     """
     nobs, nfac = factors.shape
     ncontrols = controls.shape[1]
-    nmeas = len(measurement_names)
     # Assumption: In general eps_{Obs_j,Meas_i}!=eps_{Obs_k,Meas_i}  where j!=k
     epsilon = multivariate_normal([0] * nmeas, np.diag(variances), nobs).reshape(
         nobs, 1, nmeas
