@@ -90,46 +90,51 @@ def simulate_datasets(
     """
     ncont = len(control_names)
     nfac = len(factor_names)
-    nmeas=len(meas_names)
-    out_fac = [np.zeros((nobs, nfac))] * nper
-    out_id = np.array([range(nobs)] * nper).reshape(
+    fac = [np.zeros((nobs, nfac))] * nper
+    obs_id = np.array([range(nobs)] * nper).reshape(
         nobs * nper
     )  # array of id_s repeated n_per times
-    out_fac[0], out_cont = generate_start_factors_and_control_variables(
+    
+    fac[0], cont = generate_start_factors_and_control_variables(
         means, covs, weights, nobs, nfac, ncont
     )
-    out_cont = pd.DataFrame(
-        data=np.array([out_cont] * nper).reshape(nobs * nper, ncont),
+    
+    cont = pd.DataFrame(
+        data=np.array([cont] * nper).reshape(nobs * nper, ncont),
         columns=control_names,
-        index=out_id,
+        index=obs_id,
     )
 
     for i in range(1, nper):
-        out_fac[i] = next_period_factors(
-            out_fac[i - 1], transition_names, transition_argument_dicts, shock_variances
+        fac[i] = next_period_factors(
+            fac[i - 1], transition_names, transition_argument_dicts, shock_variances
         )
-    out_meas = pd.DataFrame(
+        
+    meas = pd.DataFrame(
         data=measurements_from_factors(
-            np.array(out_fac).reshape(nobs * nper, nfac),
-            out_cont.values,
+            np.array(fac).reshape(nobs * nper, nfac),
+            cont.values,
             loadings,
             deltas,
             meas_variances,
-            nmeas,
+            meas_names,
         ),
         columns=meas_names,
-        index=out_id,
+        index=obs_id,
     )
-    out_t = pd.DataFrame(
-        np.repeat(range(nper), nobs), columns=["time_period"], index=out_id
+        
+    t = pd.DataFrame(
+        np.repeat(range(nper), nobs), columns=["time_period"], index=obs_id
     )
-    observed_data = pd.concat([out_t, out_meas, out_cont], axis=1)
+    
+    observed_data = pd.concat([t, meas, cont], axis=1)
     latent_data = pd.DataFrame(
-        data=np.array(out_fac).reshape(nobs * nper, nfac),
+        data=np.array(fac).reshape(nobs * nper, nfac),
         columns=factor_names,
-        index=out_id,
+        index=obs_id,
     )
-    latent_data = pd.concat([out_t, latent_data], axis=1)
+    
+    latent_data = pd.concat([t, latent_data], axis=1)
 
     return observed_data, latent_data
 
