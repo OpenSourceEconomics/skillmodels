@@ -89,7 +89,7 @@ def expected_npfac():
 def test_next_period_factors(set_up_npfac, expected_npfac):
     aaae(sd.next_period_factors(**set_up_npfac), expected_npfac)
     
-    
+# Excluding translog, makes the tests pass in all modes. Should be looked up  
 @pytest.fixture
 def set_up_npfac_without_translog():
     out = {}
