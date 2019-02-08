@@ -9,7 +9,7 @@ import sys
 sys.path.append("../../simulation/")
 sys.path.append("../../model_functions/")
 
-import simulate_data as sdata
+import simulate_data as sd
 
 # test measuerments_from_factors
 @pytest.fixture
@@ -31,7 +31,7 @@ def expected_meas():
 
 
 def test_measurements_from_factors(set_up_meas, expected_meas):
-    aaae(sdata.measurements_from_factors(**set_up_meas), expected_meas)
+    aaae(sd.measurements_from_factors(**set_up_meas), expected_meas)
 
 
 # Test next_period_factors
@@ -66,24 +66,25 @@ def set_up_npfac():
             "included_positions": [0, 1, 2, 3, 4, 5],
         },
     ]
-    out["shock_variances"] = np.array([0,0,0,0,0,0])
+    out["shock_variances"] = np.array([0, 0, 0, 0, 0, 0])
     return out
+
 
 @pytest.fixture
 def expected_npfac():
-    #The values have been computed by using the functions from the module transition_functions.py
-    # since the main calculations are made through those functions, what the test actualy tests is whether the loops of getatr in sumlated_next_period_factors work correctly
-    d={}
-    d['tl']=np.array([[0.055,0.09]])
-    d['lin']=np.array([[0.7,1.4]])
-    d['lces'] = np.array([[2.8104906, 3.3104906]])
-    d['ar1']=np.array([[1, 2]])
-    d['constant']=np.array([[0.5, 1 ]])
-    d['linwic']=np.array([[0.75, 1.45]])
-    npfac=np.concatenate(list(d.values())).T
+    # The values have been computed by using the functions from the module transition_functions.py
+    # since the main calculations are made through those functions, what the test actualy tests
+    # is whether the loops of getatr in sumlated_next_period_factors work correctly
+    d = {}
+    d["tl"] = np.array([[0.055, 0.09]])
+    d["lin"] = np.array([[0.7, 1.4]])
+    d["lces"] = np.array([[2.8104906, 3.3104906]])
+    d["ar1"] = np.array([[1, 2]])
+    d["constant"] = np.array([[0.5, 1]])
+    d["linwc"] = np.array([[0.75, 1.45]])
+    npfac = np.concatenate(list(d.values())).T
     return npfac
 
+
 def test_next_period_factors(set_up_npfac, expected_npfac):
-    aaae(sdata.next_period_factors(**set_up_npfac), expected_npfac)
-
-
+    aaae(sd.next_period_factors(**set_up_npfac), expected_npfac)
