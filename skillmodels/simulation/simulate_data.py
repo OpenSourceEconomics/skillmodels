@@ -29,10 +29,8 @@ Notes:
 import pandas as pd
 import numpy as np
 from numpy.random import multivariate_normal, choice
-import sys
 
-sys.path.append("../model_functions/")
-import transition_functions as tf
+import skillmodels.model_functions.transition_functions as tf
 
 # import skillmodels.model_functions.transition_functions as tf
 
