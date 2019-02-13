@@ -1,5 +1,4 @@
-"""
-Tests for functions in simulate_data module
+"""Tests for functions in simulate_data module
 """
 import numpy as np
 from numpy.testing import assert_array_almost_equal as aaae
