@@ -89,7 +89,6 @@ def simulate_datasets(
     """
     ncont = len(control_names)
     nfac = len(factor_names)
-    nmeas = len(meas_names)
     fac = [np.zeros((nobs, nfac))] * nper
     obs_id = np.array([range(nobs)] * nper).reshape(
         nobs * nper

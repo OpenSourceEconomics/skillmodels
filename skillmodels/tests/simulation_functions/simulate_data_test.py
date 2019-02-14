@@ -5,14 +5,20 @@ import pandas as pd
 from numpy.testing import assert_array_almost_equal as aaae
 from pandas.testing import assert_frame_equal as adfeq
 import pytest
-from unittest.mock import patch
+#from pytest_mock import mocker
+from unittest import mock
 import sys
+
 
 sys.path.append("../../")
 
 import simulation.simulate_data as sd
+from simulation.simulate_data import simulate_datasets
 
+
+# ===============================
 # test measuerments_from_factors
+# ===============================
 @pytest.fixture
 def set_up_meas():
     out = {}
@@ -34,7 +40,9 @@ def test_measurements_from_factors(set_up_meas, expected_meas):
     aaae(sd.measurements_from_factors(**set_up_meas), expected_meas)
 
 
+# =========================
 # Test next_period_factors
+# =========================
 
 
 @pytest.fixture
@@ -90,14 +98,19 @@ def test_next_period_factors(set_up_npfac, expected_npfac):
     aaae(sd.next_period_factors(**set_up_npfac), expected_npfac)
 
 
+# ===============================
+# test generate datasets, nemf=1
+# ===============================
+
+
 @pytest.fixture
 def set_up_generate_datasets():
     out = {}
     out["factor_names"] = ["f1", "f2"]
     out["control_names"] = ["c1", "c2"]
     out["meas_names"] = ["m1", "m2"]
-    out["nobs"] = 1
-    out["nper"] = 2
+    out["nobs"] = 5
+    out["nper"] = 3
     out["means"] = np.array([0, 0, 0.5, 0.5])
     out["covs"] = np.zeros((4, 4))
     out["weights"] = 1
@@ -107,130 +120,34 @@ def set_up_generate_datasets():
         {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
     ]
     out["shock_variances"] = np.zeros(2)
-    out["loadings"] = np.array([[0.5, 0.5], [0.5, 0.5]])
-    out["deltas"] = np.array([[0.5, 0.5], [0.5, 0.5]])
+    out["loadings"] = np.array([[0.5, 0.4], [0.2, 0.7]])
+    out["deltas"] = np.array([[0.5, 0.3], [0.5, 0.6]])
     out["meas_variances"] = np.zeros(2)
-    out["controls_mock"] = np.array([[0.5, 0.5]])
-    out["start_states_mock"] = np.array([[0, 0]])
     return out
 
 
 @pytest.fixture
 def expected_dataset():
     out = {}
-    id_obs = np.array([0, 0])
+    id_obs = np.array([0, 1, 2, 3, 4] * 3)
     controls = pd.DataFrame(
-        data=np.array([[0.5, 0.5], [0.5, 0.5]]), columns=["c1", "c2"], index=id_obs
+        data=np.array([[0.5, 0.5]] * 15), columns=["c1", "c2"], index=id_obs
     )  # constant over time
-    states_p0 = np.array([[0, 0]])
-    states_p1 = np.array([[0, 0.3]])
-    meas_p0 = np.array([[0.5, 0.5]])
-    meas_p1 = np.array([[0.65, 0.65]])
-    periods = np.array([[0, 1]]).T
-    meas = pd.DataFrame(
-        data=np.concatenate((periods, np.concatenate((meas_p0, meas_p1))), axis=1),
-        columns=["time_period", "m1", "m2"],
-        index=id_obs,
-    )
-
-    factors = pd.DataFrame(
-        data=np.concatenate((periods, np.concatenate((states_p0, states_p1))), axis=1),
-        columns=["time_period", "f1", "f2"],
-        index=id_obs,
-    )
-    out["observed_data"] = pd.concat([meas, controls], axis=1)
-    out["latent_data"] = factors
-    return out
-
-
-def test_simulate_latent_data(set_up_generate_datasets, expected_dataset):
-    d = set_up_generate_datasets
-    mock_npfac = patch("simulate_data.generate_start_factors_and_control_variables")
-    mock_npfac.return_value = (d["start_states_mock"], d["controls_mock"])
-    results = sd.simulate_datasets(
-        d["factor_names"],
-        d["control_names"],
-        d["meas_names"],
-        d["nobs"],
-        d["nper"],
-        d["means"],
-        d["covs"],
-        d["weights"],
-        d["transition_names"],
-        d["transition_argument_dicts"],
-        d["shock_variances"],
-        d["loadings"],
-        d["deltas"],
-        d["meas_variances"],
-    )
-    adfeq(results[1], expected_dataset["latent_data"], check_dtype=False)
-
-
-# @patch("simulate_data.generate_start_factors_and_control_variables")
-def test_simulate_observed_data(set_up_generate_datasets, expected_dataset):
-    d = set_up_generate_datasets
-    # mock_npfac = patch("simulate_data.generate_start_factors_and_control_variables")
-    # mock_npfac.return_value = (d["start_states_mock"], d["controls_mock"])
-    results = sd.simulate_datasets(
-        d["factor_names"],
-        d["control_names"],
-        d["meas_names"],
-        d["nobs"],
-        d["nper"],
-        d["means"],
-        d["covs"],
-        d["weights"],
-        d["transition_names"],
-        d["transition_argument_dicts"],
-        d["shock_variances"],
-        d["loadings"],
-        d["deltas"],
-        d["meas_variances"],
-    )
-    adfeq(results[0], expected_dataset["observed_data"], check_dtype=False)
-
-
-@pytest.fixture
-def set_up_generate_datasets_3_obs():
-    out = {}
-    out["factor_names"] = ["f1", "f2"]
-    out["control_names"] = ["c1", "c2"]
-    out["meas_names"] = ["m1", "m2"]
-    out["nobs"] = 3
-    out["nper"] = 3
-    out["means"] = np.array([[0, 0, 0.5, 0.5], [0, 0, 0.5, 0.5]])
-    out["covs"] = np.zeros((2, 4, 4))
-    out["weights"] = np.array([0.5, 0.5])
-    out["transition_names"] = ["linear", "linear_with_constant"]
-    out["transition_argument_dicts"] = [
-        {"coeffs": np.array([0.2, 0.2]), "included_positions": [0, 1]},
-        {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
-    ]
-    out["shock_variances"] = np.zeros(2)
-    out["loadings"] = np.array([[0.5, 0.5], [0.5, 0.5]])
-    out["deltas"] = np.array([[0.5, 0.5], [0.5, 0.5]])
-    out["meas_variances"] = np.zeros(2)
-    # out["controls_mock"] = np.array([[0.5, 0.5]])
-    # out["start_states_mock"] = np.array([[0, 0]])
-    return out
-
-
-@pytest.fixture
-def expected_dataset_3_obs():
-    out = {}
-    id_obs = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
-    controls = pd.DataFrame(
-        data=np.array([[0.5, 0.5], [0.5, 0.5], [0.5, 0.5]] * 3),
-        columns=["c1", "c2"],
-        index=id_obs,
-    )  # constant over time
-    states_p0 = np.array([[0, 0], [0, 0], [0, 0]])
-    states_p1 = np.array([[0, 0.3], [0, 0.3], [0, 0.3]])
-    states_p2 = np.array([[0.06, 0.36], [0.06, 0.36], [0.06, 0.36]])
-    meas_p0 = np.array([[0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
-    meas_p1 = np.array([[0.65, 0.65], [0.65, 0.65], [0.65, 0.65]])
-    meas_p2 = np.array([[0.71, 0.71], [0.71, 0.71], [0.71, 0.71]])
-    periods = np.array([[0, 0, 0, 1, 1, 1, 2, 2, 2]]).T
+    states_p0 = np.array([[0, 0]] * 5)  # setup[means][0:2]
+    states_p1 = np.array([[0, 0.3]] * 5)  # transition_name(states_p0), called manually
+    states_p2 = np.array(
+        [[0.06, 0.36]] * 5
+    )  # transition_name(states_p1), called manually
+    meas_p0 = np.array(
+        [[0.4, 0.55]] * 5
+    )  # meas_from_factor(factors_p0,controls), called manually
+    meas_p1 = np.array(
+        [[0.52, 0.76]] * 5
+    )  # meas_from_factor(factors_p1,controls), called manually
+    meas_p2 = np.array(
+        [[0.574, 0.814]] * 5
+    )  # meas_from_factor(factors_p2,controls), called manually
+    periods = np.array([[0] * 5, [1] * 5, [2] * 5]).reshape(15, 1)
     meas = pd.DataFrame(
         data=np.concatenate(
             (periods, np.concatenate((meas_p0, meas_p1, meas_p2))), axis=1
@@ -251,18 +168,182 @@ def expected_dataset_3_obs():
     return out
 
 
-def test_simulate_latent_data_3_obs(
-    set_up_generate_datasets_3_obs, expected_dataset_3_obs
+def test_simulate_latent_data(set_up_generate_datasets, expected_dataset):
+    latent_data = sd.simulate_datasets(**set_up_generate_datasets)[1]
+    adfeq(latent_data, expected_dataset["latent_data"], check_dtype=False)
+
+
+def test_simulate_observed_data(set_up_generate_datasets, expected_dataset):
+    obs_data = sd.simulate_datasets(**set_up_generate_datasets)[0]
+    adfeq(obs_data, expected_dataset["observed_data"], check_dtype=False)
+
+
+# =================
+# test with nemf=2
+# =================
+
+
+@pytest.fixture
+def set_up_generate_datasets_2_mix():
+    out = {}
+    out["factor_names"] = ["f1", "f2"]
+    out["control_names"] = ["c1", "c2"]
+    out["meas_names"] = ["m1", "m2"]
+    out["nobs"] = 5
+    out["nper"] = 3
+    out["means"] = np.array([[0, 0, 0.5, 0.5], [0, 0, 0.5, 0.5]])
+    out["covs"] = np.zeros((2, 4, 4))
+    out["weights"] = np.array([0.5, 0.5])
+    out["transition_names"] = ["linear", "linear_with_constant"]
+    out["transition_argument_dicts"] = [
+        {"coeffs": np.array([0.2, 0.2]), "included_positions": [0, 1]},
+        {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
+    ]
+    out["shock_variances"] = np.zeros(2)
+    out["loadings"] = np.array([[0.5, 0.5], [0.6, 0.6]])
+    out["deltas"] = np.array([[0.5, 0.5], [0.6, 0.6]])
+    out["meas_variances"] = np.zeros(2)
+    return out
+
+
+@pytest.fixture
+def expected_dataset_2_mix():
+    out = {}
+    id_obs = id_obs = np.array([0, 1, 2, 3, 4] * 3)
+    controls = pd.DataFrame(
+        data=np.array([[0.5, 0.5]] * 15), columns=["c1", "c2"], index=id_obs
+    )  # constant over time
+    states_p0 = np.array([[0, 0]] * 5)
+    states_p1 = np.array([[0, 0.3]] * 5)
+    states_p2 = np.array([[0.06, 0.36]] * 5)
+    meas_p0 = np.array([[0.5, 0.6]] * 5)
+    meas_p1 = np.array([[0.65, 0.78]] * 5)
+    meas_p2 = np.array([[0.71, 0.852]] * 5)
+    periods = np.array([[0] * 5, [1] * 5, [2] * 5]).reshape(15, 1)
+    meas = pd.DataFrame(
+        data=np.concatenate(
+            (periods, np.concatenate((meas_p0, meas_p1, meas_p2))), axis=1
+        ),
+        columns=["time_period", "m1", "m2"],
+        index=id_obs,
+    )
+
+    factors = pd.DataFrame(
+        data=np.concatenate(
+            (periods, np.concatenate((states_p0, states_p1, states_p2))), axis=1
+        ),
+        columns=["time_period", "f1", "f2"],
+        index=id_obs,
+    )
+    out["observed_data"] = pd.concat([meas, controls], axis=1)
+    out["latent_data"] = factors
+    return out
+
+
+def test_simulate_latent_data_2_mix(
+    set_up_generate_datasets_2_mix, expected_dataset_2_mix
 ):
-    latent_data = sd.simulate_datasets(**set_up_generate_datasets_3_obs)[1]
-    adfeq(latent_data, expected_dataset_3_obs["latent_data"], check_dtype=False)
+    latent_data = sd.simulate_datasets(**set_up_generate_datasets_2_mix)[1]
+    adfeq(latent_data, expected_dataset_2_mix["latent_data"], check_dtype=False)
 
 
-def test_simulate_observed_data_3_obs(
-    set_up_generate_datasets_3_obs, expected_dataset_3_obs
+def test_simulate_observed_data_2_mix(
+    set_up_generate_datasets_2_mix, expected_dataset_2_mix
 ):
-    obs_data = sd.simulate_datasets(**set_up_generate_datasets_3_obs)[0]
-    adfeq(obs_data, expected_dataset_3_obs["observed_data"], check_dtype=False)
+    obs_data = sd.simulate_datasets(**set_up_generate_datasets_2_mix)[0]
+    adfeq(obs_data, expected_dataset_2_mix["observed_data"], check_dtype=False)
 
 
-# def test_simulate_datasets_single_obs(set_up_generate_datasets, expected_dataset):
+# ===============
+# test using mock
+# ===============
+
+# ===============================
+# test generate datasets, nemf=1
+# ===============================
+
+
+@pytest.fixture
+def set_up_generate_datasets_mock():
+    out = {}
+    out["factor_names"] = ["f1", "f2"]
+    out["control_names"] = ["c1", "c2"]
+    out["meas_names"] = ["m1", "m2"]
+    out["nobs"] = 5
+    out["nper"] = 3
+    out["means"] = np.array([0, 0, 0.5, 0.5])
+    out["covs"] = np.eye(4)
+    out["weights"] = 1
+    out["transition_names"] = ["linear", "linear_with_constant"]
+    out["transition_argument_dicts"] = [
+        {"coeffs": np.array([0.2, 0.2]), "included_positions": [0, 1]},
+        {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
+    ]
+    out["shock_variances"] = np.zeros(2)
+    out["loadings"] = np.array([[0.5, 0.5], [0.5, 0.5]])
+    out["deltas"] = np.array([[0.5, 0.5], [0.5, 0.5]])
+    out["meas_variances"] = np.zeros(2)
+    #out["controls_mock"] = np.array([[0.5, 0.5]] * 5)
+    #out["start_states_mock"] = np.array([[0, 0]] * 5)
+    return out
+
+
+@pytest.fixture
+def expected_dataset_mock():
+    out = {}
+    id_obs = np.array([0, 1, 2, 3, 4] * 3)
+    controls = pd.DataFrame(
+        data=np.array([[0.5, 0.5]] * 15), columns=["c1", "c2"], index=id_obs
+    )  # constant over time
+    states_p0 = np.array([[0, 0]] * 5)  # setup[means][0:2]
+    states_p1 = np.array([[0, 0.3]] * 5)  # transition_name(states_p0), called manually
+    states_p2 = np.array(
+        [[0.06, 0.36]] * 5
+    )  # transition_name(states_p1), called manually
+    meas_p0 = np.array(
+        [[0.5, 0.5]] * 5
+    )  # meas_from_factor(factors_p0,controls), called manually
+    meas_p1 = np.array(
+        [[0.65, 0.65]] * 5
+    )  # meas_from_factor(factors_p1,controls), called manually
+    meas_p2 = np.array(
+        [[0.71, 0.71]] * 5
+    )  # meas_from_factor(factors_p2,controls), called manually
+    periods = np.array([[0] * 5, [1] * 5, [2] * 5]).reshape(15, 1)
+    meas = pd.DataFrame(
+        data=np.concatenate(
+            (periods, np.concatenate((meas_p0, meas_p1, meas_p2))), axis=1
+        ),
+        columns=["time_period", "m1", "m2"],
+        index=id_obs,
+    )
+
+    factors = pd.DataFrame(
+        data=np.concatenate(
+            (periods, np.concatenate((states_p0, states_p1, states_p2))), axis=1
+        ),
+        columns=["time_period", "f1", "f2"],
+        index=id_obs,
+    )
+    out["observed_data"] = pd.concat([meas, controls], axis=1)
+    out["latent_data"] = factors
+    return out
+
+
+@mock.patch(
+    "simulation.simulate_data.generate_start_factors_and_control_variables",
+    return_value=(
+         np.array([[0, 0]] * 5),
+         np.array([[0.5, 0.5]] * 5)
+    ),
+    autospec=True
+)
+def test_simulate_latent_data_with_mock(mock_generate_start_factors_and_control_variables,
+    set_up_generate_datasets_mock, expected_dataset_mock
+):
+    #d = set_up_generate_datasets_mock
+    # mock_npfac.return_value = (d["start_states_mock"], d["controls_mock"])
+    results = simulate_datasets(**set_up_generate_datasets_mock)
+    adfeq(results[1], expected_dataset["latent_data"], check_dtype=False)
+
+
