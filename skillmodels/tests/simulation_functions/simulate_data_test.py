@@ -329,7 +329,7 @@ def expected_dataset_mock():
     out["latent_data"] = factors
     return out
 
-
+#patch the gen_data_function
 @mock.patch(
     "simulation.simulate_data.generate_start_factors_and_control_variables",
     return_value=(
@@ -341,9 +341,130 @@ def expected_dataset_mock():
 def test_simulate_latent_data_with_mock(mock_generate_start_factors_and_control_variables,
     set_up_generate_datasets_mock, expected_dataset_mock
 ):
-    #d = set_up_generate_datasets_mock
-    # mock_npfac.return_value = (d["start_states_mock"], d["controls_mock"])
     results= simulate_datasets(**set_up_generate_datasets_mock)
     adfeq(results[1], expected_dataset_mock["latent_data"], check_dtype=False)
 
 
+
+@mock.patch(
+    "simulation.simulate_data.generate_start_factors_and_control_variables",
+    return_value=(
+         np.array([[0, 0]] * 5),
+         np.array([[0.5, 0.5]] * 5)
+    ),
+    autospec=True
+)
+    
+def test_simulate_observed_data_with_mock(mock_generate_start_factors_and_control_variables,
+    set_up_generate_datasets_mock, expected_dataset_mock
+):
+    results= simulate_datasets(**set_up_generate_datasets_mock)
+    adfeq(results[0], expected_dataset_mock["observed_data"], check_dtype=False)
+    
+    
+#=========================
+# generate datasets nemf=2
+#=========================
+    
+
+@pytest.fixture
+def set_up_generate_datasets_mock_mix_2():
+    out = {}
+    out["factor_names"] = ["f1", "f2"]
+    out["control_names"] = ["c1", "c2"]
+    out["meas_names"] = ["m1", "m2"]
+    out["nobs"] = 5
+    out["nper"] = 3
+    out["means"] = np.array([[0, 0, 0.5, 0.5], [0, 0, 0.5, 0.8]])
+    out["covs"] = np.array([np.eye(4)*100]*2)
+    out["weights"] = np.array([0.5,0.5])
+    out["transition_names"] = ["linear", "linear_with_constant"]
+    out["transition_argument_dicts"] = [
+        {"coeffs": np.array([0.2, 0.2]), "included_positions": [0, 1]},
+        {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
+    ]
+    out["shock_variances"] = np.zeros(2)
+    out["loadings"] = np.array([[0.5, 0.5], [0.5, 0.5]])
+    out["deltas"] = np.array([[0.5, 0.5], [0.5, 0.5]])
+    out["meas_variances"] = np.zeros(2)
+    #out["controls_mock"] = np.array([[0.5, 0.5]] * 5)
+    #out["start_states_mock"] = np.array([[0, 0]] * 5)
+    return out
+
+
+@pytest.fixture
+def expected_dataset_mock_mix_2():
+    out = {}
+    id_obs = np.array([0, 1, 2, 3, 4] * 3)
+    controls = pd.DataFrame(
+        data=np.array([[0.5, 0.5]] * 15), columns=["c1", "c2"], index=id_obs
+    )  # constant over time
+    states_p0 = np.array([[0, 0]] * 5)  # setup[means][0:2]
+    states_p1 = np.array([[0, 0.3]] * 5)  # transition_name(states_p0), called manually
+    states_p2 = np.array(
+        [[0.06, 0.36]] * 5
+    )  # transition_name(states_p1), called manually
+    meas_p0 = np.array(
+        [[0.5, 0.5]] * 5
+    )  # meas_from_factor(factors_p0,controls), called manually
+    meas_p1 = np.array(
+        [[0.65, 0.65]] * 5
+    )  # meas_from_factor(factors_p1,controls), called manually
+    meas_p2 = np.array(
+        [[0.71, 0.71]] * 5
+    )  # meas_from_factor(factors_p2,controls), called manually
+    periods = np.array([[0] * 5, [1] * 5, [2] * 5]).reshape(15, 1)
+    meas = pd.DataFrame(
+        data=np.concatenate(
+            (periods, np.concatenate((meas_p0, meas_p1, meas_p2))), axis=1
+        ),
+        columns=["time_period", "m1", "m2"],
+        index=id_obs,
+    )
+
+    factors = pd.DataFrame(
+        data=np.concatenate(
+            (periods, np.concatenate((states_p0, states_p1, states_p2))), axis=1
+        ),
+        columns=["time_period", "f1", "f2"],
+        index=id_obs,
+    )
+    out["observed_data"] = pd.concat([meas, controls], axis=1)
+    out["latent_data"] = factors
+    return out
+
+#patch the gen_data_function
+@mock.patch(
+    "simulation.simulate_data.generate_start_factors_and_control_variables",
+    return_value=(
+         np.array([[0, 0]] * 5),
+         np.array([[0.5, 0.5]] * 5)
+    ),
+    autospec=True
+)
+    
+
+def test_simulate_latent_data_with_mock_mix_2(mock_generate_start_factors_and_control_variables,
+    set_up_generate_datasets_mock_mix_2, expected_dataset_mock_mix_2
+):
+    results= simulate_datasets(**set_up_generate_datasets_mock_mix_2)
+    adfeq(results[1], expected_dataset_mock_mix_2["latent_data"], check_dtype=False)
+    
+    
+    
+#patch the gen_data_function
+@mock.patch(
+    "simulation.simulate_data.generate_start_factors_and_control_variables",
+    return_value=(
+         np.array([[0, 0]] * 5),
+         np.array([[0.5, 0.5]] * 5)
+    ),
+    autospec=True
+)
+    
+
+def test_simulate_observed_data_with_mock_mix_2(mock_generate_start_factors_and_control_variables,
+    set_up_generate_datasets_mock_mix_2, expected_dataset_mock_mix_2
+):
+    results= simulate_datasets(**set_up_generate_datasets_mock_mix_2)
+    adfeq(results[0], expected_dataset_mock_mix_2["observed_data"], check_dtype=False)
