@@ -30,7 +30,7 @@ import pandas as pd
 import numpy as np
 from numpy.random import multivariate_normal, choice
 import sys
-sys.path.append("../..")
+sys.path.append("../")
 import model_functions.transition_functions as tf
 
 # import skillmodels.model_functions.transition_functions as tf
@@ -117,7 +117,7 @@ def simulate_datasets(
             loadings,
             deltas,
             meas_variances,
-            nmeas,
+            
         ),
         columns=meas_names,
         index=obs_id,
@@ -232,7 +232,7 @@ def next_period_factors(
     return next_factors
 
 
-def measurements_from_factors(factors, controls, loadings, deltas, variances, nmeas):
+def measurements_from_factors(factors, controls, loadings, deltas, variances):
     """Generate the variables that would be observed in practice.
 
     This generates the data for only one period. Let nmeas be the number of measurements in that period.
@@ -258,6 +258,7 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances, nm
         - Try to express as much as possible in matrix products. This will lead to concise and
             fast code.
     """
+    nmeas= loadings.shape[0]
     nobs, nfac = factors.shape
     ncontrols = controls.shape[1]
     # Assumption: In general eps_{Obs_j,Meas_i}!=eps_{Obs_k,Meas_i}  where j!=k
