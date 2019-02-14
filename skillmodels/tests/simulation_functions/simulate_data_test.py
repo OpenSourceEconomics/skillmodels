@@ -13,7 +13,6 @@ import sys
 sys.path.append("../../")
 
 import simulation.simulate_data as sd
-from simulation.simulate_data import simulate_datasets
 
 
 # ===============================
@@ -341,7 +340,7 @@ def expected_dataset_mock():
 def test_simulate_latent_data_with_mock(mock_generate_start_factors_and_control_variables,
     set_up_generate_datasets_mock, expected_dataset_mock
 ):
-    results= simulate_datasets(**set_up_generate_datasets_mock)
+    results= sd.simulate_datasets(**set_up_generate_datasets_mock)
     adfeq(results[1], expected_dataset_mock["latent_data"], check_dtype=False)
 
 
@@ -358,7 +357,7 @@ def test_simulate_latent_data_with_mock(mock_generate_start_factors_and_control_
 def test_simulate_observed_data_with_mock(mock_generate_start_factors_and_control_variables,
     set_up_generate_datasets_mock, expected_dataset_mock
 ):
-    results= simulate_datasets(**set_up_generate_datasets_mock)
+    results= sd.simulate_datasets(**set_up_generate_datasets_mock)
     adfeq(results[0], expected_dataset_mock["observed_data"], check_dtype=False)
     
     
@@ -447,7 +446,7 @@ def expected_dataset_mock_mix_2():
 def test_simulate_latent_data_with_mock_mix_2(mock_generate_start_factors_and_control_variables,
     set_up_generate_datasets_mock_mix_2, expected_dataset_mock_mix_2
 ):
-    results= simulate_datasets(**set_up_generate_datasets_mock_mix_2)
+    results= sd.simulate_datasets(**set_up_generate_datasets_mock_mix_2)
     adfeq(results[1], expected_dataset_mock_mix_2["latent_data"], check_dtype=False)
     
     
@@ -466,5 +465,5 @@ def test_simulate_latent_data_with_mock_mix_2(mock_generate_start_factors_and_co
 def test_simulate_observed_data_with_mock_mix_2(mock_generate_start_factors_and_control_variables,
     set_up_generate_datasets_mock_mix_2, expected_dataset_mock_mix_2
 ):
-    results= simulate_datasets(**set_up_generate_datasets_mock_mix_2)
+    results= sd.simulate_datasets(**set_up_generate_datasets_mock_mix_2)
     adfeq(results[0], expected_dataset_mock_mix_2["observed_data"], check_dtype=False)
