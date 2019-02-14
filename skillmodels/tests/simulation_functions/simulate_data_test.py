@@ -343,7 +343,7 @@ def test_simulate_latent_data_with_mock(mock_generate_start_factors_and_control_
 ):
     #d = set_up_generate_datasets_mock
     # mock_npfac.return_value = (d["start_states_mock"], d["controls_mock"])
-    results = simulate_datasets(**set_up_generate_datasets_mock)
-    adfeq(results[1], expected_dataset["latent_data"], check_dtype=False)
+    results= simulate_datasets(**set_up_generate_datasets_mock)
+    adfeq(results[1], expected_dataset_mock["latent_data"], check_dtype=False)
 
 
