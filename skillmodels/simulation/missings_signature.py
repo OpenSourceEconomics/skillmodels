@@ -26,7 +26,7 @@ def add_missings(data, meas_names, share, serial_corr=0.0, within_period_corr=0.
     # questions:
     # 1. the number of missing values evenly distributed between individuals?
     # 2.
-    p = 0.6#share * np.size(data.values) / np.size(data[meas_names].values)
+    p = 0.6  # share * np.size(data.values) / np.size(data[meas_names].values)
     # serial transition probabilities
     p_t_10 = p * (1 - serial_corr)
     p_t_11 = p + serial_corr * (1 - p)
@@ -34,32 +34,36 @@ def add_missings(data, meas_names, share, serial_corr=0.0, within_period_corr=0.
     # between measurements transition probabilities
     p_m_10 = p * (1 - within_period_corr)
     p_m_11 = p + within_period_corr * (1 - p)
-    #data_with_missings = [np.zeros((int(len(data)/len(set(data.index))),len(meas_names)))]*len(set(data.index))
+    # data_with_missings = [np.zeros((int(len(data)/len(set(data.index))),len(meas_names)))]*len(set(data.index))
     data_with_missings = data[meas_names].values.copy()
-    data_with_missings=data_with_missings.reshape(len(set(data.index)),int(len(data)/len(set(data.index))),len(meas_names))
+    data_with_missings = data_with_missings.reshape(
+        len(set(data.index)), int(len(data) / len(set(data.index))), len(meas_names)
+    )
     num_missing_val = np.count_nonzero(np.isnan(data_with_missings))
     replaced_share = num_missing_val / data_with_missings.size
-    
+
     while replaced_share < share:
-        for i in range(len(data_with_missings)):  # alternatively randomly choose individual??
+        for i in range(
+            len(data_with_missings)
+        ):  # alternatively randomly choose individual??
             ind_data = data_with_missings[i]
 
             if binomial(1, p) == 1:
-                ind_data[0,0] = np.nan
+                ind_data[0, 0] = np.nan
             for t in range(1, len(ind_data)):
-                if np.isnan(ind_data[t - 1,0]):
+                if np.isnan(ind_data[t - 1, 0]):
                     if binomial(1, p_t_11) == 1:
-                        ind_data[t,0] = np.nan
+                        ind_data[t, 0] = np.nan
                 else:
                     if binomial(1, p_t_10) == 1:
-                        ind_data[t,0] = np.nan
+                        ind_data[t, 0] = np.nan
                 for m in range(1, len(meas_names)):
-                    if np.isnan(ind_data[t,m-1]):
+                    if np.isnan(ind_data[t, m - 1]):
                         if binomial(1, p_m_11) == 1:
-                            ind_data[t,m] = np.nan
+                            ind_data[t, m] = np.nan
                     else:
                         if binomial(1, p_m_10) == 1:
-                            ind_data[t,m] = np.nan
+                            ind_data[t, m] = np.nan
 
                     num_missing_val = np.count_nonzero(np.isnan(data_with_missings))
                     replaced_share = num_missing_val / data.size
