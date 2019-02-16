@@ -1,9 +1,10 @@
 import numpy as np
-import pandas as pd
 from numpy.random import binomial
 
 
-def add_missings(data, meas_names, share, serial_corr=0.0, within_period_corr=0.0):
+def add_missings(
+    data, meas_names, control_names, share, serial_corr=0.0, within_period_corr=0.0
+):
     """Add np.nans to data.
 
     nans are only added to measurements, not to control variables or factors.
@@ -26,27 +27,33 @@ def add_missings(data, meas_names, share, serial_corr=0.0, within_period_corr=0.
     # questions:
     # 1. the number of missing values evenly distributed between individuals?
     # 2.
-    p = 0.6  # share * np.size(data.values) / np.size(data[meas_names].values)
+
+    # marginal probability of getting nan:
+    p = (
+        share
+        * (np.size(data[control_names].values) + np.size(data[meas_names]))
+        / np.size(data[meas_names].values)
+    )
     # serial transition probabilities
     p_t_10 = p * (1 - serial_corr)
     p_t_11 = p + serial_corr * (1 - p)
-
     # between measurements transition probabilities
     p_m_10 = p * (1 - within_period_corr)
     p_m_11 = p + within_period_corr * (1 - p)
-    # data_with_missings = [np.zeros((int(len(data)/len(set(data.index))),len(meas_names)))]*len(set(data.index))
-    data_with_missings = data[meas_names].values.copy()
-    data_with_missings = data_with_missings.reshape(
+
+    data_with_missings = data.copy()
+    data_interim = data[meas_names].values.copy()
+    data_interim = data_interim.reshape(
         len(set(data.index)), int(len(data) / len(set(data.index))), len(meas_names)
     )
-    num_missing_val = np.count_nonzero(np.isnan(data_with_missings))
-    replaced_share = num_missing_val / data_with_missings.size
+    num_missing_val = np.count_nonzero(np.isnan(data_interim))
+    replaced_share = num_missing_val / (
+        data[meas_names].size + data[control_names].size
+    )
 
     while replaced_share < share:
-        for i in range(
-            len(data_with_missings)
-        ):  # alternatively randomly choose individual??
-            ind_data = data_with_missings[i]
+        for i in range(len(data_interim)):  # alternatively randomly choose individual??
+            ind_data = data_interim[i]
 
             if binomial(1, p) == 1:
                 ind_data[0, 0] = np.nan
@@ -65,6 +72,10 @@ def add_missings(data, meas_names, share, serial_corr=0.0, within_period_corr=0.
                         if binomial(1, p_m_10) == 1:
                             ind_data[t, m] = np.nan
 
-                    num_missing_val = np.count_nonzero(np.isnan(data_with_missings))
-                    replaced_share = num_missing_val / data.size
+                    num_missing_val = np.count_nonzero(np.isnan(data_interim))
+                    replaced_share = num_missing_val / (
+                        data[meas_names].size + data[control_names].size
+                    )
+    data_with_missings[meas_names] = data_interim.reshape(data[meas_names].shape)
+
     return data_with_missings
