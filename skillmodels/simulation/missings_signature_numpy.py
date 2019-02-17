@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from numpy.random import binomial
 
 
@@ -31,8 +32,8 @@ def add_missings(
     # marginal probability of getting nan:
     p = (
         share
-        * (np.size(data[control_names]) + np.size(data[meas_names]))
-        / np.size(data[meas_names])
+        * (np.size(data[control_names].values) + np.size(data[meas_names]))
+        / np.size(data[meas_names].values)
     )
     # serial transition probabilities
     p_t_10 = p * (1 - serial_corr)
@@ -57,13 +58,6 @@ def add_missings(
 
             if binomial(1, p) == 1:
                 ind_data[0, 0] = np.nan
-            for m in range(1, len(meas_names)):   
-                if np.isnan(ind_data[0, m - 1]):
-                        if binomial(1, p_m_11) == 1:
-                            ind_data[0, m] = np.nan
-                else:
-                        if binomial(1, p_m_10) == 1:
-                            ind_data[0, m] = np.nan
             for t in range(1, len(ind_data)):
                 if np.isnan(ind_data[t - 1, 0]):
                     if binomial(1, p_t_11) == 1:
