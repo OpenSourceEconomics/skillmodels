@@ -46,12 +46,14 @@ def add_missings(
     data_interim = data_interim.reshape(
         len(set(data.index)), int(len(data) / len(set(data.index))), len(meas_names)
     )
-    num_missing_val = np.count_nonzero(np.isnan(data_interim))
-    replaced_share = num_missing_val / (
-        data[meas_names].size + data[control_names].size
-    )
+    #num_missing_val = np.count_nonzero(np.isnan(data_interim))
+    #replaced_share = num_missing_val / (
+     #   data[meas_names].size + data[control_names].size
+    #)
 
-    while replaced_share < share:
+    while np.count_nonzero(np.isnan(data_interim))/(
+                        data[meas_names].size + data[control_names].size
+                    )<share:#replaced_share < share:
         for i in range(len(data_interim)):  # alternatively randomly choose individual??
             ind_data = data_interim[i]
 
@@ -79,10 +81,10 @@ def add_missings(
                         if binomial(1, p_m_10) == 1:
                             ind_data[t, m] = np.nan
 
-                    num_missing_val = np.count_nonzero(np.isnan(data_interim))
-                    replaced_share = num_missing_val / (
-                        data[meas_names].size + data[control_names].size
-                    )
+                    #num_missing_val = np.count_nonzero(np.isnan(data_interim))
+                    #replaced_share = num_missing_val / (
+                     #   data[meas_names].size + data[control_names].size
+                    #)
     data_with_missings[meas_names] = data_interim.reshape(data[meas_names].shape)
 
     return data_with_missings
