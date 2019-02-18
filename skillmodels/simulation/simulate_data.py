@@ -50,16 +50,15 @@ def add_missings(data, meas_names, p, q):
        
     Returns:
         data_with_missings (pd.DataFrame): Dataset with measurements replaced by np.nan values
+    Notes:
+        The first column of the data should be the column of time periods!
+        Time_periods should be sorted for each individual 
     """
 
     nmeas = len(meas_names)
     data_with_missings = data.copy(deep=True)
-    data_interim = data.sort_index()[meas_names].values.copy()
-    data_interim = data_interim.reshape(
-        len(set(data.index)), int(len(data) / len(set(data.index))), len(meas_names)
-    )
-    for i in range(len(data_interim)):
-        ind_data = data_interim[i]
+    for i in set( data_with_missings.index):
+        ind_data =  data_with_missings.loc[i][meas_names].values
         s = binomial(1, p, nmeas)
         ind_data[0, np.where(s == 1)] = np.nan
         for t in range(1, len(ind_data)):
