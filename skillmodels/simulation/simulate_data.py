@@ -49,7 +49,7 @@ def add_missings(data, meas_names, p, q):
         q (float): probability of a measurement to remain missing in the next period
        
     Returns:
-        data_with_missings (pd.DataFrame): Dataset with measurements replaced by np.nan values
+        data_with_missings (pd.DataFrame): Dataset with a share of measurements replaced by np.nan values
         
     Notes:
         Time_periods should be sorted for each individual 
