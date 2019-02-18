@@ -139,7 +139,7 @@ def simulate_datasets(
 
 
 def generate_start_factors_and_control_variables(
-    means, covs, weights, nobs, nfac, ncont
+   nobs, nfac, ncont, means, covs, weights=1
 ):
     """Draw initial states and control variables from a (mixture of) normals.
 
