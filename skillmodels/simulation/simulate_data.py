@@ -50,8 +50,8 @@ def add_missings(data, meas_names, p, q):
        
     Returns:
         data_with_missings (pd.DataFrame): Dataset with measurements replaced by np.nan values
+        
     Notes:
-        The first column of the data should be the column of time periods!
         Time_periods should be sorted for each individual 
     """
 
