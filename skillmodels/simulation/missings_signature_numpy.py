@@ -11,7 +11,7 @@ def add_missings(data, meas_names, p, q):
 
     Args:
         data (pd.DataFrame): contains the observable part of a simulated dataset
-        meas_names (list): list of strings of names of each measurement variable
+        meas_names (list): list of strings of names of each measurement variable (as in the data)
         p (float): probability of a measurement to become missing
         q (float): probability of a measurement to remain missing in the next period
        
