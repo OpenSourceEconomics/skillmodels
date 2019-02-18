@@ -319,8 +319,89 @@ def test_normal_weight_update_with_nans(setup_linear_update, expected_linear_upd
         d["kf"],
     )
     aaae(d["weights"], expected_linear_update["expected_weights"])
+    
+#tests for normal linear predict function
+@pytest.fixture
+def setup_normal_linear_predict():
+    out = {}
+    
+    out['state'] = np.array(
+        [
+                [7, 8], 
+                [9, 3],
+                [3, 5],
+        ],
+    )
 
+    out['cov'] = np.array(
+            [
+                    [
+                        [0.3, 0, 0],
+                        [0, 0.5, 0],
+                        [0, 0, 0.9],
+                    ],
+                    [
+                        [0.3, -0.2, -0.1],
+                        [-0.2, 0.3, -0.1],
+                        [-0.1, -0.1, 0.5],
+                    ],
+            ],
+        )
+    
+    out['shocks_sds'] = np.array([1.2, 0.3, 0.2])    
+    
+    out['transition_matrix'] = np.array(
+            [
+                    [0.2, 0, 0],
+                    [0, 0.9, 0],
+                    [0, 0, 0.4]
+            ],
+        )
+    
+    return out
 
+   
+@pytest.fixture
+def expected_normal_linear_predict():
+    out = {}
+    
+    out['predicted_states'] = np.array(
+            [
+                    [1.4, 1.6],
+                    [8.1, 2.7],
+                    [1.2, 2],
+            ], 
+        )
+    
+    out['predicted_covs'] = np.array(
+       [     
+            [
+                    [1.458, 0, 0],
+                    [0, 0.315, 0],
+                    [0, 0, 0.364],
+            ],
+            [
+                    [1.468, -0.022, -0.012],
+                    [-0.099, 0.216, -0.054],
+                    [-0.024, -0.024, 0.148],
+            ],
+        ],
+    )
+    
+    return out
+
+def test_normal_linear_predict_states(setup_normal_linear_predict,
+                               expected_normal_linear_predict):
+    d = setup_normal_linear_predict
+    calc_pred_state, calc_pred_cov = kf.normal_linear_predict(**d)
+    aaae(calc_pred_state, expected_normal_linear_predict['predicted_states'])
+    
+def test_normal_linear_predict_covs(setup_normal_linear_predict,
+                               expected_normal_linear_predict):
+    d = setup_normal_linear_predict
+    calc_pred_state, calc_pred_cov = kf.normal_linear_predict(**d)
+    aaae(calc_pred_cov, expected_normal_linear_predict['predicted_covs'])
+    
 # tests for unscented predict functions
 @pytest.fixture
 def setup_unscented_predict():
@@ -529,3 +610,27 @@ def test_sqrt_unscented_predict_focus_on_covs(setup_unscented_predict, mocker):
     )
     make_unique(d["out_covs"])
     aaae(d["out_covs"], d["exp_cholcovs"])
+    
+shocks_sd = np.array(
+        [
+            [
+                [1.2, 0.3, 0.2],
+            ],
+            [
+                [0.1, 0.9, 0.2],   
+            ],
+            [
+                [0.3, 0.01, 0.3],
+            ],
+            [
+                [0.2, 0.5, 0.6],
+            ],
+            [
+                [0.7, 0.1, 0.4],   
+            ],
+            [
+                [0.2, 0.1, 0.1],
+            ],
+              
+        ],
+    )

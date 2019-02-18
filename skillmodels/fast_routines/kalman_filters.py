@@ -214,6 +214,30 @@ def normal_linear_update(state, cov, like_vec, y, c, delta, h, r, positions,
                 weights[emf] /= sum_wprob
 
 
+def normal_linear_predict(state, cov, shocks_sds, transition_matrix):
+    """Make a linear kalman predict step in linear form.
+    Args:
+        state (np.ndarray): numpy array of (nemf * nobs, nfac).
+        cov (np.ndarray): numpy array of (nemf * nobs, nfac, nfac).
+        shocks_sds (np.ndarray): numpy array of (nfac).
+        transition_matrix (np.ndarray): state transition matrix of (nfac, nfac), 
+            the same for all obs.
+                
+    References:
+    https://en.wikipedia.org/wiki/Kalman_filter
+    
+    
+    """
+    nfac = len(state)
+    predicted_states = np.matmul(transition_matrix, state)
+    Q = np.diag(shocks_sds ** 2)
+    #reshape transition matrix to get the same dimension as cov
+    predicted_covs = np.matmul(np.matmul(transition_matrix.reshape(1,nfac,nfac), cov),
+                               np.transpose(cov, axes=(0,2,1))) + Q 
+    
+    return predicted_states, predicted_covs
+
+
 def normal_unscented_predict(stage, sigma_points, flat_sigma_points,
                              s_weights_m, s_weights_c, Q,
                              transform_sigma_points_args,
@@ -306,3 +330,4 @@ def sqrt_probit_update(k, t, j, states, covs, mix_weights, like_vec, y_data,
 def normal_probit_update(k, t, j, states, covs, mix_weights, like_vec, y_data,
                          c_data, deltas, H, R):
     raise NotImplementedError('probit updates are not yet implemented')
+    
