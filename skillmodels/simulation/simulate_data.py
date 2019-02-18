@@ -34,6 +34,7 @@ import sys
 sys.path.append("../")
 import model_functions.transition_functions as tf
 
+
 def add_missings(data, meas_names, p, q):
     """Add np.nans to data.
 
@@ -48,15 +49,8 @@ def add_missings(data, meas_names, p, q):
         q (float): probability of a measurement to remain missing in the next period
        
     Returns:
-        data_with_missings
+        data_with_missings (pd.DataFrame): Dataset with measurements replaced by np.nan values
     """
-    # note: should generate either {0,1} in a loop from correlated bivariate bernoullis or
-    # from multivariate bernoulli given  the covariance  matrix.
-    # questions:
-    # 1. the number of missing values evenly distributed between individuals?
-    # 2.
-
-    # marginal probability of getting nan:
 
     nmeas = len(meas_names)
     data_with_missings = data.copy(deep=True)
@@ -73,9 +67,10 @@ def add_missings(data, meas_names, p, q):
             prob = q * indc_nan + p * (1 - indc_nan)
             s_m = binomial(1, prob)
             ind_data[t, np.where(s_m == 1)] = np.nan
-        data_with_missings.loc[i,meas_names]=ind_data
-   
+        data_with_missings.loc[i, meas_names] = ind_data
+
     return data_with_missings
+
 
 def simulate_datasets(
     factor_names,
@@ -97,10 +92,6 @@ def simulate_datasets(
 
     This function calls the remaining functions in this module.
 
-    Implement this function at the very end and only after I accepted your pull
-    request for the remaining functions. You can then either figure out a suitable
-    list of arguments yourself or ask me again.
-    
     Args:
          nper (int): number of time periods the dataset contains
          nobs (int): number of observations
@@ -196,15 +187,6 @@ def generate_start_factors_and_control_variables(
     Returns:
         start_factors (np.ndarray): shape (nobs, nfac),
         controls (np.ndarray): shape (nobs, ncontrols),
-
-    Notes:
-        In the long run I would like to generalize this to drawing from a mixture of
-        elliptical distributions: https://en.wikipedia.org/wiki/Elliptical_distribution
-        This contains the multivariate normal as a special case.
-        It would require an interface change because the elliptical distribution has more
-        parameters than just mean and covariance. It would be great if you make a proposal
-        for this general case.
-
     """
 
     if np.size(weights) == 1:
@@ -237,24 +219,6 @@ def next_period_factors(
 
     Returns:
         next_factors (np.ndarray): shape(nobs,nfac)
-
-    Notes:
-        - You can look at the module `transform_sigma_points` to see how you can use
-        getattr() to call the transition functions based on their name
-
-        - Writing this function is quite complex because it reuses a lot of code for
-             the transition functions. Take the time to read the documentation of those
-             functions if you feel it is necessary
-
-        - The shocks for the different factors are assumed to be independent. You can draw
-            them from a multivariate normal with diagonal covariance matrix or from
-            nfac univariate normals.
-
-        - You have to convert the factors to a numpy array (DataFrame.values) and then convert
-            the result back in the end. For speed reasons all the transition functions
-            expect numpy arrays and not pandas DataFrames.
-
-
     """
     nobs, nfac = factors.shape
     # sigma_points = factors
@@ -268,7 +232,6 @@ def next_period_factors(
         nobs, nfac
     )
     next_factors = factors_tp1 + errors
-    # next_factors = pd.DataFrame(data = factors_tp1, columns = factors.columns)
 
     return next_factors
 
@@ -291,13 +254,6 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances):
     Returns:
         measurements (pd.DataFrame): DataFrame of shape (nobs, nmeas) with measurement
             names as columns.
-
-    Notes:
-        - A measurement y is a linear function of latent factors and control variables, i.e.
-            y = factors times loadings + controls times deltas + epsilon
-            This is a slide extension of the measurement model you know from the assignments.
-        - Try to express as much as possible in matrix products. This will lead to concise and
-            fast code.
     """
     nmeas = loadings.shape[0]
     nobs, nfac = factors.shape
@@ -309,6 +265,4 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances):
     states = factors.reshape(nobs, 1, nfac)
     conts = controls.reshape(nobs, 1, ncontrols)
     meas = np.dot(states, loadings.T) + np.dot(conts, deltas.T) + epsilon
-    # measurements = pd.DataFrame(data = meas.reshape(nobs,nmeas),columns = measurement_names)
-
     return meas.reshape(nobs, nmeas)
