@@ -37,8 +37,8 @@ def add_missings(data, meas_names, p, q):
         s = binomial(1, p, nmeas)
         ind_data[0, np.where(s == 1)] = np.nan
         for t in range(1, len(ind_data)):
-            i_nan = np.isnan(ind_data[t - 1])
-            prob = q * i_nan + p * (1 - i_nan)
+            indc_nan = np.isnan(ind_data[t - 1])
+            prob = q * indc_nan + p * (1 - indc_nan)
             s_m = binomial(1, prob)
             ind_data[t, np.where(s_m == 1)] = np.nan
     data_with_missings[meas_names] = data_interim.reshape(data[meas_names].shape)
