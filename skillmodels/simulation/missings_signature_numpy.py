@@ -26,21 +26,21 @@ def add_missings(data, meas_names, p, q):
 
     # marginal probability of getting nan:
 
-    nmeas=len(meas_names)
+    nmeas = len(meas_names)
     data_with_missings = data.copy()
     data_interim = data[meas_names].values.copy()
     data_interim = data_interim.reshape(
         len(set(data.index)), int(len(data) / len(set(data.index))), len(meas_names)
     )
-    for i in range(len(data_interim)): 
+    for i in range(len(data_interim)):
         ind_data = data_interim[i]
-        s=binomial(1,p,nmeas)
-        ind_data[0,np.where(s==1)]=np.nan
-        for t in range(1,len(ind_data)):
-            i_nan = np.isnan(ind_data[t-1])
-            prob=q*i_nan+p*(1-i_nan)
-            s_m=binomial(1,prob)
-            ind_data[t,np.where(s_m==1)]=np.nan
+        s = binomial(1, p, nmeas)
+        ind_data[0, np.where(s == 1)] = np.nan
+        for t in range(1, len(ind_data)):
+            i_nan = np.isnan(ind_data[t - 1])
+            prob = q * i_nan + p * (1 - i_nan)
+            s_m = binomial(1, prob)
+            ind_data[t, np.where(s_m == 1)] = np.nan
     data_with_missings[meas_names] = data_interim.reshape(data[meas_names].shape)
 
     return data_with_missings
