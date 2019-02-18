@@ -26,47 +26,21 @@ def add_missings(data, meas_names, p, q):
 
     # marginal probability of getting nan:
 
+    nmeas=len(meas_names)
     data_with_missings = data.copy()
     data_interim = data[meas_names].values.copy()
     data_interim = data_interim.reshape(
         len(set(data.index)), int(len(data) / len(set(data.index))), len(meas_names)
     )
-    # num_missing_val = np.count_nonzero(np.isnan(data_interim))
-    # replaced_share = num_missing_val / (
-    #   data[meas_names].size + data[control_names].size
-    # )
-    # replaced_share < share:
-    for i in range(len(data_interim)):  # alternatively randomly choose individual??
+    for i in range(len(data_interim)): 
         ind_data = data_interim[i]
-
-        if binomial(1, p) == 1:
-            ind_data[0, 0] = np.nan
-        for m in range(1, len(meas_names)):
-            if np.isnan(ind_data[0, m - 1]):
-                if binomial(1, p_m_11) == 1:
-                    ind_data[0, m] = np.nan
-            else:
-                if binomial(1, p_m_10) == 1:
-                    ind_data[0, m] = np.nan
-        for t in range(1, len(ind_data)):
-            if np.isnan(ind_data[t - 1, 0]):
-                if binomial(1, p_t_11) == 1:
-                    ind_data[t, 0] = np.nan
-            else:
-                if binomial(1, p_t_10) == 1:
-                    ind_data[t, 0] = np.nan
-            for m in range(1, len(meas_names)):
-                if np.isnan(ind_data[t, m - 1]):
-                    if binomial(1, p_m_11) == 1:
-                        ind_data[t, m] = np.nan
-                else:
-                    if binomial(1, p_m_10) == 1:
-                        ind_data[t, m] = np.nan
-
-                # num_missing_val = np.count_nonzero(np.isnan(data_interim))
-                # replaced_share = num_missing_val / (
-                #   data[meas_names].size + data[control_names].size
-                # )
+        s=binomial(1,p,nmeas)
+        ind_data[0,np.where(s==1)]=np.nan
+        for t in range(1,len(ind_data)):
+            i_nan = np.isnan(ind_data[t-1])
+            prob=q*i_nan+p*(1-i_nan)
+            s_m=binomial(1,prob)
+            ind_data[t,np.where(s_m==1)]=np.nan
     data_with_missings[meas_names] = data_interim.reshape(data[meas_names].shape)
 
     return data_with_missings
