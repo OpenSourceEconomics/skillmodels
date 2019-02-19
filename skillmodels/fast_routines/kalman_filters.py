@@ -271,7 +271,7 @@ def normal_linear_predict(state, cov, shocks_sds, transition_matrix):
     predicted_covs = (
         np.matmul(
             np.matmul(transition_matrix.reshape(1, nfac, nfac), cov),
-            np.transpose(cov, axes=(0, 2, 1)),
+            np.transpose(transition_matrix.reshape(1, nfac, nfac), axes=(0, 2, 1)),
         )
         + Q
     )
@@ -338,6 +338,7 @@ def sqrt_unscented_predict(
     out_flat_states,
     out_flat_covs,
 ):
+
     """Make a unscented Kalman filter predict step in square-root form.
 
     The square-root form of the Kalman predict is much more robust than the

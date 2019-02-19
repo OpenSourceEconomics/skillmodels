@@ -150,7 +150,7 @@ import numpy as np
 from numba import jit
 import pandas as pd
 
-replace_constant = ' - 1 + constant'
+replace_constant = " - 1 + constant"
 
 # =============================================================================
 # linear
@@ -170,25 +170,33 @@ def nr_coeffs_linear(included_factors, params_type):
 
 
 def coeff_names_linear(included_factors, params_type, factor, stage):
-    fs = 'lincoeff__{}__{}__{}'
+    fs = "lincoeff__{}__{}__{}"
     return [fs.format(stage, factor, i_fac) for i_fac in included_factors]
 
 
 def iv_formula_linear(x_list, z_list):
-    x_formula = ' + '.join(x_list) + replace_constant
-    z_formula = ' + '.join(flatten_nested_list(z_list)) + replace_constant
+    x_formula = " + ".join(x_list) + replace_constant
+    z_formula = " + ".join(flatten_nested_list(z_list)) + replace_constant
     return x_formula, z_formula
 
 
 def model_coeffs_from_iv_coeffs_linear(
-        iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum_value=None, trans_intercept_value=None):
+    iv_coeffs,
+    loading_norminfo=None,
+    intercept_norminfo=None,
+    coeff_sum_value=None,
+    trans_intercept_value=None,
+):
 
     return general_model_coeffs_from_iv_coeffs(
-        iv_coeffs=iv_coeffs, iv_intercept_position=-1,
-        has_trans_intercept=False, loading_norminfo=loading_norminfo,
-        intercept_norminfo=intercept_norminfo, coeff_sum_value=coeff_sum_value,
-        trans_intercept_value=trans_intercept_value)
+        iv_coeffs=iv_coeffs,
+        iv_intercept_position=-1,
+        has_trans_intercept=False,
+        loading_norminfo=loading_norminfo,
+        intercept_norminfo=intercept_norminfo,
+        coeff_sum_value=coeff_sum_value,
+        trans_intercept_value=trans_intercept_value,
+    )
 
 
 def output_has_known_scale_linear():
@@ -211,11 +219,9 @@ def nr_coeffs_linear_with_constant(included_factors, params_type):
     return len(included_factors) + 1
 
 
-def coeff_names_linear_with_constant(
-        included_factors, params_type, factor, stage):
-    names = coeff_names_linear(
-        included_factors, params_type, factor, stage)
-    fs = 'lincoeff__{}__{}__constant'
+def coeff_names_linear_with_constant(included_factors, params_type, factor, stage):
+    names = coeff_names_linear(included_factors, params_type, factor, stage)
+    fs = "lincoeff__{}__{}__constant"
     names.append(fs.format(stage, factor))
     return names
 
@@ -225,8 +231,12 @@ def iv_formular_linear_with_constant(x_list, z_list):
 
 
 def model_coeffs_from_iv_coeffs_linear_with_constant(
-        iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum_value=None, trans_intercept_value=None):
+    iv_coeffs,
+    loading_norminfo=None,
+    intercept_norminfo=None,
+    coeff_sum_value=None,
+    trans_intercept_value=None,
+):
     raise NotImplementedError
 
 
@@ -256,8 +266,12 @@ def iv_formula_constant(x_list, z_list):
 
 
 def model_coeffs_from_iv_coeffs_constant(
-        iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum_value=None, trans_intercept_value=0):
+    iv_coeffs,
+    loading_norminfo=None,
+    intercept_norminfo=None,
+    coeff_sum_value=None,
+    trans_intercept_value=0,
+):
     raise NotImplementedError
 
 
@@ -267,6 +281,7 @@ def output_has_known_scale_constant():
 
 def output_has_known_location_constant():
     return True
+
 
 # =============================================================================
 # ar1
@@ -282,24 +297,33 @@ def nr_coeffs_ar1(included_factors, params_type):
 
 
 def coeff_names_ar1(included_factors, params_type, factor, stage):
-    return ['ar1_coeff__{}__{}__{}'.format(stage, factor, factor)]
+    return ["ar1_coeff__{}__{}__{}".format(stage, factor, factor)]
 
 
 def iv_formula_ar1(x_list, z_list):
-    assert len(x_list) == 1, (
-        'Only one factor can be included in the ar1 transition equation')
+    assert (
+        len(x_list) == 1
+    ), "Only one factor can be included in the ar1 transition equation"
     return iv_formula_linear(x_list, z_list)
 
 
 def model_coeffs_from_iv_coeffs_ar1(
-        iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum_value=None, trans_intercept_value=None):
+    iv_coeffs,
+    loading_norminfo=None,
+    intercept_norminfo=None,
+    coeff_sum_value=None,
+    trans_intercept_value=None,
+):
 
     return general_model_coeffs_from_iv_coeffs(
-        iv_coeffs=iv_coeffs, iv_intercept_position=-1,
-        has_trans_intercept=False, loading_norminfo=loading_norminfo,
-        intercept_norminfo=intercept_norminfo, coeff_sum_value=coeff_sum_value,
-        trans_intercept_value=trans_intercept_value)
+        iv_coeffs=iv_coeffs,
+        iv_intercept_position=-1,
+        has_trans_intercept=False,
+        loading_norminfo=loading_norminfo,
+        intercept_norminfo=intercept_norminfo,
+        coeff_sum_value=coeff_sum_value,
+        trans_intercept_value=trans_intercept_value,
+    )
 
 
 def output_has_known_scale_ar1():
@@ -309,9 +333,11 @@ def output_has_known_scale_ar1():
 def output_has_known_location_ar1():
     return True
 
+
 # =============================================================================
 # log_ces (KLS-Verion)
 # =============================================================================
+
 
 def log_ces(sigma_points, coeffs, included_positions):
     nfac = sigma_points.shape[1]
@@ -330,14 +356,14 @@ def log_ces(sigma_points, coeffs, included_positions):
 
 
 def nr_coeffs_log_ces(included_factors, params_type):
-    if params_type == 'short':
+    if params_type == "short":
         return len(included_factors)
     else:
         return len(included_factors) + 1
 
 
 def transform_coeffs_log_ces(coeffs, included_factors, direction, out):
-    if direction == 'short_to_long':
+    if direction == "short_to_long":
         out[:-2] = coeffs[:-1]
         out[-2] = 1
         out /= np.sum(out[:-1])
@@ -357,12 +383,11 @@ def bounds_log_ces(included_factors):
 
 
 def coeff_names_log_ces(included_factors, params_type, factor, stage):
-    fs1 = 'gamma__{}__{}__{}'
-    fs2 = 'phi__{}__{}__Phi'
+    fs1 = "gamma__{}__{}__{}"
+    fs2 = "phi__{}__{}__Phi"
 
-    names = [
-        fs1.format(stage, factor, i_fac) for i_fac in included_factors[:-1]]
-    if params_type == 'long':
+    names = [fs1.format(stage, factor, i_fac) for i_fac in included_factors[:-1]]
+    if params_type == "long":
         names.append(fs1.format(stage, factor, included_factors[-1]))
     names.append(fs2.format(stage, factor))
 
@@ -371,19 +396,25 @@ def coeff_names_log_ces(included_factors, params_type, factor, stage):
 
 def iv_formula_log_ces(x_list, z_list):
     raise NotImplementedError(
-        'The log_ces function would lead to an IV equation that is not linear '
-        ' in parameters that cannot be estimated with closed form estimators. '
-        ' It is not and will not be implemented as part of the WA estimator.')
+        "The log_ces function would lead to an IV equation that is not linear "
+        " in parameters that cannot be estimated with closed form estimators. "
+        " It is not and will not be implemented as part of the WA estimator."
+    )
 
 
 def model_coeffs_from_iv_coeffs_log_ces(
-        iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum_value=None, trans_intercept_value=0):
+    iv_coeffs,
+    loading_norminfo=None,
+    intercept_norminfo=None,
+    coeff_sum_value=None,
+    trans_intercept_value=0,
+):
 
     raise NotImplementedError(
-        'The log_ces function would lead to an IV equation that is not linear '
-        ' in parameters that cannot be estimated with closed form estimators. '
-        ' It is not and will not be implemented as part of the WA estimator.')
+        "The log_ces function would lead to an IV equation that is not linear "
+        " in parameters that cannot be estimated with closed form estimators. "
+        " It is not and will not be implemented as part of the WA estimator."
+    )
 
 
 def output_has_known_scale_log_ces():
@@ -392,6 +423,8 @@ def output_has_known_scale_log_ces():
 
 def output_has_known_location_log_ces():
     return True
+
+
 # =============================================================================
 # translog (Non-KLS-Version)
 # =============================================================================
@@ -430,35 +463,45 @@ def nr_coeffs_translog(included_factors, params_type):
 
 
 def coeff_names_translog(included_factors, params_type, factor, stage):
-    names = ['translog__{}__{}__{}'.format(stage, factor, i_fac)
-             for i_fac in included_factors]
+    names = [
+        "translog__{}__{}__{}".format(stage, factor, i_fac)
+        for i_fac in included_factors
+    ]
 
     for i, i_fac1 in enumerate(included_factors):
         for i_fac2 in included_factors[i:]:
             if i_fac1 == i_fac2:
-                names.append('translog__{}__{}__{}-squared'.format(
-                    stage, factor, i_fac1))
+                names.append(
+                    "translog__{}__{}__{}-squared".format(stage, factor, i_fac1)
+                )
             else:
-                names.append('translog__{}__{}__{}-{}'.format(
-                    stage, factor, i_fac1, i_fac2))
-    names.append('translog__{}__{}__TFP'.format(stage, factor))
+                names.append(
+                    "translog__{}__{}__{}-{}".format(stage, factor, i_fac1, i_fac2)
+                )
+    names.append("translog__{}__{}__TFP".format(stage, factor))
     return names
 
 
 def iv_formula_translog(x_list, z_list):
 
     raise NotImplementedError(
-        'The squared terms in the general translog function will need special '
-        'treatment in the WA estimator and is therefore not yet implemented.')
+        "The squared terms in the general translog function will need special "
+        "treatment in the WA estimator and is therefore not yet implemented."
+    )
 
 
 def model_coeffs_from_iv_coeffs_translog(
-        iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum_value=None, trans_intercept_value=0):
+    iv_coeffs,
+    loading_norminfo=None,
+    intercept_norminfo=None,
+    coeff_sum_value=None,
+    trans_intercept_value=0,
+):
     raise NotImplementedError(
-        'The log_ces function would lead to an IV equation that is not linear '
-        ' in parameters that cannot be estimated with closed form estimators. '
-        ' It is not and will not be implemented as part of the WA estimator.')
+        "The log_ces function would lead to an IV equation that is not linear "
+        " in parameters that cannot be estimated with closed form estimators. "
+        " It is not and will not be implemented as part of the WA estimator."
+    )
 
 
 def output_has_known_scale_translog():
@@ -467,6 +510,7 @@ def output_has_known_scale_translog():
 
 def output_has_known_location_translog():
     return False
+
 
 # =============================================================================
 # translog without square terms
@@ -493,7 +537,7 @@ def no_squares_translog(sigma_points, coeffs, included_positions):
             # add the factor term
             res += coeffs[p] * fac
             # add the interaction terms
-            for pos2 in included_positions[p + 1:]:
+            for pos2 in included_positions[p + 1 :]:
                 res += coeffs[next_coeff] * fac * sigma_points[i, pos2]
                 next_coeff += 1
         result_array[i] = res
@@ -505,38 +549,48 @@ def nr_coeffs_no_squares_translog(included_factors, params_type):
     return nr_coeffs_translog(included_factors, params_type) - nfac
 
 
-def coeff_names_no_squares_translog(
-        included_factors, params_type, factor, stage):
-    names = ['translog__{}__{}__{}'.format(stage, factor, i_fac)
-             for i_fac in included_factors]
+def coeff_names_no_squares_translog(included_factors, params_type, factor, stage):
+    names = [
+        "translog__{}__{}__{}".format(stage, factor, i_fac)
+        for i_fac in included_factors
+    ]
 
     for i, i_fac1 in enumerate(included_factors):
-        for i_fac2 in included_factors[i + 1:]:
-            names.append('translog__{}__{}__{}-{}'.format(
-                stage, factor, i_fac1, i_fac2))
-    names.append('translog__{}__{}__TFP'.format(stage, factor))
+        for i_fac2 in included_factors[i + 1 :]:
+            names.append(
+                "translog__{}__{}__{}-{}".format(stage, factor, i_fac1, i_fac2)
+            )
+    names.append("translog__{}__{}__TFP".format(stage, factor))
     return names
 
 
 def iv_formula_no_squares_translog(x_list, z_list):
     x_polynomials = x_patsy_polynomials(x_list, squares=False)
-    x_formula = ' + '.join(x_list + x_polynomials) + replace_constant
+    x_formula = " + ".join(x_list + x_polynomials) + replace_constant
     z_polynomials = z_patsy_polynomials(z_list, squares=False)
     flat_z = flatten_nested_list(z_list)
-    z_formula = ' + '.join(flat_z + z_polynomials) + replace_constant
+    z_formula = " + ".join(flat_z + z_polynomials) + replace_constant
 
     return x_formula, z_formula
 
 
 def model_coeffs_from_iv_coeffs_no_squares_translog(
-        iv_coeffs, loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum_value=None, trans_intercept_value=None):
+    iv_coeffs,
+    loading_norminfo=None,
+    intercept_norminfo=None,
+    coeff_sum_value=None,
+    trans_intercept_value=None,
+):
 
     return general_model_coeffs_from_iv_coeffs(
-        iv_coeffs=iv_coeffs, iv_intercept_position=-1,
-        has_trans_intercept=True, loading_norminfo=loading_norminfo,
-        intercept_norminfo=intercept_norminfo, coeff_sum_value=coeff_sum_value,
-        trans_intercept_value=trans_intercept_value)
+        iv_coeffs=iv_coeffs,
+        iv_intercept_position=-1,
+        has_trans_intercept=True,
+        loading_norminfo=loading_norminfo,
+        intercept_norminfo=intercept_norminfo,
+        coeff_sum_value=coeff_sum_value,
+        trans_intercept_value=trans_intercept_value,
+    )
 
 
 def output_has_known_scale_no_squares_translog():
@@ -556,10 +610,10 @@ def x_patsy_polynomials(varlist, squares=True, interactions=True):
     polynomials = []
     for i, x1 in enumerate(varlist):
         if squares is True:
-            polynomials.append('np.square({})'.format(x1))
+            polynomials.append("np.square({})".format(x1))
         if interactions is True:
-            for x2 in varlist[i + 1:]:
-                polynomials.append('{}:{}'.format(x1, x2))
+            for x2 in varlist[i + 1 :]:
+                polynomials.append("{}:{}".format(x1, x2))
     return polynomials
 
 
@@ -571,9 +625,9 @@ def z_patsy_polynomials(varlist, squares=True, interactions=True):
     if interactions is True:
         for i, sublist1 in enumerate(varlist):
             for m1 in sublist1:
-                for sublist2 in varlist[i + 1:]:
+                for sublist2 in varlist[i + 1 :]:
                     for m2 in sublist2:
-                        polynomials.append('{}:{}'.format(m1, m2))
+                        polynomials.append("{}:{}".format(m1, m2))
     return polynomials
 
 
@@ -582,9 +636,14 @@ def flatten_nested_list(nested_list):
 
 
 def general_model_coeffs_from_iv_coeffs(
-        iv_coeffs, iv_intercept_position, has_trans_intercept,
-        loading_norminfo=None, intercept_norminfo=None,
-        coeff_sum_value=None, trans_intercept_value=None):
+    iv_coeffs,
+    iv_intercept_position,
+    has_trans_intercept,
+    loading_norminfo=None,
+    intercept_norminfo=None,
+    coeff_sum_value=None,
+    trans_intercept_value=None,
+):
     """Calculate model coeffs from iv coeffs for most transition functions.
 
     Many linear-in-parameters transition functions have very similar ways of
@@ -619,22 +678,23 @@ def general_model_coeffs_from_iv_coeffs(
     """
     # assert statements
     to_check = [coeff_sum_value, loading_norminfo]
-    assert None in to_check, ('Overidentified scale')
-    assert to_check != [None, None], ('Underidentified scale')
+    assert None in to_check, "Overidentified scale"
+    assert to_check != [None, None], "Underidentified scale"
 
     to_check = [trans_intercept_value, intercept_norminfo]
-    assert None in to_check, ('Overidentified location')
+    assert None in to_check, "Overidentified location"
     if has_trans_intercept:
-        assert to_check != [None, None], ('Underidentified location')
+        assert to_check != [None, None], "Underidentified location"
 
-    assert iv_intercept_position in [0, -1], ('')
+    assert iv_intercept_position in [0, -1], ""
 
     if has_trans_intercept is False:
-        assert trans_intercept_value is None, ('')
+        assert trans_intercept_value is None, ""
 
     iv_coeffs = iv_coeffs.groupby(level=0).mean()
-    meas_coeffs = pd.DataFrame(data=0, index=iv_coeffs.index,
-                               columns=['loadings', 'intercepts'])
+    meas_coeffs = pd.DataFrame(
+        data=0, index=iv_coeffs.index, columns=["loadings", "intercepts"]
+    )
 
     if iv_intercept_position == 0:
         all_but_intercept = slice(1, len(iv_coeffs))
@@ -654,7 +714,7 @@ def general_model_coeffs_from_iv_coeffs(
     # calculate all lambdas
     for y_variable in iv_coeffs.index:
         iv_sum = iv_coeffs.loc[y_variable].values[all_but_intercept].sum()
-        meas_coeffs.loc[y_variable, 'loadings'] = iv_sum / coeff_sum_value
+        meas_coeffs.loc[y_variable, "loadings"] = iv_sum / coeff_sum_value
 
     # get trans intercept
     if has_trans_intercept is False:
@@ -663,25 +723,25 @@ def general_model_coeffs_from_iv_coeffs(
     elif trans_intercept_value is None:
         intercept_norm_y = list(intercept_norminfo.keys())[0]
         intercept_norm_val = list(intercept_norminfo.values())[0]
-        intercept_coeff = list(
-            iv_coeffs.loc[intercept_norm_y])[iv_intercept_position]
-        corresponding_loading = meas_coeffs.loc[intercept_norm_y, 'loadings']
-        trans_intercept_value = \
-            (intercept_coeff - intercept_norm_val) / corresponding_loading
+        intercept_coeff = list(iv_coeffs.loc[intercept_norm_y])[iv_intercept_position]
+        corresponding_loading = meas_coeffs.loc[intercept_norm_y, "loadings"]
+        trans_intercept_value = (
+            intercept_coeff - intercept_norm_val
+        ) / corresponding_loading
         newly_identified_trans_intercept_value = trans_intercept_value
     else:
         newly_identified_trans_intercept_value = None
 
     # calculate all mus
     for y_variable in iv_coeffs.index:
-        intercept_coeff = list(
-            iv_coeffs.loc[y_variable])[iv_intercept_position]
-        corresponding_loading = meas_coeffs.loc[y_variable, 'loadings']
-        meas_coeffs.loc[y_variable, 'intercepts'] = \
+        intercept_coeff = list(iv_coeffs.loc[y_variable])[iv_intercept_position]
+        corresponding_loading = meas_coeffs.loc[y_variable, "loadings"]
+        meas_coeffs.loc[y_variable, "intercepts"] = (
             intercept_coeff - corresponding_loading * trans_intercept_value
+        )
 
     gamma_coeffs = iv_coeffs[iv_coeffs.columns[all_but_intercept]]
-    next_period_loadings = meas_coeffs['loadings']
+    next_period_loadings = meas_coeffs["loadings"]
     gammas = gamma_coeffs.divide(next_period_loadings, axis=0).mean().values
 
     if has_trans_intercept is True:
@@ -690,5 +750,9 @@ def general_model_coeffs_from_iv_coeffs(
         else:
             gammas = np.hstack([gammas, trans_intercept_value])
 
-    return meas_coeffs, gammas, newly_identified_coeff_sum_value, \
-        newly_identified_trans_intercept_value
+    return (
+        meas_coeffs,
+        gammas,
+        newly_identified_coeff_sum_value,
+        newly_identified_trans_intercept_value,
+    )

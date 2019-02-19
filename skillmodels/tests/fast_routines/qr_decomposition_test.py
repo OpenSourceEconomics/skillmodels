@@ -23,6 +23,3 @@ class TestRFromQR:
         self.expected_prod = a_prime_a(self.some_array)
         prod = array_qr(self.some_array)
         aaae(a_prime_a(prod), self.expected_prod)
-
-
-
