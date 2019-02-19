@@ -2,6 +2,7 @@ import skillmodels.fast_routines.kalman_filters as kf
 from numpy.testing import assert_array_almost_equal as aaae
 import numpy as np
 import pytest
+import json
 
 
 def make_unique(qr_result_arr):
@@ -12,9 +13,33 @@ def make_unique(qr_result_arr):
                 for k in range(n):
                     qr_result_arr[u, j, k] *= -1
 
+
+def skillmodels_kwargs_from_fixture(
+        factors, state, measurement, state_cov, loadings, meas_var,
+        expected_post_means=None, expected_post_state_cov=None):
+    kwargs = {
+        "state": np.array([state]).astype(float),
+        "covs": np.array([state_cov]).astype(float),
+        "like_vec": np.array([1]).astype(float),   # likelihood not relevant for this test
+        "y": np.array([measurement]).astype(float),
+        "c": np.array(range(0)),
+        "delta": np.array(range(0)),
+        "h": np.array(loadings).astype(float),
+        "r": np.array([meas_var]).astype(float),
+        "positions": np.array([i for i, x in enumerate(loadings) if x != 0]).astype(int),
+        "weights": np.array([[1]]).astype(float),
+        "kf": np.zeros((1, len(state))).astype(float)}
+    sk_type_exp_states = np.array([expected_post_means])
+    sk_type_exp_cov = np.array([expected_post_state_cov])
+    return kwargs, sk_type_exp_states, sk_type_exp_cov
+
 # =============================================================================
 # TESTS FOR THE UPDATE FUNCTIONS
 # =============================================================================
+
+# -----------------------------------------------------------------------------
+# MANUAL TESTS OF THE UPDATE FUNCTIONS
+# -----------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -322,11 +347,11 @@ def test_normal_weight_update_with_nans(setup_linear_update, expected_linear_upd
     )
     aaae(d["weights"], expected_linear_update["expected_weights"])
 
-# ============================================================================
-
 
 @pytest.fixture
 def setup_linear_update_2():
+    # to conform with the jsons that contain setup and result of filterpy
+    # this fixture contains the setup and expected result
     factors = ['c', 'n', 'i', 'cp', 'np']
     state = np.array([11, 11.5, 12, 12.5, 10])
     root_cov = np.linalg.cholesky(
@@ -339,19 +364,8 @@ def setup_linear_update_2():
     loadings = np.array([1.5, 0, 1.2, 0, 0])
     meas_var = 2.25
 
-    return {
-        'factors': factors,
-        'state': state,
-        'measurement': measurement,
-        'state_cov': root_cov.dot(root_cov.T),
-        'loadings': loadings,
-        'meas_var': meas_var}
-
-
-def expected_linear_update_2():
     expected_updated_means = np.array(
         [10.51811594, 11.38813406, 11.55683877, 12.3451087, 9.94406703])
-
     expected_updated_cov = np.array([
         [5.73913043e-01, 1.08695652e-03, -2.41847826e-01,
          6.30434783e-02, 5.43478261e-04],
@@ -364,34 +378,24 @@ def expected_linear_update_2():
         [5.43478261e-04, 2.38519022e-01, 5.45176630e-02,
          1.34103261e-01, 8.94259511e-01]])
 
-    return {"expected_states": expected_updated_means,
-            "expected_covs": expected_updated_cov}
-
-
-def skillmodels_kwargs_from_fixture(factors, state, measurement, state_cov,
-                                    loadings, meas_var):
     return {
-        "state": np.array(state),
-        "cov": np.array(state_cov),
-        "like_vec": np.array([1]),   # likelihood not relevant for this test
-        "y": np.array([measurement]),
-        "c": np.array(range(0)),
-        "delta": np.array(range(0)),
-        "h": np.array(loadings),
-        "r": np.array([meas_var]),
-        "positions": np.array([i for i, x in enumerate(loadings) if x != 0]),  #IS THIS CORRECT????
-        "weights": np.array([[1]]),
-        "kf": np.zeros(state.shape),
-    }
+        'factors': factors,
+        'state': state,
+        'measurement': measurement,
+        'state_cov': root_cov.dot(root_cov.T),
+        'loadings': loadings,
+        'meas_var': meas_var,
+        'expected_post_means': expected_updated_means,
+        'expected_post_state_cov': expected_updated_cov}
 
 
-def test_normal_state_and_cov_update_without_nan(
-        setup_linear_update_2, expected_linear_update_2):
-    d = skillmodels_kwargs_from_fixture(setup_linear_update_2)
+def test_normal_state_and_cov_update_without_nan(setup_linear_update_2):
+    d, exp_states, exp_cov = \
+        skillmodels_kwargs_from_fixture(**setup_linear_update_2)
     kf.normal_linear_update(
         d["state"],
         d["covs"],
-        d["like_vector"],
+        d["like_vec"],
         d["y"],
         d["c"],
         d["delta"],
@@ -401,12 +405,37 @@ def test_normal_state_and_cov_update_without_nan(
         d["weights"],
         d["kf"],
     )
-    aaae(d["state"], expected_linear_update_2["expected_states"])
-    aaae(d["covs"], expected_linear_update_2["expected_covs"])
+    aaae(d["state"], exp_states)
+    aaae(d["covs"], exp_cov)
 
 # -----------------------------------------------------------------------------
-# TESTS OF THE UPDATE FUNCTIONS USING FILTERPY RESULTS
+# TESTS OF THE UPDATE FUNCTION FROM FILTERPY
 # -----------------------------------------------------------------------------
+
+with open('skillmodels/tests/fast_routines/generated_fixtures.json', 'r') as f:
+    id_to_fix = json.load(f)
+
+ids, fixtures = zip(*id_to_fix.items())
+
+
+@pytest.mark.parametrize("fixture", fixtures, ids=ids)
+def test_normal_state_and_cov_against_filterpy(fixture):
+    d, exp_states, exp_cov = skillmodels_kwargs_from_fixture(**fixture)
+    kf.normal_linear_update(
+        d["state"],
+        d["covs"],
+        d["like_vec"],
+        d["y"],
+        d["c"],
+        d["delta"],
+        d["h"],
+        d["r"],
+        d["positions"],
+        d["weights"],
+        d["kf"],
+    )
+    aaae(d["state"], exp_states)
+    aaae(d["covs"], exp_cov)
 
 # =============================================================================
 # TESTS FOR THE UNSCENTED PREDICT FUNCTIONS

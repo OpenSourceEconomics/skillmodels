@@ -42,6 +42,7 @@ test:
     - skillmodels/tests/estimation/test_model2.json
     - skillmodels/tests/estimation/chs_test_ex2.dta
     - skillmodels/tests/estimation/regression_test_fixture.pickle
+    - skillmodels/tests/fast_routines/generated_fixtures.json
   requires:
     - pytest
     - nose
