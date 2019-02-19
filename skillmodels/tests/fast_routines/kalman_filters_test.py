@@ -337,7 +337,7 @@ def setup_normal_linear_predict():
 
     out["shocks_sds"] = np.array([1.2, 0.3, 0.2])
 
-    out["transition_matrix"] = np.array([[0.2, 0, 0], [0, 0.9, 0], [0, 0, 0.4]])
+    out["transition_matrix"] = np.array([[0.2, 1, 2], [0.5, 0.9, 0.7], [0.2, 0.4, 0.4]])
 
     return out
 
@@ -346,12 +346,12 @@ def setup_normal_linear_predict():
 def expected_normal_linear_predict():
     out = {}
 
-    out["predicted_states"] = np.array([[1.4, 1.6], [8.1, 2.7], [1.2, 2]])
+    out["predicted_states"] = np.array([[16.4, 14.6], [13.7, 10.2], [6.2, 4.8]])
 
     out["predicted_covs"] = np.array(
         [
-            [[1.452, 0, 0], [0, 0.495, 0], [0, 0, 0.184]],
-            [[1.452, -0.036, -0.008], [-0.036, 0.333, -0.036], [-0.008, -0.036, 0.12]],
+            [[5.552, 1.74, 0.932], [1.74, 1.011, 0.462], [0.932, 0.462, 0.276]],
+            [[3.192, 0.5, 0.308], [0.5, 0.277, 0.104], [0.308, 0.104, 0.1]],
         ]
     )
 
