@@ -97,9 +97,6 @@ def simulate_datasets(
          factor_names (list): list of strings of names of each factor
          control_names (list): list of strings of names of each control variable
          meas_names (list): list of strings of names of each measurement variable
-         means (np.ndarray): size (nemf, nfac + ncontrols)
-         covs (np.ndarray): size (nemf, nfac + ncontrols, nfac + ncontrols)
-         weights (np.ndarray): size (nemf). The weight of each mixture element
          loadings (np.ndarray): numpy array of size (nmeas, nfac)
          deltas (np.ndarray): numpy array of size (nmeas, ncontrols)
          transition_names (list): list of strings with the names of the transition
@@ -111,7 +108,10 @@ def simulate_datasets(
          shock_variances (np.ndarray): numpy array of length nfac.
          meas_variances (np.ndarray): numpy array of size (nmeas) with the variances of the
             measurements. Measurement error is assumed to be independent across measurements
-
+         means (np.ndarray): size (nemf, nfac + ncontrols)
+         covs (np.ndarray): size (nemf, nfac + ncontrols, nfac + ncontrols)
+         weights (np.ndarray): size (nemf). The weight of each mixture element.
+               The default value is 1.
 
     Returns:
         observed_data (pd.DataFrame): Dataset with measurements and control variables
@@ -247,9 +247,7 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances):
         deltas (np.ndarray): numpy array of size (nmeas, ncontrols)
         variances (np.ndarray): numpy array of size (nmeas) with the variances of the
             measurements. Measurement error is assumed to be independent across measurements
-        instead: measurement_names (list): list of length nmeas with the names of the measurements
-        read: nmeas (int): number of measurments 
-
+        
     Returns:
         measurements (pd.DataFrame): DataFrame of shape (nobs, nmeas) with measurement
             names as columns.
