@@ -52,7 +52,10 @@ def add_missings(data, meas_names, p, q):
         data_with_missings (pd.DataFrame): Dataset with a share of measurements replaced by np.nan values
         
     Notes:
-        Time_periods should be sorted for each individual 
+        - Time_periods should be sorted for each individual 
+        - p is NOT the marginal probability of a measurement being missing. The marginal probability is given by:
+           p_m = p/(1-serial_corr), where in general serial_corr = (q-p) != 0, since p != q. This means that in average the share of 
+           missing values will be larger than p. Thus, p and q should be set accordingly given the desired share of missing values.
     """
 
     nmeas = len(meas_names)
