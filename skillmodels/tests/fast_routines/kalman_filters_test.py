@@ -321,17 +321,24 @@ def test_normal_weight_update_with_nans(setup_linear_update, expected_linear_upd
     aaae(d["weights"], expected_linear_update["expected_weights"])
 
 
-# tests for normal linear predict function
+# tests for normal linear predict and sqrt linear functions
 @pytest.fixture
-def setup_normal_linear_predict():
+def setup_linear_predict():
     out = {}
 
-    out["state"] = np.array([[7, 8], [9, 3], [3, 5]])
+    out["state"] = np.array([[7, 9, 3], [8, 3, 5]])
 
     out["cov"] = np.array(
         [
             [[0.3, 0, 0], [0, 0.5, 0], [0, 0, 0.9]],
             [[0.3, -0.2, -0.1], [-0.2, 0.3, -0.1], [-0.1, -0.1, 0.5]],
+        ]
+    )
+
+    out["root_cov"] = np.array(
+        [
+            [[0.3, 0, 0], [0, 0.5, 0], [0, 0, 0.9]],
+            [[0.3, 0.2, 0.1], [0, 0.3, 0.1], [0, 0, 0.5]],
         ]
     )
 
@@ -343,10 +350,10 @@ def setup_normal_linear_predict():
 
 
 @pytest.fixture
-def expected_normal_linear_predict():
+def expected_linear_predict():
     out = {}
 
-    out["predicted_states"] = np.array([[16.4, 14.6], [13.7, 10.2], [6.2, 4.8]])
+    out["predicted_states"] = np.array([[16.4, 13.7, 6.2], [14.6, 10.2, 4.8]])
 
     out["predicted_covs"] = np.array(
         [
@@ -355,23 +362,57 @@ def expected_normal_linear_predict():
         ]
     )
 
+    out["predicted_sqrt_covs"] = np.array(
+        [
+            [
+                [5.427423, -0.424064, 0.0809716],
+                [-0.424064, 0.374016, -0.0487112],
+                [0.0809716, -0.0487112, 0.0572607],
+            ],
+            [
+                [3.11777, 0.273778, 0.0502302],
+                [0.273778, 0.354309, 0.0453752],
+                [0.0502302, 0.0453752, 0.05562],
+            ],
+        ]
+    )
+
     return out
 
 
-def test_normal_linear_predict_states(
-    setup_normal_linear_predict, expected_normal_linear_predict
-):
-    d = setup_normal_linear_predict
-    calc_pred_state, calc_pred_cov = kf.normal_linear_predict(**d)
-    aaae(calc_pred_state, expected_normal_linear_predict["predicted_states"])
+def test_normal_linear_predict_states(setup_linear_predict, expected_linear_predict):
+    d = setup_linear_predict
+    calc_pred_state, calc_pred_cov = kf.normal_linear_predict(
+        d["state"], d["cov"], d["shocks_sds"], d["transition_matrix"]
+    )
+    aaae(calc_pred_state, expected_linear_predict["predicted_states"])
 
 
-def test_normal_linear_predict_covs(
-    setup_normal_linear_predict, expected_normal_linear_predict
-):
-    d = setup_normal_linear_predict
-    calc_pred_state, calc_pred_cov = kf.normal_linear_predict(**d)
-    aaae(calc_pred_cov, expected_normal_linear_predict["predicted_covs"])
+def test_normal_linear_predict_covs(setup_linear_predict, expected_linear_predict):
+    d = setup_linear_predict
+    calc_pred_state, calc_pred_cov = kf.normal_linear_predict(
+        d["state"], d["cov"], d["shocks_sds"], d["transition_matrix"]
+    )
+    aaae(calc_pred_cov, expected_linear_predict["predicted_covs"])
+
+
+def test_sqrt_predict_states(setup_linear_predict, expected_linear_predict):
+    d = setup_linear_predict
+    calc_pred_state, calc_pred_cov = kf.sqrt_linear_predict(
+        d["state"], d["root_cov"], d["shocks_sds"], d["transition_matrix"]
+    )
+    aaae(calc_pred_state, expected_linear_predict["predicted_states"])
+
+
+def test_sqrt_predict_root_covs(setup_linear_predict, expected_linear_predict):
+    d = setup_linear_predict
+    calc_pred_state, calc_pred_root_cov = kf.sqrt_linear_predict(
+        d["state"], d["root_cov"], d["shocks_sds"], d["transition_matrix"]
+    )
+    calc_cov = np.matmul(
+        calc_pred_root_cov, np.transpose(calc_pred_root_cov, axes=(0, 2, 1))
+    )
+    aaae(calc_cov, expected_linear_predict["predicted_sqrt_covs"])
 
 
 # tests for unscented predict functions

@@ -264,16 +264,12 @@ def normal_linear_predict(state, cov, shocks_sds, transition_matrix):
     
     
     """
-    nfac = len(state)
-    predicted_states = np.matmul(transition_matrix, state)
+    nstates, nfac = state.shape
+    predicted_states = np.dot(transition_matrix, state.T).T
     Q = np.diag(shocks_sds ** 2)
     # reshape transition matrix to get the same dimension as cov
     predicted_covs = (
-        np.matmul(
-            np.matmul(transition_matrix.reshape(1, nfac, nfac), cov),
-            np.transpose(transition_matrix.reshape(1, nfac, nfac), axes=(0, 2, 1)),
-        )
-        + Q
+        np.matmul(np.matmul(transition_matrix, cov), transition_matrix.T) + Q
     )
 
     return predicted_states, predicted_covs
@@ -325,6 +321,35 @@ def normal_unscented_predict(
     out_flat_covs[:] = (
         np.sum((s_weights_c.reshape(nsigma, 1, 1) * dev_outerprod), axis=1) + q
     )
+
+
+def sqrt_linear_predict(state, root_cov, shocks_sds, transition_matrix):
+    """Make a linear kalman predict step in linear form.
+    Args:
+        state (np.ndarray): numpy array of (nemf * nobs, nfac).
+        root_cov (np.ndarray): upper triangular cholesky factor of the covariance 
+            matrix of (nemf * nobs, nfac, nfac).
+        shocks_sds (np.ndarray): numpy array of (nfac).
+        transition_matrix (np.ndarray): state transition matrix of (nfac, nfac), 
+            the same for all obs.
+                
+    References:
+    Robert Grover Brown. Introduction to Random Signals and Applied
+        Kalman Filtering. Wiley and sons, 2012.
+    
+    
+    """
+    nstates, nfac = state.shape
+    predicted_states = np.dot(transition_matrix, state.T).T
+    root_Q = np.diag(shocks_sds)
+
+    m = np.empty([nstates, 2 * nfac, nfac])
+    m[:, :nfac] = np.matmul(root_cov, transition_matrix.T)
+    m[:, nfac:] = root_Q
+    # array_qr modifies matrix m in place
+    predicted_root_covs = array_qr(m)[:, :nfac, :]
+
+    return predicted_states, predicted_root_covs
 
 
 def sqrt_unscented_predict(
