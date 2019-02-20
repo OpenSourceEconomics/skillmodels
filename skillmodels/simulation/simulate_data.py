@@ -56,6 +56,10 @@ def add_missings(data, meas_names, p, q):
         - p is NOT the marginal probability of a measurement being missing. The marginal probability is given by:
            p_m = p/(1-serial_corr), where  serial_corr = (q-p) in general != 0, since p != q. This means that in average the share of 
            missing values will be larger than p. Thus, p and q should be set accordingly given the desired share of missing values.
+        - I would still suggest to draw period_0 bernoulli with the marginal probaility. Having run the function in a loop with 100 
+          iteration, the average share of missing measurements in all measurements is very close to p/(1-(q-p)) 
+          (for six pairs of p and q the average percentage deviation is less than 2 %). 
+          Sounds like a nice result and a simple formula for deciding on p and q.
     """
 
     nmeas = len(meas_names)
