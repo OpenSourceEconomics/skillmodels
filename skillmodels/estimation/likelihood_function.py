@@ -11,9 +11,19 @@ from skillmodels.fast_routines.sigma_points import calculate_sigma_points
 
 
 def log_likelihood_per_individual(
-        params, like_vec, parse_params_args, stagemap, nmeas_list, anchoring,
-        square_root_filters, update_types, update_args, predict_args,
-        calculate_sigma_points_args, restore_args):
+    params,
+    like_vec,
+    parse_params_args,
+    stagemap,
+    nmeas_list,
+    anchoring,
+    square_root_filters,
+    update_types,
+    update_args,
+    predict_args,
+    calculate_sigma_points_args,
+    restore_args,
+):
     """Return the log likelihood for each individual in the sample.
 
     Users do not have to call this function directly and do not have to bother
@@ -73,12 +83,12 @@ def update(square_root_filters, update_type, update_args):
 
     """
     if square_root_filters is True:
-        if update_type == 'linear':
+        if update_type == "linear":
             sqrt_linear_update(*update_args)
         else:
             sqrt_probit_update(**update_args)
     else:
-        if update_type == 'linear':
+        if update_type == "linear":
             normal_linear_update(*update_args)
         else:
             normal_probit_update(**update_args)
@@ -95,6 +105,3 @@ def predict(stage, square_root_filters, predict_args):
         sqrt_unscented_predict(stage, **predict_args)
     else:
         normal_unscented_predict(stage, **predict_args)
-
-
-

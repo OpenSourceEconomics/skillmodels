@@ -51,9 +51,8 @@ def array_choldate(to_update, update_with, weight):
             s = update_with[u, k] / d
             to_update[u, k, k] = r
             for i in range(k + 1, nfac):
-                to_update[u, k, i] = \
-                    (to_update[u, k, i] +
-                     sign * s * update_with[u, i]) / c
-                update_with[u, i] = \
-                    c * update_with[u, i] - s * to_update[u, k, i]
+                to_update[u, k, i] = (
+                    to_update[u, k, i] + sign * s * update_with[u, i]
+                ) / c
+                update_with[u, i] = c * update_with[u, i] - s * to_update[u, k, i]
     return to_update

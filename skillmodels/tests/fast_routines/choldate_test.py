@@ -13,16 +13,15 @@ def setup_(weight):
     for i in range(20):
         to_update[i][helper_bool] = np.random.randn(10) + 100
 
-    pos_def_arr = matrix_multiply(np.transpose(to_update, axes=(0, 2, 1)),
-                                  to_update)
+    pos_def_arr = matrix_multiply(np.transpose(to_update, axes=(0, 2, 1)), to_update)
 
     update_with = np.random.uniform(size=(20, 4))
 
-    outer_prod = update_with.reshape(20, 4, 1) * \
-        update_with.reshape(20, 1, 4)
+    outer_prod = update_with.reshape(20, 4, 1) * update_with.reshape(20, 1, 4)
 
     expected_result = np.transpose(
-        cholesky(pos_def_arr + weight * outer_prod), axes=(0, 2, 1))
+        cholesky(pos_def_arr + weight * outer_prod), axes=(0, 2, 1)
+    )
 
     return to_update, update_with, expected_result
 
