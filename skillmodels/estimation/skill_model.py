@@ -1,8 +1,7 @@
 from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 from skillmodels.pre_processing.data_processor import DataProcessor
 from skillmodels.estimation.likelihood_function import log_likelihood_per_individual
-from skillmodels.estimation.wa_functions import (
-    calculate_wa_estimated_quantities)
+from skillmodels.estimation.wa_functions import calculate_wa_estimated_quantities
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -1227,11 +1226,23 @@ class SkillModel(GenericLikelihoodModel):
 
     def estimate_params_wa(self):
         """Estimate the params vector with wa."""
-        storage_df, X_zero, P_zero, trans_coeffs, trans_var_df, anch_intercept, anch_loadings, anch_variance = (
-            calculate_wa_estimated_quantities(self.identified_restrictions, self.y_data, self.measurements, self.normalizations,
-                                              self.storage_df, self.factors, self.transition_names, self.included_factors,
-                                              self.nstages, self.stages, self.periods, self.stagemap, self.anchored_factors,
-                                              self.anch_outcome, self.wa_period_weights, self.anchoring)
+        storage_df, X_zero, P_zero, trans_coeffs, trans_var_df, anch_intercept, anch_loadings, anch_variance = calculate_wa_estimated_quantities(
+            self.identified_restrictions,
+            self.y_data,
+            self.measurements,
+            self.normalizations,
+            self.storage_df,
+            self.factors,
+            self.transition_names,
+            self.included_factors,
+            self.nstages,
+            self.stages,
+            self.periods,
+            self.stagemap,
+            self.anchored_factors,
+            self.anch_outcome,
+            self.wa_period_weights,
+            self.anchoring,
         )
 
         params = np.zeros(self.len_params(params_type="long"))

@@ -5,6 +5,11 @@ import pytest
 import json
 
 
+# ======================================================================================
+# helper functions
+# ======================================================================================
+
+
 def make_unique(qr_result_arr):
     long_side, m, n = qr_result_arr.shape
     for u in range(long_side):
@@ -20,7 +25,7 @@ def skillmodels_kwargs_from_fixture(
     kwargs = {
         "state": np.array([state]).astype(float),
         "covs": np.array([state_cov]).astype(float),
-        "like_vec": np.array([1]).astype(float),   # likelihood not relevant for this test
+        "like_vec": np.array([1]).astype(float),
         "y": np.array([measurement]).astype(float),
         "c": np.array(range(0)),
         "delta": np.array(range(0)),
@@ -438,8 +443,102 @@ def test_normal_state_and_cov_against_filterpy(fixture):
     aaae(d["covs"], exp_cov)
 
 # =============================================================================
-# TESTS FOR THE UNSCENTED PREDICT FUNCTIONS
+# TESTS FOR THE PREDICT FUNCTIONS
 # =============================================================================
+
+
+# tests for normal linear predict and sqrt linear functions
+@pytest.fixture
+def setup_linear_predict():
+    out = {}
+
+    out["state"] = np.array([[7, 9, 3], [8, 3, 5]])
+
+    out["cov"] = np.array(
+        [
+            [[0.3, 0, 0], [0, 0.5, 0], [0, 0, 0.9]],
+            [[0.3, -0.2, -0.1], [-0.2, 0.3, -0.1], [-0.1, -0.1, 0.5]],
+        ]
+    )
+
+    out["root_cov"] = np.array(
+        [
+            [[0.3, 0, 0], [0, 0.5, 0], [0, 0, 0.9]],
+            [[0.3, 0.2, 0.1], [0, 0.3, 0.1], [0, 0, 0.5]],
+        ]
+    )
+
+    out["shocks_sds"] = np.array([1.2, 0.3, 0.2])
+
+    out["transition_matrix"] = np.array([[0.2, 1, 2], [0.5, 0.9, 0.7], [0.2, 0.4, 0.4]])
+
+    return out
+
+
+@pytest.fixture
+def expected_linear_predict():
+    out = {}
+
+    out["predicted_states"] = np.array([[16.4, 13.7, 6.2], [14.6, 10.2, 4.8]])
+
+    out["predicted_covs"] = np.array(
+        [
+            [[5.552, 1.74, 0.932], [1.74, 1.011, 0.462], [0.932, 0.462, 0.276]],
+            [[3.192, 0.5, 0.308], [0.5, 0.277, 0.104], [0.308, 0.104, 0.1]],
+        ]
+    )
+
+    out["predicted_sqrt_covs"] = np.array(
+        [
+            [
+                [5.427423, -0.424064, 0.0809716],
+                [-0.424064, 0.374016, -0.0487112],
+                [0.0809716, -0.0487112, 0.0572607],
+            ],
+            [
+                [3.11777, 0.273778, 0.0502302],
+                [0.273778, 0.354309, 0.0453752],
+                [0.0502302, 0.0453752, 0.05562],
+            ],
+        ]
+    )
+
+    return out
+
+
+def test_normal_linear_predict_states(setup_linear_predict, expected_linear_predict):
+    d = setup_linear_predict
+    calc_pred_state, calc_pred_cov = kf.normal_linear_predict(
+        d["state"], d["cov"], d["shocks_sds"], d["transition_matrix"]
+    )
+    aaae(calc_pred_state, expected_linear_predict["predicted_states"])
+
+
+def test_normal_linear_predict_covs(setup_linear_predict, expected_linear_predict):
+    d = setup_linear_predict
+    calc_pred_state, calc_pred_cov = kf.normal_linear_predict(
+        d["state"], d["cov"], d["shocks_sds"], d["transition_matrix"]
+    )
+    aaae(calc_pred_cov, expected_linear_predict["predicted_covs"])
+
+
+def test_sqrt_predict_states(setup_linear_predict, expected_linear_predict):
+    d = setup_linear_predict
+    calc_pred_state, calc_pred_cov = kf.sqrt_linear_predict(
+        d["state"], d["root_cov"], d["shocks_sds"], d["transition_matrix"]
+    )
+    aaae(calc_pred_state, expected_linear_predict["predicted_states"])
+
+
+def test_sqrt_predict_root_covs(setup_linear_predict, expected_linear_predict):
+    d = setup_linear_predict
+    calc_pred_state, calc_pred_root_cov = kf.sqrt_linear_predict(
+        d["state"], d["root_cov"], d["shocks_sds"], d["transition_matrix"]
+    )
+    calc_cov = np.matmul(
+        calc_pred_root_cov, np.transpose(calc_pred_root_cov, axes=(0, 2, 1))
+    )
+    aaae(calc_cov, expected_linear_predict["predicted_sqrt_covs"])
 
 
 @pytest.fixture
@@ -649,3 +748,15 @@ def test_sqrt_unscented_predict_focus_on_covs(setup_unscented_predict, mocker):
     )
     make_unique(d["out_covs"])
     aaae(d["out_covs"], d["exp_cholcovs"])
+
+
+shocks_sd = np.array(
+    [
+        [[1.2, 0.3, 0.2]],
+        [[0.1, 0.9, 0.2]],
+        [[0.3, 0.01, 0.3]],
+        [[0.2, 0.5, 0.6]],
+        [[0.7, 0.1, 0.4]],
+        [[0.2, 0.1, 0.1]],
+    ]
+)

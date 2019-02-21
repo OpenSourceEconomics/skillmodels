@@ -26,9 +26,15 @@ class ModelSpecProcessor:
     """
 
     def __init__(
-            self, model_dict, dataset, estimator, model_name='some_model',
-            dataset_name='some_dataset', save_path=None,
-            bootstrap_samples=None):
+        self,
+        model_dict,
+        dataset,
+        estimator,
+        model_name="some_model",
+        dataset_name="some_dataset",
+        save_path=None,
+        bootstrap_samples=None,
+    ):
         self.model_dict = model_dict
         self.data = dataset
         self.estimator = estimator
@@ -36,67 +42,67 @@ class ModelSpecProcessor:
         self.dataset_name = dataset_name
         self.save_path = save_path
         self.bootstrap_samples = bootstrap_samples
-        if 'time_specific' in model_dict:
-            self._timeinf = model_dict['time_specific']
+        if "time_specific" in model_dict:
+            self._timeinf = model_dict["time_specific"]
         else:
             self._timeinf = {}
-        self._facinf = model_dict['factor_specific']
+        self._facinf = model_dict["factor_specific"]
         self.factors = sorted(list(self._facinf.keys()))
         self.nfac = len(self.factors)
         self.nsigma = 2 * self.nfac + 1
 
         # set the general model specifications
-        general_settings = \
-            {"nemf": 1,
-             "kappa": 2,
-             "square_root_filters": True,
-             "missing_variables": "raise_error",
-             "controls_with_missings": "raise_error",
-             "variables_without_variance": "raise_error",
-             "robust_bounds": False,
-             "bounds_distance": 1e-200,
-             "estimate_X_zeros": False,
-             "order_X_zeros": 0,
-             "restrict_W_zeros": True,
-             "restrict_P_zeros": True,
-             "cholesky_of_P_zero": False,
-             "probit_measurements": False,
-             "probanch_function": "odds_ratio",
-             "ignore_intercept_in_linear_anchoring": True,
-             "start_values_per_quantity":
-                {
-                    "deltas": 1.0,
-                    "H": 1.0,
-                    "R": 1.0,
-                    "Q": 0.1,
-                    "P_zero_diags": 0.4472135955,
-                    "P_zero_off_diags": 0.0,
-                    "psi": 0.1,
-                    "trans_coeffs": 1.0
-                },
-             # "numba_target": "cpu",
-             'wa_standard_error_method': 'bootstrap',
-             'chs_standard_error_method': 'op_of_gradient',
-             'save_intermediate_optimization_results': False,
-             'save_params_before_calculating_standard_errors': False,
-             'maxiter': 1000000,
-             'maxfun': 1000000,
-             'period_identifier': 'period',
-             'person_identifier': 'id',
-             'bootstrap_nreps': 300,
-             'bootstrap_sample_size': None,
-             'bootstrap_nprocesses': None,
-             'anchoring_mode': 'only_estimate_anchoring_equation',
-             'time_invariant_measurement_system': False,
-             'base_color': '#035096'
-             }
+        general_settings = {
+            "nemf": 1,
+            "kappa": 2,
+            "square_root_filters": True,
+            "missing_variables": "raise_error",
+            "controls_with_missings": "raise_error",
+            "variables_without_variance": "raise_error",
+            "robust_bounds": False,
+            "bounds_distance": 1e-200,
+            "estimate_X_zeros": False,
+            "order_X_zeros": 0,
+            "restrict_W_zeros": True,
+            "restrict_P_zeros": True,
+            "cholesky_of_P_zero": False,
+            "probit_measurements": False,
+            "probanch_function": "odds_ratio",
+            "ignore_intercept_in_linear_anchoring": True,
+            "start_values_per_quantity": {
+                "deltas": 1.0,
+                "H": 1.0,
+                "R": 1.0,
+                "Q": 0.1,
+                "P_zero_diags": 0.4472135955,
+                "P_zero_off_diags": 0.0,
+                "psi": 0.1,
+                "trans_coeffs": 1.0,
+            },
+            # "numba_target": "cpu",
+            "wa_standard_error_method": "bootstrap",
+            "chs_standard_error_method": "op_of_gradient",
+            "save_intermediate_optimization_results": False,
+            "save_params_before_calculating_standard_errors": False,
+            "maxiter": 1000000,
+            "maxfun": 1000000,
+            "period_identifier": "period",
+            "person_identifier": "id",
+            "bootstrap_nreps": 300,
+            "bootstrap_sample_size": None,
+            "bootstrap_nprocesses": None,
+            "anchoring_mode": "only_estimate_anchoring_equation",
+            "time_invariant_measurement_system": False,
+            "base_color": "#035096",
+        }
 
-        if 'general' in model_dict:
-            general_settings.update(model_dict['general'])
+        if "general" in model_dict:
+            general_settings.update(model_dict["general"])
         self.__dict__.update(general_settings)
         self.standard_error_method = getattr(
-            self, '{}_standard_error_method'.format(self.estimator))
-        if self.estimator == 'wa':
+            self, "{}_standard_error_method".format(self.estimator)
+        )
+        if self.estimator == "wa":
             self.nemf = 1
             self.cholesky_of_P_zero = False
             self.square_root_filters = False
@@ -115,13 +121,14 @@ class ModelSpecProcessor:
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
         self._nmeas_list()
-        if self.estimator == 'wa':
+        if self.estimator == "wa":
             self._wa_period_weights()
             self._wa_storage_df()
             self._wa_identified_transition_function_restrictions()
             assert self.time_invariant_measurement_system is False, (
-                'Time invariant measurement system is not yet supported '
-                'with the wa estimator.')
+                "Time invariant measurement system is not yet supported "
+                "with the wa estimator."
+            )
 
     def _set_bootstrap_sample_size(self):
         if self.bootstrap_samples is not None:
@@ -129,10 +136,11 @@ class ModelSpecProcessor:
             if self.bootstrap_sample_size is not None:
                 if bs_n != self.bootstrap_sample_size:
                     message = (
-                        'The bootsrap_sample_size you specified in the general'
-                        ' section of the model dict in model {} does not '
-                        'coincide with the bootstrap_samples you provide '
-                        'and will be ignored.').format(self.model_name)
+                        "The bootsrap_sample_size you specified in the general"
+                        " section of the model dict in model {} does not "
+                        "coincide with the bootstrap_samples you provide "
+                        "and will be ignored."
+                    ).format(self.model_name)
                     warnings.warn(message)
             self.bootstrap_sample_size = bs_n
         elif self.bootstrap_sample_size is None:
@@ -140,15 +148,15 @@ class ModelSpecProcessor:
 
     def _generate_save_directories(self):
         if self.save_intermediate_optimization_results is True:
-            os.makedirs(self.save_path + '/opt_results', exist_ok=True)
+            os.makedirs(self.save_path + "/opt_results", exist_ok=True)
         if self.save_params_before_calculating_standard_errors is True:
-            os.makedirs(self.save_path + '/params', exist_ok=True)
+            os.makedirs(self.save_path + "/params", exist_ok=True)
 
     def _set_time_specific_attributes(self):
         """Set model specs related to periods and stages as attributes."""
-        self.nperiods = len(self._facinf[self.factors[0]]['measurements'])
-        if 'stagemap' in self._timeinf:
-            self.stagemap = np.array(self._timeinf['stagemap'])
+        self.nperiods = len(self._facinf[self.factors[0]]["measurements"])
+        if "stagemap" in self._timeinf:
+            self.stagemap = np.array(self._timeinf["stagemap"])
         else:
             sm = np.arange(self.nperiods)
             sm[-1] = sm[-2]
@@ -158,61 +166,70 @@ class ModelSpecProcessor:
         self.stages = sorted(list(set(self.stagemap)))
         self.nstages = len(self.stages)
         self.stage_length_list = [
-            list(self.stagemap[:-1]).count(s) for s in self.stages]
+            list(self.stagemap[:-1]).count(s) for s in self.stages
+        ]
 
         assert len(self.stagemap) == self.nperiods, (
-            'You have to specify a list of length nperiods '
-            'as stagemap. Check model {}').format(self.model_name)
+            "You have to specify a list of length nperiods "
+            "as stagemap. Check model {}"
+        ).format(self.model_name)
 
         assert self.stagemap[-1] == self.stagemap[-2], (
-            'If you specify a stagemap of length nperiods the last two '
-            'elements have to coincide because no transition equation can be '
-            'estimated in the last period. Check model {}').format(
-                self.model_name)
+            "If you specify a stagemap of length nperiods the last two "
+            "elements have to coincide because no transition equation can be "
+            "estimated in the last period. Check model {}"
+        ).format(self.model_name)
 
         assert np.array_equal(self.stages, range(self.nstages)), (
-            'The stages have to be numbered beginning with 0 and increase in '
-            'steps of 1. Your stagemap in mode {} is invalid').format(
-                self.model_name)
+            "The stages have to be numbered beginning with 0 and increase in "
+            "steps of 1. Your stagemap in mode {} is invalid"
+        ).format(self.model_name)
 
         for factor in self.factors:
-            length = len(self._facinf[factor]['measurements'])
+            length = len(self._facinf[factor]["measurements"])
             assert length == self.nperiods, (
-                'The lists of lists with the measurements must have the '
-                'same length for each factor in the model. In the model {} '
-                'you have one list with length {} and another with length '
-                '{}.').format(self.model_name, self.nperiods, length)
+                "The lists of lists with the measurements must have the "
+                "same length for each factor in the model. In the model {} "
+                "you have one list with length {} and another with length "
+                "{}."
+            ).format(self.model_name, self.nperiods, length)
 
     def _check_general_specifications(self):
         """Check consistency of the "general" model specifications."""
         if self.estimate_X_zeros is False:
             assert self.nemf == 1, (
-                'If start states (X_zero) are not estimated it is not '
-                'possible to have more than one element in the mixture '
-                'distribution of the latent factors. Check model {}').format(
-                    self.model_name)
+                "If start states (X_zero) are not estimated it is not "
+                "possible to have more than one element in the mixture "
+                "distribution of the latent factors. Check model {}"
+            ).format(self.model_name)
 
-        assert self.wa_standard_error_method == 'bootstrap', (
-            'Currently, the only standard error method supported with the wa '
-            'estimator is bootstrap.')
+        assert self.wa_standard_error_method == "bootstrap", (
+            "Currently, the only standard error method supported with the wa "
+            "estimator is bootstrap."
+        )
 
-        chs_admissible = ['bootstrap', 'op_of_gradient', 'hessian_inverse']
+        chs_admissible = ["bootstrap", "op_of_gradient", "hessian_inverse"]
         assert self.chs_standard_error_method in chs_admissible, (
-            'Currently, the only standard error methods supported with the '
-            'chs estimator are {}'.format(chs_admissible))
+            "Currently, the only standard error methods supported with the "
+            "chs estimator are {}".format(chs_admissible)
+        )
 
-        something_ist_saved = self.save_intermediate_optimization_results or \
-            self.save_params_before_calculating_standard_errors
+        something_ist_saved = (
+            self.save_intermediate_optimization_results
+            or self.save_params_before_calculating_standard_errors
+        )
         if something_ist_saved is True:
             assert self.save_path is not None, (
-                'If you specified to save intermediate optimization '
-                'results or estimated parameters you have to provide '
-                'a save_path.')
+                "If you specified to save intermediate optimization "
+                "results or estimated parameters you have to provide "
+                "a save_path."
+            )
 
-        if self.estimator == 'wa':
+        if self.estimator == "wa":
             assert self.probit_measurements is False, (
-                'It is not possible to estimate probit measurement equations '
-                'with the wa estimator.')
+                "It is not possible to estimate probit measurement equations "
+                "with the wa estimator."
+            )
 
     def _transition_equation_names(self):
         """Construct a list with the transition equation name for each factor.
@@ -220,8 +237,9 @@ class ModelSpecProcessor:
         The result is set as class attribute ``transition_names``.
 
         """
-        self.transition_names = \
-            [self._facinf[f]['trans_eq']['name'] for f in self.factors]
+        self.transition_names = [
+            self._facinf[f]["trans_eq"]["name"] for f in self.factors
+        ]
 
     def _transition_equation_included_factors(self):
         """Included factors and their position for each transition equation.
@@ -238,8 +256,8 @@ class ModelSpecProcessor:
         included_positions = []
 
         for factor in self.factors:
-            trans_inf = self._facinf[factor]['trans_eq']
-            args_f = sorted(trans_inf['included_factors'])
+            trans_inf = self._facinf[factor]["trans_eq"]
+            args_f = sorted(trans_inf["included_factors"])
             pos_f = list(np.arange(self.nfac)[np.in1d(self.factors, args_f)])
             included_factors.append(args_f)
             included_positions.append(pos_f)
@@ -249,21 +267,23 @@ class ModelSpecProcessor:
 
     def _set_anchoring_attributes(self):
         """Set attributes related to anchoring and make some checks."""
-        if 'anchoring' in self.model_dict:
-            assert len(self.model_dict['anchoring']) <= 1, (
-                'At most one anchoring equation can be estimated. You '
-                'specify {} in model {}').format(
-                    len(self.model_dict['anchoring']), self.model_name)
-            (self.anch_outcome, self.anchored_factors), = \
-                self.model_dict['anchoring'].items()
+        if "anchoring" in self.model_dict:
+            assert len(self.model_dict["anchoring"]) <= 1, (
+                "At most one anchoring equation can be estimated. You "
+                "specify {} in model {}"
+            ).format(len(self.model_dict["anchoring"]), self.model_name)
+            (self.anch_outcome, self.anchored_factors), = self.model_dict[
+                "anchoring"
+            ].items()
             self.anchoring = True
             if self._is_dummy(self.anch_outcome, self.periods[-1]):
-                self.anchoring_update_type = 'probit'
+                self.anchoring_update_type = "probit"
             else:
-                self.anchoring_update_type = 'linear'
-            self.anch_positions = [f for f in range(self.nfac) if
-                                   self.factors[f] in self.anchored_factors]
-            if self.anchoring_mode == 'truly_anchor_latent_factors':
+                self.anchoring_update_type = "linear"
+            self.anch_positions = [
+                f for f in range(self.nfac) if self.factors[f] in self.anchored_factors
+            ]
+            if self.anchoring_mode == "truly_anchor_latent_factors":
                 self.anchor_in_predict = True
             else:
                 self.anchor_in_predict = False
@@ -274,19 +294,20 @@ class ModelSpecProcessor:
 
     def _set_endogeneity_correction_attributes(self):
         # TODO: implement endogeneity correction option for both estimators
-        if 'endog_correction' in self.model_dict:
-            info_dict = self.model_dict['endog_correction']
-            self.endog_factor = info_dict['endog_factor']
+        if "endog_correction" in self.model_dict:
+            info_dict = self.model_dict["endog_correction"]
+            self.endog_factor = info_dict["endog_factor"]
             self.endog_correction = True
-            self.endog_function = info_dict['endog_function']
+            self.endog_function = info_dict["endog_function"]
         else:
             self.endog_correction = False
 
         if self.endog_correction is True:
             raise NotImplementedError(
-                'You can currently not use endogeneity correction. The method '
-                'proposed by CHS is not easily adjustable to reflect the '
-                'critique about renormalization by Wiswall and Agostinelli.')
+                "You can currently not use endogeneity correction. The method "
+                "proposed by CHS is not easily adjustable to reflect the "
+                "critique about renormalization by Wiswall and Agostinelli."
+            )
 
     def _present(self, variable, period):
         """Check if **variable** is present in **period**.
@@ -307,17 +328,17 @@ class ModelSpecProcessor:
 
         """
         message = (
-            'In model {} you use variable {} which is not in dataset {}. '
-            'in period {}. You can either delete the variable in the '
+            "In model {} you use variable {} which is not in dataset {}. "
+            "in period {}. You can either delete the variable in the "
             'model_specs or set "missing_variables" to "drop_variable" '
-            'to automatically drop missing variables.').format(
-                self.model_name, variable, self.dataset_name, period)
+            "to automatically drop missing variables."
+        ).format(self.model_name, variable, self.dataset_name, period)
 
         columns = set(self.data.columns)
         df = self.data[self.data[self.period_identifier] == period]
         if variable in columns and df[variable].notnull().any():
             return True
-        elif self.missing_variables == 'raise_error':
+        elif self.missing_variables == "raise_error":
             raise KeyError(message)
         else:
             return False
@@ -337,8 +358,7 @@ class ModelSpecProcessor:
             bool: True if **variable** is a dummy in **period**, else False
 
         """
-        series = \
-            self.data[self.data[self.period_identifier] == period][variable]
+        series = self.data[self.data[self.period_identifier] == period][variable]
         unique_values = series[pd.notnull(series)].unique()
         if sorted(unique_values) == [0, 1]:
             return True
@@ -363,23 +383,29 @@ class ModelSpecProcessor:
 
         """
         message = (
-            'Variables have to take at least two different values as variables'
-            ' without variance cannot help to identify the model. In model {} '
-            'you use variable {} which only takes the value {} in dataset {} '
-            'in period {}. You can eiter drop the variable in the model_specs '
+            "Variables have to take at least two different values as variables"
+            " without variance cannot help to identify the model. In model {} "
+            "you use variable {} which only takes the value {} in dataset {} "
+            "in period {}. You can eiter drop the variable in the model_specs "
             'or set the "variables_without_variance" key in general settings '
-            'to "drop_variable".')
+            'to "drop_variable".'
+        )
 
-        series = \
-            self.data[self.data[self.period_identifier] == period][variable]
+        series = self.data[self.data[self.period_identifier] == period][variable]
         unique_non_missing_values = list(series[pd.notnull(series)].unique())
         nr_unique = len(unique_non_missing_values)
 
         if nr_unique <= 1:
-            if self.variables_without_variance == 'raise_error':
-                raise ValueError(message.format(
-                    self.model_name, variable, unique_non_missing_values,
-                    self.dataset_name, period))
+            if self.variables_without_variance == "raise_error":
+                raise ValueError(
+                    message.format(
+                        self.model_name,
+                        variable,
+                        unique_non_missing_values,
+                        self.dataset_name,
+                        period,
+                    )
+                )
             else:
                 return False
         else:
@@ -399,29 +425,32 @@ class ModelSpecProcessor:
         """
         measurements = {factor: [] for factor in self.factors}
         for factor, t in product(self.factors, self.periods):
-            possible_meas = self._facinf[factor]['measurements'][t]
-            present = [m for m in possible_meas if (self._present(m, t) and
-                       self._has_variance(m, t))]
+            possible_meas = self._facinf[factor]["measurements"][t]
+            present = [
+                m
+                for m in possible_meas
+                if (self._present(m, t) and self._has_variance(m, t))
+            ]
             measurements[factor].append(present)
 
         for f, factor in enumerate(self.factors):
-            if self.transition_names[f] == 'constant':
+            if self.transition_names[f] == "constant":
                 for t in self.periods[1:]:
                     assert len(measurements[factor][t]) == 0, (
-                        'In model {} factor {} has a constant transition '
-                        'equation. Therefore it can only have measurements '
-                        'in the initial period. However, you specified measure'
-                        'ments in period {}.'.format(
-                            self.model_name, factor, t))
+                        "In model {} factor {} has a constant transition "
+                        "equation. Therefore it can only have measurements "
+                        "in the initial period. However, you specified measure"
+                        "ments in period {}.".format(self.model_name, factor, t)
+                    )
 
-            elif self.estimator == 'wa':
+            elif self.estimator == "wa":
                 for t in self.periods:
                     assert len(measurements[factor][t]) >= 2, (
-                        'In model {} factor {} has a non-constant transition '
-                        'equation. Therefore it must have at least two '
-                        'measurements in every period. However, this is '
-                        'not the case in period {}'.format(
-                            self.model_name, factor, t))
+                        "In model {} factor {} has a non-constant transition "
+                        "equation. Therefore it must have at least two "
+                        "measurements in every period. However, this is "
+                        "not the case in period {}".format(self.model_name, factor, t)
+                    )
 
         self.measurements = measurements
 
@@ -444,24 +473,27 @@ class ModelSpecProcessor:
 
         """
         message = (
-            'In model {} you use variable {} which has missing observations '
-            'in period {} as control variable. You can either delete the '
+            "In model {} you use variable {} which has missing observations "
+            "in period {} as control variable. You can either delete the "
             'variable in the model_specs or set the "controls_with_missings" '
             'key to "drop_variable" or "drop_observation" to automatically '
-            'drop the variable (in period {}) or the missing observations '
-            '(in all periods!), respectively')
+            "drop the variable (in period {}) or the missing observations "
+            "(in all periods!), respectively"
+        )
 
         self.uses_controls = False
-        if 'controls' in self._timeinf:
+        if "controls" in self._timeinf:
             for t in self.periods:
-                if len(self._timeinf['controls'][t]) > 0:
+                if len(self._timeinf["controls"][t]) > 0:
                     self.uses_controls = True
 
-        if self.estimator == 'wa':
+        if self.estimator == "wa":
             if self.uses_controls is True:
-                print('The control variables you specified in model {} will '
-                      'be ignored when the model is estimated with the wa '
-                      'estimator.'.format(self.model_name))
+                print(
+                    "The control variables you specified in model {} will "
+                    "be ignored when the model is estimated with the wa "
+                    "estimator.".format(self.model_name)
+                )
 
         obs_to_keep = np.ones(len(self.data) // self.nperiods, dtype=bool)
         controls = [[] for t in self.periods]
@@ -470,51 +502,51 @@ class ModelSpecProcessor:
             present_controls = []
             for t in self.periods:
                 present_controls.append(
-                    [c for c in self._timeinf['controls'][t]
-                     if (self._present(c, t))])
+                    [c for c in self._timeinf["controls"][t] if (self._present(c, t))]
+                )
 
             for t in self.periods:
                 df = self.data[self.data[self.period_identifier] == t]
                 for c, control in enumerate(present_controls[t]):
                     if df[control].notnull().all():
                         controls[t].append(control)
-                    elif self.controls_with_missings == 'drop_observations':
+                    elif self.controls_with_missings == "drop_observations":
                         controls[t].append(control)
                         obs_to_keep = np.logical_and(
-                            obs_to_keep, df[control].notnull().values)
-                    elif self.controls_with_missings == 'raise_error':
-                        raise ValueError(message.format(
-                            self.model_name, control, t, t))
+                            obs_to_keep, df[control].notnull().values
+                        )
+                    elif self.controls_with_missings == "raise_error":
+                        raise ValueError(message.format(self.model_name, control, t, t))
 
         self.controls = controls
         self.obs_to_keep = obs_to_keep
 
     def _check_anchoring_specification(self):
         """Consistency checks for the model specs related to anchoring."""
-        if hasattr(self, 'anch_outcome'):
+        if hasattr(self, "anch_outcome"):
             for factor in self.factors:
-                last_measurements = \
-                    self.measurements[factor][self.nperiods - 1]
+                last_measurements = self.measurements[factor][self.nperiods - 1]
                 assert self.anch_outcome not in last_measurements, (
-                    'The anchoring outcome cannot be used as measurement '
-                    'in the last period. In model {} you use the anchoring '
-                    'outcome {} as measurement for factor {}').format(
-                        self.model_name, self.anch_outcome, factor)
+                    "The anchoring outcome cannot be used as measurement "
+                    "in the last period. In model {} you use the anchoring "
+                    "outcome {} as measurement for factor {}"
+                ).format(self.model_name, self.anch_outcome, factor)
 
         if self.nemf >= 2 and self._is_dummy(self.anch_outcome):
             raise NotImplementedError(
-                'Probability anchoring is not yet implemented for nemf >= 2 '
-                'but your anchoring outcome {} in model {} is a dummy '
-                'variable.').format(self.anch_outcmoe, self.model_name)
+                "Probability anchoring is not yet implemented for nemf >= 2 "
+                "but your anchoring outcome {} in model {} is a dummy "
+                "variable."
+            ).format(self.anch_outcmoe, self.model_name)
 
-        if self.anchoring is True and self.estimator == 'wa':
+        if self.anchoring is True and self.estimator == "wa":
             assert self.anchor_in_predict is False, (
-                'For the wa estimator the only possible anchoring_mode is ',
-                'only_estimate_anchoring_equation. Check the specs of ',
-                'model {}'.format(self.model_name))
+                "For the wa estimator the only possible anchoring_mode is ",
+                "only_estimate_anchoring_equation. Check the specs of ",
+                "model {}".format(self.model_name),
+            )
 
-    def _check_and_clean_normalizations_list(
-            self, factor, norm_list, norm_type):
+    def _check_and_clean_normalizations_list(self, factor, norm_list, norm_type):
         """Check and clean a list with normalization specifications.
 
         Raise an error if invalid normalizations were specified.
@@ -541,30 +573,32 @@ class ModelSpecProcessor:
 
         """
         has_been_dropped_message = (
-            'Normalized measurements must be present. In model {} you have '
-            'specified {} as normalized variable for factor {} but it was '
-            'dropped because it is not present in dataset {} in period {}'
-            'and missing_variables == "drop_variable"')
+            "Normalized measurements must be present. In model {} you have "
+            "specified {} as normalized variable for factor {} but it was "
+            "dropped because it is not present in dataset {} in period {}"
+            'and missing_variables == "drop_variable"'
+        )
 
         was_not_specified_message = (
-            'Normalized measurements must be included in the measurement list '
-            'of the factor they normalize in the period where they are used. '
-            'In model {} you use the variable {} to normalize factor {} in '
-            'period {} but it is not included as measurement.')
+            "Normalized measurements must be included in the measurement list "
+            "of the factor they normalize in the period where they are used. "
+            "In model {} you use the variable {} to normalize factor {} in "
+            "period {} but it is not included as measurement."
+        )
 
         assert len(norm_list) == self.nperiods, (
-            'Normalizations lists must have one entry per period. In model {} '
-            'you specify a normalizations list of length {} for factor {} '
-            'but the model has {} periods').format(
-                self.model_name, len(norm_list), factor, self.nperiods)
+            "Normalizations lists must have one entry per period. In model {} "
+            "you specify a normalizations list of length {} for factor {} "
+            "but the model has {} periods"
+        ).format(self.model_name, len(norm_list), factor, self.nperiods)
 
         for t, norminfo in enumerate(norm_list):
             if type(norminfo) != dict:
                 assert len(norminfo) in [0, 2], (
-                    'The sublists in the normalizations must be empty or have '
-                    'length 2. In model {} in period {} you specify a '
-                    'list with len {} for factor {}').format(
-                        self.model_name, t, len(norminfo), factor)
+                    "The sublists in the normalizations must be empty or have "
+                    "length 2. In model {} in period {} you specify a "
+                    "list with len {} for factor {}"
+                ).format(self.model_name, t, len(norminfo), factor)
 
         cleaned = []
 
@@ -576,8 +610,9 @@ class ModelSpecProcessor:
 
         if norm_list != cleaned:
             raise DeprecationWarning(
-                'Using lists of lists instead of lists of dicts for the '
-                'normalization specification is deprecated.')
+                "Using lists of lists instead of lists of dicts for the "
+                "normalization specification is deprecated."
+            )
 
         norm_list = cleaned
 
@@ -586,31 +621,39 @@ class ModelSpecProcessor:
             normed_measurements = list(norminfo.keys())
             for normed_meas in normed_measurements:
                 if normed_meas not in self.measurements[factor][t]:
-                    if normed_meas in self._facinf[factor]['measurements'][t]:
-                        raise KeyError(has_been_dropped_message.format(
-                            self.model_name, normed_meas, factor,
-                            self.dataset_name, t))
+                    if normed_meas in self._facinf[factor]["measurements"][t]:
+                        raise KeyError(
+                            has_been_dropped_message.format(
+                                self.model_name,
+                                normed_meas,
+                                factor,
+                                self.dataset_name,
+                                t,
+                            )
+                        )
                     else:
-                        raise KeyError(was_not_specified_message.format(
-                            self.model_name, normed_meas, factor, t))
+                        raise KeyError(
+                            was_not_specified_message.format(
+                                self.model_name, normed_meas, factor, t
+                            )
+                        )
 
         # check validity of values
         for t, norminfo in enumerate(norm_list):
             for n_meas, n_val in norminfo.items():
-                if norm_type == 'variances':
-                    assert n_val > 0, \
-                        'Variances can only be normalized to a value > 0.'
-                if norm_type == 'loadings':
-                    assert n_val != 0, \
-                        'Loadings cannot be normalized to 0.'
+                if norm_type == "variances":
+                    assert n_val > 0, "Variances can only be normalized to a value > 0."
+                if norm_type == "loadings":
+                    assert n_val != 0, "Loadings cannot be normalized to 0."
 
-        if self.estimator == 'wa':
+        if self.estimator == "wa":
             for norminfo in norm_list:
-                msg = ('The wa estimator currently allows at most one '
-                       'normalization of {} in each period. This is '
-                       'violated for factor {}: {}')
-                assert len(norminfo) <= 1, msg.format(
-                    norm_type, factor, norminfo)
+                msg = (
+                    "The wa estimator currently allows at most one "
+                    "normalization of {} in each period. This is "
+                    "violated for factor {}: {}"
+                )
+                assert len(norminfo) <= 1, msg.format(norm_type, factor, norminfo)
 
         return norm_list
 
@@ -621,29 +664,31 @@ class ModelSpecProcessor:
 
         """
         norm = {}
-        norm_types = ['loadings', 'intercepts', 'variances']
+        norm_types = ["loadings", "intercepts", "variances"]
 
         for factor in self.factors:
             norm[factor] = {}
 
             for norm_type in norm_types:
-                if 'normalizations' in self._facinf[factor]:
-                    norminfo = self._facinf[factor]['normalizations']
+                if "normalizations" in self._facinf[factor]:
+                    norminfo = self._facinf[factor]["normalizations"]
                     if norm_type in norminfo:
                         norm_list = norminfo[norm_type]
-                        norm[factor][norm_type] = \
-                            self._check_and_clean_normalizations_list(
-                                factor, norm_list, norm_type)
+                        norm[factor][
+                            norm_type
+                        ] = self._check_and_clean_normalizations_list(
+                            factor, norm_list, norm_type
+                        )
                     else:
                         norm[factor][norm_type] = [{}] * self.nperiods
                 else:
-                    norm[factor] = {
-                        nt: [{}] * self.nperiods for nt in norm_types}
+                    norm[factor] = {nt: [{}] * self.nperiods for nt in norm_types}
 
-        if self.estimator == 'wa':
+        if self.estimator == "wa":
             for factor in self.factors:
-                assert norm[factor]['variances'] == [{}] * self.nperiods, \
-                    'Normalized variances and wa estimator are incompatible.'
+                assert (
+                    norm[factor]["variances"] == [{}] * self.nperiods
+                ), "Normalized variances and wa estimator are incompatible."
 
         self.normalizations = norm
 
@@ -712,7 +757,8 @@ class ModelSpecProcessor:
             self._stage_udpate_info(),
             self._purpose_update_info(),
             self._type_update_info(),
-            self._invariance_update_info()]
+            self._invariance_update_info(),
+        ]
 
         df = pd.concat(to_concat, axis=1)
         if self.time_invariant_measurement_system is True:
@@ -723,7 +769,8 @@ class ModelSpecProcessor:
     def _factor_update_info(self):
         # create an empty DataFrame with and empty MultiIndex
         index = pd.MultiIndex(
-            levels=[[], []], labels=[[], []], names=['period', 'name'])
+            levels=[[], []], labels=[[], []], names=["period", "name"]
+        )
         df = DataFrame(data=None, index=index)
 
         # append rows for each update that has to be performed
@@ -743,7 +790,8 @@ class ModelSpecProcessor:
                 else:
                     # add a new row to the DataFrame
                     ind = pd.MultiIndex.from_tuples(
-                        [(t, meas)], names=['period', 'variable'])
+                        [(t, meas)], names=["period", "variable"]
+                    )
                     dat = np.zeros((1, self.nfac))
                     df2 = DataFrame(data=dat, columns=self.factors, index=ind)
                     df2[factor] = 1
@@ -759,60 +807,64 @@ class ModelSpecProcessor:
 
     def _normalization_update_info(self):
         bdf = self._factor_update_info()
-        load_cols = ['{}_loading_norm_value'.format(f) for f in self.factors]
+        load_cols = ["{}_loading_norm_value".format(f) for f in self.factors]
         # for some reason it affects the likelihood value of a test model
         # whether the loading norm values have dtype float or int
         # therefore I fill them with 0.0 to have them explicitly as float.
         df = pd.DataFrame(index=bdf.index, columns=load_cols).fillna(0.0)
 
-        df['intercept_norm_value'] = np.nan
-        df['variance_norm_value'] = np.nan
+        df["intercept_norm_value"] = np.nan
+        df["variance_norm_value"] = np.nan
 
         for (t, meas), factor in product(df.index, self.factors):
             if bdf.loc[(t, meas), factor] == 1:
-                load_norm_column = '{}_loading_norm_value'.format(factor)
-                load_norminfo = self.normalizations[factor]['loadings'][t]
+                load_norm_column = "{}_loading_norm_value".format(factor)
+                load_norminfo = self.normalizations[factor]["loadings"][t]
 
                 if meas in load_norminfo:
                     df.loc[(t, meas), load_norm_column] = load_norminfo[meas]
 
-                msg = 'Incompatible normalizations of {} for {} in period {}'
-                for normtype in ['intercepts', 'variances']:
+                msg = "Incompatible normalizations of {} for {} in period {}"
+                for normtype in ["intercepts", "variances"]:
                     norminfo = self.normalizations[factor][normtype][t]
                     if meas in norminfo:
-                        col = '{}_norm_value'.format(normtype[:-1])
+                        col = "{}_norm_value".format(normtype[:-1])
                         if df.loc[(t, meas), col] != norminfo[meas]:
-                            assert np.isnan(df.loc[(t, meas), col]), (
-                                msg.format(normtype, meas, t))
+                            assert np.isnan(df.loc[(t, meas), col]), msg.format(
+                                normtype, meas, t
+                            )
                         df.loc[(t, meas), col] = norminfo[meas]
 
-        df['has_normalized_loading'] = df[load_cols].sum(axis=1).astype(bool)
-        df['has_normalized_intercept'] = pd.notnull(df['intercept_norm_value'])
-        df['has_normalized_variance'] = pd.notnull(df['variance_norm_value'])
+        df["has_normalized_loading"] = df[load_cols].sum(axis=1).astype(bool)
+        df["has_normalized_intercept"] = pd.notnull(df["intercept_norm_value"])
+        df["has_normalized_variance"] = pd.notnull(df["variance_norm_value"])
         return df
 
     def _stage_udpate_info(self):
         replace_dict = {t: stage for t, stage in enumerate(self.stagemap)}
         df = self._factor_update_info()
-        df['period'] = df.index.get_level_values('period')
-        df['stage'] = df['period'].replace(replace_dict)
-        return df['stage']
+        df["period"] = df.index.get_level_values("period")
+        df["stage"] = df["period"].replace(replace_dict)
+        return df["stage"]
 
     def _purpose_update_info(self):
         factor_uinfo = self._factor_update_info()
-        sr = pd.Series(index=factor_uinfo.index, name='purpose',
-                       data=['measurement'] * len(factor_uinfo))
+        sr = pd.Series(
+            index=factor_uinfo.index,
+            name="purpose",
+            data=["measurement"] * len(factor_uinfo),
+        )
         if self.anchoring is True:
             anch_index = (self.nperiods - 1, self.anch_outcome)
-            sr[anch_index] = 'anchoring'
+            sr[anch_index] = "anchoring"
         return sr
 
     def _type_update_info(self):
         ind = self._factor_update_info().index
-        sr = pd.Series(data='linear', index=ind, name='update_type')
+        sr = pd.Series(data="linear", index=ind, name="update_type")
         for t, meas in ind:
             if self._is_dummy(meas, t) and self.probit_measurements is True:
-                sr[(t, meas)] = 'probit'
+                sr[(t, meas)] = "probit"
         return sr
 
     def _invariance_update_info(self):
@@ -830,8 +882,11 @@ class ModelSpecProcessor:
         """
         factor_uinfo = self._factor_update_info()
         ind = factor_uinfo.index
-        df = pd.DataFrame(columns=['is_repeated', 'first_occurence'],
-                          index=ind, data=[[False, np.nan]] * len(ind))
+        df = pd.DataFrame(
+            columns=["is_repeated", "first_occurence"],
+            index=ind,
+            data=[[False, np.nan]] * len(ind),
+        )
 
         for t, meas in ind:
             # find first occurrence
@@ -845,8 +900,8 @@ class ModelSpecProcessor:
                             break
 
             if t != first:
-                df.loc[(t, meas), 'is_repeated'] = True
-                df.loc[(t, meas), 'first_occurence'] = first
+                df.loc[(t, meas), "is_repeated"] = True
+                df.loc[(t, meas), "first_occurence"] = first
         return df
 
     def _rewrite_normalizations_for_time_inv_meas_system(self, df):
@@ -856,64 +911,75 @@ class ModelSpecProcessor:
         measurement equation are also present in all other occurrences.
 
         """
-        assert self.time_invariant_measurement_system is True, \
-            'Must not be called if measurement system is not time invariant.'
+        assert (
+            self.time_invariant_measurement_system is True
+        ), "Must not be called if measurement system is not time invariant."
         df = df.copy(deep=True)
 
         loading_msg = (
-            'Incompatible normalizations of factor loadings for time '
-            'invariant measurement system. Check normalizations of '
-            '{} in periods {} and {} for factor {}')
+            "Incompatible normalizations of factor loadings for time "
+            "invariant measurement system. Check normalizations of "
+            "{} in periods {} and {} for factor {}"
+        )
 
         other_msg = (
-            'Incompatible normalizations of {} for time invariant measurement '
-            'system. Check normalizations of {} in periods {} and {}')
+            "Incompatible normalizations of {} for time invariant measurement "
+            "system. Check normalizations of {} in periods {} and {}"
+        )
 
         # check normalizations and write them into first occurrence
         for factor in self.factors:
-            normcol = '{}_loading_norm_value'.format(factor)
-            norm_dummy = 'has_normalized_loading'
+            normcol = "{}_loading_norm_value".format(factor)
+            norm_dummy = "has_normalized_loading"
             for t, meas in df.index:
-                repeated = df.loc[(t, meas), 'is_repeated'] == True
+                repeated = df.loc[(t, meas), "is_repeated"] == True
                 normalized = df.loc[(t, meas), normcol] != 0
                 if repeated and normalized:
-                    first_occ = df.loc[(t, meas), 'first_occurence']
+                    first_occ = df.loc[(t, meas), "first_occurence"]
                     nval = df.loc[(t, meas), normcol]
                     nval_first = df.loc[(first_occ, meas), normcol]
                     assert nval_first in [0, nval], loading_msg.format(
-                        meas, first_occ, t, factor)
+                        meas, first_occ, t, factor
+                    )
                     df.loc[(first_occ, meas), normcol] = nval
                     df.loc[(first_occ, meas), norm_dummy] = True
 
-        for norm_type in ['intercepts', 'variances']:
+        for norm_type in ["intercepts", "variances"]:
             for t, meas in df.index:
-                normcol = '{}_norm_value'.format(norm_type[:-1])
-                norm_dummy = 'has_normalized_{}'.format(norm_type[:-1])
-                repeated = df.loc[(t, meas), 'is_repeated'] == True
+                normcol = "{}_norm_value".format(norm_type[:-1])
+                norm_dummy = "has_normalized_{}".format(norm_type[:-1])
+                repeated = df.loc[(t, meas), "is_repeated"] == True
                 normalized = df.loc[(t, meas), norm_dummy] == True
                 if repeated and normalized:
-                    first_occ = df.loc[(t, meas), 'first_occurence']
+                    first_occ = df.loc[(t, meas), "first_occurence"]
                     nval = df.loc[(t, meas), normcol]
                     nval_first = df.loc[(first_occ, meas), normcol]
                     normalized_first = df.loc[(first_occ, meas), norm_dummy]
                     if normalized_first == True:
                         assert nval_first == nval, other_msg.format(
-                            norm_type, meas, first_occ, t)
+                            norm_type, meas, first_occ, t
+                        )
                     df.loc[(first_occ, meas), normcol] = nval
                     df.loc[(first_occ, meas), norm_dummy] = True
 
         # copy consolidated normalizations to all other occurrences
         all_normcols = [
-            '{}_loading_norm_value'.format(factor) for factor in self.factors]
-        all_normcols += ['intercept_norm_value', 'variance_norm_value',
-                         'has_normalized_loading', 'has_normalized_intercept',
-                         'has_normalized_variance']
+            "{}_loading_norm_value".format(factor) for factor in self.factors
+        ]
+        all_normcols += [
+            "intercept_norm_value",
+            "variance_norm_value",
+            "has_normalized_loading",
+            "has_normalized_intercept",
+            "has_normalized_variance",
+        ]
 
         for t, meas in df.index:
-            if df.loc[(t, meas), 'is_repeated'] == True:
-                first_occurence = df.loc[(t, meas), 'first_occurence']
-                df.loc[(t, meas), all_normcols] = \
-                    df.loc[(first_occurence, meas), all_normcols]
+            if df.loc[(t, meas), "is_repeated"] == True:
+                first_occurence = df.loc[(t, meas), "first_occurence"]
+                df.loc[(t, meas), all_normcols] = df.loc[
+                    (first_occurence, meas), all_normcols
+                ]
 
         return df
 
@@ -939,25 +1005,25 @@ class ModelSpecProcessor:
         new_params = pd.DataFrame(index=uinfo.index)
 
         for param in self.factors:
-            normcol = '{}_loading_norm_value'.format(param)
+            normcol = "{}_loading_norm_value".format(param)
             not_normalized = ~uinfo[normcol].astype(bool)
-            not_repeated = ~uinfo['is_repeated']
+            not_repeated = ~uinfo["is_repeated"]
             applicable = uinfo[param].astype(bool)
             if self.time_invariant_measurement_system is True:
                 new_params[param] = not_normalized & not_repeated & applicable
             else:
                 new_params[param] = not_normalized & applicable
 
-        for param in ['intercept', 'variance']:
-            not_normalized = ~uinfo['has_normalized_{}'.format(param)]
-            not_repeated = ~uinfo['is_repeated']
+        for param in ["intercept", "variance"]:
+            not_normalized = ~uinfo["has_normalized_{}".format(param)]
+            not_repeated = ~uinfo["is_repeated"]
             if self.time_invariant_measurement_system is True:
                 new_params[param] = not_normalized & not_repeated
             else:
                 new_params[param] = not_normalized
 
         for param in all_controls:
-            not_repeated = ~uinfo['is_repeated']
+            not_repeated = ~uinfo["is_repeated"]
             applicable = pd.Series(index=uinfo.index, data=True)
             for t in self.periods:
                 if param not in self.controls[t]:
@@ -980,29 +1046,35 @@ class ModelSpecProcessor:
 
     def _wa_storage_df(self):
         df = self.update_info().copy(deep=True)
-        df = df[df['purpose'] == 'measurement']
-        assert (df[self.factors].values.sum(axis=1) == 1).all(), (
-            'In the wa estimator each measurement can only measure 1 factor.')
-        norm_cols = ['{}_loading_norm_value'.format(f) for f in self.factors]
+        df = df[df["purpose"] == "measurement"]
+        assert (
+            df[self.factors].values.sum(axis=1) == 1
+        ).all(), "In the wa estimator each measurement can only measure 1 factor."
+        norm_cols = ["{}_loading_norm_value".format(f) for f in self.factors]
         # storage column for factor loadings, initialized with zeros for un-
         # normalized loadings and the norm_value for normalized loadings
-        df['loadings'] = df[norm_cols].sum(axis=1)
+        df["loadings"] = df[norm_cols].sum(axis=1)
         # storage column for intercepts, initialized with zeros for un-
         # normalized intercepts and the norm_value for normalized intercepts.
-        df['intercepts'] = df['intercept_norm_value'].fillna(0)
-        relevant_columns = \
-            ['has_normalized_intercept', 'has_normalized_loading',
-             'loadings', 'intercepts']
+        df["intercepts"] = df["intercept_norm_value"].fillna(0)
+        relevant_columns = [
+            "has_normalized_intercept",
+            "has_normalized_loading",
+            "loadings",
+            "intercepts",
+        ]
         storage_df = df[relevant_columns].copy(deep=True)
-        storage_df['meas_error_variances'] = 0.0
+        storage_df["meas_error_variances"] = 0.0
         self.storage_df = storage_df
 
     def _wa_identified_transition_function_restrictions(self):
         restriction_dict = {}
-        for rtype in ['coeff_sum_value', 'trans_intercept_value']:
+        for rtype in ["coeff_sum_value", "trans_intercept_value"]:
             df = pd.DataFrame(
                 data=[[None] * self.nfac] * self.nstages,
-                columns=self.factors, index=self.stages)
+                columns=self.factors,
+                index=self.stages,
+            )
             restriction_dict[rtype] = df
         self.identified_restrictions = restriction_dict
 
@@ -1030,9 +1102,9 @@ class ModelSpecProcessor:
         for f, factor in enumerate(self.factors):
             name = self.transition_names[f]
 
-            if name == 'constant':
+            if name == "constant":
                 new_params[:, f] = -1
-            elif name == 'ar1':
+            elif name == "ar1":
                 new_params[0, f] = 1
                 new_params[1:, f] = 0
             else:
@@ -1059,21 +1131,21 @@ class ModelSpecProcessor:
         for t, f in product(self.periods[:-1], range(self.nfac)):
             s = self.stagemap[t]
             arr[t, f] /= self.stage_length_list[s]
-        df = pd.DataFrame(data=arr, index=self.periods[:-1],
-                          columns=self.factors)
+        df = pd.DataFrame(data=arr, index=self.periods[:-1], columns=self.factors)
 
         for f, factor in enumerate(self.factors):
-            if self.transition_names[f] == 'ar1':
+            if self.transition_names[f] == "ar1":
                 df[factor] = 1 / (self.nperiods - 1)
-            elif self.transition_names[f] == 'constant':
+            elif self.transition_names[f] == "constant":
                 df[factor] = np.nan
         self.wa_period_weights = df
 
     def public_attribute_dict(self):
         all_attributes = self.__dict__
-        public_attributes = {key: val for key, val in all_attributes.items()
-                             if not key.startswith('_')}
-        public_attributes['update_info'] = self.update_info()
-        public_attributes['new_meas_coeffs'] = self.new_meas_coeffs()
-        public_attributes['new_trans_coeffs'] = self.new_trans_coeffs()
+        public_attributes = {
+            key: val for key, val in all_attributes.items() if not key.startswith("_")
+        }
+        public_attributes["update_info"] = self.update_info()
+        public_attributes["new_meas_coeffs"] = self.new_meas_coeffs()
+        public_attributes["new_trans_coeffs"] = self.new_trans_coeffs()
         return public_attributes

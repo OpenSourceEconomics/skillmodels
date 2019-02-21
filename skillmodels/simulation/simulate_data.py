@@ -47,7 +47,8 @@ def simulate_datasets():
 
 
 def generate_start_factors_and_control_variables(
-        means, covs, weights, nobs, factor_names, control_names):
+    means, covs, weights, nobs, factor_names, control_names
+):
     """Draw initial states and control variables from a (mixture of) normals.
 
     Args:
@@ -75,7 +76,8 @@ def generate_start_factors_and_control_variables(
 
 
 def next_period_factors(
-        factors, transition_names, transition_argument_dicts, shock_variances):
+    factors, transition_names, transition_argument_dicts, shock_variances
+):
     """Apply transition function to factors and add shocks.
 
     Args:
@@ -112,7 +114,9 @@ def next_period_factors(
     pass
 
 
-def measurements_from_factors(factors, controls, loadings, deltas, variances, measurement_names):
+def measurements_from_factors(
+    factors, controls, loadings, deltas, variances, measurement_names
+):
     """Generate the variables that would be observed in practice.
 
     This generates the data for only one period. Let nmeas be the number of measurements in that period.
