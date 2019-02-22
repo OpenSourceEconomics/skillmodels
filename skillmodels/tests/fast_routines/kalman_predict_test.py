@@ -1,6 +1,6 @@
 """Tests for the linear Kalman predict step."""
 import skillmodels.fast_routines.kalman_filters as kf
-from skillmodels.tests.kalman_update_test import make_unique, skillmodels_kwargs_from_fixture
+from skillmodels.tests.fast_routines.kalman_update_test import make_unique
 from numpy.testing import assert_array_almost_equal as aaae
 import numpy as np
 import pytest
@@ -9,6 +9,22 @@ import json
 # ======================================================================================
 # manual tests
 # ======================================================================================
+
+
+def unpack_predict_fixture(fixture):
+    nfac = len(fixture['state'])
+    vec = (1, nfac)
+    mat = (1, nfac, nfac)
+
+    args = (
+        np.array(fixture['state']).reshape(*vec),
+        np.array(fixture['state_cov']).reshape(*mat),
+        np.array(fixture['shock_sds']).reshape(*vec),
+        np.array(fixture['transition_matrix']).reshape(*mat)
+    )
+    exp_state = np.array(fixture['expected_post_means'])
+    exp_cov = np.array(fixture['expected_post_state_cov'])
+    return args, exp_state, exp_cov
 
 
 @pytest.fixture
@@ -323,3 +339,28 @@ shocks_sd = np.array(
         [[0.2, 0.1, 0.1]],
     ]
 )
+
+### check that negative SDs raise an error!
+
+# ======================================================================================
+# tests from filterpy
+# ======================================================================================
+
+fix_path = 'skillmodels/tests/fast_routines/generated_fixtures_predict.json'
+with open(fix_path, 'r') as f:
+    id_to_fix = json.load(f)
+ids, fixtures = zip(*id_to_fix.items())
+
+
+@pytest.mark.parametrize("fixture", fixtures, ids=ids)
+def test_normal_linear_predicted_state_against_filterpy(fixture):
+    args, exp_state, exp_cov = unpack_predict_fixture(fixture)
+    after_state, after_covs = kf.normal_linear_predict(*args)
+    aaae(after_state.flatten(), exp_state)
+
+
+@pytest.mark.parametrize("fixture", fixtures, ids=ids)
+def test_normal_linear_predicted_cov_against_filterpy(fixture):
+    args, exp_state, exp_cov = unpack_predict_fixture(fixture)
+    after_state, after_covs = kf.normal_linear_predict(*args)
+    aaae(after_covs.reshape(exp_cov.shape), exp_cov)

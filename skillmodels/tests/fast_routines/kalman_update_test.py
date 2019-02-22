@@ -19,7 +19,7 @@ def make_unique(qr_result_arr):
                     qr_result_arr[u, j, k] *= -1
 
 
-def skillmodels_kwargs_from_fixture(
+def unpack_update_fixture(
         factors, state, measurement, state_cov, loadings, meas_var,
         expected_post_means=None, expected_post_state_cov=None):
     kwargs = {
@@ -392,7 +392,7 @@ def setup_linear_update_2():
 
 def test_normal_state_and_cov_update_without_nan(setup_linear_update_2):
     d, exp_states, exp_cov = \
-        skillmodels_kwargs_from_fixture(**setup_linear_update_2)
+        unpack_update_fixture(**setup_linear_update_2)
     kf.normal_linear_update(
         d["state"],
         d["covs"],
@@ -417,13 +417,12 @@ def test_normal_state_and_cov_update_without_nan(setup_linear_update_2):
 fix_path = 'skillmodels/tests/fast_routines/generated_fixtures_update.json'
 with open(fix_path, 'r') as f:
     id_to_fix = json.load(f)
-
 ids, fixtures = zip(*id_to_fix.items())
 
 
 @pytest.mark.parametrize("fixture", fixtures, ids=ids)
 def test_normal_state_and_cov_against_filterpy(fixture):
-    d, exp_states, exp_cov = skillmodels_kwargs_from_fixture(**fixture)
+    d, exp_states, exp_cov = unpack_update_fixture(**fixture)
     kf.normal_linear_update(
         d["state"],
         d["covs"],
