@@ -1,4 +1,5 @@
 """Tests for the linear Kalman predict step."""
+from scipy.linalg import cholesky
 import skillmodels.fast_routines.kalman_filters as kf
 from skillmodels.tests.fast_routines.kalman_update_test import make_unique
 from numpy.testing import assert_array_almost_equal as aaae
@@ -24,6 +25,22 @@ def unpack_predict_fixture(fixture):
     )
     exp_state = np.array(fixture['expected_post_means'])
     exp_cov = np.array(fixture['expected_post_state_cov'])
+    return args, exp_state, exp_cov
+
+
+def unpack_sqrt_predict_fixture(fixture):
+    nfac = len(fixture['state'])
+    vec = (1, nfac)
+    mat = (1, nfac, nfac)
+
+    args = (
+        np.array(fixture['state']).reshape(*vec),
+        cholesky(np.array(fixture['state_cov'])).reshape(*mat),
+        np.array(fixture['shock_sds']),
+        np.array(fixture['transition_matrix']).reshape(*mat[1:])
+    )
+    exp_state = np.array(fixture['expected_post_means'])
+    exp_cov = np.array(fixture['expected_post_state_cov']).reshape(mat)
     return args, exp_state, exp_cov
 
 
@@ -346,6 +363,9 @@ shocks_sd = np.array(
 # tests from filterpy
 # ======================================================================================
 
+# for the normal linear predict
+# ------------------------------
+
 fix_path = 'skillmodels/tests/fast_routines/generated_fixtures_predict.json'
 with open(fix_path, 'r') as f:
     id_to_fix = json.load(f)
@@ -359,8 +379,47 @@ def test_normal_linear_predicted_state_against_filterpy(fixture):
     aaae(after_state.flatten(), exp_state)
 
 
+#@pytest.mark.parametrize("fixture", fixtures, ids=ids)
+#def test_normal_linear_predicted_cov_against_filterpy(fixture):
+#    args, exp_state, exp_cov = unpack_predict_fixture(fixture)
+#    after_state, after_covs = kf.normal_linear_predict(*args)
+#    aaae(after_covs.reshape(exp_cov.shape), exp_cov)
+
+
+# for the square root linear predict
+# -----------------------------------
+
+
+fix_path = 'skillmodels/tests/fast_routines/generated_fixtures_square_root_predict.json'
+with open(fix_path, 'r') as f:
+    id_to_fix = json.load(f)
+ids, fixtures = zip(*id_to_fix.items())
+
+
 @pytest.mark.parametrize("fixture", fixtures, ids=ids)
-def test_normal_linear_predicted_cov_against_filterpy(fixture):
-    args, exp_state, exp_cov = unpack_predict_fixture(fixture)
-    after_state, after_covs = kf.normal_linear_predict(*args)
-    aaae(after_covs.reshape(exp_cov.shape), exp_cov)
+def test_sqrt_linear_predicted_state_against_filterpy(fixture):
+    args, exp_state, exp_cov = unpack_sqrt_predict_fixture(fixture)
+    after_state, after_covs = kf.sqrt_linear_predict(*args)
+    aaae(after_state.flatten(), exp_state)
+
+
+np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
+
+
+@pytest.mark.parametrize("fixture", fixtures, ids=ids)
+def test_sqrt_linear_predicted_cov_against_filterpy(fixture):
+    # this gives the covariance matrix, not a square root of it!
+    args, exp_state, exp_cov = unpack_sqrt_predict_fixture(fixture)
+    exp_cov = exp_cov[0]
+    print('\nCovariance matrix from filterpy (A):\n', exp_cov)
+    after_state, after_covs = kf.sqrt_linear_predict(*args)
+    after_covs = after_covs[0]
+    print('\n\nR of the QR decomp. from sqrt_linear_predict:\n', after_covs)
+
+    # sqrt_linear_predict gives the R of the QR decomposition
+    # R'R = A'A where A is the input of the entered matrix
+    to_compare = np.transpose(after_covs).dot(after_covs)
+    print('\n\nR\'R:\n', to_compare.round(3))
+    exp_res = np.transpose(exp_cov).dot(exp_cov)
+    print('\n\nfor comparison with R\'R: A\'A:\n', exp_res)
+    aaae(to_compare, exp_res)
