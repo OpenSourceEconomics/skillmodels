@@ -28,17 +28,15 @@ def unpack_predict_fixture(fixture):
 
 def unpack_sqrt_predict_fixture(fixture):
     nfac = len(fixture['state'])
-    vec = (1, nfac)
-    mat = (1, nfac, nfac)
 
     args = (
-        np.array(fixture['state']).reshape(*vec),
-        cholesky(np.array(fixture['state_cov'])).reshape(*mat),
+        np.array(fixture['state']).reshape(1, nfac),
+        cholesky(np.array(fixture['state_cov'])).reshape(1, nfac, nfac),
         np.array(fixture['shock_sds']),
-        np.array(fixture['transition_matrix']).reshape(*mat[1:])
+        np.array(fixture['transition_matrix'])
     )
     exp_state = np.array(fixture['expected_post_means'])
-    exp_cov = np.array(fixture['expected_post_state_cov']).reshape(mat)
+    exp_cov = np.array(fixture['expected_post_state_cov'])
     return args, exp_state, exp_cov
 
 
@@ -381,11 +379,6 @@ def test_normal_linear_predicted_state_against_filterpy(fixture):
 def test_normal_linear_predicted_cov_against_filterpy(fixture):
     args, exp_state, exp_cov = unpack_predict_fixture(fixture)
     after_state, after_covs = kf.normal_linear_predict(*args)
-    print(after_covs)
-    print()
-    print(after_covs.shape)
-    print()
-    print(exp_cov)
     aaae(after_covs.reshape(exp_cov.shape), exp_cov)
 
 
@@ -409,23 +402,16 @@ def test_sqrt_linear_predicted_state_against_filterpy(fixture):
 np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
 
 
-@pytest.mark.parametrize("fixture", fixtures[:2], ids=ids[:2]) #####################
+@pytest.mark.parametrize("fixture", fixtures[:4], ids=ids[:4]) #####################
 def test_sqrt_linear_predicted_cov_against_filterpy(fixture):
     # this gives the covariance matrix, not a square root of it!
     args, exp_state, exp_cov = unpack_sqrt_predict_fixture(fixture)
-    exp_cov = exp_cov[0]
-    print('\nCovariance matrix from filterpy (A):\n', exp_cov)
+    print('\nCovariance matrix from filterpy:\n', exp_cov)
 
     after_state, after_cov_sqrt = kf.sqrt_linear_predict(*args)
     after_cov_sqrt = after_cov_sqrt[0]
-    print('\n\nR of the QR decomp. from sqrt_linear_predict:\n', after_cov_sqrt)
 
-    # sqrt_linear_predict gives the R of the QR decomposition
-    # R'R = A'A where A is the input of the entered matrix
-    to_compare = np.transpose(after_cov_sqrt).dot(after_cov_sqrt)
-    print('\n\nR\'R:\n', to_compare.round(3))
+    implied_cov = after_cov_sqrt.T.dot(after_cov_sqrt)
+    print('\nImplied cov from skillmodels:\n', implied_cov)
 
-    exp_res = np.transpose(exp_cov).dot(exp_cov)
-    print('\n\nfor comparison with R\'R: A\'A:\n', exp_res)
-
-    aaae(to_compare, exp_res)
+    aaae(implied_cov, exp_cov)
