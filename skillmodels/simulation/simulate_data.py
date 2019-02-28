@@ -128,9 +128,7 @@ def simulate_datasets(
     ncont = len(control_names)
     nfac = len(factor_names)
     fac = [np.zeros((nobs, nfac))] * nper
-    obs_id = np.array([range(nobs)] * nper).reshape(
-        nobs * nper
-    )  # array of id_s repeated n_per times
+    obs_id = np.tile(np.arange(nobs),nper) # array of id_s repeated n_per times
 
     fac[0], cont = generate_start_factors_and_control_variables(
         nobs, nfac, ncont, means, covs, weights
