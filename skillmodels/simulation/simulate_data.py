@@ -269,7 +269,7 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances):
     meas = np.dot(states, loadings.T) + np.dot(conts, deltas.T) + epsilon
     return meas.reshape(nobs, nmeas)
 
-def _mv_student_t(mu, cov, nu):
+def _mv_student_t(mu, cov, nu,size=1):
     """Generate random variable from d-dimensional t_distribution
     Args:
         mu (np.ndarray): vector of mean of size d
@@ -281,11 +281,10 @@ def _mv_student_t(mu, cov, nu):
         Cov is the variance-covariance of the generated random variable. 
         So that the normal vector is to be generated from N(0,cov*(nu-2)/nu)
         Ref: https://bit.ly/2NDhbWM
-        Can be extended to generate samples of any size:
-            https://bit.ly/2tHQAP1
+        
     """
     d = len(cov)
-    u = np.sqrt(np.random.chisquare(nu)/nu)
-    y = multivariate_normal(np.zeros(d),cov*(nu-2)/nu)
-    mv_t = mu + y/u
+    u = np.sqrt(np.random.chisquare(nu,size)/nu).reshape(size,1,1)
+    y = multivariate_normal(np.zeros(d),cov*(nu-2)/nu,size).reshape(size,1,d)
+    mv_t = mu + (y/u).reshape(size,d)
     return mv_t
