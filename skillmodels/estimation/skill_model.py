@@ -893,7 +893,7 @@ class SkillModel(GenericLikelihoodModel):
             else:
                 start[slices["W_zero"]] = np.ones(self.nemf) / self.nemf
 
-            return start
+        return start
 
     def _generate_wa_based_start_params(self):
         """Use wa estimates to construct a start_params vector for chs.
@@ -925,9 +925,8 @@ class SkillModel(GenericLikelihoodModel):
         wa estimates will be used. Else, naive start_params are generated.
 
         """
-        len_correct = self._correct_len_of_start_params()
-        if hasattr(self, "start_params") and len_correct is True:
-            start = self.start_params
+        if hasattr(self, 'start_params') and self._correct_len_of_start_params():
+                start = self.start_params
         elif self._wa_params_can_be_used_for_start_params() is True:
             try:
                 start = self._generate_wa_based_start_params()
