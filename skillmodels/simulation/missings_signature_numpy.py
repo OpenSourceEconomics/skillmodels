@@ -52,29 +52,65 @@ def add_missings(
         data[meas_names].size + data[control_names].size
     )
 
-    while replaced_share < share:
-        for i in range(len(data_interim)):  # alternatively randomly choose individual??
-            ind_data = data_interim[i]
-
+    
+    for i in range(len(data_interim)):
+       # alternatively randomly choose individual??
+       ind_data = data_interim[i]
+       num_missing_val = np.count_nonzero(np.isnan(ind_data))
+       replaced_share = num_missing_val / (
+                        ind_data.size
+                    )
+       while replaced_share < share*0.9:
+           
             if binomial(1, p) == 1:
                 ind_data[0, 0] = np.nan
+                num_missing_val = np.count_nonzero(np.isnan(data_interim))
+                replaced_share = num_missing_val / (
+                        data[meas_names].size + data[control_names].size
+                    )
+            for m in range(1, len(meas_names)):   
+                if np.isnan(ind_data[0, m - 1]):
+                        if binomial(1, p_m_11) == 1:
+                            ind_data[0, m] = np.nan
+                            num_missing_val = np.count_nonzero(np.isnan(data_interim))
+                            replaced_share = num_missing_val / (
+                        data[meas_names].size + data[control_names].size
+                    )
+                else:
+                        if binomial(1, p_m_10) == 1:
+                            ind_data[0, m] = np.nan
+                            num_missing_val = np.count_nonzero(np.isnan(data_interim))
+                            replaced_share = num_missing_val / (
+                        data[meas_names].size + data[control_names].size
+                    )
             for t in range(1, len(ind_data)):
                 if np.isnan(ind_data[t - 1, 0]):
                     if binomial(1, p_t_11) == 1:
                         ind_data[t, 0] = np.nan
+                        num_missing_val = np.count_nonzero(np.isnan(data_interim))
+                        replaced_share = num_missing_val / (
+                        data[meas_names].size + data[control_names].size
+                    )
                 else:
                     if binomial(1, p_t_10) == 1:
                         ind_data[t, 0] = np.nan
+                        num_missing_val = np.count_nonzero(np.isnan(data_interim))
+                        replaced_share = num_missing_val / (
+                        data[meas_names].size + data[control_names].size
+                    )
                 for m in range(1, len(meas_names)):
                     if np.isnan(ind_data[t, m - 1]):
                         if binomial(1, p_m_11) == 1:
                             ind_data[t, m] = np.nan
+                            num_missing_val = np.count_nonzero(np.isnan(data_interim))
+                            replaced_share = num_missing_val / (
+                        data[meas_names].size + data[control_names].size
+                    )
                     else:
                         if binomial(1, p_m_10) == 1:
                             ind_data[t, m] = np.nan
-
-                    num_missing_val = np.count_nonzero(np.isnan(data_interim))
-                    replaced_share = num_missing_val / (
+                            num_missing_val = np.count_nonzero(np.isnan(data_interim))
+                            replaced_share = num_missing_val / (
                         data[meas_names].size + data[control_names].size
                     )
     data_with_missings[meas_names] = data_interim.reshape(data[meas_names].shape)

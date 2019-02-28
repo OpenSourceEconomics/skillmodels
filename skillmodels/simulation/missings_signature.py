@@ -3,7 +3,7 @@ import pandas as pd
 from numpy.random import binomial
 
 
-def add_missings(data, meas_names, share, serial_corr=0.0, within_period_corr=0.0):
+def add_missing_0(data, meas_names, share, serial_corr=0.0, within_period_corr=0.0):
     """Add np.nans to data.
 
     nans are only added to measurements, not to control variables or factors.
