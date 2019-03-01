@@ -23,19 +23,17 @@ Notes:
     - Please delete all notes in the docstrings when you are done.
     - It is very likely that I made some mistakes in the docstrings or forgot an
         argument somewhere. Just send me an email in that case or come to my office.
-
 """
-
+import sys
 import pandas as pd
 import numpy as np
 from numpy.random import multivariate_normal, choice, binomial
-import sys
 
 sys.path.append("../")
 import model_functions.transition_functions as tf
 
 
-def add_missings(data, meas_names, p, q):
+def add_missings(data, meas_names, p_b, p_r):
     """Add np.nans to data.
 
     nans are only added to measurements, not to control variables or factors.
@@ -44,33 +42,38 @@ def add_missings(data, meas_names, p, q):
 
     Args:
         data (pd.DataFrame): contains the observable part of a simulated dataset
-        meas_names (list): list of strings of names of each measurement variable (as in the data)
-        p (float): probability of a measurement to become missing
-        q (float): probability of a measurement to remain missing in the next period
-       
+        meas_names (list): list of strings of names of each measurement variable
+        p_b (float): probability of a measurement to become missing
+        p_r (float): probability of a measurement to remain missing in the next period
     Returns:
-        data_with_missings (pd.DataFrame): Dataset with a share of measurements replaced by np.nan values
-        
+        data_with_missings (pd.DataFrame): Dataset with a share of measurements
+        replaced by np.nan values
+
     Notes:
-        - Time_periods should be sorted for each individual 
-        - p is NOT the marginal probability of a measurement being missing. The marginal probability is given by:
-           p_m = p/(1-serial_corr), where  serial_corr = (q-p) in general != 0, since p != q. This means that in average the share of 
-           missing values will be larger than p. Thus, p and q should be set accordingly given the desired share of missing values.
-        - I would still suggest to draw period_0 bernoulli with the marginal probaility. Having run the function in a loop with 100 
-          iteration, for 100 pairs of p and q , the average share of missing measurements in all measurements is very close to 
-          p/(1-(q-p)) (the average percentage deviation is less than 2 %). 
-          Sounds like a nice result and a simple formula for deciding on p and q.
+        - Time_periods should be sorted for each individual
+        - p is NOT the marginal probability of a measurement being missing.
+          The marginal probability is given by: p_m = p/(1-serial_corr), where
+          serial_corr = (p_r-p_b) in general != 0, since p_r != p_b. This means that in
+          average the share of missing values (in the entire dataset) will be larger
+          than p. Thus, p and q should be set accordingly given the desired share
+          of missing values.
+        - I would still suggest to draw period_0 bernoulli with the marginal
+          probaility. Having run the function in a loop with 100 iteration, for
+          100 pairs of p_r and p_b , the average share of missing measurements in all
+          measurements is very close to p_b/(1-(p_r-p_b)) (the average percentage
+          deviation is less than 2 %). Sounds like a nice result and a simple
+          formula for deciding on p_b and p_r.
     """
 
     nmeas = len(meas_names)
     data_with_missings = data.copy(deep=True)
-    for i in set( data_with_missings.index):
-        ind_data =  data_with_missings.loc[i][meas_names].values
-        s = binomial(1, p, nmeas)
-        ind_data[0, np.where(s == 1)] = np.nan
+    for i in set(data_with_missings.index):
+        ind_data = data_with_missings.loc[i][meas_names].values
+        s_0 = binomial(1, p_b, nmeas)
+        ind_data[0, np.where(s_0 == 1)] = np.nan
         for t in range(1, len(ind_data)):
             indc_nan = np.isnan(ind_data[t - 1])
-            prob = q * indc_nan + p * (1 - indc_nan)
+            prob = p_r * indc_nan + p_b * (1 - indc_nan)
             s_m = binomial(1, prob)
             ind_data[t, np.where(s_m == 1)] = np.nan
         data_with_missings.loc[i, meas_names] = ind_data
@@ -128,7 +131,8 @@ def simulate_datasets(
     ncont = len(control_names)
     nfac = len(factor_names)
     fac = [np.zeros((nobs, nfac))] * nper
-    obs_id = np.tile(np.arange(nobs),nper) # array of id_s repeated n_per times
+    # array of id_s repeated n_per times
+    obs_id = np.tile(np.arange(nobs), nper)
 
     fac[0], cont = generate_start_factors_and_control_variables(
         nobs, nfac, ncont, means, covs, weights
@@ -157,18 +161,18 @@ def simulate_datasets(
         index=obs_id,
     )
 
-    t = pd.DataFrame(
+    t_col = pd.DataFrame(
         np.repeat(range(nper), nobs), columns=["time_period"], index=obs_id
     )
 
-    observed_data = pd.concat([t, meas, cont], axis=1)
+    observed_data = pd.concat([t_col, meas, cont], axis=1)
     latent_data = pd.DataFrame(
         data=np.array(fac).reshape(nobs * nper, nfac),
         columns=factor_names,
         index=obs_id,
     )
 
-    latent_data = pd.concat([t, latent_data], axis=1)
+    latent_data = pd.concat([t_col, latent_data], axis=1)
 
     return observed_data, latent_data
 
@@ -186,7 +190,7 @@ def generate_start_factors_and_control_variables(
         covs (np.ndarray): size (nemf, nfac + ncontrols, nfac + ncontrols)
         weights (np.ndarray): size (nemf). The weight of each mixture element.
                               Default value is equal to 1.
-        
+
 
     Returns:
         start_factors (np.ndarray): shape (nobs, nfac),
@@ -243,7 +247,8 @@ def next_period_factors(
 def measurements_from_factors(factors, controls, loadings, deltas, variances):
     """Generate the variables that would be observed in practice.
 
-    This generates the data for only one period. Let nmeas be the number of measurements in that period.
+    This generates the data for only one period. Let nmeas be the number
+    of measurements in that period.
 
     Args:
         factors (pd.DataFrame or np.ndarray): DataFrame of shape (nobs, nfac)
@@ -252,10 +257,9 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances):
         deltas (np.ndarray): numpy array of size (nmeas, ncontrols)
         variances (np.ndarray): numpy array of size (nmeas) with the variances of the
             measurements. Measurement error is assumed to be independent across measurements
-        
+
     Returns:
-        measurements (pd.DataFrame): DataFrame of shape (nobs, nmeas) with measurement
-            names as columns.
+        measurements (np.ndarray): array of shape (nobs, nmeas) with measurements.
     """
     nmeas = loadings.shape[0]
     nobs, nfac = factors.shape
@@ -269,23 +273,55 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances):
     meas = np.dot(states, loadings.T) + np.dot(conts, deltas.T) + epsilon
     return meas.reshape(nobs, nmeas)
 
-def _mv_student_t(mu, cov, nu, size=1):
+
+def _mv_student_t(mean, cov, d_f, size=1):
     """Generate random sample from d-dimensional t_distribution
     Args:
         mu (np.ndarray): vector of mean of size d
         cov (np.ndarray): covariance matrix of shape (d,d)
-        nu (float): degree of freedom
+        d_f (float): degree of freedom
         size (float): the sample size
     Returns:
         mv_t(np.ndarray): shape (size, d)
     Notes:
-        Cov is the variance-covariance of the generated random variable. 
-        So that the normal vector is to be generated from N(0,cov*(nu-2)/nu)
-        Ref: https://bit.ly/2NDhbWM
-        
+       - Cov is the variance-covariance of the generated random variable.
+       - So that the normal vector is to be generated from N(0,cov*(nu-2)/nu)
+       - Ref: https://bit.ly/2NDhbWM
+
     """
-    d = len(cov)
-    u = np.sqrt(np.random.chisquare(nu,size)/nu).reshape(size,1,1)
-    y = multivariate_normal(np.zeros(d),cov*(nu-2)/nu,size).reshape(size,1,d)
-    mv_t = mu + (y/u).reshape(size,d)
+    d_dim = len(cov)
+    x_chi = np.sqrt(np.random.chisquare(d_f, size) / d_f).reshape(size, 1, 1)
+    y_norm = multivariate_normal(np.zeros(d_dim), cov * (d_f - 2) / d_f, size).reshape(
+        size, 1, d_dim
+    )
+    mv_t = mean + (y_norm / x_chi).reshape(size, d_dim)
     return mv_t
+
+
+def _uv_elip_stable(delta, gamma, alpha, beta=0):
+    """An algorithm to for simulating random variables from (symmetric) stable 
+    
+    distribution.
+    Args:
+        alpha (float): measure of concentration
+        beta (float): measure of skewness. Now works only for beta=0
+        delta (float): location parameter
+        gamma (float): scale parameter
+    Returns:
+        s_return (float): S(alpha, beta, gamm, delta) random variable
+    Notes:
+       
+       - ref: Chambers et al.(1976) , Nolan (2018)
+    
+    """
+    theta=np.random.uniform(-np.pi/2, np.pi/2)
+    w_exp = np.random.exponential(1)
+    if alpha==1:
+        zeta = np.tan(theta)
+    else:
+        z_1 = np.sin(alpha*theta)/(np.cos(theta))^(1/alpha)
+        z_2 = (np.cos((alpha-1)*theta)/w_exp)^(1/alpha-1)
+        zeta = z_1*z_2
+
+    s_return = gamma*zeta+delta
+    return s_return
