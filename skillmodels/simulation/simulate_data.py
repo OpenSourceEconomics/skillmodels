@@ -275,6 +275,7 @@ def _mv_student_t(mu, cov, nu, size=1):
         mu (np.ndarray): vector of mean of size d
         cov (np.ndarray): covariance matrix of shape (d,d)
         nu (float): degree of freedom
+        size (float): the sample size
     Returns:
         mv_t(np.ndarray): shape (size, d)
     Notes:
