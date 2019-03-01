@@ -298,13 +298,13 @@ def _mv_student_t(mean, cov, d_f, size=1):
     return mv_t
 
 
-def _uv_elip_stable(delta, gamma, alpha, beta=0):
+def _uv_elip_stable(delta, gamma, alpha, beta=1,size=1):
     """An algorithm to for simulating random variables from (symmetric) stable 
     
     distribution.
     Args:
         alpha (float): measure of concentration
-        beta (float): measure of skewness. Now works only for beta=0
+        beta (float): measure of skewness.
         delta (float): location parameter
         gamma (float): scale parameter
     Returns:
@@ -312,16 +312,42 @@ def _uv_elip_stable(delta, gamma, alpha, beta=0):
     Notes:
        
        - ref: Chambers et al.(1976) , Nolan (2018)
+       - This is the general case. For the purpose of generating form
+         a multivariate elliptically countered stabel rv would suffice 
+         to set beta==1 and restrict alpha<1 (strictly).
     
     """
-    theta=np.random.uniform(-np.pi/2, np.pi/2)
-    w_exp = np.random.exponential(1)
+    theta=np.random.uniform(-np.pi/2, np.pi/2,size) #!!!!!!Need to check!!!!!!!!!
+    w_exp = np.random.exponential(1,size)
     if alpha==1:
-        zeta = np.tan(theta)
+        comp_1 = np.tan(theta)*(0.5*np.pi+beta-theta)
+        comp_2 = -beta*np.log(0.5*w_exp*np.cos(theta)/(0.5*np.pi+beta*theta))
+        zeta = 2/np.pi*(comp_1+comp_2)
+        s_return = gamma*zeta+(delta+beta*0.5*np.pi*np.log(gamma))
     else:
-        z_1 = np.sin(alpha*theta)/(np.cos(theta))^(1/alpha)
-        z_2 = (np.cos((alpha-1)*theta)/w_exp)^(1/alpha-1)
+        theta_0 = np.arctan(beta*np.tan(0.5*np.pi*alpha))/alpha
+        z_1 = np.sin(alpha*(theta_0+theta))/((np.cos(theta)*np.cos(alpha/theta_0))^(1/alpha))
+        z_2 = (np.cos((alpha-1)*theta+alpha*theta_0)/w_exp)^(1/alpha-1)
         zeta = z_1*z_2
+        s_return = gamma*zeta+delta
 
-    s_return = gamma*zeta+delta
+
     return s_return
+
+def _mv_elip_stable(alpha, sigma_mat, delta,size=1):
+     """An algorithm to generate d-dimensional multivariate elliptically contoured stable rv
+     Args:
+        alpha (float): measure of concentration strictly between 0 and 2
+        sigma_mat (np.ndarray): positive definite matrix of shape (d,d)
+        delta (np.ndarray): shift vector of size d
+     Returns:
+        mv_stab (np.ndarray): rv of shape (size, d)
+     Notes:
+       - ref: Nolan (2013)
+     """
+
+        a_stab = _uv_elip_stable(0, 2*(np.cos(np.pi*alpha/4))^(2/alpha),0.5*alpha, beta=1, size=size)
+        g_norm = multivariate_normal(np.zeros(len(sigma_mat)),sigma_mat,size)
+        mv_stab = np.sqrt(a_stab)*g_norm+delta #need to check the shapes!!!!!!!
+
+     return mv_stab
