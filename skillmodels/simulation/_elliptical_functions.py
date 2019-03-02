@@ -14,7 +14,7 @@ def _mv_student_t(mean, cov, d_f, size=1):
     Args:
         mean (np.ndarray): vector of mean of size d
         cov (np.ndarray): covariance matrix of shape (d,d)
-        d_f (float): degree of freedom
+        d_f (float): degree of freedom 
         size (float): the sample size
     Returns:
         mv_t (np.ndarray): shape (size, d)
@@ -32,7 +32,7 @@ def _mv_student_t(mean, cov, d_f, size=1):
 
 
 def _uv_elip_stable(alpha, gamma, delta=0, beta=1, size=1):
-    """An algorithm to for simulating random variables from stable 
+    """An algorithm for simulating random variables from stable 
     
     distribution.
     Args:
@@ -65,7 +65,7 @@ def _uv_elip_stable(alpha, gamma, delta=0, beta=1, size=1):
     else:
         theta_0 = (
             np.arctan(beta * np.tan(0.5 * np.pi * alpha)) / alpha
-        )  #!!! Don't know if alpha is inside arctan or artcan is divided by alpha
+        )  
         theta_0 = np.ones(size) * theta_0
         z_1 = np.sin(alpha * (theta_0 + theta)) / np.power(
             (np.cos(theta) * np.cos(alpha * theta_0)), (1 / alpha)

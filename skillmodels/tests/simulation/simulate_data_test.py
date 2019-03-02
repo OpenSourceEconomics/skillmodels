@@ -110,8 +110,10 @@ def set_up_generate_datasets():
     out["meas_names"] = ["m1", "m2"]
     out["nobs"] = 5
     out["nper"] = 3
-    out["means"] = np.array([0, 0, 0.5, 0.5])
-    out["covs"] = np.zeros((4, 4))
+    means = np.array([0, 0, 0.5, 0.5])
+    covs = np.zeros((4, 4))
+    out["dist_name"] = "multivariate_normal"
+    out["dist_arg_dict"] = {"mean": means, "cov" : covs}
     out["weights"] = 1
     out["transition_names"] = ["linear", "linear_with_constant"]
     out["transition_argument_dicts"] = [
@@ -190,8 +192,10 @@ def set_up_generate_datasets_2_mix():
     out["meas_names"] = ["m1", "m2"]
     out["nobs"] = 5
     out["nper"] = 3
-    out["means"] = np.array([[0, 0, 0.5, 0.5], [0, 0, 0.5, 0.5]])
-    out["covs"] = np.zeros((2, 4, 4))
+    means = np.array([[0, 0, 0.5, 0.5], [0, 0, 0.5, 0.5]])
+    covs = np.zeros((2, 4, 4))
+    out["dist_name"] = "multivariate_normal"
+    out["dist_arg_dict"] = [{"mean": means[0], "cov" : covs[0]},{"mean": means[1], "cov" : covs[1]}]
     out["weights"] = np.array([0.5, 0.5])
     out["transition_names"] = ["linear", "linear_with_constant"]
     out["transition_argument_dicts"] = [
@@ -270,8 +274,10 @@ def set_up_generate_datasets_mock():
     out["meas_names"] = ["m1", "m2"]
     out["nobs"] = 5
     out["nper"] = 3
-    out["means"] = np.array([0, 0, 0.5, 0.5])
-    out["covs"] = np.eye(4)
+    means = np.array([0, 0, 0.5, 0.5])
+    covs = np.eye(4)
+    out["dist_name"] = "multivariate_normal"
+    out["dist_arg_dict"] = {"mean": means, "cov" : covs}
     out["weights"] = 1
     out["transition_names"] = ["linear", "linear_with_constant"]
     out["transition_argument_dicts"] = [
@@ -330,7 +336,7 @@ def expected_dataset_mock():
 
 #patch the gen_data_function
 @mock.patch(
-    "simulation.simulate_data.generate_start_factors_and_control_variables",
+    "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
     return_value=(
          np.array([[0, 0]] * 5),
          np.array([[0.5, 0.5]] * 5)
@@ -346,7 +352,7 @@ def test_simulate_latent_data_with_mock(mock_generate_start_factors_and_control_
 
 
 @mock.patch(
-    "simulation.simulate_data.generate_start_factors_and_control_variables",
+    "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
     return_value=(
          np.array([[0, 0]] * 5),
          np.array([[0.5, 0.5]] * 5)
@@ -374,8 +380,10 @@ def set_up_generate_datasets_mock_mix_2():
     out["meas_names"] = ["m1", "m2"]
     out["nobs"] = 5
     out["nper"] = 3
-    out["means"] = np.array([[0, 0, 0.5, 0.5], [0, 0, 0.5, 0.8]])
-    out["covs"] = np.array([np.eye(4)*100]*2)
+    means = np.array([[0, 0, 0.5, 0.5], [0, 0, 0.5, 0.8]])
+    covs = np.array([np.eye(4)*100]*2)
+    out["dist_name"] = "multivariate_normal"
+    out["dist_arg_dict"] = [{"mean": means[0], "cov" : covs[0]},{"mean": means[1], "cov" : covs[1]}]
     out["weights"] = np.array([0.5,0.5])
     out["transition_names"] = ["linear", "linear_with_constant"]
     out["transition_argument_dicts"] = [
@@ -434,7 +442,7 @@ def expected_dataset_mock_mix_2():
 
 #patch the gen_data_function
 @mock.patch(
-    "simulation.simulate_data.generate_start_factors_and_control_variables",
+    "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
     return_value=(
          np.array([[0, 0]] * 5),
          np.array([[0.5, 0.5]] * 5)
@@ -453,7 +461,7 @@ def test_simulate_latent_data_with_mock_mix_2(mock_generate_start_factors_and_co
     
 #patch the gen_data_function
 @mock.patch(
-    "simulation.simulate_data.generate_start_factors_and_control_variables",
+    "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
     return_value=(
          np.array([[0, 0]] * 5),
          np.array([[0.5, 0.5]] * 5)
