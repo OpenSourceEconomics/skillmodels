@@ -29,7 +29,7 @@ import pandas as pd
 import numpy as np
 from numpy.random import multivariate_normal, choice, binomial
 
-sys.path.append("../../")
+sys.path.append("../")
 import model_functions.transition_functions as tf
 import simulation._elliptical_functions as ef
 
@@ -69,7 +69,7 @@ def add_missings(data, meas_names, p_b, p_r):
     nmeas = len(meas_names)
     data_with_missings = data.copy(deep=True)
     for i in set(data_with_missings.index):
-        ind_data = data_with_missings.loc[i][meas_names].values
+        ind_data = data_with_missings.loc[i][meas_names].to_numpy()
         s_0 = binomial(1, p_b, nmeas)
         ind_data[0, np.where(s_0 == 1)] = np.nan
         for t in range(1, len(ind_data)):
@@ -159,7 +159,7 @@ def simulate_datasets(
     meas = pd.DataFrame(
         data=measurements_from_factors(
             np.array(fac).reshape(nobs * nper, nfac),
-            cont.values,
+            cont.to_numpy(),
             loadings,
             deltas,
             meas_variances,
