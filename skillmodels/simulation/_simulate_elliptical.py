@@ -1,7 +1,7 @@
 """ Contains functions for simulating random vectors of arbytrary size from:
     - multivariate student's t
     - multivariate symmetric stable (based on Nolan (2018) and Nolan (2013))
-    - calls multivariate normal from np.rdandom to be able to use with getattr() 
+    - calls multivariate normal from np.random to be able to use with getattr() 
       in simulate_data
 
 """
@@ -46,10 +46,12 @@ def _uv_elip_stable(alpha, gamma, delta=0, beta=1, size=1):
     Notes:
        
        - ref: [1] Chambers et al., 1976 , [2] Nolan, 2018 [3] Weron, 1995
+       - to be used in _mv_elip_stable
        - This is the general case. For the purpose of generating from
-         a multivariate elliptically countered stabel rv would suffice 
-         to set beta = 1 and restrict alpha < 1 (strictly).
-    
+         a multivariate elliptically contoured (symmetric) stabel rv would suffice 
+         to set beta = 1  and restrict alpha < 1 (strictly).
+       - the extreme skewness of the univariate_stable component creates the heave tails of 
+         the multivariate in the multivariate distribution.
     """
     theta = np.random.uniform(-np.pi / 2, np.pi / 2, size)
     w_exp = np.random.exponential(1, size)
