@@ -50,8 +50,8 @@ def _uv_elip_stable(alpha, gamma, delta=0, beta=1, size=1):
        - This is the general case. For the purpose of generating from
          a multivariate elliptically contoured (symmetric) stabel rv would suffice 
          to set beta = 1  and restrict alpha < 1 (strictly).
-       - the extreme skewness of the univariate_stable component creates the heave tails of 
-         the multivariate in the multivariate distribution.
+       - the extreme skewness of the univariate_stable component creates the heavy tails of 
+         in the multivariate distribution.
     """
     theta = np.random.uniform(-np.pi / 2, np.pi / 2, size)
     w_exp = np.random.exponential(1, size)
