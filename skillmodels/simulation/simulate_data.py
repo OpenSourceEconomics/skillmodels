@@ -28,6 +28,7 @@ import sys
 import pandas as pd
 import numpy as np
 from numpy.random import multivariate_normal, choice, binomial
+import _simulate_elliptical as es
 
 sys.path.append("../")
 import model_functions.transition_functions as tf
@@ -209,6 +210,40 @@ def generate_start_factors_and_control_variables(
 
     return start_factors, controls
 
+def generate_start_factors_and_control_variables_elliptical(
+    nobs, nfac, ncont, dist_name, dist_arg_dict, weights=1
+):
+    """Draw initial states and control variables from a (mixture of) normals.
+
+    Args:
+        nobs (int): number of observations
+        nfac (int): number of factor (latent) variables
+        ncont (int): number of control variables
+        dist_name (string): the elliptical distribution to use in the mixture
+        dist_arg_dict (list or dict): list of length nemf of dictionaries with the 
+          relevant arguments of the mixture distributions. Arguments with default
+          values should NOT be included in the dictionaries. Lengths of arrays in the
+          arguments should be in accordance with nfac + ncont
+        weights (np.ndarray): size (nemf). The weight of each mixture element.
+                              Default value is equal to 1.
+
+    Returns:
+        start_factors (np.ndarray): shape (nobs, nfac),
+        controls (np.ndarray): shape (nobs, ncontrols),
+    """
+
+    if np.size(weights) == 1:
+        out = getattr(es,dist_name)(**dist_arg_dict, size=nobs)
+    else:
+        helper_array = choice(np.arange(len(weights)), p=weights, size=nobs)
+        out = np.zeros((nobs, nfac + ncont))
+        for i in range(nobs):
+            out[i] = getattr(es, dist_name)(**dist_arg_dict[helper_array[i]])
+    start_factors = out[:, 0:nfac]
+    controls = out[:, nfac:]
+
+    return start_factors, controls
+
 
 def next_period_factors(
     factors, transition_names, transition_argument_dicts, shock_variances
@@ -272,82 +307,3 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances):
     conts = controls.reshape(nobs, 1, ncontrols)
     meas = np.dot(states, loadings.T) + np.dot(conts, deltas.T) + epsilon
     return meas.reshape(nobs, nmeas)
-
-
-def _mv_student_t(mean, cov, d_f, size=1):
-    """Generate random sample from d-dimensional t_distribution
-    Args:
-        mu (np.ndarray): vector of mean of size d
-        cov (np.ndarray): covariance matrix of shape (d,d)
-        d_f (float): degree of freedom
-        size (float): the sample size
-    Returns:
-        mv_t(np.ndarray): shape (size, d)
-    Notes:
-       - Cov is the variance-covariance of the generated random variable.
-       - So that the normal vector is to be generated from N(0,cov*(nu-2)/nu)
-       - Ref: https://bit.ly/2NDhbWM
-
-    """
-    d_dim = len(cov)
-    x_chi = np.sqrt(np.random.chisquare(d_f, size) / d_f).reshape(size, 1, 1)
-    y_norm = multivariate_normal(np.zeros(d_dim), cov * (d_f - 2) / d_f, size).reshape(
-        size, 1, d_dim
-    )
-    mv_t = mean + (y_norm / x_chi).reshape(size, d_dim)
-    return mv_t
-
-
-def _uv_elip_stable(delta, gamma, alpha, beta=1,size=1):
-    """An algorithm to for simulating random variables from (symmetric) stable 
-    
-    distribution.
-    Args:
-        alpha (float): measure of concentration
-        beta (float): measure of skewness.
-        delta (float): location parameter
-        gamma (float): scale parameter
-    Returns:
-        s_return (float): S(alpha, beta, gamm, delta) random variable
-    Notes:
-       
-       - ref: Chambers et al.(1976) , Nolan (2018)
-       - This is the general case. For the purpose of generating form
-         a multivariate elliptically countered stabel rv would suffice 
-         to set beta==1 and restrict alpha<1 (strictly).
-    
-    """
-    theta=np.random.uniform(-np.pi/2, np.pi/2,size) #!!!!!!Need to check!!!!!!!!!
-    w_exp = np.random.exponential(1,size)
-    if alpha==1:
-        comp_1 = np.tan(theta)*(0.5*np.pi+beta-theta)
-        comp_2 = -beta*np.log(0.5*w_exp*np.cos(theta)/(0.5*np.pi+beta*theta))
-        zeta = 2/np.pi*(comp_1+comp_2)
-        s_return = gamma*zeta+(delta+beta*0.5*np.pi*np.log(gamma))
-    else:
-        theta_0 = np.arctan(beta*np.tan(0.5*np.pi*alpha))/alpha
-        z_1 = np.sin(alpha*(theta_0+theta))/((np.cos(theta)*np.cos(alpha/theta_0))^(1/alpha))
-        z_2 = (np.cos((alpha-1)*theta+alpha*theta_0)/w_exp)^(1/alpha-1)
-        zeta = z_1*z_2
-        s_return = gamma*zeta+delta
-
-
-    return s_return
-
-def _mv_elip_stable(alpha, sigma_mat, delta,size=1):
-     """An algorithm to generate d-dimensional multivariate elliptically contoured stable rv
-     Args:
-        alpha (float): measure of concentration strictly between 0 and 2
-        sigma_mat (np.ndarray): positive definite matrix of shape (d,d)
-        delta (np.ndarray): shift vector of size d
-     Returns:
-        mv_stab (np.ndarray): rv of shape (size, d)
-     Notes:
-       - ref: Nolan (2013)
-     """
-
-        a_stab = _uv_elip_stable(0, 2*(np.cos(np.pi*alpha/4))^(2/alpha),0.5*alpha, beta=1, size=size)
-        g_norm = multivariate_normal(np.zeros(len(sigma_mat)),sigma_mat,size)
-        mv_stab = np.sqrt(a_stab)*g_norm+delta #need to check the shapes!!!!!!!
-
-     return mv_stab
