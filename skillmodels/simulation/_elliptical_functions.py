@@ -46,12 +46,21 @@ def _uv_elip_stable(alpha, gamma, delta=0, beta=1, size=1):
     Notes:
        
        - ref: [1] Chambers et al., 1976 , [2] Nolan, 2018 [3] Weron, 1995
-       - to be used in _mv_elip_stable
+       - To be used in _mv_elip_stable
        - This is the general case. For the purpose of generating from
          a multivariate elliptically contoured (symmetric) stabel rv would suffice 
          to set beta = 1  and restrict alpha < 1 (strictly).
-       - the extreme skewness of the univariate_stable component creates the heavy tails of 
+       - The extreme skewness of the univariate_stable component creates the heavy tails of 
          in the multivariate distribution.
+    Warnings: 
+        
+       - If both [2] and [3] (in ref) were correct the expression for z_1 below
+         should have been the same for beta=1, however [3] is missing cos(alpha * theta_0)
+         in the denominator of z_1, thus [2] gets an additional term of cos(pi*alpha/2)
+         when beta = 1.
+       - when beta!=1 the resulting rv in [3] is from S(alpha,beta_2) where beta_2
+         is a function of beta (and beta_2=beta when beta=1) and to check whether
+         the two forumlas agree or not is out of scope of this assignment)
     """
     theta = np.random.uniform(-np.pi / 2, np.pi / 2, size)
     w_exp = np.random.exponential(1, size)
@@ -68,13 +77,13 @@ def _uv_elip_stable(alpha, gamma, delta=0, beta=1, size=1):
         theta_0 = (
             np.arctan(beta * np.tan(0.5 * np.pi * alpha)) / alpha
         )  
-        theta_0 = np.ones(size) * theta_0
+        theta_0 = np.ones(size) * theta_0 #!!! cross checked ([3] Weron, 1995)
         z_1 = np.sin(alpha * (theta_0 + theta)) / np.power(
-            (np.cos(theta) * np.cos(alpha * theta_0)), (1 / alpha)
-        )
+            (np.cos(theta) * np.cos(alpha * theta_0)), (1 / alpha) #!!! z_1 here 
+        ) 
         z_2 = np.power(
             (np.cos((alpha - 1) * theta + alpha * theta_0) / w_exp), (1 / alpha - 1)
-        )
+        ) #!!! cross checked ([3] Weron, 1995)
         zeta = z_1 * z_2
         stable_u = gamma * zeta + delta
 

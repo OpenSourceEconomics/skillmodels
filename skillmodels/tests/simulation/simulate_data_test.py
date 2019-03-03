@@ -112,8 +112,8 @@ def set_up_generate_datasets():
     out["nper"] = 3
     means = np.array([0, 0, 0.5, 0.5])
     covs = np.zeros((4, 4))
-    out["dist_name"] = "multivariate_normal"
-    out["dist_arg_dict"] = {"mean": means, "cov" : covs}
+    out["dist_name"] = "_mv_student_t"
+    out["dist_arg_dict"] = {"mean": means, "cov" : covs, "d_f": 3}
     out["weights"] = 1
     out["transition_names"] = ["linear", "linear_with_constant"]
     out["transition_argument_dicts"] = [
@@ -382,7 +382,7 @@ def set_up_generate_datasets_mock_mix_2():
     out["nper"] = 3
     means = np.array([[0, 0, 0.5, 0.5], [0, 0, 0.5, 0.8]])
     covs = np.array([np.eye(4)*100]*2)
-    out["dist_name"] = "multivariate_normal"
+    out["dist_name"] = "_mv_student_t"
     out["dist_arg_dict"] = [{"mean": means[0], "cov" : covs[0]},{"mean": means[1], "cov" : covs[1]}]
     out["weights"] = np.array([0.5,0.5])
     out["transition_names"] = ["linear", "linear_with_constant"]
