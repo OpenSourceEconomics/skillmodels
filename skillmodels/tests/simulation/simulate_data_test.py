@@ -5,7 +5,8 @@ import pandas as pd
 from numpy.testing import assert_array_almost_equal as aaae
 from pandas.testing import assert_frame_equal as adfeq
 import pytest
-#from pytest_mock import mocker
+
+# from pytest_mock import mocker
 from unittest import mock
 import sys
 
@@ -113,7 +114,7 @@ def set_up_generate_datasets():
     means = np.array([0, 0, 0.5, 0.5])
     covs = np.zeros((4, 4))
     out["dist_name"] = "_mv_student_t"
-    out["dist_arg_dict"] = {"mean": means, "cov" : covs, "d_f": 3}
+    out["dist_arg_dict"] = {"mean": means, "cov": covs, "d_f": 3}
     out["weights"] = 1
     out["transition_names"] = ["linear", "linear_with_constant"]
     out["transition_argument_dicts"] = [
@@ -195,7 +196,10 @@ def set_up_generate_datasets_2_mix():
     means = np.array([[0, 0, 0.5, 0.5], [0, 0, 0.5, 0.5]])
     covs = np.zeros((2, 4, 4))
     out["dist_name"] = "multivariate_normal"
-    out["dist_arg_dict"] = [{"mean": means[0], "cov" : covs[0]},{"mean": means[1], "cov" : covs[1]}]
+    out["dist_arg_dict"] = [
+        {"mean": means[0], "cov": covs[0]},
+        {"mean": means[1], "cov": covs[1]},
+    ]
     out["weights"] = np.array([0.5, 0.5])
     out["transition_names"] = ["linear", "linear_with_constant"]
     out["transition_argument_dicts"] = [
@@ -277,7 +281,7 @@ def set_up_generate_datasets_mock():
     means = np.array([0, 0, 0.5, 0.5])
     covs = np.eye(4)
     out["dist_name"] = "multivariate_normal"
-    out["dist_arg_dict"] = {"mean": means, "cov" : covs}
+    out["dist_arg_dict"] = {"mean": means, "cov": covs}
     out["weights"] = 1
     out["transition_names"] = ["linear", "linear_with_constant"]
     out["transition_argument_dicts"] = [
@@ -288,8 +292,8 @@ def set_up_generate_datasets_mock():
     out["loadings"] = np.array([[0.5, 0.5], [0.5, 0.5]])
     out["deltas"] = np.array([[0.5, 0.5], [0.5, 0.5]])
     out["meas_variances"] = np.zeros(2)
-    #out["controls_mock"] = np.array([[0.5, 0.5]] * 5)
-    #out["start_states_mock"] = np.array([[0, 0]] * 5)
+    # out["controls_mock"] = np.array([[0.5, 0.5]] * 5)
+    # out["start_states_mock"] = np.array([[0, 0]] * 5)
     return out
 
 
@@ -334,43 +338,40 @@ def expected_dataset_mock():
     out["latent_data"] = factors
     return out
 
-#patch the gen_data_function
+
+# patch the gen_data_function
 @mock.patch(
     "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
-    return_value=(
-         np.array([[0, 0]] * 5),
-         np.array([[0.5, 0.5]] * 5)
-    ),
-    autospec=True
+    return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
+    autospec=True,
 )
-def test_simulate_latent_data_with_mock(mock_generate_start_factors_and_control_variables,
-    set_up_generate_datasets_mock, expected_dataset_mock
+def test_simulate_latent_data_with_mock(
+    mock_generate_start_factors_and_control_variables,
+    set_up_generate_datasets_mock,
+    expected_dataset_mock,
 ):
-    results= sd.simulate_datasets(**set_up_generate_datasets_mock)
+    results = sd.simulate_datasets(**set_up_generate_datasets_mock)
     adfeq(results[1], expected_dataset_mock["latent_data"], check_dtype=False)
 
 
-
 @mock.patch(
     "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
-    return_value=(
-         np.array([[0, 0]] * 5),
-         np.array([[0.5, 0.5]] * 5)
-    ),
-    autospec=True
+    return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
+    autospec=True,
 )
-    
-def test_simulate_observed_data_with_mock(mock_generate_start_factors_and_control_variables,
-    set_up_generate_datasets_mock, expected_dataset_mock
+def test_simulate_observed_data_with_mock(
+    mock_generate_start_factors_and_control_variables,
+    set_up_generate_datasets_mock,
+    expected_dataset_mock,
 ):
-    results= sd.simulate_datasets(**set_up_generate_datasets_mock)
+    results = sd.simulate_datasets(**set_up_generate_datasets_mock)
     adfeq(results[0], expected_dataset_mock["observed_data"], check_dtype=False)
-    
-    
-#=========================
+
+
+# =========================
 # generate datasets nemf=2
-#=========================
-    
+# =========================
+
 
 @pytest.fixture
 def set_up_generate_datasets_mock_mix_2():
@@ -381,10 +382,13 @@ def set_up_generate_datasets_mock_mix_2():
     out["nobs"] = 5
     out["nper"] = 3
     means = np.array([[0, 0, 0.5, 0.5], [0, 0, 0.5, 0.8]])
-    covs = np.array([np.eye(4)*100]*2)
+    covs = np.array([np.eye(4) * 100] * 2)
     out["dist_name"] = "_mv_student_t"
-    out["dist_arg_dict"] = [{"mean": means[0], "cov" : covs[0]},{"mean": means[1], "cov" : covs[1]}]
-    out["weights"] = np.array([0.5,0.5])
+    out["dist_arg_dict"] = [
+        {"mean": means[0], "cov": covs[0]},
+        {"mean": means[1], "cov": covs[1]},
+    ]
+    out["weights"] = np.array([0.5, 0.5])
     out["transition_names"] = ["linear", "linear_with_constant"]
     out["transition_argument_dicts"] = [
         {"coeffs": np.array([0.2, 0.2]), "included_positions": [0, 1]},
@@ -394,8 +398,8 @@ def set_up_generate_datasets_mock_mix_2():
     out["loadings"] = np.array([[0.5, 0.5], [0.5, 0.5]])
     out["deltas"] = np.array([[0.5, 0.5], [0.5, 0.5]])
     out["meas_variances"] = np.zeros(2)
-    #out["controls_mock"] = np.array([[0.5, 0.5]] * 5)
-    #out["start_states_mock"] = np.array([[0, 0]] * 5)
+    # out["controls_mock"] = np.array([[0.5, 0.5]] * 5)
+    # out["start_states_mock"] = np.array([[0, 0]] * 5)
     return out
 
 
@@ -440,38 +444,32 @@ def expected_dataset_mock_mix_2():
     out["latent_data"] = factors
     return out
 
-#patch the gen_data_function
+
+# patch the gen_data_function
 @mock.patch(
     "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
-    return_value=(
-         np.array([[0, 0]] * 5),
-         np.array([[0.5, 0.5]] * 5)
-    ),
-    autospec=True
+    return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
+    autospec=True,
 )
-    
-
-def test_simulate_latent_data_with_mock_mix_2(mock_generate_start_factors_and_control_variables,
-    set_up_generate_datasets_mock_mix_2, expected_dataset_mock_mix_2
+def test_simulate_latent_data_with_mock_mix_2(
+    mock_generate_start_factors_and_control_variables,
+    set_up_generate_datasets_mock_mix_2,
+    expected_dataset_mock_mix_2,
 ):
-    results= sd.simulate_datasets(**set_up_generate_datasets_mock_mix_2)
+    results = sd.simulate_datasets(**set_up_generate_datasets_mock_mix_2)
     adfeq(results[1], expected_dataset_mock_mix_2["latent_data"], check_dtype=False)
-    
-    
-    
-#patch the gen_data_function
+
+
+# patch the gen_data_function
 @mock.patch(
     "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
-    return_value=(
-         np.array([[0, 0]] * 5),
-         np.array([[0.5, 0.5]] * 5)
-    ),
-    autospec=True
+    return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
+    autospec=True,
 )
-    
-
-def test_simulate_observed_data_with_mock_mix_2(mock_generate_start_factors_and_control_variables,
-    set_up_generate_datasets_mock_mix_2, expected_dataset_mock_mix_2
+def test_simulate_observed_data_with_mock_mix_2(
+    mock_generate_start_factors_and_control_variables,
+    set_up_generate_datasets_mock_mix_2,
+    expected_dataset_mock_mix_2,
 ):
-    results= sd.simulate_datasets(**set_up_generate_datasets_mock_mix_2)
+    results = sd.simulate_datasets(**set_up_generate_datasets_mock_mix_2)
     adfeq(results[0], expected_dataset_mock_mix_2["observed_data"], check_dtype=False)

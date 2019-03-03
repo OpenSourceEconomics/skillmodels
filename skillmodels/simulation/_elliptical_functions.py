@@ -74,16 +74,14 @@ def _uv_elip_stable(alpha, gamma, delta=0, beta=1, size=1):
             delta + beta * np.power(0.5 * np.pi, -1) * gamma * np.log(gamma)
         )
     else:
-        theta_0 = (
-            np.arctan(beta * np.tan(0.5 * np.pi * alpha)) / alpha
-        )  
-        theta_0 = np.ones(size) * theta_0 #!!! cross checked ([3] Weron, 1995)
+        theta_0 = np.arctan(beta * np.tan(0.5 * np.pi * alpha)) / alpha
+        theta_0 = np.ones(size) * theta_0  #!!! cross checked ([3] Weron, 1995)
         z_1 = np.sin(alpha * (theta_0 + theta)) / np.power(
-            (np.cos(theta) * np.cos(alpha * theta_0)), (1 / alpha) #!!! z_1 here 
-        ) 
+            (np.cos(theta) * np.cos(alpha * theta_0)), (1 / alpha)  #!!! z_1 here
+        )
         z_2 = np.power(
             (np.cos((alpha - 1) * theta + alpha * theta_0) / w_exp), (1 / alpha - 1)
-        ) #!!! cross checked ([3] Weron, 1995)
+        )  #!!! cross checked ([3] Weron, 1995)
         zeta = z_1 * z_2
         stable_u = gamma * zeta + delta
 
