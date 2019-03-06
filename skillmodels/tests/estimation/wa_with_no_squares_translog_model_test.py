@@ -187,8 +187,8 @@ class TestOfWAEstimator:
         calc_loadings = calc_storage_df["loadings"]
         calc_intercepts = calc_storage_df["intercepts"]
 
-        aaae(calc_loadings.values, self.true_loadings, decimal=3)
-        aaae(calc_intercepts.values, self.true_intercepts, decimal=3)
+        aaae(calc_loadings.to_numpy(), self.true_loadings, decimal=3)
+        aaae(calc_intercepts.to_numpy(), self.true_intercepts, decimal=3)
         aaae(calc_X_zero, self.true_X_zero, decimal=1)
         for arr1, arr2 in zip(calc_gammas, self.true_gammas):
             aaae(arr1, arr2, decimal=3)
@@ -279,7 +279,7 @@ class TestOfWAEstimator:
         #           'loadings', 'true_loadings']])
         # print(df['diff'].mean())
 
-        calc_epsilon_variances = calc_storage_df["meas_error_variances"].values
+        calc_epsilon_variances = calc_storage_df["meas_error_variances"].to_numpy()
         # average_epsilon_diff = \
         #     (calc_epsilon_variances - self.true_meas_var).mean()
         aaae(calc_P_zero, self.true_P_zero, decimal=2)
@@ -350,4 +350,4 @@ class TestOfWAEstimator:
             wa_model.anchoring,
         )
 
-        aaae(calc_trans_vars.values, self.true_trans_var, decimal=3)
+        aaae(calc_trans_vars.to_numpy(), self.true_trans_var, decimal=3)

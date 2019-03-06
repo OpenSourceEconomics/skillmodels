@@ -105,7 +105,7 @@ def next_period_factors(
             them from a multivariate normal with diagonal covariance matrix or from
             nfac univariate normals.
 
-        - You have to convert the factors to a numpy array (DataFrame.values) and then convert
+        - You have to convert the factors to a numpy array (DataFrame.to_numpy()) and then convert
             the result back in the end. For speed reasons all the transition functions
             expect numpy arrays and not pandas DataFrames.
 

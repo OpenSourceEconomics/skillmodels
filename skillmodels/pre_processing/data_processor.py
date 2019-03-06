@@ -21,7 +21,7 @@ class DataProcessor:
 
         for t in self.periods:
             df = self.data[self.data[self.period_identifier] == t]
-            arr = df[const_list + self.controls[t]].values[self.obs_to_keep]
+            arr = df[const_list + self.controls[t]].to_numpy()[self.obs_to_keep]
             c_data.append(arr)
         return c_data
 
@@ -39,7 +39,7 @@ class DataProcessor:
             measurements = list(self.update_info.loc[t].index)
             df = self.data[self.data[self.period_identifier] == t][measurements]
 
-            y_data[counter : counter + len(measurements), :] = df.values[
+            y_data[counter : counter + len(measurements), :] = df.to_numpy()[
                 self.obs_to_keep
             ].T
             counter += len(measurements)

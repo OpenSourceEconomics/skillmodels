@@ -176,11 +176,11 @@ def factor_covs_and_measurement_error_variances(meas_cov, loadings, meas_per_fac
     scaled_meas_cov = meas_cov.divide(loadings, axis=0).divide(loadings, axis=1)
 
     diag_bool = np.eye(len(scaled_meas_cov), dtype=bool)
-    diag_data = scaled_meas_cov.copy(deep=True).values[diag_bool]
+    diag_data = scaled_meas_cov.copy(deep=True).to_numpy()[diag_bool]
     diag_series = pd.Series(
         data=diag_data, index=scaled_meas_cov.index, name="meas_error_variances"
     )
-    scaled_meas_cov.values[diag_bool] = np.nan
+    scaled_meas_cov.to_numpy()[diag_bool] = np.nan
     # print('\n\nrelevant_parts_of_cov_matrix\n')
     factor_covs = []
     for f1, factor1 in enumerate(factors):
@@ -235,16 +235,16 @@ def iv_reg_array_dict(
     for category in ["x", "z"]:
         data[(category, "constant")] = 1.0
 
-    arr_dict["depvar_arr"] = data[("y", depvar_name)].values
+    arr_dict["depvar_arr"] = data[("y", depvar_name)].to_numpy()
 
     formula_func = getattr(tf, "iv_formula_{}".format(transition_name))
     indep_formula, instr_formula = formula_func(indepvar_names, instrument_names)
     arr_dict["indepvars_arr"] = dmatrix(
         indep_formula, data=data["x"], return_type="dataframe"
-    ).values
+    ).to_numpy()
     arr_dict["instruments_arr"] = dmatrix(
         instr_formula, data=data["z"], return_type="dataframe"
-    ).values
+    ).to_numpy()
 
     arr_dict["non_missing_index"] = data.index
     return arr_dict
@@ -862,7 +862,7 @@ def calculate_wa_estimated_quantities(
             t,
             iv_data,
         )
-        deltas = iv_coeffs.mean().values
+        deltas = iv_coeffs.mean().to_numpy()
         anch_intercept = deltas[-1]
         anch_loadings = deltas[:-1]
         indep_permutations, instr_permutations = variable_permutations_for_iv_equations(

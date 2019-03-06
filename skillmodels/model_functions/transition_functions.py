@@ -705,7 +705,7 @@ def general_model_coeffs_from_iv_coeffs(
     if coeff_sum_value is None:
         load_norm_y = list(loading_norminfo.keys())[0]
         load_norm_val = list(loading_norminfo.values())[0]
-        iv_sum = iv_coeffs.loc[load_norm_y].values[all_but_intercept].sum()
+        iv_sum = iv_coeffs.loc[load_norm_y].to_numpy()[all_but_intercept].sum()
         coeff_sum_value = iv_sum / load_norm_val
         newly_identified_coeff_sum_value = coeff_sum_value
     else:
@@ -713,7 +713,7 @@ def general_model_coeffs_from_iv_coeffs(
 
     # calculate all lambdas
     for y_variable in iv_coeffs.index:
-        iv_sum = iv_coeffs.loc[y_variable].values[all_but_intercept].sum()
+        iv_sum = iv_coeffs.loc[y_variable].to_numpy()[all_but_intercept].sum()
         meas_coeffs.loc[y_variable, "loadings"] = iv_sum / coeff_sum_value
 
     # get trans intercept
@@ -742,7 +742,7 @@ def general_model_coeffs_from_iv_coeffs(
 
     gamma_coeffs = iv_coeffs[iv_coeffs.columns[all_but_intercept]]
     next_period_loadings = meas_coeffs["loadings"]
-    gammas = gamma_coeffs.divide(next_period_loadings, axis=0).mean().values
+    gammas = gamma_coeffs.divide(next_period_loadings, axis=0).mean().to_numpy()
 
     if has_trans_intercept is True:
         if iv_intercept_position == 0:

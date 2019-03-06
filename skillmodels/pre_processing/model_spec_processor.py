@@ -513,7 +513,7 @@ class ModelSpecProcessor:
                     elif self.controls_with_missings == "drop_observations":
                         controls[t].append(control)
                         obs_to_keep = np.logical_and(
-                            obs_to_keep, df[control].notnull().values
+                            obs_to_keep, df[control].notnull().to_numpy()
                         )
                     elif self.controls_with_missings == "raise_error":
                         raise ValueError(message.format(self.model_name, control, t, t))
@@ -893,8 +893,8 @@ class ModelSpecProcessor:
             for t2, meas2 in ind:
                 if meas == meas2 and t2 <= t:
                     if self.controls[t] == self.controls[t2]:
-                        info1 = factor_uinfo.loc[(t, meas)].values
-                        info2 = factor_uinfo.loc[(t2, meas2)].values
+                        info1 = factor_uinfo.loc[(t, meas)].to_numpy()
+                        info2 = factor_uinfo.loc[(t2, meas2)].to_numpy()
                         if (info1 == info2).all():
                             first = t2
                             break
@@ -1048,7 +1048,7 @@ class ModelSpecProcessor:
         df = self.update_info().copy(deep=True)
         df = df[df["purpose"] == "measurement"]
         assert (
-            df[self.factors].values.sum(axis=1) == 1
+            df[self.factors].to_numpy().sum(axis=1) == 1
         ).all(), "In the wa estimator each measurement can only measure 1 factor."
         norm_cols = ["{}_loading_norm_value".format(f) for f in self.factors]
         # storage column for factor loadings, initialized with zeros for un-
