@@ -1,11 +1,11 @@
 from numpy.testing import assert_array_almost_equal as aaae
-from numpy.core.umath_tests import matrix_multiply
+#from numpy.core.umath_tests import matrix_multiply
 import numpy as np
 from skillmodels.fast_routines.qr_decomposition import array_qr
 
 
 def a_prime_a(a):
-    return matrix_multiply(np.transpose(a, axes=(0, 2, 1)), a)
+    return np.matmul(np.transpose(a, axes=(0, 2, 1)), a)
 
 
 class TestRFromQR:
@@ -23,6 +23,3 @@ class TestRFromQR:
         self.expected_prod = a_prime_a(self.some_array)
         prod = array_qr(self.some_array)
         aaae(a_prime_a(prod), self.expected_prod)
-
-
-

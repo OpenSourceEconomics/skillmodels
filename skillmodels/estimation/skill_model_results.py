@@ -31,24 +31,24 @@ class SkillModelResults(GenericLikelihoodModelResults):
         self.df_resid = model.df_resid
         self._cache = resettable_cache()
         self.__dict__.update(mlefit.__dict__)
-        self.param_names = model.param_names(params_type='long')
+        self.param_names = model.param_names(params_type="long")
         self.nperiods = self.model.nperiods
 
     @cache_readonly
     def aic(self):
-        if self.estimator == 'chs':
+        if self.estimator == "chs":
             return super(SkillModelResults, self).aic
         else:
-            raise NotApplicableError(
-                'aic only works for likelihood based models.')
+            raise NotApplicableError("aic only works for likelihood based models.")
 
     @cache_readonly
     def llf(self):
-        if self.estimator == 'chs':
-            return self.optimize_dict['log_lh_value']
+        if self.estimator == "chs":
+            return self.optimize_dict["log_lh_value"]
         else:
             raise NotApplicableError(
-                'If the wa estimator was used there is no likelihood value.')
+                "If the wa estimator was used there is no likelihood value."
+            )
 
     @cache_readonly
     def df_modelwc(self):
@@ -88,17 +88,18 @@ class SkillModelResults(GenericLikelihoodModelResults):
 
         """
         bs_dict = {}
-        bs_dict['covariance_matrix'] = self.covbs
-        bs_dict['standard_errors'] = self.bsebs
-        bs_dict['mean'] = self.model.bootstrap_mean(self.params)
-        bs_dict['conf_int'] = self.model.bootstrap_conf_int(self.params)
-        bs_dict['pvalues'] = self.model.bootstrap_pvalues(self.params)
+        bs_dict["covariance_matrix"] = self.covbs
+        bs_dict["standard_errors"] = self.bsebs
+        bs_dict["mean"] = self.model.bootstrap_mean(self.params)
+        bs_dict["conf_int"] = self.model.bootstrap_conf_int(self.params)
+        bs_dict["pvalues"] = self.model.bootstrap_pvalues(self.params)
 
         return bs_dict
 
-    def summary(self, yname=None, xname=None, title=None, alpha=.05):
+    def summary(self, yname=None, xname=None, title=None, alpha=0.05):
         raise NotImplementedError(
-            'The summary method is not yet implemented for SkillModelResults')
+            "The summary method is not yet implemented for SkillModelResults"
+        )
 
     def get_nlfun(self, fun):
         # in the super class this is a do-nothing function
@@ -106,37 +107,41 @@ class SkillModelResults(GenericLikelihoodModelResults):
         raise NotImplementedError
 
     def conf_int(self):
-        if self.model.standard_error_method == 'bootstrap':
+        if self.model.standard_error_method == "bootstrap":
             return self.model.bootstrap_conf_int(self.params)
         else:
             return super(SkillModelResults, self).conf_int()
 
     def pvalues(self):
-        if self.model.standard_error_method == 'bootstrap':
+        if self.model.standard_error_method == "bootstrap":
             return self.model.bootstrap_pvalues(self.params)
         else:
             return super(SkillModelResults, self).pvalues
 
     def save(self, fname, remove_data=False):
         raise NotImplementedError(
-            'A save method is not yet implemented for SkillModelResults')
+            "A save method is not yet implemented for SkillModelResults"
+        )
 
     @classmethod
     def load(cls, fname):
         raise NotImplementedError(
-            'A load method is not yet implemented for SkillModelResults')
+            "A load method is not yet implemented for SkillModelResults"
+        )
 
     def remove_data(self):
         raise NotImplementedError(
-            'A remove_data method is not yet implemented for '
-            'SkillModelResults.')
+            "A remove_data method is not yet implemented for " "SkillModelResults."
+        )
 
     def predict(self, exog=None, transform=True, *args, **kwargs):
         raise NotImplementedError(
-            'A predict method is not yet implemented for SkillModelResults')
+            "A predict method is not yet implemented for SkillModelResults"
+        )
 
-    def marginal_effects(self, of, on, at=None, anchor_on=True, centered=True,
-                         complex_step=False):
+    def marginal_effects(
+        self, of, on, at=None, anchor_on=True, centered=True, complex_step=False
+    ):
         """
         Marginal effects of a factor in all periods on a last period outcome.
 
@@ -167,8 +172,9 @@ class SkillModelResults(GenericLikelihoodModelResults):
 
         """
         assert self.model.endog_correction is False, (
-            'Currently, marginal effects cannot be calculated if endogeneity '
-            'correction is used.')
+            "Currently, marginal effects cannot be calculated if endogeneity "
+            "correction is used."
+        )
 
         self.model.me_of = of
         self.model.me_on = on
@@ -183,17 +189,13 @@ class SkillModelResults(GenericLikelihoodModelResults):
 
         epsilon = self.model._get_epsilon(centered)
 
-        diff_func = \
-            approx_fprime if complex_step is False else approx_fprime_cs
+        diff_func = approx_fprime if complex_step is False else approx_fprime_cs
 
-        me = diff_func(x=change, f=self.model._marginal_effect_outcome,
-                       epsilon=epsilon, centered=centered)
+        me = diff_func(
+            x=change,
+            f=self.model._marginal_effect_outcome,
+            epsilon=epsilon,
+            centered=centered,
+        )
 
         return me
-
-
-
-
-
-
-

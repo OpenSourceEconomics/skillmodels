@@ -269,6 +269,7 @@ def next_period_factors(
 
     Returns:
         next_factors (np.ndarray): shape(nobs,nfac)
+
     """
     nobs, nfac = factors.shape
     # sigma_points = factors
@@ -285,7 +286,7 @@ def next_period_factors(
 
     return next_factors
 
-
+  
 def measurements_from_factors(factors, controls, loadings, deltas, variances):
     """Generate the variables that would be observed in practice.
 
@@ -314,3 +315,4 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances):
     conts = controls.reshape(nobs, 1, ncontrols)
     meas = np.dot(states, loadings.T) + np.dot(conts, deltas.T) + epsilon
     return meas.reshape(nobs, nmeas)
+  

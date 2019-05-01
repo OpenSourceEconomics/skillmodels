@@ -32,13 +32,14 @@ def loadings_from_covs(data, normalization):
     measurements = list(data.columns)
     nmeas = len(measurements)
     assert nmeas >= 3, (
-        'For covariance based factor loading estimation 3 or more '
-        'measurements are needed.')
+        "For covariance based factor loading estimation 3 or more "
+        "measurements are needed."
+    )
 
     cov = data.cov()
     load_norm = list(normalization.keys())[0]
     load_norm_val = list(normalization.values())[0]
-    loadings = pd.Series(index=measurements, name='loadings')
+    loadings = pd.Series(index=measurements, name="loadings")
 
     for m in measurements:
         if m != load_norm:
@@ -83,18 +84,16 @@ def intercepts_from_means(data, normalization, loadings):
         intercepts = data.mean()
         factor_mean = None
     else:
-        intercepts = pd.Series(index=measurements, name='intercepts')
+        intercepts = pd.Series(index=measurements, name="intercepts")
         intercept_norm = list(normalization.keys())[0]
         intercept_norm_val = list(normalization.values())[0]
         loading = loadings[intercept_norm]
-        factor_mean = \
-            (data[intercept_norm].mean() - intercept_norm_val) / loading
+        factor_mean = (data[intercept_norm].mean() - intercept_norm_val) / loading
 
         for m, meas in enumerate(measurements):
             if meas != intercept_norm:
                 loading = loadings[meas]
-                intercepts[meas] = \
-                    data[meas].mean() - loading * factor_mean
+                intercepts[meas] = data[meas].mean() - loading * factor_mean
             else:
                 intercepts[meas] = intercept_norm_val
     return intercepts, factor_mean
@@ -102,15 +101,13 @@ def intercepts_from_means(data, normalization, loadings):
 
 def prepend_index_level(df, to_prepend):
     df = df.copy()
-    df.index = pd.MultiIndex.from_tuples(
-        [(to_prepend, x) for x in df.index])
+    df.index = pd.MultiIndex.from_tuples([(to_prepend, x) for x in df.index])
     return df
 
 
 def prepend_column_level(df, to_prepend):
     df = df.copy()
-    df.columns = pd.MultiIndex.from_tuples(
-        [(to_prepend, x) for x in df.columns])
+    df.columns = pd.MultiIndex.from_tuples([(to_prepend, x) for x in df.columns])
     return df
 
 
@@ -142,12 +139,13 @@ def initial_meas_coeffs(y_data, measurements, normalizations):
     for f, factor in enumerate(factors):
         meas_list = measurements[factor][0]
         data = y_data[meas_list]
-        norminfo_load = normalizations[factor]['loadings'][0]
+        norminfo_load = normalizations[factor]["loadings"][0]
 
         loadings = loadings_from_covs(data, norminfo_load)
-        norminfo_intercept = normalizations[factor]['intercepts'][0]
+        norminfo_intercept = normalizations[factor]["intercepts"][0]
         intercepts, factor_mean = intercepts_from_means(
-            data, norminfo_intercept, loadings)
+            data, norminfo_intercept, loadings
+        )
         to_concat.append(pd.concat([loadings, intercepts], axis=1))
         X_zero.append(factor_mean)
 
@@ -155,8 +153,7 @@ def initial_meas_coeffs(y_data, measurements, normalizations):
     return meas_coeffs, np.array(X_zero)
 
 
-def factor_covs_and_measurement_error_variances(
-        meas_cov, loadings, meas_per_factor):
+def factor_covs_and_measurement_error_variances(meas_cov, loadings, meas_per_factor):
     """Covs of latent factors and vars of measurement equations in a period.
 
     Args:
@@ -176,15 +173,14 @@ def factor_covs_and_measurement_error_variances(
     """
     factors = sorted(list(meas_per_factor.keys()))
 
-    scaled_meas_cov = meas_cov.divide(
-        loadings, axis=0).divide(loadings, axis=1)
+    scaled_meas_cov = meas_cov.divide(loadings, axis=0).divide(loadings, axis=1)
 
     diag_bool = np.eye(len(scaled_meas_cov), dtype=bool)
-    diag_data = scaled_meas_cov.copy(deep=True).values[diag_bool]
+    diag_data = scaled_meas_cov.copy(deep=True).to_numpy()[diag_bool]
     diag_series = pd.Series(
-        data=diag_data, index=scaled_meas_cov.index,
-        name='meas_error_variances')
-    scaled_meas_cov.values[diag_bool] = np.nan
+        data=diag_data, index=scaled_meas_cov.index, name="meas_error_variances"
+    )
+    scaled_meas_cov.to_numpy()[diag_bool] = np.nan
     # print('\n\nrelevant_parts_of_cov_matrix\n')
     factor_covs = []
     for f1, factor1 in enumerate(factors):
@@ -206,8 +202,9 @@ def factor_covs_and_measurement_error_variances(
     return factor_covs, meas_error_variances
 
 
-def iv_reg_array_dict(depvar_name, indepvar_names, instrument_names,
-                      transition_name, data):
+def iv_reg_array_dict(
+    depvar_name, indepvar_names, instrument_names, transition_name, data
+):
     """Prepare the data arrays for an iv regression.
 
     Args:
@@ -228,29 +225,32 @@ def iv_reg_array_dict(depvar_name, indepvar_names, instrument_names,
 
     """
     arr_dict = {}
-    used_variables = \
-        [('y', depvar_name)] + [('x', indep) for indep in indepvar_names] + \
-        [('z', instr) for sublist in instrument_names for instr in sublist]
+    used_variables = (
+        [("y", depvar_name)]
+        + [("x", indep) for indep in indepvar_names]
+        + [("z", instr) for sublist in instrument_names for instr in sublist]
+    )
 
     data = data[used_variables].dropna()
-    for category in ['x', 'z']:
-        data[(category, 'constant')] = 1.0
+    for category in ["x", "z"]:
+        data[(category, "constant")] = 1.0
 
-    arr_dict['depvar_arr'] = data[('y', depvar_name)].values
+    arr_dict["depvar_arr"] = data[("y", depvar_name)].to_numpy()
 
-    formula_func = getattr(tf, 'iv_formula_{}'.format(transition_name))
-    indep_formula, instr_formula = formula_func(
-        indepvar_names, instrument_names)
-    arr_dict['indepvars_arr'] = \
-        dmatrix(indep_formula, data=data['x'], return_type='dataframe').values
-    arr_dict['instruments_arr'] = \
-        dmatrix(instr_formula, data=data['z'], return_type='dataframe').values
+    formula_func = getattr(tf, "iv_formula_{}".format(transition_name))
+    indep_formula, instr_formula = formula_func(indepvar_names, instrument_names)
+    arr_dict["indepvars_arr"] = dmatrix(
+        indep_formula, data=data["x"], return_type="dataframe"
+    ).to_numpy()
+    arr_dict["instruments_arr"] = dmatrix(
+        instr_formula, data=data["z"], return_type="dataframe"
+    ).to_numpy()
 
-    arr_dict['non_missing_index'] = data.index
+    arr_dict["non_missing_index"] = data.index
     return arr_dict
 
 
-def iv_reg(depvar_arr, indepvars_arr, instruments_arr, fit_method='2sls'):
+def iv_reg(depvar_arr, indepvars_arr, instruments_arr, fit_method="2sls"):
     """Estimate a linear-in-parameters instrumental variable equation via GMM.
 
     All input arrays must not contain NaNs and constants must be included
@@ -277,7 +277,7 @@ def iv_reg(depvar_arr, indepvars_arr, instruments_arr, fit_method='2sls'):
     w = _iv_gmm_weights(z)
     beta = _iv_math(y, x, z, w)
 
-    if fit_method == 'optimal':
+    if fit_method == "optimal":
         u = y - np.dot(x, beta)
         w = _iv_gmm_weights(z, u)
         beta = _iv_math(y, x, z, w)
@@ -291,9 +291,9 @@ def _iv_math(y, x, z, w):
     try:
         inverse_part = np.linalg.pinv(np.dot(helper, xTz.T))
     except:
-        print('non_invertible_matrix:\n', np.dot(helper, xTz.T))
-        print('z_matrix:\n', z)
-        print('helper:\n', helper)
+        print("non_invertible_matrix:\n", np.dot(helper, xTz.T))
+        print("z_matrix:\n", z)
+        print("helper:\n", helper)
     y_part = helper.dot(z.T.dot(y))
     beta = inverse_part.dot(y_part)
 
@@ -306,8 +306,8 @@ def _iv_gmm_weights(z, u=None):
         try:
             w = np.linalg.pinv(np.dot(z.T, z) / nobs)
         except:
-            print('non_invertible_matrix:\n', np.dot(z.T, z) / nobs)
-            print('z_matrix:\n', z)
+            print("non_invertible_matrix:\n", np.dot(z.T, z) / nobs)
+            print("z_matrix:\n", z)
     else:
         u_squared = u ** 2
         outerprod = z.reshape(nobs, 1, k_prime) * z.reshape(nobs, k_prime, 1)
@@ -317,9 +317,11 @@ def _iv_gmm_weights(z, u=None):
 
 
 def large_df_for_iv_equations(depvar_data, indepvars_data, instruments_data):
-    to_concat = [prepend_column_level(depvar_data, 'y'),
-                 prepend_column_level(indepvars_data, 'x'),
-                 prepend_column_level(instruments_data, 'z')]
+    to_concat = [
+        prepend_column_level(depvar_data, "y"),
+        prepend_column_level(indepvars_data, "x"),
+        prepend_column_level(instruments_data, "z"),
+    ]
 
     df = pd.concat(to_concat, axis=1)
     return df
@@ -333,11 +335,10 @@ def transition_error_variance_from_u_covs(u_covs, loadings):
 
 
 def anchoring_error_variance_from_u_vars(
-        u_vars, indepvars_permutations, anch_loadings, meas_loadings,
-        anchored_factors):
+    u_vars, indepvars_permutations, anch_loadings, meas_loadings, anchored_factors
+):
 
-    meas_noise_df = pd.DataFrame(0.0, index=u_vars.index,
-                                 columns=anchored_factors)
+    meas_noise_df = pd.DataFrame(0.0, index=u_vars.index, columns=anchored_factors)
 
     for p, perm in enumerate(indepvars_permutations):
         for f, factor in enumerate(anchored_factors):
@@ -351,8 +352,15 @@ def anchoring_error_variance_from_u_vars(
     return anch_variance
 
 
-def all_variables_for_iv_equations(factors, included_factors, transition_names, measurements, period, factor=None,
-                                   anchored_factors=None):
+def all_variables_for_iv_equations(
+    factors,
+    included_factors,
+    transition_names,
+    measurements,
+    period,
+    factor=None,
+    anchored_factors=None,
+):
     """List of lists with names of measurements of included factors.
 
     Args:
@@ -387,15 +395,20 @@ def all_variables_for_iv_equations(factors, included_factors, transition_names, 
             sublist = [form_string.format(m) for m in measurements[inc][0]]
         else:
             form_string = "{}" + suffix
-            sublist = [
-                form_string.format(m) for m in measurements[inc][period]
-            ]
+            sublist = [form_string.format(m) for m in measurements[inc][period]]
         varlist.append(sublist)
     return varlist
 
 
-def variable_permutations_for_iv_equations(factors, included_factors, transition_names, measurements, anchored_factors,
-                                           period, factor=None):
+def variable_permutations_for_iv_equations(
+    factors,
+    included_factors,
+    transition_names,
+    measurements,
+    anchored_factors,
+    period,
+    factor=None,
+):
     """Nested lists with permutations of variable names for iv equations.
 
     In the WA estimator, the transition equations are rewritten in an
@@ -426,9 +439,15 @@ def variable_permutations_for_iv_equations(factors, included_factors, transition
         included factor.
 
     """
-    all_variables_for_indepvars = all_variables_for_iv_equations(factors, included_factors,
-                                                                 transition_names, measurements, period,
-                                                                 factor, anchored_factors)
+    all_variables_for_indepvars = all_variables_for_iv_equations(
+        factors,
+        included_factors,
+        transition_names,
+        measurements,
+        period,
+        factor,
+        anchored_factors,
+    )
     indepvar_permutations = list(map(list, product(*all_variables_for_indepvars)))
 
     instrument_permutations = []
@@ -441,32 +460,50 @@ def variable_permutations_for_iv_equations(factors, included_factors, transition
     return indepvar_permutations, instrument_permutations
 
 
-def number_of_iv_parameters(factors, transition_names, included_factors, measurements, anchored_factors, periods,
-                            factor=None, anch_equation=False):
+def number_of_iv_parameters(
+    factors,
+    transition_names,
+    included_factors,
+    measurements,
+    anchored_factors,
+    periods,
+    factor=None,
+    anch_equation=False,
+):
     """Number of parameters in the IV equation of a factor."""
     if anch_equation is False:
         assert factor is not None, ""
         f = factors.index(factor)
         trans_name = transition_names[f]
-        x_list, z_list = variable_permutations_for_iv_equations(factors, included_factors,
-                                                                transition_names, measurements,
-                                                                anchored_factors, 0, factor)
+        x_list, z_list = variable_permutations_for_iv_equations(
+            factors,
+            included_factors,
+            transition_names,
+            measurements,
+            anchored_factors,
+            0,
+            factor,
+        )
     else:
         trans_name = "linear"
-        x_list, z_list = variable_permutations_for_iv_equations(factors, included_factors,
-                                                                transition_names, measurements,
-                                                                anchored_factors,
-                                                                periods[-1], None
-                                                                )
+        x_list, z_list = variable_permutations_for_iv_equations(
+            factors,
+            included_factors,
+            transition_names,
+            measurements,
+            anchored_factors,
+            periods[-1],
+            None,
+        )
 
     example_x, example_z = x_list[0], z_list[0]
-    x_formula, _ = getattr(tf, "iv_formula_{}".format(trans_name))(
-        example_x, example_z
-    )
+    x_formula, _ = getattr(tf, "iv_formula_{}".format(trans_name))(example_x, example_z)
     return x_formula.count("+") + 1
 
 
-def extended_meas_coeffs(storage_df, transition_names, factors, measurements, coeff_type, period):
+def extended_meas_coeffs(
+    storage_df, transition_names, factors, measurements, coeff_type, period
+):
     """Series of coefficients for construction of residual measurements.
 
     Args:
@@ -484,9 +521,7 @@ def extended_meas_coeffs(storage_df, transition_names, factors, measurements, co
         for f, factor in enumerate(factors):
             if transition_names[f] == "constant":
                 initial_meas += measurements[factor][0]
-        constant_factor_coeffs = storage_df.loc[0, coeff_type].loc[
-            initial_meas
-        ]
+        constant_factor_coeffs = storage_df.loc[0, coeff_type].loc[initial_meas]
         constant_factor_coeffs.index = [
             "{}_copied".format(m) for m in constant_factor_coeffs.index
         ]
@@ -494,7 +529,9 @@ def extended_meas_coeffs(storage_df, transition_names, factors, measurements, co
     return coeffs
 
 
-def residual_measurements(storage_df, transition_names, factors, measurements, y_data, period):
+def residual_measurements(
+    storage_df, transition_names, factors, measurements, y_data, period
+):
     """Residual measurements for the wa estimator in one period.
 
     Args:
@@ -506,18 +543,30 @@ def residual_measurements(storage_df, transition_names, factors, measurements, y
         period.
 
     """
-    loadings = extended_meas_coeffs(storage_df, transition_names, factors, measurements,
-                                    "loadings", period)
-    intercepts = extended_meas_coeffs(storage_df, transition_names, factors, measurements,
-                                      "intercepts", period)
+    loadings = extended_meas_coeffs(
+        storage_df, transition_names, factors, measurements, "loadings", period
+    )
+    intercepts = extended_meas_coeffs(
+        storage_df, transition_names, factors, measurements, "intercepts", period
+    )
 
     res_meas = (y_data[period] - intercepts) / loadings
     res_meas.columns = [col + "_resid" for col in res_meas.columns]
     return res_meas
 
 
-def all_iv_estimates(periods, factors, included_factors, transition_names, measurements, anchored_factors, anch_outcome,
-                     period, data, factor=None):
+def all_iv_estimates(
+    periods,
+    factors,
+    included_factors,
+    transition_names,
+    measurements,
+    anchored_factors,
+    anch_outcome,
+    period,
+    data,
+    factor=None,
+):
     """Coeffs and residual covs for all IV equations of factor in period.
 
     Args:
@@ -544,23 +593,38 @@ def all_iv_estimates(periods, factors, included_factors, transition_names, measu
     if period != last_period:
         assert factor is not None, ""
 
-    indep_permutations, instr_permutations = variable_permutations_for_iv_equations(factors,
-                                                                                    included_factors,
-                                                                                    transition_names,
-                                                                                    measurements,
-                                                                                    anchored_factors,
-                                                                                    period, factor
-                                                                                    )
+    indep_permutations, instr_permutations = variable_permutations_for_iv_equations(
+        factors,
+        included_factors,
+        transition_names,
+        measurements,
+        anchored_factors,
+        period,
+        factor,
+    )
 
     if period != last_period:
-        nr_deltas = number_of_iv_parameters(factors, transition_names, included_factors,
-                                            measurements, anchored_factors, periods, factor)
+        nr_deltas = number_of_iv_parameters(
+            factors,
+            transition_names,
+            included_factors,
+            measurements,
+            anchored_factors,
+            periods,
+            factor,
+        )
         trans_name = transition_names[factors.index(factor)]
         depvars = measurements[factor][period + 1]
     else:
-        nr_deltas = number_of_iv_parameters(factors, transition_names, included_factors,
-                                            measurements, anchored_factors, periods,
-                                            anch_equation=True)
+        nr_deltas = number_of_iv_parameters(
+            factors,
+            transition_names,
+            included_factors,
+            measurements,
+            anchored_factors,
+            periods,
+            anch_equation=True,
+        )
         trans_name = "linear"
         depvars = [anch_outcome]
 
@@ -594,9 +658,7 @@ def all_iv_estimates(periods, factors, included_factors, transition_names, measu
             if period != last_period:
                 for dep2 in depvars:
                     if dep2 != dep:
-                        u_cov_df.loc[(dep, counter), dep2] = u.cov(
-                            data[("y", dep2)]
-                        )
+                        u_cov_df.loc[(dep, counter), dep2] = u.cov(data[("y", dep2)])
                     else:
                         u_cov_df.loc[(dep, counter), dep2] = np.nan
             else:
@@ -608,7 +670,9 @@ def all_iv_estimates(periods, factors, included_factors, transition_names, measu
         return iv_coeffs, u_var_sr
 
 
-def model_coeffs_from_iv_coeffs_args_dict(normalizations, stagemap, identified_restrictions, period, factor):
+def model_coeffs_from_iv_coeffs_args_dict(
+    normalizations, stagemap, identified_restrictions, period, factor
+):
     """Dictionary with optional arguments of model_coeffs_from_iv_coeffs.
 
     The arguments contain the normalizations and identified restrictions
@@ -636,7 +700,9 @@ def model_coeffs_from_iv_coeffs_args_dict(normalizations, stagemap, identified_r
     return args
 
 
-def update_identified_restrictions(identified_restrictions, stage, factor, coeff_sum, intercept):
+def update_identified_restrictions(
+    identified_restrictions, stage, factor, coeff_sum, intercept
+):
     """Update self.identified_restrictions if necessary.
 
     Identified restrictions are sums of coefficients of transition
@@ -650,16 +716,14 @@ def update_identified_restrictions(identified_restrictions, stage, factor, coeff
 
     """
     if coeff_sum is not None:
-        identified_restrictions["coeff_sum_value"].loc[
-            stage, factor
-        ] = coeff_sum
+        identified_restrictions["coeff_sum_value"].loc[stage, factor] = coeff_sum
     if intercept is not None:
-        identified_restrictions["trans_intercept_value"].loc[
-            stage, factor
-        ] = intercept
+        identified_restrictions["trans_intercept_value"].loc[stage, factor] = intercept
 
 
-def _measurement_per_factor_dict(factors, transition_names, measurements, period, include_copied=True):
+def _measurement_per_factor_dict(
+    factors, transition_names, measurements, period, include_copied=True
+):
     d = {}
     for f, factor in enumerate(factors):
         if transition_names[f] != "constant" or period == 0:
@@ -670,9 +734,24 @@ def _measurement_per_factor_dict(factors, transition_names, measurements, period
     return d
 
 
-def calculate_wa_estimated_quantities(identified_restrictions, y_data, measurements, normalizations, storage_df, factors,
-                                      transition_names, included_factors, nstages, stages, periods, stagemap, anchored_factors,
-                                      anch_outcome, wa_period_weights, anchoring):
+def calculate_wa_estimated_quantities(
+    identified_restrictions,
+    y_data,
+    measurements,
+    normalizations,
+    storage_df,
+    factors,
+    transition_names,
+    included_factors,
+    nstages,
+    stages,
+    periods,
+    stagemap,
+    anchored_factors,
+    anch_outcome,
+    wa_period_weights,
+    anchoring,
+):
     """Helper function.
 
     In this function the wa estimates are calculated, but not yet written
@@ -684,9 +763,7 @@ def calculate_wa_estimated_quantities(identified_restrictions, y_data, measureme
     t = 0
     # identify measurement system and factor means in initial period
     meas_coeffs, X_zero = initial_meas_coeffs(
-        y_data=y_data[t],
-        measurements=measurements,
-        normalizations=normalizations,
+        y_data=y_data[t], measurements=measurements, normalizations=normalizations
     )
     storage_df.update(prepend_index_level(meas_coeffs, t))
 
@@ -695,13 +772,11 @@ def calculate_wa_estimated_quantities(identified_restrictions, y_data, measureme
     for f, factor in enumerate(factors):
         func = "nr_coeffs_{}".format(transition_names[f])
         width = getattr(tf, func)(
-            included_factors=included_factors[f], params_type='short'
+            included_factors=included_factors[f], params_type="short"
         )
         trans_coeff_storage.append(np.zeros((nstages, int(width))))
     trans_var_cols = [
-        fac
-        for f, fac in enumerate(factors)
-        if transition_names[f] != "constant"
+        fac for f, fac in enumerate(factors) if transition_names[f] != "constant"
     ]
     trans_var_df = pd.DataFrame(data=0.0, columns=trans_var_cols, index=stages)
 
@@ -709,8 +784,9 @@ def calculate_wa_estimated_quantities(identified_restrictions, y_data, measureme
     # all model parameters of interest from the iv parameters
     for t, stage in zip(periods[:-1], stagemap[:-1]):
         # generate the large IV DataFrame for period t
-        resid_meas = residual_measurements(storage_df, transition_names, factors, measurements,
-                                           y_data, period=t)
+        resid_meas = residual_measurements(
+            storage_df, transition_names, factors, measurements, y_data, period=t
+        )
         iv_data = large_df_for_iv_equations(
             depvar_data=y_data[t + 1],
             indepvars_data=resid_meas,
@@ -721,19 +797,31 @@ def calculate_wa_estimated_quantities(identified_restrictions, y_data, measureme
             trans_name = transition_names[f]
             if trans_name != "constant":
                 # get iv estimates (parameters and residual covariances)
-                iv_coeffs, u_cov_df = all_iv_estimates(periods, factors, included_factors,
-                                                       transition_names, measurements,
-                                                       anchored_factors, anch_outcome, t, iv_data, factor)
+                iv_coeffs, u_cov_df = all_iv_estimates(
+                    periods,
+                    factors,
+                    included_factors,
+                    transition_names,
+                    measurements,
+                    anchored_factors,
+                    anch_outcome,
+                    t,
+                    iv_data,
+                    factor,
+                )
 
                 # get model parameters from iv parameters
                 model_coeffs_func = getattr(
                     tf, "model_coeffs_from_iv_coeffs_" + trans_name
                 )
 
-                optional_args = model_coeffs_from_iv_coeffs_args_dict(normalizations, stagemap,
-                                                                      identified_restrictions,
-                                                                      period=t + 1, factor=factor
-                                                                      )
+                optional_args = model_coeffs_from_iv_coeffs_args_dict(
+                    normalizations,
+                    stagemap,
+                    identified_restrictions,
+                    period=t + 1,
+                    factor=factor,
+                )
 
                 meas_coeffs, gammas, n_i_coeff_sum, n_i_intercept = model_coeffs_func(
                     iv_coeffs=iv_coeffs, **optional_args
@@ -743,9 +831,9 @@ def calculate_wa_estimated_quantities(identified_restrictions, y_data, measureme
                 weight = wa_period_weights.loc[t, factor]
                 trans_coeff_storage[f][stage] += weight * gammas
 
-                update_identified_restrictions(identified_restrictions,
-                                               stage, factor, n_i_coeff_sum, n_i_intercept
-                                               )
+                update_identified_restrictions(
+                    identified_restrictions, stage, factor, n_i_coeff_sum, n_i_intercept
+                )
 
                 # get transition error variance from residual covariances
                 trans_var_df.loc[stage, factor] += (
@@ -757,26 +845,35 @@ def calculate_wa_estimated_quantities(identified_restrictions, y_data, measureme
 
     if anchoring is True:
         t = periods[-1]
-        resid_meas = residual_measurements(storage_df, transition_names, factors, measurements,
-                                           y_data, period=t)
-        iv_data = large_df_for_iv_equations(
-            depvar_data=y_data[t],
-            indepvars_data=resid_meas,
-            instruments_data=y_data[t],
+        resid_meas = residual_measurements(
+            storage_df, transition_names, factors, measurements, y_data, period=t
         )
-        iv_coeffs, u_var_sr = all_iv_estimates(periods, factors, included_factors,
-                                               transition_names, measurements, anchored_factors,
-                                               anch_outcome, t, iv_data)
-        deltas = iv_coeffs.mean().values
+        iv_data = large_df_for_iv_equations(
+            depvar_data=y_data[t], indepvars_data=resid_meas, instruments_data=y_data[t]
+        )
+        iv_coeffs, u_var_sr = all_iv_estimates(
+            periods,
+            factors,
+            included_factors,
+            transition_names,
+            measurements,
+            anchored_factors,
+            anch_outcome,
+            t,
+            iv_data,
+        )
+        deltas = iv_coeffs.mean().to_numpy()
         anch_intercept = deltas[-1]
         anch_loadings = deltas[:-1]
-        indep_permutations, instr_permutations = variable_permutations_for_iv_equations(factors,
-                                                                                        included_factors,
-                                                                                        transition_names,
-                                                                                        measurements,
-                                                                                        anchored_factors,
-                                                                                        period=t, factor=None
-                                                                                        )
+        indep_permutations, instr_permutations = variable_permutations_for_iv_equations(
+            factors,
+            included_factors,
+            transition_names,
+            measurements,
+            anchored_factors,
+            period=t,
+            factor=None,
+        )
         anch_variance = anchoring_error_variance_from_u_vars(
             u_vars=u_var_sr,
             indepvars_permutations=indep_permutations,
@@ -792,12 +889,20 @@ def calculate_wa_estimated_quantities(identified_restrictions, y_data, measureme
     # calculate measurement error variances and factor covariance matrices
     factor_cov_list = []
     for t in periods:
-        loadings = extended_meas_coeffs(storage_df, transition_names, factors, measurements,
-                                        period=t, coeff_type="loadings")
+        loadings = extended_meas_coeffs(
+            storage_df,
+            transition_names,
+            factors,
+            measurements,
+            period=t,
+            coeff_type="loadings",
+        )
         all_meas = list(loadings.index)
         meas_cov = y_data[t][all_meas].cov()
         # loadings = self.storage_df.loc[t, 'loadings']
-        meas_per_f = _measurement_per_factor_dict(factors, transition_names, measurements, period=t)
+        meas_per_f = _measurement_per_factor_dict(
+            factors, transition_names, measurements, period=t
+        )
 
         p, meas_error_variances = factor_covs_and_measurement_error_variances(
             meas_cov=meas_cov, loadings=loadings, meas_per_factor=meas_per_f

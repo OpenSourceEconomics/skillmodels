@@ -1,4 +1,5 @@
 from skillmodels.estimation import wa_functions as wf
+
 # from numpy.testing import assert_array_equal as aae
 from numpy.testing import assert_array_almost_equal as aaae
 import numpy as np
@@ -8,211 +9,243 @@ from pandas.util.testing import assert_series_equal, assert_frame_equal
 from statsmodels.sandbox.regression.gmm import LinearIVGMM
 from unittest.mock import patch, call
 
-from skillmodels.estimation.wa_functions import residual_measurements, model_coeffs_from_iv_coeffs_args_dict, \
-    all_variables_for_iv_equations, variable_permutations_for_iv_equations, number_of_iv_parameters, \
-    extended_meas_coeffs
+from skillmodels.estimation.wa_functions import (
+    residual_measurements,
+    model_coeffs_from_iv_coeffs_args_dict,
+    all_variables_for_iv_equations,
+    variable_permutations_for_iv_equations,
+    number_of_iv_parameters,
+    extended_meas_coeffs,
+)
 
 
 class TestInitialLoadingsAndIntercepts:
     def setup(self):
         np.random.seed(84320)
-        self.true_loadings = np.array([1., 2., 3, 4])
+        self.true_loadings = np.array([1.0, 2.0, 3, 4])
         factor = np.random.normal(scale=1e-2, size=(10000, 1))
-        self.true_intercepts = np.array([4., 0, 2, 1])
+        self.true_intercepts = np.array([4.0, 0, 2, 1])
         measurement_data = factor * self.true_loadings + self.true_intercepts
-        self.data = pd.DataFrame(data=measurement_data,
-                                 columns=['m1', 'm2', 'm3', 'm4'])
+        self.data = pd.DataFrame(
+            data=measurement_data, columns=["m1", "m2", "m3", "m4"]
+        )
         self.true_loadings_series = pd.Series(
-            data=self.true_loadings, name='loadings', index=self.data.columns)
+            data=self.true_loadings, name="loadings", index=self.data.columns
+        )
         self.true_intercepts_series = pd.Series(
-            data=self.true_intercepts, name='intercepts',
-            index=self.data.columns)
+            data=self.true_intercepts, name="intercepts", index=self.data.columns
+        )
 
     def test_loadings_from_covs_normalized_to_true_value(self):
-        true_normalization = {'m1': 1}
-        calculated_loadings = wf.loadings_from_covs(self.data,
-                                                    true_normalization)
+        true_normalization = {"m1": 1}
+        calculated_loadings = wf.loadings_from_covs(self.data, true_normalization)
         expected_loadings = self.true_loadings_series
         assert_series_equal(calculated_loadings, expected_loadings)
 
     def test_loadings_from_covs_normalized_to_different_value(self):
         multiple = 1.5
-        different_normalization = {'m2': multiple * 2}
-        calculated_loadings = wf.loadings_from_covs(self.data,
-                                                    different_normalization)
-        expected_loadings = (multiple * self.true_loadings_series)
+        different_normalization = {"m2": multiple * 2}
+        calculated_loadings = wf.loadings_from_covs(self.data, different_normalization)
+        expected_loadings = multiple * self.true_loadings_series
         assert_series_equal(calculated_loadings, expected_loadings)
 
     def test_intercepts_from_means_with_true_normalization(self):
         expected_intercepts = self.true_intercepts_series
-        true_normalization = {'m3': 2.0}
+        true_normalization = {"m3": 2.0}
         calc_intercepts, calc_mean = wf.intercepts_from_means(
-            self.data, true_normalization, self.true_loadings_series)
+            self.data, true_normalization, self.true_loadings_series
+        )
         assert_series_equal(calc_intercepts, expected_intercepts)
         assert_almost_equal(calc_mean, 0.0, places=2)
 
     def test_intercepts_from_means_with_different_normalization(self):
         difference = 4
-        different_normalization = {'m2': 0 + difference}
+        different_normalization = {"m2": 0 + difference}
         expected_mean = -2.0
         expected_intercepts = pd.Series(
-            data=[6., 4, 8, 9], index=self.true_intercepts_series.index,
-            name='intercepts')
+            data=[6.0, 4, 8, 9],
+            index=self.true_intercepts_series.index,
+            name="intercepts",
+        )
         calc_intercepts, calc_mean = wf.intercepts_from_means(
-            self.data, different_normalization, self.true_loadings_series)
+            self.data, different_normalization, self.true_loadings_series
+        )
         assert_series_equal(calc_intercepts, expected_intercepts)
         assert_almost_equal(calc_mean, expected_mean, places=2)
 
     def test_intercepts_from_means_without_normalization(self):
         expected_intercepts = self.true_intercepts_series
         calc_intercepts, calc_mean = wf.intercepts_from_means(
-            self.data, [], self.true_loadings_series)
-        aaae(calc_intercepts.values, expected_intercepts.values, decimal=3)
+            self.data, [], self.true_loadings_series
+        )
+        aaae(calc_intercepts.to_numpy(), expected_intercepts.to_numpy(), decimal=3)
         assert_equal(calc_mean, None)
 
 
 class TestInitialMeasCoeffsIntegrationTest:
     def setup(self):
-        self.factors = ['f1', 'f2']
-        self.measurements = {
-            'f1': [['y1', 'y2', 'y3']],
-            'f2': [['y4', 'y5', 'y6']]}
+        self.factors = ["f1", "f2"]
+        self.measurements = {"f1": [["y1", "y2", "y3"]], "f2": [["y4", "y5", "y6"]]}
         self.normalizations = {
-            'f1': {'intercepts': [{'y1': 4}], 'loadings': [{'y2': 2}]},
-            'f2': {'intercepts': [{'y4': 2}], 'loadings': [{'y5': 4}]}}
+            "f1": {"intercepts": [{"y1": 4}], "loadings": [{"y2": 2}]},
+            "f2": {"intercepts": [{"y4": 2}], "loadings": [{"y5": 4}]},
+        }
 
-        self.true_loadings = np.array([[1., 2., 0.5], [3, 4, 1]])
-        self.true_intercepts = np.array([[4., 0, 1], [2, 1, 0.0]])
+        self.true_loadings = np.array([[1.0, 2.0, 0.5], [3, 4, 1]])
+        self.true_intercepts = np.array([[4.0, 0, 1], [2, 1, 0.0]])
 
         to_concat = []
         for f, factor in enumerate(self.factors):
             factor_data = np.random.normal(size=(10000, 1))
-            measurements = factor_data * self.true_loadings[f] + \
-                self.true_intercepts[f]
-            to_concat.append(pd.DataFrame(
-                data=measurements, columns=self.measurements[factor][0]))
+            measurements = factor_data * self.true_loadings[f] + self.true_intercepts[f]
+            to_concat.append(
+                pd.DataFrame(data=measurements, columns=self.measurements[factor][0])
+            )
         self.y_data = pd.concat(to_concat, axis=1)
 
-        cols = ['loadings', 'intercepts']
-        data = np.array([
-            [1.0, 4.0],
-            [2.0, 0.0],
-            [0.5, 1],
-            [3.0, 2.0],
-            [4.0, 1.0],
-            [1.0, 0.0]])
+        cols = ["loadings", "intercepts"]
+        data = np.array(
+            [[1.0, 4.0], [2.0, 0.0], [0.5, 1], [3.0, 2.0], [4.0, 1.0], [1.0, 0.0]]
+        )
 
         self.expected_meas_coeffs = pd.DataFrame(
-            data=data, columns=cols,
-            index=['y1', 'y2', 'y3', 'y4', 'y5', 'y6'])
+            data=data, columns=cols, index=["y1", "y2", "y3", "y4", "y5", "y6"]
+        )
 
         self.expected_x_zeros = np.array([0.0, 0.0])
 
     def test_initial_meas_coeffs(self):
         self.calc_meas_coeffs, self.calc_x_zeros = wf.initial_meas_coeffs(
-            self.y_data, self.measurements, self.normalizations)
+            self.y_data, self.measurements, self.normalizations
+        )
         assert_frame_equal(self.expected_meas_coeffs, self.calc_meas_coeffs)
 
     def test_x_zeros(self):
         self.calc_meas_coeffs, self.calc_x_zeros = wf.initial_meas_coeffs(
-            self.y_data, self.measurements, self.normalizations)
+            self.y_data, self.measurements, self.normalizations
+        )
         aaae(self.expected_x_zeros, self.calc_x_zeros, decimal=2)
 
 
 class TestFactorCovsAndMeasurementErrorVariances:
     def setup(self):
         # nobs = 50000
-        self.factors = ['f1', 'f2']
-        self.meas_per_factor = {
-            'f1': ['y1', 'y2', 'y3'],
-            'f2': ['y4', 'y5', 'y6']}
+        self.factors = ["f1", "f2"]
+        self.meas_per_factor = {"f1": ["y1", "y2", "y3"], "f2": ["y4", "y5", "y6"]}
 
-        meas_names = self.meas_per_factor['f1'] + self.meas_per_factor['f2']
+        meas_names = self.meas_per_factor["f1"] + self.meas_per_factor["f2"]
 
         self.loading_series = pd.Series(
-            data=np.arange(start=1, step=1, stop=7), index=meas_names)
+            data=np.arange(start=1, step=1, stop=7), index=meas_names
+        )
 
         meas_cov_data = np.array(
-            [[1.1, 2.0, 3.0, 0.4, 0.5, 0.6],
-             [2.0, 4.2, 6.0, 0.8, 1.0, 1.2],
-             [3.0, 6.0, 9.3, 1.2, 1.5, 1.8],
-             [0.4, 0.8, 1.2, 32.4, 40.0, 48.0],
-             [0.5, 1.0, 1.5, 40.0, 50.5, 60.0],
-             [0.6, 1.2, 1.8, 48.0, 60.0, 72.6]])
+            [
+                [1.1, 2.0, 3.0, 0.4, 0.5, 0.6],
+                [2.0, 4.2, 6.0, 0.8, 1.0, 1.2],
+                [3.0, 6.0, 9.3, 1.2, 1.5, 1.8],
+                [0.4, 0.8, 1.2, 32.4, 40.0, 48.0],
+                [0.5, 1.0, 1.5, 40.0, 50.5, 60.0],
+                [0.6, 1.2, 1.8, 48.0, 60.0, 72.6],
+            ]
+        )
 
-        self.meas_cov = pd.DataFrame(data=meas_cov_data, columns=meas_names,
-                                     index=meas_names)
+        self.meas_cov = pd.DataFrame(
+            data=meas_cov_data, columns=meas_names, index=meas_names
+        )
 
         self.true_factor_cov_elements = np.array([1.0, 0.1, 2.0])
         self.true_epsilon_variances = pd.Series(
-            data=np.arange(start=0.1, step=0.1, stop=0.7), index=meas_names)
+            data=np.arange(start=0.1, step=0.1, stop=0.7), index=meas_names
+        )
 
     def test_factor_cov_matrix(self):
         expected_cov_matrix = self.true_factor_cov_elements
         calc_cov_matrix = wf.factor_covs_and_measurement_error_variances(
-            self.meas_cov, self.loading_series, self.meas_per_factor)[0]
+            self.meas_cov, self.loading_series, self.meas_per_factor
+        )[0]
         aaae(calc_cov_matrix, expected_cov_matrix)
 
     def test_epsilon_variances(self):
         expected_epsilon_variances = self.true_epsilon_variances
-        calc_epsilon_variances = \
-            wf.factor_covs_and_measurement_error_variances(
-                self.meas_cov, self.loading_series, self.meas_per_factor)[1]
+        calc_epsilon_variances = wf.factor_covs_and_measurement_error_variances(
+            self.meas_cov, self.loading_series, self.meas_per_factor
+        )[1]
         aaae(calc_epsilon_variances, expected_epsilon_variances)
 
 
 class TestIVRegArrayDict:
     def setup(self):
-        self.depvar_name = 'm1'
-        self.indepvar_names = ['m1_resid', 'm3_resid']
-        self.instrument_names = [['m2', 'm4']]
-        self.transition_name = 'some_func'
+        self.depvar_name = "m1"
+        self.indepvar_names = ["m1_resid", "m3_resid"]
+        self.instrument_names = [["m2", "m4"]]
+        self.transition_name = "some_func"
 
         cols = pd.MultiIndex.from_tuples(
-            [('y', 'm1'), ('x', 'm1_resid'), ('x', 'm3_resid'),
-             ('z', 'm2'), ('z', 'm4')])
+            [
+                ("y", "m1"),
+                ("x", "m1_resid"),
+                ("x", "m3_resid"),
+                ("z", "m2"),
+                ("z", "m4"),
+            ]
+        )
         dat = np.arange(15, dtype=float).reshape(3, 5)
         dat[2, 0] = np.nan
         self.data = pd.DataFrame(data=dat, columns=cols)
         self.formula_tuple = (
-            'm1_resid + m3_resid + m1_resid:m3_resid - 1',
-            'm2 + m4 + np.square(m4) - 1')
+            "m1_resid + m3_resid + m1_resid:m3_resid - 1",
+            "m2 + m4 + np.square(m4) - 1",
+        )
 
-    @patch('skillmodels.estimation.wa_functions.tf')
+    @patch("skillmodels.estimation.wa_functions.tf")
     def test_iv_reg_array_dict_y(self, mock_tf):
         mock_tf.iv_formula_some_func.return_value = self.formula_tuple
 
         expected_y = np.array([0, 5])
         calculated_y = wf.iv_reg_array_dict(
-            self.depvar_name, self.indepvar_names, self.instrument_names,
-            self.transition_name, self.data)['depvar_arr']
+            self.depvar_name,
+            self.indepvar_names,
+            self.instrument_names,
+            self.transition_name,
+            self.data,
+        )["depvar_arr"]
         aaae(expected_y, calculated_y)
 
-    @patch('skillmodels.estimation.wa_functions.tf')
+    @patch("skillmodels.estimation.wa_functions.tf")
     def test_iv_reg_array_dict_x(self, mock_tf):
         mock_tf.iv_formula_some_func.return_value = self.formula_tuple
 
-        expected_x = self.data['x'].copy()
-        expected_x['m1_resid:m3_resid'] = \
-            expected_x['m1_resid'] * expected_x['m3_resid']
-        expected_x = expected_x.values[:2, :]
+        expected_x = self.data["x"].copy()
+        expected_x["m1_resid:m3_resid"] = (
+            expected_x["m1_resid"] * expected_x["m3_resid"]
+        )
+        expected_x = expected_x.to_numpy()[:2, :]
 
         calculated_x = wf.iv_reg_array_dict(
-            self.depvar_name, self.indepvar_names, self.instrument_names,
-            self.transition_name, self.data)['indepvars_arr']
+            self.depvar_name,
+            self.indepvar_names,
+            self.instrument_names,
+            self.transition_name,
+            self.data,
+        )["indepvars_arr"]
         aaae(expected_x, calculated_x)
 
-    @patch('skillmodels.estimation.wa_functions.tf')
+    @patch("skillmodels.estimation.wa_functions.tf")
     def test_iv_reg_array_dict_z(self, mock_tf):
         mock_tf.iv_formula_some_func.return_value = self.formula_tuple
 
-        expected_z = self.data['z'].copy()
-        expected_z['np.square(m4)'] = np.square(expected_z['m4'])
-        expected_z = expected_z.values[:2, :]
+        expected_z = self.data["z"].copy()
+        expected_z["np.square(m4)"] = np.square(expected_z["m4"])
+        expected_z = expected_z.to_numpy()[:2, :]
 
         calculated_z = wf.iv_reg_array_dict(
-            self.depvar_name, self.indepvar_names, self.instrument_names,
-            self.transition_name, self.data)['instruments_arr']
+            self.depvar_name,
+            self.indepvar_names,
+            self.instrument_names,
+            self.transition_name,
+            self.data,
+        )["instruments_arr"]
         aaae(expected_z, calculated_z)
 
 
@@ -220,28 +253,33 @@ class TestIVMath:
     def setup(self):
         np.random.seed(40925)
         nobs = 2000
-        x_cov = np.array([
-            [2.0, 0.3, 0.4, 0.1],
-            [0.3, 4.0, 0.2, 0.1],
-            [0.4, 0.2, 3.5, 0.2],
-            [0.1, 0.1, 0.2, 5.0]])
+        x_cov = np.array(
+            [
+                [2.0, 0.3, 0.4, 0.1],
+                [0.3, 4.0, 0.2, 0.1],
+                [0.4, 0.2, 3.5, 0.2],
+                [0.1, 0.1, 0.2, 5.0],
+            ]
+        )
 
         # self.y = np.random.normal(loc=20, size=(nobs, 1))
         betas = np.array([0.2, 0.3, 0.4, 0.5])
         self.true_x = np.random.multivariate_normal(
-            mean=np.arange(4), cov=x_cov, size=(nobs))
+            mean=np.arange(4), cov=x_cov, size=(nobs)
+        )
         self.x = self.true_x + np.random.normal(
-            loc=0, scale=0.4, size=self.true_x.shape)
+            loc=0, scale=0.4, size=self.true_x.shape
+        )
         self.y = self.true_x.dot(betas) + np.random.normal(
-            loc=0, scale=0.5, size=(nobs))
-        self.z = self.true_x + np.random.normal(
-            loc=0, scale=0.4, size=self.x.shape)
+            loc=0, scale=0.5, size=(nobs)
+        )
+        self.z = self.true_x + np.random.normal(loc=0, scale=0.4, size=self.x.shape)
         self.w = np.eye(4)
 
     def test_iv_math(self):
         expected_beta = LinearIVGMM(
-            endog=self.y, exog=self.x, instrument=self.z).fitgmm(
-                start=None, weights=self.w)
+            endog=self.y, exog=self.x, instrument=self.z
+        ).fitgmm(start=None, weights=self.w)
         calc_beta = wf._iv_math(self.y, self.x, self.z, self.w)
 
         aaae(calc_beta.flatten(), expected_beta)
@@ -251,228 +289,301 @@ class TestIVGMMWeights:
     def setup(self):
         nobs = 2000
         self.z_large = np.random.normal(size=(nobs, 5))
-        self.z_small = np.array(
-            [[1, 0.5, 3], [0, 0, 2], [1, 1, 1], [0.1, 0.2, 0.3]])
+        self.z_small = np.array([[1, 0.5, 3], [0, 0, 2], [1, 1, 1], [0.1, 0.2, 0.3]])
         self.fake_y = np.ones(nobs)
         self.fake_x = np.ones((nobs, 2))
         self.u = np.array([1, 2, 3, 4])
 
     def test_iv_gmm_weights_2sls_comparison_with_statsmodels(self):
-        mod = LinearIVGMM(endog=self.fake_y, exog=self.fake_x,
-                          instrument=self.z_large)
+        mod = LinearIVGMM(endog=self.fake_y, exog=self.fake_x, instrument=self.z_large)
         expected_w = mod.start_weights(inv=False)
         calculated_w = wf._iv_gmm_weights(self.z_large)
         aaae(calculated_w, expected_w)
 
     def test_iv_gmm_weights_optimal_small_case_calculated_manually(self):
-        expected_w = np.array([[11.27417695, -10.54526749, -0.56018519],
-                               [-10.54526749, 10.51028807, 0.31481481],
-                               [-0.56018519, 0.31481481, 0.20833333]])
+        expected_w = np.array(
+            [
+                [11.27417695, -10.54526749, -0.56018519],
+                [-10.54526749, 10.51028807, 0.31481481],
+                [-0.56018519, 0.31481481, 0.20833333],
+            ]
+        )
         calculated_w = wf._iv_gmm_weights(self.z_small, self.u)
         aaae(calculated_w, expected_w)
 
 
 class TestLargeDFForIVEquations:
     def setup(self):
-        self.dep = pd.DataFrame(
-            data=np.ones((2, 2), dtype=float), columns=list('ab'))
-        self.indep = pd.DataFrame(data=np.ones((2, 1)) * 1.5, columns=['c'])
+        self.dep = pd.DataFrame(data=np.ones((2, 2), dtype=float), columns=list("ab"))
+        self.indep = pd.DataFrame(data=np.ones((2, 1)) * 1.5, columns=["c"])
         self.instr = pd.DataFrame(
-            data=np.arange(2, dtype=float).reshape(2, 1), columns=['d'])
+            data=np.arange(2, dtype=float).reshape(2, 1), columns=["d"]
+        )
 
-        expected_dat = np.array([[1., 1, 1.5, 0], [1, 1, 1.5, 1]])
+        expected_dat = np.array([[1.0, 1, 1.5, 0], [1, 1, 1.5, 1]])
         expected_cols = pd.MultiIndex.from_tuples(
-            [('y', 'a'), ('y', 'b'), ('x', 'c'), ('z', 'd')])
-        self.expected_df = pd.DataFrame(
-            data=expected_dat, columns=expected_cols)
+            [("y", "a"), ("y", "b"), ("x", "c"), ("z", "d")]
+        )
+        self.expected_df = pd.DataFrame(data=expected_dat, columns=expected_cols)
 
     def test_large_df_for_iv_equations(self):
         calc = wf.large_df_for_iv_equations(self.dep, self.indep, self.instr)
-        assert_frame_equal(calc, self.expected_df,)
+        assert_frame_equal(calc, self.expected_df)
 
 
 class TestTransitionErrorVarianceFromUCovs:
     def setup(self):
-        cols = ['m0', 'm1', 'm2']
-        ind = pd.MultiIndex.from_tuples([
-            ('m0', 0), ('m0', 1), ('m1', 0), ('m1', 1), ('m2', 0), ('m2', 1)])
+        cols = ["m0", "m1", "m2"]
+        ind = pd.MultiIndex.from_tuples(
+            [("m0", 0), ("m0", 1), ("m1", 0), ("m1", 1), ("m2", 0), ("m2", 1)]
+        )
         dat = np.ones((6, 3))
         self.u_covs = pd.DataFrame(data=dat, columns=cols, index=ind)
 
         self.loadings = pd.Series(data=[1, 2, 3], index=cols)
 
     def test_transition_error_variance_from_u_covs(self):
-        calc = wf.transition_error_variance_from_u_covs(
-            self.u_covs, self.loadings)
+        calc = wf.transition_error_variance_from_u_covs(self.u_covs, self.loadings)
         assert_almost_equal(calc, 0.3734567901234568)
 
 
 class TestResidualMeasurements:
     def setup(self):
-        intercepts = pd.Series(
-            [3.0, 2.0], name='intercepts', index=['m2', 'm1'])
-        loadings = pd.Series(
-            [2.0, 0.5], name='loadings', index=['m1', 'm2'])
+        intercepts = pd.Series([3.0, 2.0], name="intercepts", index=["m2", "m1"])
+        loadings = pd.Series([2.0, 0.5], name="loadings", index=["m1", "m2"])
         self.side_effect = [loadings, intercepts]
-        d = pd.DataFrame(data=np.array([[5, 4], [3, 2]]), columns=['m1', 'm2'])
+        d = pd.DataFrame(data=np.array([[5, 4], [3, 2]]), columns=["m1", "m2"])
 
-        self.y_data = ['dummy', d, 'dummy']
+        self.y_data = ["dummy", d, "dummy"]
         self.storage_df = pd.DataFrame()
         self.transition_names = []
         self.factors = []
         self.measurements = []
 
-    @patch('skillmodels.estimation.wa_functions.extended_meas_coeffs')
+    @patch("skillmodels.estimation.wa_functions.extended_meas_coeffs")
     def test_residual_measurements(self, mock_extcoeffs):
         mock_extcoeffs.side_effect = self.side_effect
-        expected_data = np.array([
-            [1.5, 2],
-            [0.5, -2]])
-        expected_resid = pd.DataFrame(
-            expected_data, columns=['m1_resid', 'm2_resid'])
-        calc_resid = residual_measurements(self.storage_df, self.transition_names, self.factors, self.measurements,
-                                           self.y_data, period=1)
+        expected_data = np.array([[1.5, 2], [0.5, -2]])
+        expected_resid = pd.DataFrame(expected_data, columns=["m1_resid", "m2_resid"])
+        calc_resid = residual_measurements(
+            self.storage_df,
+            self.transition_names,
+            self.factors,
+            self.measurements,
+            self.y_data,
+            period=1,
+        )
         assert_frame_equal(calc_resid, expected_resid)
 
 
 class TestWANorminfoDict:
     def setup(self):
         n = {}
-        n['f1'] = {'loadings': [['y1', 4], ['y2', 5], ['y3', 6]],
-                   'intercepts': [['y4', 7], ['y5', 8]]}
+        n["f1"] = {
+            "loadings": [["y1", 4], ["y2", 5], ["y3", 6]],
+            "intercepts": [["y4", 7], ["y5", 8]],
+        }
 
-        df = pd.DataFrame(data=[[None]] * 3, columns=['f1'])
+        df = pd.DataFrame(data=[[None]] * 3, columns=["f1"])
         self.identified_restrictions = {
-            'coeff_sum_value': df, 'trans_intercept_value': df}
+            "coeff_sum_value": df,
+            "trans_intercept_value": df,
+        }
         self.normalizations = n
         self.stagemap = [0, 1, 2, 2]
 
     def test_wa_norminfo_dict(self):
-        expected = {'loading_norminfo': ['y2', 5],
-                    'intercept_norminfo': ['y5', 8]}
-        calculated = model_coeffs_from_iv_coeffs_args_dict(self.normalizations, self.stagemap,
-                                                           self.identified_restrictions, 1, 'f1')
+        expected = {"loading_norminfo": ["y2", 5], "intercept_norminfo": ["y5", 8]}
+        calculated = model_coeffs_from_iv_coeffs_args_dict(
+            self.normalizations, self.stagemap, self.identified_restrictions, 1, "f1"
+        )
         assert_equal(calculated, expected)
 
 
 class TestAllVariablesForIVEquations:
     def setup(self):
         self.measurements = {
-            'f1': [['y01', 'y02'], ['y11', 'y12'], []],
-            'f2': [['y04', 'y05'], ['y14', 'y15'], []],
-            'f3': [['y07', 'y08'], [], []]}
+            "f1": [["y01", "y02"], ["y11", "y12"], []],
+            "f2": [["y04", "y05"], ["y14", "y15"], []],
+            "f3": [["y07", "y08"], [], []],
+        }
 
-        self.factors = ['f1', 'f2', 'f3']
-        self.included_factors = [['f1', 'f3'], ['f2', 'f3'], []]
-        self.transition_names = ['blubb', 'blubb', 'constant']
+        self.factors = ["f1", "f2", "f3"]
+        self.included_factors = [["f1", "f3"], ["f2", "f3"], []]
+        self.transition_names = ["blubb", "blubb", "constant"]
         self.periods = [0, 1, 2]
 
     def test_all_variables_for_iv_equations_constant_factor(self):
-        calc_meas_list = all_variables_for_iv_equations(self.factors, self.included_factors, self.transition_names,
-                                                        self.measurements, 1, 'f1')
+        calc_meas_list = all_variables_for_iv_equations(
+            self.factors,
+            self.included_factors,
+            self.transition_names,
+            self.measurements,
+            1,
+            "f1",
+        )
         expected_meas_list = [
-            ['y11_resid', 'y12_resid'],
-            ['y07_copied_resid', 'y08_copied_resid']]
+            ["y11_resid", "y12_resid"],
+            ["y07_copied_resid", "y08_copied_resid"],
+        ]
         assert_equal(calc_meas_list, expected_meas_list)
 
     def test_all_variables_for_iv_equations_non_constant(self):
-        calc_meas_list = all_variables_for_iv_equations(self.factors, self.included_factors, self.transition_names,
-                                                        self.measurements, 1, 'f2')
+        calc_meas_list = all_variables_for_iv_equations(
+            self.factors,
+            self.included_factors,
+            self.transition_names,
+            self.measurements,
+            1,
+            "f2",
+        )
         expected_meas_list = [
-            ['y14_resid', 'y15_resid'], ['y07_copied_resid', 'y08_copied_resid']]
+            ["y14_resid", "y15_resid"],
+            ["y07_copied_resid", "y08_copied_resid"],
+        ]
         assert_equal(calc_meas_list, expected_meas_list)
 
-    @patch('skillmodels.estimation.wa_functions.all_variables_for_iv_equations')
+    @patch("skillmodels.estimation.wa_functions.all_variables_for_iv_equations")
     def test_indepvar_permutations(self, mock_allvars):
-        ret_val = [['y1', 'y2'], ['y3', 'y4']]
+        ret_val = [["y1", "y2"], ["y3", "y4"]]
         self.anchored_factors = []
         mock_allvars.return_value = ret_val
 
-        expected_xs = [
-            ['y1', 'y3'], ['y1', 'y4'], ['y2', 'y3'], ['y2', 'y4']]
-        calc_xs = variable_permutations_for_iv_equations(self.factors, self.included_factors, self.transition_names,
-                                                         self.measurements, self.anchored_factors, 1, 1)[0]
+        expected_xs = [["y1", "y3"], ["y1", "y4"], ["y2", "y3"], ["y2", "y4"]]
+        calc_xs = variable_permutations_for_iv_equations(
+            self.factors,
+            self.included_factors,
+            self.transition_names,
+            self.measurements,
+            self.anchored_factors,
+            1,
+            1,
+        )[0]
         assert_equal(calc_xs, expected_xs)
 
-    @patch('skillmodels.estimation.wa_functions.all_variables_for_iv_equations')
+    @patch("skillmodels.estimation.wa_functions.all_variables_for_iv_equations")
     def test_instrument_permutations(self, mock_allvars):
         self.anchored_factors = []
-        ret_val = [['y1_resid', 'y2_resid'], ['y3_resid', 'y4_resid']]
+        ret_val = [["y1_resid", "y2_resid"], ["y3_resid", "y4_resid"]]
         mock_allvars.return_value = ret_val
 
         expected_zs = [
-            [['y2'], ['y4']],
-            [['y2'], ['y3']],
-            [['y1'], ['y4']],
-            [['y1'], ['y3']]]
-        calc_zs = variable_permutations_for_iv_equations(self.factors, self.included_factors, self.transition_names,
-                                                         self.measurements, self.anchored_factors, 1, 1)[1]
+            [["y2"], ["y4"]],
+            [["y2"], ["y3"]],
+            [["y1"], ["y4"]],
+            [["y1"], ["y3"]],
+        ]
+        calc_zs = variable_permutations_for_iv_equations(
+            self.factors,
+            self.included_factors,
+            self.transition_names,
+            self.measurements,
+            self.anchored_factors,
+            1,
+            1,
+        )[1]
 
         assert_equal(calc_zs, expected_zs)
 
 
 class TestNumberOfIVParameters:
     def setup(self):
-        self.factors = ['f1', 'f2', 'f3']
-        self.transition_names = ['bla', 'bla', 'blubb']
+        self.factors = ["f1", "f2", "f3"]
+        self.transition_names = ["bla", "bla", "blubb"]
         self.included_factors = []
         self.measurements = []
         self.anchored_factors = []
         self.periods = []
 
-    @patch('skillmodels.estimation.wa_functions.variable_permutations_for_iv_equations')
-    @patch('skillmodels.estimation.wa_functions.tf')
+    @patch("skillmodels.estimation.wa_functions.variable_permutations_for_iv_equations")
+    @patch("skillmodels.estimation.wa_functions.tf")
     def test_number_of_iv_parameters(self, mock_tf, mock_permut):
-        mock_tf.iv_formula_bla.return_value = ('1 + 2 + 3 + 4', '_')
-        ret = (['correct', 'wrong'], ['correct2', 'wrong2'])
+        mock_tf.iv_formula_bla.return_value = ("1 + 2 + 3 + 4", "_")
+        ret = (["correct", "wrong"], ["correct2", "wrong2"])
         mock_permut.return_value = ret
 
         expected_param_nr = 4
-        calc_res = number_of_iv_parameters(self.factors, self.transition_names, self.included_factors,
-                                           self.measurements, self.anchored_factors, self.periods, 'f1')
+        calc_res = number_of_iv_parameters(
+            self.factors,
+            self.transition_names,
+            self.included_factors,
+            self.measurements,
+            self.anchored_factors,
+            self.periods,
+            "f1",
+        )
         assert_equal(calc_res, expected_param_nr)
 
-    @patch('skillmodels.estimation.wa_functions.variable_permutations_for_iv_equations')
-    @patch('skillmodels.estimation.wa_functions.tf')
+    @patch("skillmodels.estimation.wa_functions.variable_permutations_for_iv_equations")
+    @patch("skillmodels.estimation.wa_functions.tf")
     def test_right_calls(self, mock_tf, mock_permut):
-        mock_tf.iv_formula_bla.return_value = ('1 + 2 + 3 + 4', '_')
-        ret = (['correct', 'wrong'], ['correct2', 'wrong2'])
+        mock_tf.iv_formula_bla.return_value = ("1 + 2 + 3 + 4", "_")
+        ret = (["correct", "wrong"], ["correct2", "wrong2"])
         mock_permut.return_value = ret
-        number_of_iv_parameters(self.factors, self.transition_names, self.included_factors, self.measurements,
-                                self.anchored_factors, self.periods, 'f1')
-        mock_tf.iv_formula_bla.assert_has_calls([call('correct', 'correct2')])
+        number_of_iv_parameters(
+            self.factors,
+            self.transition_names,
+            self.included_factors,
+            self.measurements,
+            self.anchored_factors,
+            self.periods,
+            "f1",
+        )
+        mock_tf.iv_formula_bla.assert_has_calls([call("correct", "correct2")])
 
 
 class TestExtendedMeasCoeffs:
     def setup(self):
-        self.factors = ['f1', 'f2']
-        self.transition_names = ['linear', 'constant']
+        self.factors = ["f1", "f2"]
+        self.transition_names = ["linear", "constant"]
         self.measurements = {
-            'f1': [['y01', 'y02'], ['y11', 'y12']],
-            'f2': [['y03', 'y04'], []]}
+            "f1": [["y01", "y02"], ["y11", "y12"]],
+            "f2": [["y03", "y04"], []],
+        }
 
         coeffs = np.arange(0.6, 3.0, 0.2).reshape((6, 2))
-        cols = ['loadings', 'intercepts']
-        index_tuples = [(0, 'y01'), (0, 'y02'), (0, 'y03'), (0, 'y04'),
-                        (1, 'y11'), (1, 'y12')]
+        cols = ["loadings", "intercepts"]
+        index_tuples = [
+            (0, "y01"),
+            (0, "y02"),
+            (0, "y03"),
+            (0, "y04"),
+            (1, "y11"),
+            (1, "y12"),
+        ]
         self.index = pd.MultiIndex.from_tuples(index_tuples)
         self.storage_df = pd.DataFrame(coeffs, index=self.index, columns=cols)
 
     def test_extended_meas_coeffs_no_constant_factor_and_intercepts_case(self):
-        coeff_type = 'intercepts'
-        calc_intercepts = extended_meas_coeffs(self.storage_df, self.transition_names, self.factors, self.measurements,
-                                               coeff_type, 0)
+        coeff_type = "intercepts"
+        calc_intercepts = extended_meas_coeffs(
+            self.storage_df,
+            self.transition_names,
+            self.factors,
+            self.measurements,
+            coeff_type,
+            0,
+        )
         expected_intercepts = pd.Series(
             data=[0.8, 1.2, 1.6, 2.0],
-            name='intercepts', index=['y01', 'y02', 'y03', 'y04'])
+            name="intercepts",
+            index=["y01", "y02", "y03", "y04"],
+        )
         assert_series_equal(calc_intercepts, expected_intercepts)
 
     def test_extendend_meas_coeffs_constant_factor_and_loadings_case(self):
-        coeff_type = 'loadings'
-        calc_loadings = extended_meas_coeffs(self.storage_df, self.transition_names, self.factors, self.measurements,
-                                             coeff_type, 1)
+        coeff_type = "loadings"
+        calc_loadings = extended_meas_coeffs(
+            self.storage_df,
+            self.transition_names,
+            self.factors,
+            self.measurements,
+            coeff_type,
+            1,
+        )
         expected_loadings = pd.Series(
             data=[2.2, 2.6, 1.4, 1.8],
-            name='loadings',
-            index=['y11', 'y12', 'y03_copied', 'y04_copied'])
+            name="loadings",
+            index=["y11", "y12", "y03_copied", "y04_copied"],
+        )
         assert_series_equal(calc_loadings, expected_loadings)

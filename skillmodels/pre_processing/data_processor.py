@@ -16,12 +16,12 @@ class DataProcessor:
 
         """
         c_data = []
-        self.data['constant'] = 1.0
-        const_list = ['constant']
+        self.data["constant"] = 1.0
+        const_list = ["constant"]
 
         for t in self.periods:
             df = self.data[self.data[self.period_identifier] == t]
-            arr = df[const_list + self.controls[t]].values[self.obs_to_keep]
+            arr = df[const_list + self.controls[t]].to_numpy()[self.obs_to_keep]
             c_data.append(arr)
         return c_data
 
@@ -37,11 +37,11 @@ class DataProcessor:
         counter = 0
         for t in self.periods:
             measurements = list(self.update_info.loc[t].index)
-            df = self.data[self.data[self.period_identifier] == t][
-                measurements]
+            df = self.data[self.data[self.period_identifier] == t][measurements]
 
-            y_data[counter: counter + len(measurements), :] = \
-                df.values[self.obs_to_keep].T
+            y_data[counter : counter + len(measurements), :] = df.to_numpy()[
+                self.obs_to_keep
+            ].T
             counter += len(measurements)
         return y_data
 
@@ -56,35 +56,38 @@ class DataProcessor:
 
             if t > 0:
                 for f, factor in enumerate(self.factors):
-                    if self.transition_names[f] == 'constant':
+                    if self.transition_names[f] == "constant":
                         initial_meas = self.measurements[factor][0]
-                        df[['{}_copied'.format(m) for m in initial_meas]] = \
-                            df_list[0][initial_meas]
+                        df[["{}_copied".format(m) for m in initial_meas]] = df_list[0][
+                            initial_meas
+                        ]
 
             df_list.append(df)
         return df_list
 
     def y_data(self):
-        if self.estimator == 'chs':
+        if self.estimator == "chs":
             return self.y_data_chs()
-        elif self.estimator == 'wa':
+        elif self.estimator == "wa":
             return self.y_data_wa()
         else:
             raise NotImplementedError(
-                'DataProcessor.y_data only works for CHS and WA estimator.')
+                "DataProcessor.y_data only works for CHS and WA estimator."
+            )
 
     def c_data(self):
-        if self.estimator == 'chs':
+        if self.estimator == "chs":
             return self.c_data_chs()
         else:
             raise NotImplementedError(
-                'DataProcessor.c_data only works for CHS estimator')
+                "DataProcessor.c_data only works for CHS estimator"
+            )
 
-    def measurements_df(self, periods='all', factors='all', other_vars=[]):
-        if periods == 'all':
+    def measurements_df(self, periods="all", factors="all", other_vars=[]):
+        if periods == "all":
             periods = self.periods
 
-        if factors == 'all':
+        if factors == "all":
             factors = self.factors
 
         if isinstance(periods, int) or isinstance(periods, float):
@@ -116,22 +119,27 @@ class DataProcessor:
             measurements_df = period_dfs[0]
         else:
             for period, df in enumerate(period_dfs):
-                rename_dict = {
-                    col: col + '_{}'.format(period) for col in df.columns}
+                rename_dict = {col: col + "_{}".format(period) for col in df.columns}
                 df.rename(columns=rename_dict, inplace=True)
 
             measurements_df = pd.concat(period_dfs, axis=1)
 
         return measurements_df
 
-    def score_df(self, periods='all', factors='all', other_vars=[],
-                 agg_method='mean', order='by_factor'):
+    def score_df(
+        self,
+        periods="all",
+        factors="all",
+        other_vars=[],
+        agg_method="mean",
+        order="by_factor",
+    ):
 
         # mean, z_scaled, norm_scaled
-        if periods == 'all':
+        if periods == "all":
             periods = self.periods
 
-        if factors == 'all':
+        if factors == "all":
             factors = self.factors
 
         if isinstance(periods, int) or isinstance(periods, float):
@@ -148,8 +156,9 @@ class DataProcessor:
             other_vars_dict[period] = other_vars[i]
 
         relevant_uinfo = self.update_info.loc[periods, factors]
-        assert (relevant_uinfo.sum(axis=1) <= 1).all(), (
-            'score_df only works with dedicated measurement systems.')
+        assert (
+            relevant_uinfo.sum(axis=1) <= 1
+        ).all(), "score_df only works with dedicated measurement systems."
 
         trans_name_dict = {}
         for f, factor in enumerate(self.factors):
@@ -160,23 +169,23 @@ class DataProcessor:
             to_concat = []
             for factor in factors:
 
-                if trans_name_dict[factor] == 'constant':
+                if trans_name_dict[factor] == "constant":
                     meas_df = self.measurements_df(factors=factor)
                 else:
-                    meas_df = self.measurements_df(
-                        periods=period, factors=factor)
-                if agg_method == 'mean':
+                    meas_df = self.measurements_df(periods=period, factors=factor)
+                if agg_method == "mean":
                     score_sr = meas_df.mean(axis=1)
                 else:
                     scaled = (meas_df - meas_df.mean()) / meas_df.std()
                     score_sr = scaled.mean(axis=1)
-                    if agg_method == 'norm_scaled':
+                    if agg_method == "norm_scaled":
                         raise NotImplementedError
 
                 score_sr.name = factor
                 to_concat.append(score_sr)
-            to_concat.append(self.measurements_df(periods=period, factors=[],
-                             other_vars=other_vars))
+            to_concat.append(
+                self.measurements_df(periods=period, factors=[], other_vars=other_vars)
+            )
 
             period_dfs[period] = pd.concat(to_concat, axis=1)
 
@@ -184,8 +193,7 @@ class DataProcessor:
         for period in periods:
             df = period_dfs[period]
             if len(periods) > 1:
-                rename_dict = {
-                    col: col + '_{}'.format(period) for col in df.columns}
+                rename_dict = {col: col + "_{}".format(period) for col in df.columns}
                 df.rename(columns=rename_dict, inplace=True)
             to_concat.append(df)
         score_df = pd.concat(to_concat, axis=1)
@@ -193,11 +201,11 @@ class DataProcessor:
         if isinstance(score_df, pd.Series):
             score_df = score_df.to_frame()
 
-        if order == 'by_factor' and len(to_concat) > 1:
+        if order == "by_factor" and len(to_concat) > 1:
             ordered_columns = []
             for factor in factors:
                 for period in periods:
-                    ordered_columns.append('{}_{}'.format(factor, period))
+                    ordered_columns.append("{}_{}".format(factor, period))
             for col in score_df.columns:
                 if col not in ordered_columns:
                     ordered_columns.append(col)
@@ -205,22 +213,23 @@ class DataProcessor:
 
         return score_df
 
-    def reg_df(self, factor, period=None, stage=None, controls=[],
-               agg_method='mean'):
+    def reg_df(self, factor, period=None, stage=None, controls=[], agg_method="mean"):
 
-        assert period is None or stage is None, (
-            'You cannot specify a period and a stage for a score regression.')
+        assert (
+            period is None or stage is None
+        ), "You cannot specify a period and a stage for a score regression."
 
-        assert not (period is None and stage is None), (
-            'You have to specify a period or a stage for a score regression')
+        assert not (
+            period is None and stage is None
+        ), "You have to specify a period or a stage for a score regression"
 
         if period is not None:
-            assert period in self.periods[:-1], (
-                'The score regression is not possible in the last period.')
+            assert (
+                period in self.periods[:-1]
+            ), "The score regression is not possible in the last period."
 
         if stage is not None:
-            periods = [p for p in self.periods[:-1]
-                       if self.stagemap[p] == stage]
+            periods = [p for p in self.periods[:-1] if self.stagemap[p] == stage]
         else:
             periods = [period]
 
@@ -230,14 +239,12 @@ class DataProcessor:
         period_dfs = []
         for p in periods:
             df_old = self.score_df(
-                periods=p, factors=included, other_vars=controls,
-                agg_method=agg_method)
-            df_old.rename(mapper=lambda x: x + '_t', axis=1, inplace=True)
+                periods=p, factors=included, other_vars=controls, agg_method=agg_method
+            )
+            df_old.rename(mapper=lambda x: x + "_t", axis=1, inplace=True)
 
-            df_new = self.score_df(
-                periods=p + 1, factors=factor, agg_method=agg_method)
-            df_new.rename(mapper=lambda x: x + '_t_plusone',
-                          axis=1, inplace=True)
+            df_new = self.score_df(periods=p + 1, factors=factor, agg_method=agg_method)
+            df_new.rename(mapper=lambda x: x + "_t_plusone", axis=1, inplace=True)
             df = pd.concat([df_new, df_old], axis=1)
 
             df = prepend_index_level(df, p)
@@ -246,8 +253,3 @@ class DataProcessor:
 
         reg_df = pd.concat(period_dfs, axis=0)
         return reg_df
-
-
-
-
-
