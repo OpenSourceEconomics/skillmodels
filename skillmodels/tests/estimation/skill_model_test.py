@@ -1275,7 +1275,7 @@ class TestGenerateStartFactorsForMarginalEffects:
         self.nobs = 200000
         calc_factors = smo._generate_start_factors(self)
         df = pd.DataFrame(calc_factors)
-        calc_cov = df.cov().values
+        calc_cov = df.cov().to_numpy()
         aaae(calc_cov, self.exp_cov, decimal=2)
 
     def test_generate_start_factors_cov_cholesky(self):
@@ -1284,7 +1284,7 @@ class TestGenerateStartFactorsForMarginalEffects:
         self.cholesky_of_P_zero = True
         calc_factors = smo._generate_start_factors(self)
         df = pd.DataFrame(calc_factors)
-        calc_cov = df.cov().values
+        calc_cov = df.cov().to_numpy()
         aaae(calc_cov, self.exp_cov, decimal=2)
 
 

@@ -78,7 +78,7 @@ class TestInitialLoadingsAndIntercepts:
         calc_intercepts, calc_mean = wf.intercepts_from_means(
             self.data, [], self.true_loadings_series
         )
-        aaae(calc_intercepts.values, expected_intercepts.values, decimal=3)
+        aaae(calc_intercepts.to_numpy(), expected_intercepts.to_numpy(), decimal=3)
         assert_equal(calc_mean, None)
 
 
@@ -220,7 +220,7 @@ class TestIVRegArrayDict:
         expected_x["m1_resid:m3_resid"] = (
             expected_x["m1_resid"] * expected_x["m3_resid"]
         )
-        expected_x = expected_x.values[:2, :]
+        expected_x = expected_x.to_numpy()[:2, :]
 
         calculated_x = wf.iv_reg_array_dict(
             self.depvar_name,
@@ -237,7 +237,7 @@ class TestIVRegArrayDict:
 
         expected_z = self.data["z"].copy()
         expected_z["np.square(m4)"] = np.square(expected_z["m4"])
-        expected_z = expected_z.values[:2, :]
+        expected_z = expected_z.to_numpy()[:2, :]
 
         calculated_z = wf.iv_reg_array_dict(
             self.depvar_name,

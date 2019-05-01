@@ -164,7 +164,7 @@ class SkillModel(GenericLikelihoodModel):
         deltas_bool = []
         for t in self.periods:
             relevant = ["intercept"] + self.controls[t]
-            boo = self.new_meas_coeffs.loc[t, relevant].astype(bool).values
+            boo = self.new_meas_coeffs.loc[t, relevant].astype(bool).to_numpy()
             deltas_bool.append(boo)
         return deltas_bool
 
@@ -265,7 +265,7 @@ class SkillModel(GenericLikelihoodModel):
         """
         column_list = ["{}_loading_norm_value".format(f) for f in self.factors]
         df = self.update_info[column_list]
-        return df.values
+        return df.to_numpy()
 
     def _H_bool(self):
         """Boolean array.
@@ -274,7 +274,7 @@ class SkillModel(GenericLikelihoodModel):
         has to be overwritten entries from params.
 
         """
-        return self.new_meas_coeffs[self.factors].values
+        return self.new_meas_coeffs[self.factors].to_numpy()
 
     def _helpers_for_H_transformation_with_psi(self):
         """A boolean array and two empty arrays to store intermediate results.
@@ -297,7 +297,7 @@ class SkillModel(GenericLikelihoodModel):
             "endog_correction is True. You did otherwise in model {}"
         ).format(self.model_name)
 
-        psi_bool = self.update_info[self.endog_factor].values.flatten().astype(bool)
+        psi_bool = self.update_info[self.endog_factor].to_numpy().flatten().astype(bool)
         arr1 = np.zeros((psi_bool.sum(), 1))
         return psi_bool, arr1
 
@@ -343,10 +343,10 @@ class SkillModel(GenericLikelihoodModel):
 
     def _initial_R(self):
         """1d numpy array of length nupdates filled with zeros."""
-        return self.update_info["variance_norm_value"].fillna(0).values
+        return self.update_info["variance_norm_value"].fillna(0).to_numpy()
 
     def _R_bool(self):
-        return self.new_meas_coeffs["variance"].values
+        return self.new_meas_coeffs["variance"].to_numpy()
 
     def _params_slice_for_R(self, params_type):
         """A slice object, selecting the part of params mapped to R.
@@ -811,7 +811,7 @@ class SkillModel(GenericLikelihoodModel):
             reasons.append("Probit or logit updates are used.")
         df = self.update_info.copy(deep=True)
         df = df[df["purpose"] == "measurement"]
-        if not (df[self.factors].values.sum(axis=1) == 1).all():
+        if not (df[self.factors].to_numpy().sum(axis=1) == 1).all():
             reasons.append("Some measurements measure more than 1 factor.")
         if self.anchoring_mode == "truly_anchor_latent_factors":
             reasons.append("The anchoring mode is not supported in wa.")
@@ -1031,7 +1031,7 @@ class SkillModel(GenericLikelihoodModel):
         return r_args
 
     def _update_args_dict(self, initial_quantities, like_vec):
-        position_helper = self.update_info[self.factors].values.astype(bool)
+        position_helper = self.update_info[self.factors].to_numpy().astype(bool)
 
         u_args_list = []
         # this is necessary to make some parts of the likelihood arguments
@@ -1253,21 +1253,21 @@ class SkillModel(GenericLikelihoodModel):
         all_intercepts = list(
             storage_df[storage_df["has_normalized_intercept"] == False][
                 "intercepts"
-            ].values
+            ].to_numpy()
         )
         if anch_intercept is not None:
             all_intercepts.append(anch_intercept)
         params[delta_start_index:delta_stop_index] = all_intercepts
         # write loadings in params
         all_loadings = list(
-            storage_df[storage_df["has_normalized_loading"] == False]["loadings"].values
+            storage_df[storage_df["has_normalized_loading"] == False]["loadings"].to_numpy()
         )
         if anch_loadings is not None:
             all_loadings += list(anch_loadings)
         params[slices["H"]] = all_loadings
 
         # write measurement variances in params
-        all_meas_variances = list(storage_df["meas_error_variances"].values)
+        all_meas_variances = list(storage_df["meas_error_variances"].to_numpy())
         if anch_variance is not None:
             all_meas_variances.append(anch_variance)
         params[slices["R"]] = all_meas_variances
