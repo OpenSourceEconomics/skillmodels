@@ -256,13 +256,13 @@ def normal_linear_predict(state, cov, shocks_sds, transition_matrix):
         state (np.ndarray): numpy array of (nemf * nobs, nfac).
         cov (np.ndarray): numpy array of (nemf * nobs, nfac, nfac).
         shocks_sds (np.ndarray): numpy array of (nfac).
-        transition_matrix (np.ndarray): state transition matrix of (nfac, nfac), 
+        transition_matrix (np.ndarray): state transition matrix of (nfac, nfac),
             the same for all obs.
-                
+
     References:
     https://en.wikipedia.org/wiki/Kalman_filter
-    
-    
+
+
     """
     nstates, nfac = state.shape
     predicted_states = np.dot(transition_matrix, state.T).T
@@ -327,17 +327,17 @@ def sqrt_linear_predict(state, root_cov, shocks_sds, transition_matrix):
     """Make a linear kalman predict step in linear form.
     Args:
         state (np.ndarray): numpy array of (nemf * nobs, nfac).
-        root_cov (np.ndarray): upper triangular cholesky factor of the covariance 
+        root_cov (np.ndarray): upper triangular cholesky factor of the covariance
             matrix of (nemf * nobs, nfac, nfac).
         shocks_sds (np.ndarray): numpy array of (nfac).
-        transition_matrix (np.ndarray): state transition matrix of (nfac, nfac), 
+        transition_matrix (np.ndarray): state transition matrix of (nfac, nfac),
             the same for all obs.
-                
+
     References:
     Robert Grover Brown. Introduction to Random Signals and Applied
         Kalman Filtering. Wiley and sons, 2012.
-    
-    
+
+
     """
     nstates, nfac = state.shape
     predicted_states = np.dot(transition_matrix, state.T).T
