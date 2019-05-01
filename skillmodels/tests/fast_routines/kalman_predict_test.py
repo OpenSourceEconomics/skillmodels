@@ -1,5 +1,4 @@
 """Tests for the linear Kalman predict step."""
-from scipy.linalg import cholesky
 import skillmodels.fast_routines.kalman_filters as kf
 from skillmodels.tests.fast_routines.kalman_update_test import make_unique
 from numpy.testing import assert_array_almost_equal as aaae
@@ -10,34 +9,6 @@ import json
 # ======================================================================================
 # manual tests
 # ======================================================================================
-
-
-def unpack_predict_fixture(fixture):
-    nfac = len(fixture['state'])
-
-    args = (
-        np.array(fixture['state']).reshape(1, nfac),
-        np.array(fixture['state_cov']).reshape(1, nfac, nfac),
-        np.array(fixture['shock_sds']),
-        np.array(fixture['transition_matrix'])
-    )
-    exp_state = np.array(fixture['expected_post_means'])
-    exp_cov = np.array(fixture['expected_post_state_cov'])
-    return args, exp_state, exp_cov
-
-
-def unpack_sqrt_predict_fixture(fixture):
-    nfac = len(fixture['state'])
-
-    args = (
-        np.array(fixture['state']).reshape(1, nfac),
-        cholesky(np.array(fixture['state_cov'])).reshape(1, nfac, nfac),
-        np.array(fixture['shock_sds']),
-        np.array(fixture['transition_matrix'])
-    )
-    exp_state = np.array(fixture['expected_post_means'])
-    exp_cov = np.array(fixture['expected_post_state_cov'])
-    return args, exp_state, exp_cov
 
 
 @pytest.fixture
@@ -353,11 +324,39 @@ shocks_sd = np.array(
     ]
 )
 
-### check that negative SDs raise an error!
-
 # ======================================================================================
 # tests from filterpy
 # ======================================================================================
+
+
+def unpack_predict_fixture(fixture):
+    nfac = len(fixture['state'])
+
+    args = (
+        np.array(fixture['state']).reshape(1, nfac),
+        np.array(fixture['state_cov']).reshape(1, nfac, nfac),
+        np.array(fixture['shock_sds']),
+        np.array(fixture['transition_matrix'])
+    )
+    exp_state = np.array(fixture['expected_post_means'])
+    exp_cov = np.array(fixture['expected_post_state_cov'])
+    return args, exp_state, exp_cov
+
+
+def convert_normal_to_sqrt_args(args):
+    args_list = list(args)
+    covs = args[1]
+    all_diagonal = True
+    for i in range(len(covs)):
+        if (np.diag(np.diagonal(covs[i])) != covs[i]).any():
+            all_diagonal = False
+
+    if all_diagonal is True:
+        args_list[1] = np.sqrt(covs)
+    else:
+        args_list[1] = np.transpose(np.linalg.cholesky(covs), axes=(0, 2, 1))
+    return tuple(args_list)
+
 
 # for the normal linear predict
 # ------------------------------
@@ -386,15 +385,10 @@ def test_normal_linear_predicted_cov_against_filterpy(fixture):
 # -----------------------------------
 
 
-fix_path = 'skillmodels/tests/fast_routines/generated_fixtures_square_root_predict.json'
-with open(fix_path, 'r') as f:
-    id_to_fix = json.load(f)
-ids, fixtures = zip(*id_to_fix.items())
-
-
 @pytest.mark.parametrize("fixture", fixtures, ids=ids)
 def test_sqrt_linear_predicted_state_against_filterpy(fixture):
-    args, exp_state, exp_cov = unpack_sqrt_predict_fixture(fixture)
+    args, exp_state, exp_cov = unpack_predict_fixture(fixture)
+    args = convert_normal_to_sqrt_args(args)
     after_state, after_covs = kf.sqrt_linear_predict(*args)
     aaae(after_state.flatten(), exp_state)
 
@@ -402,16 +396,14 @@ def test_sqrt_linear_predicted_state_against_filterpy(fixture):
 np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
 
 
-@pytest.mark.parametrize("fixture", fixtures[:4], ids=ids[:4]) #####################
+@pytest.mark.parametrize("fixture", fixtures, ids=ids)
 def test_sqrt_linear_predicted_cov_against_filterpy(fixture):
     # this gives the covariance matrix, not a square root of it!
-    args, exp_state, exp_cov = unpack_sqrt_predict_fixture(fixture)
-    print('\nCovariance matrix from filterpy:\n', exp_cov)
-
+    args, exp_state, exp_cov = unpack_predict_fixture(fixture)
+    args = convert_normal_to_sqrt_args(args)
     after_state, after_cov_sqrt = kf.sqrt_linear_predict(*args)
     after_cov_sqrt = after_cov_sqrt[0]
 
     implied_cov = after_cov_sqrt.T.dot(after_cov_sqrt)
-    print('\nImplied cov from skillmodels:\n', implied_cov)
 
     aaae(implied_cov, exp_cov)
