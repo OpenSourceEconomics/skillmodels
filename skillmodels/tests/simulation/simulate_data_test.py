@@ -8,12 +8,8 @@ import pytest
 
 # from pytest_mock import mocker
 from unittest import mock
-import sys
 
-
-sys.path.append("../../")
-
-import simulation.simulate_data as sd
+import skillmodels.simulation.simulate_data as sd
 
 
 # ===============================
@@ -341,7 +337,7 @@ def expected_dataset_mock():
 
 # patch the gen_data_function
 @mock.patch(
-    "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
+    "skillmodels.simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
     return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
     autospec=True,
 )
@@ -355,7 +351,7 @@ def test_simulate_latent_data_with_mock(
 
 
 @mock.patch(
-    "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
+    "skillmodels.simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
     return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
     autospec=True,
 )
@@ -447,7 +443,7 @@ def expected_dataset_mock_mix_2():
 
 # patch the gen_data_function
 @mock.patch(
-    "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
+    "skillmodels.simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
     return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
     autospec=True,
 )
@@ -462,7 +458,7 @@ def test_simulate_latent_data_with_mock_mix_2(
 
 # patch the gen_data_function
 @mock.patch(
-    "simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
+    "skillmodels.simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
     return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
     autospec=True,
 )

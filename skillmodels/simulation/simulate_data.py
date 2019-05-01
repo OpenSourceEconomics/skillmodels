@@ -24,14 +24,12 @@ Notes:
     - It is very likely that I made some mistakes in the docstrings or forgot an
         argument somewhere. Just send me an email in that case or come to my office.
 """
-import sys
 import pandas as pd
 import numpy as np
 from numpy.random import multivariate_normal, choice, binomial
 
-sys.path.append("../")
-import model_functions.transition_functions as tf
-import simulation._elliptical_functions as ef
+import skillmodels.model_functions.transition_functions as tf
+import skillmodels.simulation._elliptical_functions as ef
 
 
 def add_missings(data, meas_names, p_b, p_r):
@@ -120,7 +118,7 @@ def simulate_datasets(
          meas_variances (np.ndarray): numpy array of size (nmeas) with the variances of the
             measurements. Measurement error is assumed to be independent across measurements
          dist_name (string): the elliptical distribution to use in the mixture
-         dist_arg_dict (list or dict): list of length nemf of dictionaries with the 
+         dist_arg_dict (list or dict): list of length nemf of dictionaries with the
           relevant arguments of the mixture distributions. Arguments with default
           values should NOT be included in the dictionaries. Lengths of arrays in the
           arguments should be in accordance with nfac + ncont
@@ -227,7 +225,7 @@ def generate_start_factors_and_control_variables_elliptical(
         nfac (int): number of factor (latent) variables
         ncont (int): number of control variables
         dist_name (string): the elliptical distribution to use in the mixture
-        dist_arg_dict (list or dict): list of length nemf of dictionaries with the 
+        dist_arg_dict (list or dict): list of length nemf of dictionaries with the
           relevant arguments of the mixture distributions. Arguments with default
           values should NOT be included in the dictionaries. Lengths of arrays in the
           arguments should be in accordance with nfac + ncont
@@ -286,7 +284,7 @@ def next_period_factors(
 
     return next_factors
 
-  
+
 def measurements_from_factors(factors, controls, loadings, deltas, variances):
     """Generate the variables that would be observed in practice.
 
@@ -315,4 +313,3 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances):
     conts = controls.reshape(nobs, 1, ncontrols)
     meas = np.dot(states, loadings.T) + np.dot(conts, deltas.T) + epsilon
     return meas.reshape(nobs, nmeas)
-  
