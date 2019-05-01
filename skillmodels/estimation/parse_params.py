@@ -11,7 +11,7 @@ already been done in SkillModel.
 """
 import skillmodels.model_functions.transition_functions as tf
 import numpy as np
-from numpy.core.umath_tests import matrix_multiply
+#from numpy.core.umath_tests import matrix_multiply
 from numpy.linalg import cholesky
 
 
@@ -117,7 +117,7 @@ def _map_params_to_P_zero(
     if params_type == "short" or cholesky_of_P_zero is True:
         if square_root_filters is False:
             # make chol_t to not chol
-            filler = matrix_multiply(np.transpose(filler, axes=(0, 2, 1)), filler)
+            filler = np.matmul(np.transpose(filler, axes=(0, 2, 1)), filler)
     else:
         # make not_chol to not_chol (as covariance matrices are symmetric,
         # only half of its off-diagonal elements have to be estimated. here the
@@ -229,7 +229,7 @@ def transform_params_for_P_zero(
         return params_for_P_zero
     elif direction == "short_to_long":
         filler[boo] = params_for_P_zero
-        filler = matrix_multiply(np.transpose(filler, axes=(0, 2, 1)), filler)
+        filler = np.matmul(np.transpose(filler, axes=(0, 2, 1)), filler)
         return filler[boo]
     else:
         filler[boo] = params_for_P_zero

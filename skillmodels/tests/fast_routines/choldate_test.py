@@ -1,6 +1,6 @@
 from numpy.testing import assert_array_almost_equal as aaae
 from skillmodels.fast_routines.choldate import array_choldate
-from numpy.core.umath_tests import matrix_multiply
+#from numpy.core.umath_tests import matrix_multiply
 import numpy as np
 from numpy.linalg import cholesky
 
@@ -13,7 +13,7 @@ def setup_(weight):
     for i in range(20):
         to_update[i][helper_bool] = np.random.randn(10) + 100
 
-    pos_def_arr = matrix_multiply(np.transpose(to_update, axes=(0, 2, 1)), to_update)
+    pos_def_arr = np.matmul(np.transpose(to_update, axes=(0, 2, 1)), to_update)
 
     update_with = np.random.uniform(size=(20, 4))
 
