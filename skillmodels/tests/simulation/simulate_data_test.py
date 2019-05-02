@@ -1,5 +1,4 @@
-"""Tests for functions in simulate_data module
-"""
+"""Tests for functions in simulate_data module."""
 import numpy as np
 import pandas as pd
 from numpy.testing import assert_array_almost_equal as aaae
@@ -76,9 +75,10 @@ def set_up_npfac():
 
 @pytest.fixture
 def expected_npfac():
-    # The values have been computed by using the functions from the module transition_functions.py
-    # since the main calculations are made through those functions, what the test actualy tests
-    # is whether the loops of getatr in sumlated_next_period_factors work correctly
+    # The values have been computed by using the functions from the module transition_
+    # functions.py since the main calculations are made through those functions,
+    # what the test actualy tests is whether the loops of getatr in #
+    # simlated_next_period_factors work correctly
     d = {}
     d["tl"] = np.array([[0.145, 0.42]])
     d["lin"] = np.array([[0.7, 1.4]])
@@ -337,7 +337,9 @@ def expected_dataset_mock():
 
 # patch the gen_data_function
 @mock.patch(
-    "skillmodels.simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
+    "skillmodels.simulation.simulate_data." +
+    "generate_start_factors_and_control_variables_elliptical",
+
     return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
     autospec=True,
 )
@@ -351,7 +353,8 @@ def test_simulate_latent_data_with_mock(
 
 
 @mock.patch(
-    "skillmodels.simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
+    "skillmodels.simulation.simulate_data." +
+    "generate_start_factors_and_control_variables_elliptical",
     return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
     autospec=True,
 )
@@ -443,7 +446,8 @@ def expected_dataset_mock_mix_2():
 
 # patch the gen_data_function
 @mock.patch(
-    "skillmodels.simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
+    "skillmodels.simulation.simulate_data." +
+    "generate_start_factors_and_control_variables_elliptical",
     return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
     autospec=True,
 )
@@ -458,7 +462,8 @@ def test_simulate_latent_data_with_mock_mix_2(
 
 # patch the gen_data_function
 @mock.patch(
-    "skillmodels.simulation.simulate_data.generate_start_factors_and_control_variables_elliptical",
+    "skillmodels.simulation.simulate_data." +
+    "generate_start_factors_and_control_variables_elliptical",
     return_value=(np.array([[0, 0]] * 5), np.array([[0.5, 0.5]] * 5)),
     autospec=True,
 )
