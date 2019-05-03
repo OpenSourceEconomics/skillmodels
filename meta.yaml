@@ -24,7 +24,7 @@ test:
   commands:
     - py.test
   files:
-    - skillmodels/tests/fast_routines/kalman_filters_test.py
+    - skillmodels/tests/fast_routines/kalman_predict_test.py
     - skillmodels/tests/fast_routines/choldate_test.py
     - skillmodels/tests/fast_routines/qr_decomposition_test.py
     - skillmodels/tests/fast_routines/sigma_points_test.py
@@ -46,6 +46,7 @@ test:
     - skillmodels/tests/fast_routines/generated_fixtures_update.json
     - skillmodels/tests/fast_routines/generated_fixtures_predict.json
     - skillmodels/tests/fast_routines/generated_fixtures_square_root_predict.json
+    - skillmodels/tests/simulation/simulate_data_test.py
   requires:
     - pytest
     - nose
