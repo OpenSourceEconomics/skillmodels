@@ -79,25 +79,25 @@ def simulate_datasets(
         nobs (int): number of observations
         factor_names (list): list of strings of names of each factor
         control_names (list): list of strings of names of each control variable
-        loadings_df (np.ndarray): Series with the factor loadings. It has a multi
+        loadings_df (pd.DataFrame): The factor loadings. It has a multi
             index where the first level indicates the period and the second one
-            the variable
-        deltas (np.ndarray): numpy array of size (nmeas, ncontrols)
+            the variable. The columns are the names of the factors.
+        deltas (list): list of numpy array of size (nmeas, ncontrols). The list has
+            length nper.
         transition_names (list): list of strings with the names of the transition
            function of each factor.
-        transition_argument_dicts (list): list of dictionaries of length nfac with
-           the arguments for the transition function of each factor. A detailed
-           description of the arguments of transition functions can be found in the
-           module docstring of skillmodels.model_functions.transition_functions.
-        shock_variances (np.ndarray): numpy array of length nfac.
-        meas_variances (np.ndarray): numpy array of size (nmeas) with the variances of
-           the measurements. Measurement error is assumed to be independent across
-           measurements
+        transition_argument_dicts (list): list lists of dictionaries. Each sublsit has
+            length nfac with and contanis the arguments for the transition function of
+            each factor. There is one sublist for each period.
+        shock_variances (np.ndarra): numpy array of size (nper, nfac) with the shock
+            variances in each period.
+        meas_variances (pd.Series): The index is the same as in loadings_df. The data
+            are the variances of the measurements errors.
         dist_name (string): the elliptical distribution to use in the mixture
         dist_arg_dict (list or dict): list of length nemf of dictionaries with the
-         relevant arguments of the mixture distributions. Arguments with default
-         values should NOT be included in the dictionaries. Lengths of arrays in the
-         arguments should be in accordance with nfac + ncont
+            relevant arguments of the mixture distributions. Arguments with default
+            values should NOT be included in the dictionaries. Lengths of arrays in the
+            arguments should be in accordance with nfac + ncont
         weights (np.ndarray): size (nemf). The weight of each mixture element.
 
     Returns:
@@ -155,40 +155,6 @@ def simulate_datasets(
     latent_data.set_index(['id', 'period'], inplace=True)
 
     return observed_data, latent_data
-
-
-def generate_start_factors_and_control_variables(
-    nobs, nfac, ncont, means, covs, weights=1
-):
-    """Draw initial states and control variables from a (mixture of) normals.
-
-    Args:
-        nobs (int): number of observations
-        nfac (int): number of factor (latent) variables
-        ncont (int): number of control variables
-        means (np.ndarray): size (nemf, nfac + ncontrols)
-        covs (np.ndarray): size (nemf, nfac + ncontrols, nfac + ncontrols)
-        weights (np.ndarray): size (nemf). The weight of each mixture element.
-                              Default value is equal to 1.
-
-
-    Returns:
-        start_factors (np.ndarray): shape (nobs, nfac),
-        controls (np.ndarray): shape (nobs, ncontrols),
-
-    """
-    if np.size(weights) == 1:
-        out = multivariate_normal(means, covs, nobs)
-    else:
-        helper_array = choice(np.arange(len(weights)), p=weights, size=nobs)
-        out = np.zeros((nobs, nfac + ncont))
-        for i in range(nobs):
-            out[i] = multivariate_normal(means[helper_array[i]], covs[helper_array[i]])
-    start_factors = out[:, 0:nfac]
-    controls = out[:, nfac:]
-    controls = np.hstack([np.ones((nobs, 1)), controls])
-
-    return start_factors, controls
 
 
 def generate_start_factors_and_control_variables_elliptical(
