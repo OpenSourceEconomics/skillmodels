@@ -9,7 +9,7 @@ class TestCData:
     def setup(self):
         self.controls = [["c1", "c2"], ["c1", "c2", "c3"]]
         df = DataFrame(
-            data=np.array([0] * 5 + [1] * 5).reshape(10, 1), columns=["period"]
+            data=np.array([0] * 5 + [1] * 5).reshape(10, 1), columns=["__period__"]
         )
         df["c1"] = ["c1_t0_{}".format(i) for i in range(5)] + [
             "c1_t1_{}".format(i) for i in range(5)
@@ -27,7 +27,6 @@ class TestCData:
 
         self.obs_to_keep = np.array([True, True, True, False, True])
         self.estimator = "chs"
-        self.period_identifier = "period"
 
     def test_c_data_with_constants(self):
         res1 = [
@@ -61,7 +60,7 @@ class TestYData:
             ind_tuples += [(t, d) for d in self.different_meas]
         ind_tuples.append((3, "a"))
 
-        index = pd.MultiIndex.from_tuples(ind_tuples, names=["period", "variable"])
+        index = pd.MultiIndex.from_tuples(ind_tuples, names=["__period__", "variable"])
 
         dat = np.zeros((25, 1))
         df = DataFrame(data=dat, columns=["some_col"], index=index)
@@ -71,12 +70,11 @@ class TestYData:
         self.nobs = 3
 
         self.obs_to_keep = np.array([True, True, False, True])
-        self.period_identifier = "period"
 
     def test_y_data_focus_on_rows(self):
         data = np.tile(np.arange(6), 16).reshape(16, 6)
         self.data = DataFrame(data=data, columns=self.different_meas)
-        self.data["period"] = np.arange(4).repeat(4)
+        self.data["__period__"] = np.arange(4).repeat(4)
         self.data["a"] = 10
 
         res = np.vstack([np.arange(6).repeat(3).reshape(6, 3)] * 4)
@@ -85,7 +83,7 @@ class TestYData:
         aae(dc.y_data_chs(self), res)
 
     def test_y_data_focus_on_columns(self):
-        df = DataFrame(data=np.arange(4).repeat(4), columns=["period"])
+        df = DataFrame(data=np.arange(4).repeat(4), columns=["__period__"])
         for var in self.different_meas + ["a"]:
             df[var] = np.arange(16)
         self.data = df

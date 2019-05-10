@@ -15,6 +15,7 @@ requirements:
     - python {{ python }}
     - numba >=0.27
     - numpy
+    - pandas >=0.24
     - statsmodels >=0.6.1
     - scipy
     - seaborn

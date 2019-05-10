@@ -1077,8 +1077,6 @@ class TestBSMethods:
         self.bootstrap_nreps = 3
         self.model_name = "test_check_bs_sample"
         self.dataset_name = "test_data"
-        self.person_identifier = "id"
-        self.period_identifier = "period"
         self.periods = [0, 1, 2]
         self.data = pd.DataFrame(
             data=np.array(
@@ -1087,9 +1085,9 @@ class TestBSMethods:
                     [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
                 ]
             ).T,
-            columns=["period", "arange"],
+            columns=["__period__", "arange"],
         )
-        self.data["id"] = pd.Series(
+        self.data["__id__"] = pd.Series(
             dtype="str",
             data=[
                 "id_0",
@@ -1140,9 +1138,9 @@ class TestBSMethods:
                     [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 3.0, 4.0, 5.0],
                 ]
             ).T,
-            columns=["period", "arange"],
+            columns=["__period__", "arange"],
         )
-        expected_data["id"] = [
+        expected_data["__id__"] = [
             "id_0",
             "id_0",
             "id_0",

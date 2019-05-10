@@ -1424,7 +1424,7 @@ class SkillModel(GenericLikelihoodModel):
             )
         )
 
-        identifiers = self.data[self.person_identifier].unique()
+        identifiers = self.data['__id__'].unique()
         for item in self.bootstrap_samples:
             assert set(item).issubset(identifiers), (
                 "The bootstrap_samples you provided contain person_identifiers"
@@ -1433,7 +1433,7 @@ class SkillModel(GenericLikelihoodModel):
                 "occurred in model {}".format(
                     self.dataset_name,
                     [i for i in item if i not in identifiers],
-                    self.person_identifier,
+                    '__id__',
                     self.model_name,
                 )
             )
@@ -1454,7 +1454,7 @@ class SkillModel(GenericLikelihoodModel):
         Each sublist contains the 'person_identifiers' of the individuals that
         were sampled from the dataset with replacement.
         """
-        individuals = np.array(self.data[self.person_identifier].unique())
+        individuals = np.array(self.data['__id__'].unique())
         selected_indices = np.random.randint(
             low=0,
             high=len(individuals),
@@ -1466,12 +1466,12 @@ class SkillModel(GenericLikelihoodModel):
     def _select_bootstrap_data(self, rep):
         """Return the data of the resampled individuals."""
         data = self.data.set_index(
-            [self.person_identifier, self.period_identifier], drop=False
+            ['__id__', '__period__'], drop=False
         )
         current_sample = self.bootstrap_samples[rep]
         bs_index = pd.MultiIndex.from_product(
             [current_sample, self.periods],
-            names=[self.person_identifier, self.period_identifier],
+            names=['__id__', '__period__'],
         )
         bs_data = data.loc[bs_index].reset_index(drop=True)
         return bs_data
@@ -2135,7 +2135,7 @@ class SkillModel(GenericLikelihoodModel):
             df = self.data_proc.score_df(
                 periods=period,
                 factors=factor,
-                other_vars=[group, self.period_identifier],
+                other_vars=[group, '__period__'],
                 agg_method=agg_method,
             )
             to_concat.append(df)
@@ -2144,7 +2144,7 @@ class SkillModel(GenericLikelihoodModel):
 
         fig, ax = plt.subplots(figsize=figsize)
         sns.pointplot(
-            x=self.period_identifier,
+            x='__period__',
             y=factor,
             hue=group,
             data=data,

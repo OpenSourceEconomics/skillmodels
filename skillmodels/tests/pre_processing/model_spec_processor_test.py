@@ -44,16 +44,15 @@ class TestTransitionEquationIncludedFactors:
 
 class TestVariableCheckMethods:
     def setup(self):
-        df1 = DataFrame(data=np.zeros((5, 2)), columns=["period", "var1"])
+        df1 = DataFrame(data=np.zeros((5, 2)), columns=["__period__", "var1"])
         df1.loc[1, "var1"] = 1
-        df2 = DataFrame(data=np.ones((5, 2)), columns=["period", "var2"])
+        df2 = DataFrame(data=np.ones((5, 2)), columns=["__period__", "var2"])
         df2.loc[1, "var2"] = 5
         self.data = pd.concat([df1, df2], axis=0, sort=True)
         self.missing_variables = "drop_variable"
         self.variables_without_variance = "drop_variable"
         self.model_name = "model"
         self.dataset_name = "dataset"
-        self.period_identifier = "period"
 
     def test_present_where_true(self):
         assert_equal(msp._present(self, "var1", 0), True)
@@ -132,12 +131,11 @@ class TestCleanControlSpecifications:
         self.controls_with_missings = "drop_variable"
         self.model_name = "model"
         self.dataset_name = "data"
-        cols = ["period", "c1", "c2"]
+        cols = ["__period__", "c1", "c2"]
         dat = np.zeros((10, 3))
         dat[5:, 0] = 1
         self.data = DataFrame(data=dat, columns=cols)
         self.estimator = "chs"
-        self.period_identifier = "period"
 
     def test_clean_control_specs_nothing_to_clean(self):
         msp._clean_controls_specification(self)

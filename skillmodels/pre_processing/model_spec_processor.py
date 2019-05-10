@@ -4,6 +4,7 @@ import numpy as np
 from itertools import product
 import os
 import warnings
+from skillmodels.pre_processing.data_processor import pre_process_data
 
 
 class ModelSpecProcessor:
@@ -36,7 +37,7 @@ class ModelSpecProcessor:
         bootstrap_samples=None,
     ):
         self.model_dict = model_dict
-        self.data = dataset
+        self.data = pre_process_data(dataset)
         self.estimator = estimator
         self.model_name = model_name
         self.dataset_name = dataset_name
@@ -86,8 +87,6 @@ class ModelSpecProcessor:
             "save_params_before_calculating_standard_errors": False,
             "maxiter": 1000000,
             "maxfun": 1000000,
-            "period_identifier": "period",
-            "person_identifier": "id",
             "bootstrap_nreps": 300,
             "bootstrap_sample_size": None,
             "bootstrap_nprocesses": None,
@@ -335,7 +334,7 @@ class ModelSpecProcessor:
         ).format(self.model_name, variable, self.dataset_name, period)
 
         columns = set(self.data.columns)
-        df = self.data[self.data[self.period_identifier] == period]
+        df = self.data.query('__period__ == {}'.format(period))
         if variable in columns and df[variable].notnull().any():
             return True
         elif self.missing_variables == "raise_error":
@@ -358,7 +357,7 @@ class ModelSpecProcessor:
             bool: True if **variable** is a dummy in **period**, else False
 
         """
-        series = self.data[self.data[self.period_identifier] == period][variable]
+        series = self.data.query('__period__ == {}'.format(period))[variable]
         unique_values = series[pd.notnull(series)].unique()
         if sorted(unique_values) == [0, 1]:
             return True
@@ -391,7 +390,7 @@ class ModelSpecProcessor:
             'to "drop_variable".'
         )
 
-        series = self.data[self.data[self.period_identifier] == period][variable]
+        series = self.data.query('__period__ == {}'.format(period))[variable]
         unique_non_missing_values = list(series[pd.notnull(series)].unique())
         nr_unique = len(unique_non_missing_values)
 
@@ -506,7 +505,7 @@ class ModelSpecProcessor:
                 )
 
             for t in self.periods:
-                df = self.data[self.data[self.period_identifier] == t]
+                df = self.data.query('__period__ == {}'.format(t))
                 for c, control in enumerate(present_controls[t]):
                     if df[control].notnull().all():
                         controls[t].append(control)
@@ -769,7 +768,7 @@ class ModelSpecProcessor:
     def _factor_update_info(self):
         # create an empty DataFrame with and empty MultiIndex
         index = pd.MultiIndex(
-            levels=[[], []], labels=[[], []], names=["period", "name"]
+            levels=[[], []], codes=[[], []], names=["period", "name"]
         )
         df = DataFrame(data=None, index=index)
 

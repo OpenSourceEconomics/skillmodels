@@ -11,8 +11,11 @@ import pytest
 # @pytest.mark.skip()
 def test_likelihood_value():
     df = pd.read_stata("skillmodels/tests/estimation/chs_test_ex2.dta")
+    df.set_index(['id', 'period'], inplace=True)
     with open("skillmodels/tests/estimation/test_model2.json") as j:
         model_dict = json.load(j)
+
+    print(df.head())
 
     mod = SkillModel(
         model_dict=model_dict, dataset=df, estimator="chs", model_name="test_model"

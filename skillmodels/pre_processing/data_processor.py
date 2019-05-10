@@ -3,11 +3,54 @@ import pandas as pd
 from skillmodels.estimation.wa_functions import prepend_index_level
 
 
+def pre_process_data(df):
+    """Transform an unbalanced and unsorted dataset.
+
+    Args:
+        df (DataFrame): panel dataset in long format. It has a MultiIndex
+            where the first level indicates the period and the second
+            the individual.
+
+    Returns:
+        balanced (DataFrame): balanced panel. It has a MultiIndex. The first
+            level is called __id__ and enumerates individuals. The second
+            level is called __period__ and counts periods, starting at 0.
+
+    """
+    assert '__id__' not in df.columns, (
+        'The variable name __id__ is used internally and must not occur.')
+
+    assert '__period__' not in df.columns, (
+        'The variable name __period__ is used internally and must not occur.')
+
+    df = df.sort_index()
+    all_ids, all_periods = list(df.index.levels[0]), list(df.index.levels[1])
+    nobs = len(all_ids)
+    nperiods = len(all_periods)
+
+    new_period = np.tile(np.arange(nperiods), nobs)
+    old_period = all_periods * nobs
+    old_id = np.repeat(all_ids, nperiods)
+    new_id = np.arange(nobs).repeat(nperiods)
+
+    balanced = pd.DataFrame(
+        data=np.column_stack([old_id, old_period, new_id, new_period]),
+        columns=df.index.names + ['__id__', '__period__'])
+
+    balanced.set_index(df.index.names, inplace=True)
+    balanced = pd.concat([balanced, df], axis=1)
+    balanced.set_index(['__id__', '__period__'], inplace=True, drop=False)
+
+
+    return balanced
+
+
 class DataProcessor:
     """Transform a pandas DataFrame in long format into numpy arrays."""
 
     def __init__(self, specs_processor_attribute_dict):
         self.__dict__.update(specs_processor_attribute_dict)
+
 
     def c_data_chs(self):
         """A List of 2d arrays with control variables for each period.
@@ -20,7 +63,7 @@ class DataProcessor:
         const_list = ["constant"]
 
         for t in self.periods:
-            df = self.data[self.data[self.period_identifier] == t]
+            df = self.data[self.data['__period__'] == t]
             arr = df[const_list + self.controls[t]].to_numpy()[self.obs_to_keep]
             c_data.append(arr)
         return c_data
@@ -37,7 +80,7 @@ class DataProcessor:
         counter = 0
         for t in self.periods:
             measurements = list(self.update_info.loc[t].index)
-            df = self.data[self.data[self.period_identifier] == t][measurements]
+            df = self.data[self.data['__period__'] == t][measurements]
 
             y_data[counter : counter + len(measurements), :] = df.to_numpy()[
                 self.obs_to_keep
@@ -50,8 +93,8 @@ class DataProcessor:
         df_list = []
         for t in self.periods:
             measurements = list(self.update_info.loc[t].index)
-            df = self.data[self.data[self.period_identifier] == t]
-            df.set_index(self.person_identifier, inplace=True, drop=True)
+            df = self.data[self.data['__period__'] == t]
+            df.set_index('__id__', inplace=True, drop=True)
             df = df[measurements]
 
             if t > 0:
@@ -105,14 +148,14 @@ class DataProcessor:
 
         period_dfs = []
         for period in periods:
-            relevant_variables = [self.person_identifier]
+            relevant_variables = ['__id__']
             for factor in factors:
                 for meas in self.measurements[factor][period]:
                     if meas not in relevant_variables:
                         relevant_variables.append(meas)
             relevant_variables += other_vars_dict[period]
-            df = self.data[self.data[self.period_identifier] == period]
-            df = df[relevant_variables].set_index(self.person_identifier)
+            df = self.data[self.data['__period__'] == period]
+            df = df[relevant_variables].set_index('__id__')
             period_dfs.append(df)
 
         if len(period_dfs) == 1:
@@ -253,3 +296,4 @@ class DataProcessor:
 
         reg_df = pd.concat(period_dfs, axis=0)
         return reg_df
+

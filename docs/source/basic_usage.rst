@@ -52,7 +52,7 @@ The main object a user interacts with is ``SkillModel`` (see :ref:`estimation`) 
 The mandatory arguments of SkillModel are:
 
 * model_dict: dictionary that defines the model (usually loaded from a json file). See :ref:`model_specs` for details.
-* dataset: a pandas dataframe in long format. It has to contain columns that identify the period and individual. The names of these columns are indicated as 'period_identifier' and 'person_identifier' in the general section of the model dictionary. The default values are 'period' and 'id'.
+* dataset: a pandas dataframe in long format. Needs to have a MultiIndex in which the first level indicates the individual and the second the period.
 * estimator: a string that can take the values 'wa' (Wiswall Agostinelli Estimator) and 'chs' (Cunha, Heckman, Schennach estimator).
 
 Optional arguments of SkillModel are:

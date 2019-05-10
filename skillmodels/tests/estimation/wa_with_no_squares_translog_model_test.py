@@ -83,11 +83,7 @@ def generate_test_data(
         meas_data.append(df)
     large_df = pd.concat(meas_data, sort=True)
     large_df.sort_values(by=["id", "period"], inplace=True)
-
-    # print('true cov matrices for generated factor data')
-    # for arr in factor_data:
-    #     df = pd.DataFrame(data=arr, columns=factors)
-    #     print(df.cov())
+    large_df.set_index(['id', 'period'], inplace=True)
     return large_df
 
 
