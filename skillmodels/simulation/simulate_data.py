@@ -2,10 +2,13 @@
 import pandas as pd
 import numpy as np
 from numpy.random import multivariate_normal, choice, binomial
+import sys
 
-import skillmodels.model_functions.transition_functions as tf
-import skillmodels.simulation._elliptical_functions as ef
-
+#import skillmodels.model_functions.transition_functions as tf
+#import skillmodels.simulation._elliptical_functions as ef
+sys.path.append("../")
+import model_functions.transition_functions as tf
+import simulation._elliptical_functions as ef
 
 def add_missings(data, meas_names, p_b, p_r):
     """Add np.nans to data.
@@ -178,6 +181,9 @@ def generate_start_factors_and_control_variables_elliptical(
         start_factors (np.ndarray): shape (nobs, nfac),
         controls (np.ndarray): shape (nobs, ncontrols),
 
+    Returns:
+        start_factors (np.ndarray): shape (nobs, nfac),
+        controls (np.ndarray): shape (nobs, ncontrols),
     """
     if np.size(weights) == 1:
         out = getattr(ef, dist_name)(size=nobs, **dist_arg_dict[0])
