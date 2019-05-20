@@ -1,4 +1,9 @@
 name: skillmodels
+
+channels:
+  - defaults
+  - conda-forge
+
 dependencies:
   - numpy
   - pandas
