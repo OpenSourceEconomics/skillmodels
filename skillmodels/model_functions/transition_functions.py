@@ -165,6 +165,14 @@ def linear(sigma_points, coeffs, included_positions):
     return np.dot(sigma_points, coeff_vec)
 
 
+def index_tuples_linear(factor, included_factors, period):
+    ind_tups = []
+    for incl_fac in included_factors:
+        ind_tups.append(
+            ('trans', period, factor, 'lincoeff-{}'.format(incl_fac)))
+    return ind_tups
+
+
 def nr_coeffs_linear(included_factors, params_type):
     return len(included_factors)
 
@@ -211,8 +219,14 @@ def output_has_known_location_linear():
 # linear with constant
 # =============================================================================
 def linear_with_constant(sigma_points, coeffs, included_positions):
-    without_constant = linear(sigma_points, coeffs[:-1], included_positions) 
+    without_constant = linear(sigma_points, coeffs[:-1], included_positions)
     return coeffs[-1] + without_constant
+
+
+def index_tuples_linear_with_constant(factor, included_factors, period):
+    ind_tups = index_tuples_linear(factor, included_factors, period)
+    ind_tups.append(('trans', period, factor, 'lincoeff-constant'))
+    return ind_tups
 
 
 def nr_coeffs_linear_with_constant(included_factors, params_type):
@@ -257,6 +271,10 @@ def constant(sigma_points, coeffs, included_positions):
     return sigma_points[:, included_positions[0]]
 
 
+def index_tuples_constant(factor, included_factors, period):
+    return []
+
+
 def nr_coeffs_constant(included_factors, params_type):
     return 0
 
@@ -290,6 +308,10 @@ def output_has_known_location_constant():
 
 def ar1(sigma_points, coeffs, included_positions):
     return sigma_points[:, included_positions[0]] * coeffs[0]
+
+
+def index_tuples_ar1(factor, included_factors, period):
+    return [('trans', period, factor, factor)]
 
 
 def nr_coeffs_ar1(included_factors, params_type):
@@ -353,6 +375,20 @@ def log_ces(sigma_points, coeffs, included_positions):
     result = scaling_factor * np.log(x)
 
     return result
+
+
+def index_tuples_log_ces(factor, included_factors, period):
+    ind_tups = []
+    for incl_fac in included_factors:
+        ind_tups.append(('trans', period, factor, 'gamma-{}'.format(incl_fac)))
+    ind_tups.append(('trans', period, factor, 'phi'))
+    return ind_tups
+
+
+def constraints_log_ces(factor, included_factors, period):
+    ind_tups = index_tuples_log_ces(factor, included_factors, period)
+    loc = ind_tups[:-1]
+    return {'loc': loc, 'type': 'probability'}
 
 
 def nr_coeffs_log_ces(included_factors, params_type):
@@ -457,6 +493,23 @@ def translog(sigma_points, coeffs, included_positions):
     return result_array
 
 
+def index_tuples_translog(factor, included_factors, period):
+    ind_tups = []
+    for i_fac in included_factors:
+        ind_tups.append(('trans', period, factor, 'translog-{}'.format(i_fac)))
+
+    for i, i_fac1 in enumerate(included_factors):
+        for i_fac2 in included_factors[i:]:
+            if i_fac1 == i_fac2:
+                ind_tups.append(
+                    ('trans', period, factor, 'translog-{}-squared'.format(i_fac1)))
+            else:
+                ind_tups.append(
+                    ('trans', period, factor, 'translog-{}-{}'.format(i_fac1, i_fac2)))
+    ind_tups.append(('trans', period, factor, 'translog-tfp'))
+    return ind_tups
+
+
 def nr_coeffs_translog(included_factors, params_type):
     nfac = len(included_factors)
     return 1 + 0.5 * nfac * (nfac + 3)
@@ -542,6 +595,19 @@ def no_squares_translog(sigma_points, coeffs, included_positions):
                 next_coeff += 1
         result_array[i] = res
     return result_array
+
+
+def index_tuples_no_squares_translog(factor, included_factors, period):
+    ind_tups = []
+    for i_fac in included_factors:
+        ind_tups.append(('trans', period, factor, 'translog-{}'.format(i_fac)))
+
+    for i, i_fac1 in enumerate(included_factors):
+        for i_fac2 in included_factors[i + 1:]:
+            ind_tups.append(
+                ('trans', period, factor, 'translog-{}-{}'.format(i_fac1, i_fac2)))
+    ind_tups.append(('trans', period, factor, 'translog-tfp'))
+    return ind_tups
 
 
 def nr_coeffs_no_squares_translog(included_factors, params_type):

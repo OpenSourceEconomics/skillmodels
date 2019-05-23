@@ -7,22 +7,39 @@ from numpy.testing import assert_array_equal as aae
 
 
 def test_pre_process_data():
-    df = pd.DataFrame(data=np.arange(10).reshape(10, 1), columns=['var'])
-    df['period'] = [1, 2, 3, 2, 3, 4, 2, 4, 3, 1]
-    df['id'] = [1, 1, 1, 3, 3, 3, 4, 4, 5, 5]
-    df.set_index(['id', 'period'], inplace=True)
+    df = pd.DataFrame(data=np.arange(10).reshape(10, 1), columns=["var"])
+    df["period"] = [1, 2, 3, 2, 3, 4, 2, 4, 3, 1]
+    df["id"] = [1, 1, 1, 3, 3, 3, 4, 4, 5, 5]
+    df.set_index(["id", "period"], inplace=True)
 
     exp = pd.DataFrame()
     period = [0, 1, 2, 3] * 4
     id_ = np.arange(4).repeat(4)
-    data = [0, 1, 2, np.nan, np.nan, 3, 4, 5, np.nan, 6, np.nan, 7, 9, np.nan, 8, np.nan]
+    data = [
+        0,
+        1,
+        2,
+        np.nan,
+        np.nan,
+        3,
+        4,
+        5,
+        np.nan,
+        6,
+        np.nan,
+        7,
+        9,
+        np.nan,
+        8,
+        np.nan,
+    ]
     data = np.column_stack([period, id_, data])
-    exp = pd.DataFrame(data=data, columns=['__period__', '__id__', 'var'])
-    exp.set_index(['__id__', '__period__'], inplace=True)
+    exp = pd.DataFrame(data=data, columns=["__period__", "__id__", "var"])
+    exp.set_index(["__id__", "__period__"], inplace=True)
 
     res = pre_process_data(df)
 
-    assert res['var'].equals(exp['var'])
+    assert res["var"].equals(exp["var"])
 
 
 class TestCData:
