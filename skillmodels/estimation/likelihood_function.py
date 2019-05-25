@@ -18,7 +18,6 @@ def log_likelihood_per_individual(
     nmeas_list,
     anchoring,
     square_root_filters,
-    update_types,
     update_args,
     predict_args,
     calculate_sigma_points_args,
@@ -60,7 +59,7 @@ def log_likelihood_per_individual(
     for t, stage in enumerate(stagemap):
         for j in range(nmeas_list[t]):
             # measurement updates
-            update(square_root_filters, update_types[k], update_args[k])
+            update(square_root_filters, update_args[k])
             k += 1
         if t < len(stagemap) - 1:
             calculate_sigma_points(**calculate_sigma_points_args)
@@ -68,14 +67,14 @@ def log_likelihood_per_individual(
     if anchoring is True:
         j += 1
         # anchoring update
-        update(square_root_filters, update_types[k], update_args[k])
+        update(square_root_filters, update_args[k])
 
     small = 1e-250
     like_vec[like_vec < small] = small
     return np.log(like_vec)
 
 
-def update(square_root_filters, update_type, update_args):
+def update(square_root_filters, update_args):
     """Select and call the correct update function.
 
     The actual update functions are implemented in several modules in
@@ -83,15 +82,9 @@ def update(square_root_filters, update_type, update_args):
 
     """
     if square_root_filters is True:
-        if update_type == "linear":
-            sqrt_linear_update(*update_args)
-        else:
-            sqrt_probit_update(**update_args)
+        sqrt_linear_update(*update_args)
     else:
-        if update_type == "linear":
-            normal_linear_update(*update_args)
-        else:
-            normal_probit_update(**update_args)
+        normal_linear_update(*update_args)
 
 
 def predict(stage, square_root_filters, predict_args):

@@ -1303,47 +1303,25 @@ class TestAnchorFinalFactorsAndAnchoringOutcome:
         self.exp_anchored_factors[:, 2] = 2
         self.exp_anchored_factors[:, 2] *= 0.6
 
-    def test_anchor_final_factors_invalid_anchoring_type(self):
-        self.anchoring = True
-        self.anchoring_update_type = "probit"
-        assert_raises(
-            AssertionError, smo._anchor_final_factors, self, self.final_factors, self.al
-        )
-
     def test_anchor_final_factors_no_anchoring(self):
         # should pass and do nothing
         self.anchoring = False
-        self.anchoring_update_type = "anything"
         calc = smo._anchor_final_factors(self, self.final_factors, self.al)
         aae(calc, self.final_factors)
 
     def test_anchor_final_factors_with_linear_anchoring_integration(self):
         self.anchoring = True
-        self.anchoring_update_type = "linear"
         calc = smo._anchor_final_factors(self, self.final_factors, self.al)
         aae(calc, self.exp_anchored_factors)
 
     def test_anch_outcome_from_final_factors_with_linear_anchoring(self):
         self.anchoring = True
-        self.anchoring_update_type = "linear"
         self._anchor_final_factors = Mock(return_value=self.exp_anchored_factors)
         exp = np.ones(10) * 3.6
         calc = smo._anchoring_outcome_from_final_factors(
             self, self.final_factors, self.al, self.ai
         )
         aae(calc, exp)
-
-    def test_anch_outcome_from_final_factors_invalid_anchoring(self):
-        self.anchoring = True
-        self.anchoring_update_type = "not_linear"
-        assert_raises(
-            AssertionError,
-            smo._anchoring_outcome_from_final_factors,
-            self,
-            self.final_factors,
-            self.al,
-            self.ai,
-        )
 
     def test_anch_outcome_from_final_factors_no_anchoring(self):
         self.anchoring = False

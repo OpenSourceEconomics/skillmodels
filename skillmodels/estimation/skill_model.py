@@ -693,9 +693,6 @@ class SkillModel(GenericLikelihoodModel):
             reasons.append("A mixture distribution is estimated.")
         if self.uses_controls is True:
             reasons.append("Control variables are used.")
-        update_types = list(self.update_info["update_type"])
-        if "probit" in update_types or "logit" in update_types:
-            reasons.append("Probit or logit updates are used.")
         df = self.update_info.copy(deep=True)
         df = df[df["purpose"] == "measurement"]
         if not (df[self.factors].to_numpy().sum(axis=1) == 1).all():
@@ -948,7 +945,6 @@ class SkillModel(GenericLikelihoodModel):
         tsp_args = {}
         tsp_args["transition_function_names"] = self.transition_names
         if self.anchor_in_predict is True:
-            tsp_args["anchoring_type"] = self.anchoring_update_type
             tsp_args["anchoring_positions"] = self.anch_positions
             tsp_args["anch_params"] = initial_quantities["H"][-1, :]
             if self.ignore_intercept_in_linear_anchoring is False:
@@ -994,7 +990,6 @@ class SkillModel(GenericLikelihoodModel):
         args["nmeas_list"] = self.nmeas_list
         args["anchoring"] = self.anchoring
         args["square_root_filters"] = self.square_root_filters
-        args["update_types"] = list(self.update_info["update_type"])
         args["update_args"] = self._update_args_dict(
             initial_quantities, args["like_vec"]
         )
@@ -1642,11 +1637,7 @@ class SkillModel(GenericLikelihoodModel):
     def _anchor_final_factors(self, final_factors, anch_loadings):
 
         if self.anchoring is True:
-            assert self.anchoring_update_type == "linear", (
-                "Currently, marginal effects only work for linearly anchored "
-                "factors."
-            )
-            anch_func = "anchor_flat_sigma_points_{}".format(self.anchoring_update_type)
+            anch_func = "anchor_flat_sigma_points_linear"
             getattr(anch, anch_func)(
                 final_factors, self.anch_positions, anch_loadings, intercept=None
             )
@@ -1660,11 +1651,6 @@ class SkillModel(GenericLikelihoodModel):
         assert self.anchoring is True, (
             "Marginal effects on a anchoring outcome can only be calculated "
             "if anchoring equations were estimated."
-        )
-
-        assert self.anchoring_update_type == "linear", (
-            "Currently, marginal effects on an anchoring outcome can only "
-            "be calculated for linear anchoring."
         )
 
         anchored = self._anchor_final_factors(final_factors, anch_loadings)

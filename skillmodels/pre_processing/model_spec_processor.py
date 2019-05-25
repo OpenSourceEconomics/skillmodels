@@ -274,10 +274,6 @@ class ModelSpecProcessor:
                 "anchoring"
             ].items()
             self.anchoring = True
-            if self._is_dummy(self.anch_outcome, self.periods[-1]):
-                self.anchoring_update_type = "probit"
-            else:
-                self.anchoring_update_type = "linear"
             self.anch_positions = [
                 f for f in range(self.nfac) if self.factors[f] in self.anchored_factors
             ]
@@ -714,9 +710,6 @@ class ModelSpecProcessor:
         * intercept_norm_value: the value the intercept is normalized to or NaN
         * stage: maps updates to stages
         * purpose: takes one of the values in ['measurement', 'anchoring']
-        * update_type: takes the value 'probit' if the measurement or
-          anchoring_outcome is a dummy variable and self.probit_measurements
-          is True, else 'linear'
         * has_normalized_loading: True if any loading is normalized
         * has_normalized_intercept: True if the intercept is normalized
         * is_repeated: True if the same measurement equation has appeared
@@ -737,7 +730,6 @@ class ModelSpecProcessor:
             self._normalization_update_info(),
             self._stage_udpate_info(),
             self._purpose_update_info(),
-            self._type_update_info(),
             self._invariance_update_info(),
         ]
 
@@ -838,14 +830,6 @@ class ModelSpecProcessor:
         if self.anchoring is True:
             anch_index = (self.nperiods - 1, self.anch_outcome)
             sr[anch_index] = "anchoring"
-        return sr
-
-    def _type_update_info(self):
-        ind = self._factor_update_info().index
-        sr = pd.Series(data="linear", index=ind, name="update_type")
-        for t, meas in ind:
-            if self._is_dummy(meas, t) and self.probit_measurements is True:
-                sr[(t, meas)] = "probit"
         return sr
 
     def _invariance_update_info(self):

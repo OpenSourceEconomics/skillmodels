@@ -493,20 +493,6 @@ class TestPurposeUpdateInfo:
         assert calc.equals(exp)
 
 
-class TestTypeUpdateInfo:
-    def setup(self):
-        self._factor_update_info = Mock(return_value=factor_uinfo())
-        self.probit_measurements = True
-        self._is_dummy = Mock(side_effect=cycle([False, False, True]))
-
-    def test_update_info_update_type(self):
-        calc = msp._type_update_info(self)
-        exp = type_uinfo()
-        print(calc, "\n\n")
-        print(exp, "\n\n")
-        assert calc.equals(exp)
-
-
 class TestInvarianceUpdateInfo:
     def setup(self):
         cols = ["period", "variable", "f1", "f2", "f3"]
