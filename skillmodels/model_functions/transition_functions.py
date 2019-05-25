@@ -311,7 +311,7 @@ def ar1(sigma_points, coeffs, included_positions):
 
 
 def index_tuples_ar1(factor, included_factors, period):
-    return [('trans', period, factor, factor)]
+    return [('trans', period, factor, 'ar1coeff')]
 
 
 def nr_coeffs_ar1(included_factors, params_type):

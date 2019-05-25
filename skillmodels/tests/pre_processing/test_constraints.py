@@ -208,11 +208,11 @@ def test_ar1_constraints():
 
     expected = [
         {
-            "loc": [("trans", 0, "fac2", "fac2"), ("trans", 1, "fac2", "fac2")],
+            "loc": [("trans", 0, "fac2", "ar1coeff"), ("trans", 1, "fac2", "ar1coeff")],
             "type": "equality",
         },
         {
-            "loc": [("trans", 1, "fac2", "fac2"), ("trans", 2, "fac2", "fac2")],
+            "loc": [("trans", 1, "fac2", "ar1coeff"), ("trans", 2, "fac2", "ar1coeff")],
             "type": "equality",
         },
         {"loc": [("q", 0, "fac2", ""), ("q", 1, "fac2", "")], "type": "equality"},
