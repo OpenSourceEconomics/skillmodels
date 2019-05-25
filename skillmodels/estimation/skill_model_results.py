@@ -171,10 +171,6 @@ class SkillModelResults(GenericLikelihoodModelResults):
                 derivatives with complex step are used.
 
         """
-        assert self.model.endog_correction is False, (
-            "Currently, marginal effects cannot be calculated if endogeneity "
-            "correction is used."
-        )
 
         self.model.me_of = of
         self.model.me_on = on

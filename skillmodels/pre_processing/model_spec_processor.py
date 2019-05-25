@@ -111,7 +111,6 @@ class ModelSpecProcessor:
         self._transition_equation_names()
         self._transition_equation_included_factors()
         self._set_anchoring_attributes()
-        self._set_endogeneity_correction_attributes()
         self._clean_measurement_specifications()
         self._clean_controls_specification()
         self.nobs = self.obs_to_keep.sum()
@@ -290,23 +289,6 @@ class ModelSpecProcessor:
             self.anchoring = False
             self.anchored_factors = []
             self.anchor_in_predict = False
-
-    def _set_endogeneity_correction_attributes(self):
-        # TODO: implement endogeneity correction option for both estimators
-        if "endog_correction" in self.model_dict:
-            info_dict = self.model_dict["endog_correction"]
-            self.endog_factor = info_dict["endog_factor"]
-            self.endog_correction = True
-            self.endog_function = info_dict["endog_function"]
-        else:
-            self.endog_correction = False
-
-        if self.endog_correction is True:
-            raise NotImplementedError(
-                "You can currently not use endogeneity correction. The method "
-                "proposed by CHS is not easily adjustable to reflect the "
-                "critique about renormalization by Wiswall and Agostinelli."
-            )
 
     def _present(self, variable, period):
         """Check if **variable** is present in **period**.

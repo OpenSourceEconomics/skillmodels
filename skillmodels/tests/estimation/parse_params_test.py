@@ -66,19 +66,6 @@ class TestMapParamToDeltasWithReplacements:
         aae(self.initial[1], expected1)
 
 
-class TestMapParamsToPsi:
-    def setup(self):
-        self.params = np.arange(100)
-        self.slice = slice(10, 15)
-        self.initial = np.zeros(10)
-        self.boo = np.array([True, False] * 5)
-
-    def test_map_params_to_psi(self):
-        expected = np.array([10, 0, 11, 0, 12, 0, 13, 0, 14, 0])
-        pp._map_params_to_psi(self.params, self.initial, self.slice, self.boo)
-        aae(self.initial, expected)
-
-
 class TestMapParamsToH:
     def setup(self):
         self.params = np.arange(100)
@@ -95,7 +82,7 @@ class TestMapParamsToH:
         self.slice = slice(10, 17)
         self.initial_copy = self.initial.copy()
 
-    def test_map_params_to_H_without_psi_transformation(self):
+    def test_map_params_to_H(self):
         expected = np.array(
             [[10, 0, 0], [0, 11, 0], [0, 3, 12], [13, 0, 14], [0, 15, 16], [0, 0, 0]]
         )
@@ -107,7 +94,7 @@ class TestMapParamsToH:
         )
         aae(self.initial, expected)
 
-    def test_map_params_to_H_without_psi_but_with_replacements(self):
+    def test_map_params_to_H_with_replacements(self):
         expected = np.array(
             [[10, 0, 0], [0, 11, 0], [0, 3, 12], [13, 0, 14], [0, 15, 16], [13, 0, 14]]
         )
@@ -121,39 +108,6 @@ class TestMapParamsToH:
             replacements=replacements,
         )
         aae(self.initial, expected)
-
-    def test_map_params_to_H_with_psi_transformation(self):
-        psi_boo = np.array([True, False, False, True, False, False])
-        psi = np.array([1, 5, 8])
-        arr1 = np.zeros((2, 1))
-
-        expected = np.array(
-            [
-                [10, 50, 80],
-                [0, 11, 0],
-                [0, 3, 12],
-                [13, 65, 118],
-                [0, 15, 16],
-                [0, 0, 0],
-            ]
-        )
-
-        pp._map_params_to_H(
-            params=self.params,
-            initial=self.initial,
-            params_slice=self.slice,
-            boo=self.boo,
-            psi_bool_for_H=psi_boo,
-            psi=psi,
-            arr1=arr1,
-            endog_position=0,
-            initial_copy=self.initial_copy,
-        )
-        aae(self.initial, expected)
-
-    def test_map_params_to_H_with_psi_transformation_unclean_initial(self):
-        self.initial[:] = 100
-        self.test_map_params_to_H_with_psi_transformation()
 
 
 class TestMapParamsToWZero:

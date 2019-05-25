@@ -28,7 +28,7 @@ class TestTransformSigmaPoints:
         self.transition_function_names = ["fake1", "fake2"]
 
     @patch("skillmodels.fast_routines.transform_sigma_points.trans")
-    def test_tsp_no_anchoring_no_endog(self, mock_trans):
+    def test_tsp_no_anchoring(self, mock_trans):
         mock_trans.fake1.side_effect = fake1
         mock_trans.fake2.side_effect = fake2
 
@@ -47,7 +47,7 @@ class TestTransformSigmaPoints:
         aaae(calc, exp)
 
     @patch("skillmodels.fast_routines.transform_sigma_points.trans")
-    def test_tsp_with_anchoring_no_endog_integration(self, mock_trans):
+    def test_tsp_with_anchoring_integration(self, mock_trans):
         mock_trans.fake1.side_effect = fake1
         mock_trans.fake2.side_effect = fake2
 

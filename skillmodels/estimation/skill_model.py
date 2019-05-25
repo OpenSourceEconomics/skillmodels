@@ -101,9 +101,6 @@ class SkillModel(GenericLikelihoodModel):
         self.params_quants = ["deltas", "H", "R", "Q", "P_zero", "trans_coeffs"]
         if self.estimate_X_zeros is True:
             self.params_quants.append("X_zero")
-        # Todo: maybe this does not make sense for the wa estimator
-        if self.endog_correction is True:
-            self.params_quants.append("psi")
         if self.restrict_W_zeros is False and self.estimator == "chs":
             self.params_quants.append("W_zero")
 
@@ -207,34 +204,6 @@ class SkillModel(GenericLikelihoodModel):
         else:
             return []
 
-    def _initial_psi(self):
-        """Initial psi vector filled with ones."""
-        # TODO: Check if psi is needed for endog correction in wa case
-        return np.ones(self.nfac)
-
-    def _psi_bool(self):
-        """Boolean array.
-        It has the same shape as initial_psi and is True where initial_psi
-        has to be overwritten entries from params.
-        """
-        return np.array(self.factors) != self.endog_factor
-
-    def _params_slice_for_psi(self, params_type):
-        """A slice object, selecting the part of params mapped to psi.
-        The method has a side effect on self.param_counter and should never
-        be called by the user.
-        """
-        length = self.nfac - 1
-        return self._general_params_slice(length)
-
-    def _psi_names(self, params_type):
-        """List with names for the params mapped to psi."""
-        psi_names = []
-        for factor in self.factors:
-            if factor != self.endog_factor:
-                psi_names.append("psi__{}".format(factor))
-        return psi_names
-
     def _initial_H(self):
         """Initial H array filled with zeros and normalized factor loadings.
         The array has the form [nupdates, nfac]. Most entries
@@ -251,26 +220,6 @@ class SkillModel(GenericLikelihoodModel):
         has to be overwritten entries from params.
         """
         return self.new_meas_coeffs[self.factors].to_numpy()
-
-    def _helpers_for_H_transformation_with_psi(self):
-        """A boolean array and two empty arrays to store intermediate results.
-        To reduce the number of computations when using endogeneity correction,
-        some vectors with factor loadings (i.e. some rows of H) are transformed
-        using psi.
-        Returns:
-            boolean array that indicates which rows are transformed
-            numpy array to store intermediate results
-            numpy arrey to store intermediate results
-        """
-        # TODO: remove this. It didn't bring the time improvement I hoped for
-        assert self.endog_correction is True, (
-            "The psi_bool_for_H method should only be called if "
-            "endog_correction is True. You did otherwise in model {}"
-        ).format(self.model_name)
-
-        psi_bool = self.update_info[self.endog_factor].to_numpy().flatten().astype(bool)
-        arr1 = np.zeros((psi_bool.sum(), 1))
-        return psi_bool, arr1
 
     def _params_slice_for_H(self, params_type):
         """A slice object, selecting the part of params mapped to H.
@@ -798,7 +747,7 @@ class SkillModel(GenericLikelihoodModel):
         slices = self.params_slices(params_type="short")
         start = np.zeros(self.len_params(params_type="short"))
         vals = self.start_values_per_quantity
-        for quant in ["deltas", "H", "R", "Q", "psi", "X_zero"]:
+        for quant in ["deltas", "H", "R", "Q", "X_zero"]:
             if quant in self.params_quants and quant in vals:
                 if type(slices[quant]) != list:
                     start[slices[quant]] = vals[quant]
@@ -932,14 +881,6 @@ class SkillModel(GenericLikelihoodModel):
                 if len(rep) > 0:
                     pp[entry]["replacements"] = rep
 
-        if self.endog_correction is True:
-            helpers = self._helpers_for_H_transformation_with_psi()
-            pp["H_args"]["psi"] = initial_quantities["psi"]
-            pp["H_args"]["psi_bool_for_H"] = helpers[0]
-            pp["H_args"]["arr1"] = helpers[1]
-            pp["H_args"]["endog_position"] = self.endog_position
-            pp["H_args"]["initial_copy"] = initial_quantities["H"].copy()
-
         pp["P_zero_args"]["cholesky_of_P_zero"] = self.cholesky_of_P_zero
         pp["P_zero_args"]["square_root_filters"] = self.square_root_filters
         pp["P_zero_args"]["params_type"] = params_type
@@ -1013,10 +954,6 @@ class SkillModel(GenericLikelihoodModel):
             if self.ignore_intercept_in_linear_anchoring is False:
                 tsp_args["intercept"] = initial_quantities["deltas"][-1][-1, 0:1]
 
-        if self.endog_correction is True:
-            tsp_args["psi"] = initial_quantities["psi"]
-            tsp_args["endog_position"] = self.endog_position
-            tsp_args["correction_func"] = self.endog_function
         tsp_args["transition_argument_dicts"] = self._transition_equation_args_dicts(
             initial_quantities
         )
@@ -1671,11 +1608,6 @@ class SkillModel(GenericLikelihoodModel):
         return epsilon
 
     def _predict_final_factors(self, change, return_intermediate=False):
-
-        assert self.endog_correction is False, (
-            "Currently, final factors can only be predicted if no "
-            "endogeneity correction is used."
-        )
 
         assert (
             len(change) == self.nperiods - 1

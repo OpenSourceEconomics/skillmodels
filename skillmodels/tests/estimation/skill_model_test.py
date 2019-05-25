@@ -269,27 +269,6 @@ class TestDeltasRelatedMethods:
         assert calc == exp
 
 
-class TestPsiRelatedMethods:
-    def setup(self):
-        self.factors = ["f1", "f2", "f3"]
-        self.nfac = len(self.factors)
-        self.endog_factor = "f3"
-
-    def test_initial_psi(self):
-        aae(smo._initial_psi(self), np.ones(3))
-
-    def test_psi_bool(self):
-        aae(smo._psi_bool(self), np.array([True, True, False]))
-
-    def test_params_slice_for_psi(self):
-        self._general_params_slice = Mock()
-        smo._params_slice_for_psi(self, params_type="short")
-        self._general_params_slice.assert_has_calls([call(2)])
-
-    def test_psi_names(self):
-        assert_equal(smo._psi_names(self, params_type="short"), ["psi__f1", "psi__f2"])
-
-
 class TestHRelatedMethods:
     def setup(self):
         self.factors = ["f1", "f2"]
@@ -360,18 +339,6 @@ class TestHRelatedMethods:
         self._general_params_slice = Mock()
         smo._params_slice_for_H(self, params_type="short")
         self._general_params_slice.assert_has_calls([call(9)])
-
-    def test_helpers_for_h_transformation(self):
-        self.endog_correction = True
-        self.endog_factor = ["f1"]
-        res1 = np.zeros(20, dtype=bool)
-        for i in (0, 1, 6, 8, 11, 16, 18):
-            res1[i] = True
-        res2 = np.zeros((7, 1))
-
-        calc1, calc2 = smo._helpers_for_H_transformation_with_psi(self)
-        aae(calc1, res1)
-        aae(calc2, res2)
 
     def test_H_names(self):
         self.factors = ["f1", "f2"]
@@ -1399,9 +1366,6 @@ def fake_tsp(
     anchoring_positions=None,
     anch_params=None,
     intercept=None,
-    psi=None,
-    endog_position=None,
-    correction_func=None,
 ):
 
     flat_sigma_points[:] *= 2
@@ -1411,7 +1375,6 @@ class TestPredictFinalFactors:
     def setup(self):
         self.change = np.array([1, 2])
         self.nperiods = 3
-        self.endog_correction = False
         self.lh_args = {
             "predict_args": {
                 "transform_sigma_points_args": {
@@ -1426,10 +1389,6 @@ class TestPredictFinalFactors:
         self.factors = ["f1", "f2"]
         self.me_params = None
         self.stagemap = [0, 1, 1]
-
-    def test_predict_final_factors_raises_with_endog(self):
-        self.endog_correction = True
-        assert_raises(AssertionError, smo._predict_final_factors, self, self.change)
 
     def test_predict_final_factors_invalid_change(self):
         invalid_change = np.zeros(5)

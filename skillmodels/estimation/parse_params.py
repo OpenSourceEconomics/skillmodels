@@ -11,7 +11,6 @@ already been done in SkillModel.
 """
 import skillmodels.model_functions.transition_functions as tf
 import numpy as np
-#from numpy.core.umath_tests import matrix_multiply
 from numpy.linalg import cholesky
 
 
@@ -24,27 +23,14 @@ def _map_params_to_deltas(params, initial, params_slice, boo, replacements=None)
             initial[t_put][pos_put, :] = initial[t_take][pos_take, :]
 
 
-def _map_params_to_psi(params, initial, params_slice, boo):
-    """Map parameters from params to psi."""
-    initial[boo] = params[params_slice]
-
-
 def _map_params_to_H(
     params,
     initial,
     params_slice,
     boo,
-    psi_bool_for_H=None,
-    psi=None,
-    arr1=None,
-    endog_position=None,
-    initial_copy=None,
     replacements=None,
 ):
     """Map parameters from params to H."""
-    # the initial H has to be restored if endog_correction is True
-    if psi is not None:
-        initial[:] = initial_copy
 
     # fill H with the new parameters
     initial[boo] = params[params_slice]
@@ -53,12 +39,6 @@ def _map_params_to_H(
     if replacements is not None:
         for put_position, take_position in replacements:
             initial[put_position, :] = initial[take_position, :]
-
-    # make some transformations with psi in the case of endog correction
-    if psi is not None:
-        arr1[:] = initial[psi_bool_for_H, endog_position].reshape(arr1.shape)
-        initial[psi_bool_for_H, endog_position] = 0
-        initial[psi_bool_for_H] += np.multiply(arr1, psi)
 
 
 def _map_params_to_R(

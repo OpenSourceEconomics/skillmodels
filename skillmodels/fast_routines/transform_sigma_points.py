@@ -1,6 +1,5 @@
 import skillmodels.model_functions.anchoring_functions as anch
 import skillmodels.model_functions.transition_functions as trans
-import skillmodels.model_functions.endogeneity_functions as endog
 import numpy as np
 
 
@@ -13,9 +12,6 @@ def transform_sigma_points(
     anchoring_positions=None,
     anch_params=None,
     intercept=None,
-    psi=None,
-    endog_position=None,
-    correction_func=None,
 ):
     """Transform an array of sigma_points for the unscented predict.
 
@@ -33,24 +29,10 @@ def transform_sigma_points(
             flat_sigma_points, anchoring_positions, anch_params, intercept
         )
 
-    # apply transition function of endog_factor
-    if endog_position is not None:
-        p = endog_position
-        intermediate_array[:, p] = getattr(trans, transition_function_names[p])(
-            flat_sigma_points, **transition_argument_dicts[stage][p]
-        )
-
-        # call the endogeneity correction function()
-        flat_sigma_points[:, p] = getattr(endog, correction_func)(
-            flat_sigma_points, psi, endog_position
-        )
-
-    # apply the other transition equations
     for f in range(nfac):
-        if f != endog_position:
-            intermediate_array[:, f] = getattr(trans, transition_function_names[f])(
-                flat_sigma_points, **transition_argument_dicts[stage][f]
-            )
+        intermediate_array[:, f] = getattr(trans, transition_function_names[f])(
+            flat_sigma_points, **transition_argument_dicts[stage][f]
+        )
 
     # copy them into the sigma_point array
     flat_sigma_points[:] = intermediate_array[:]
