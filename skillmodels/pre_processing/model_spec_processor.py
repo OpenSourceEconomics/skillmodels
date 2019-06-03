@@ -5,6 +5,8 @@ from itertools import product
 import os
 import warnings
 from skillmodels.pre_processing.data_processor import pre_process_data
+from skillmodels.pre_processing.params_index import params_index
+from skillmodels.pre_processing.constraints import constraints
 
 
 class ModelSpecProcessor:
@@ -72,12 +74,11 @@ class ModelSpecProcessor:
             "ignore_intercept_in_linear_anchoring": True,
             "start_values_per_quantity": {
                 "deltas": 1.0,
-                "H": 1.0,
-                "R": 1.0,
-                "Q": 0.1,
-                "P_zero_diags": 0.4472135955,
-                "P_zero_off_diags": 0.0,
-                "psi": 0.1,
+                "h": 1.0,
+                "r": 1.0,
+                "q": 0.1,
+                "p_diags": 0.4472135955,
+                "p_off_diags": 0.0,
                 "trans_coeffs": 1.0,
             },
             # "numba_target": "cpu",
@@ -320,28 +321,6 @@ class ModelSpecProcessor:
         else:
             return False
 
-    def _is_dummy(self, variable, period):
-        """Check if **variable** is a dummy variable in **period**.
-
-        **variable** is considered a dummy variable if it takes the values
-        0, 1 and NaN in **period**. If it only takes a subset of these values
-        it is not considered a dummy variable.
-
-        args:
-            variable (str): name of the variable being checked.
-            period (int): period in which the variable is checked
-
-        Returns:
-            bool: True if **variable** is a dummy in **period**, else False
-
-        """
-        series = self.data.query('__period__ == {}'.format(period))[variable]
-        unique_values = series[pd.notnull(series)].unique()
-        if sorted(unique_values) == [0, 1]:
-            return True
-        else:
-            return False
-
     def _has_variance(self, variable, period):
         """Check if **variable** has variance in **period**.
 
@@ -508,13 +487,6 @@ class ModelSpecProcessor:
                     "in the last period. In model {} you use the anchoring "
                     "outcome {} as measurement for factor {}"
                 ).format(self.model_name, self.anch_outcome, factor)
-
-        if self.nemf >= 2 and self._is_dummy(self.anch_outcome):
-            raise NotImplementedError(
-                "Probability anchoring is not yet implemented for nemf >= 2 "
-                "but your anchoring outcome {} in model {} is a dummy "
-                "variable."
-            ).format(self.anch_outcmoe, self.model_name)
 
         if self.anchoring is True and self.estimator == "wa":
             assert self.anchor_in_predict is False, (
@@ -1076,6 +1048,39 @@ class ModelSpecProcessor:
                 new_params[:, f] = 1
 
         return new_params
+
+
+    def _params_df(self):
+        index = params_index(
+            self.update_info,
+            self.controls,
+            self.factors,
+            self.nemf,
+            self.transition_names,
+            self.included_factors,
+        )
+        constraints = constraints(
+            self.update_info,
+            self.controls,
+            self.factors,
+            self.normalizations,
+            self.measurements,
+            self.nemf,
+            self.stagemap,
+            self.transition_names,
+            self.included_factors
+        )
+        df = pd.DataFrame(index=index)
+        df['value']
+
+
+    def _start_params_helper(self):
+        """Return a params_df that only contains free parameters and start values.
+
+        The start value can then be modified by the user.
+        """
+
+
 
     def _wa_period_weights(self):
         """Dataframe of shape (nperiods - 1, nfac) with weights.

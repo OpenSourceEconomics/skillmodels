@@ -64,15 +64,6 @@ class TestVariableCheckMethods:
         self.missing_variables = "raise_error"
         assert_raises(KeyError, msp._present, self, "var1", 1)
 
-    def test_is_dummy_where_true(self):
-        assert_equal(msp._is_dummy(self, "var1", 0), True)
-
-    def test_is_dummy_where_false_non_missing(self):
-        assert_equal(msp._is_dummy(self, "var2", 1), False)
-
-    def test_is_dummy_where_false_missing(self):
-        assert_equal(msp._is_dummy(self, "var1", 1), False)
-
     def test_has_variance_where_true(self):
         assert_equal(msp._has_variance(self, "var1", 0), True)
 

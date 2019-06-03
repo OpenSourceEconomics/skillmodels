@@ -15,8 +15,6 @@ def test_likelihood_value():
     with open("skillmodels/tests/estimation/test_model2.json") as j:
         model_dict = json.load(j)
 
-    print(df.head())
-
     mod = SkillModel(
         model_dict=model_dict, dataset=df, estimator="chs", model_name="test_model"
     )
