@@ -73,7 +73,7 @@ class ModelSpecProcessor:
             "probanch_function": "odds_ratio",
             "ignore_intercept_in_linear_anchoring": True,
             "start_values_per_quantity": {
-                "deltas": 1.0,
+                "delta": 1.0,
                 "h": 1.0,
                 "r": 1.0,
                 "q": 0.1,
@@ -120,6 +120,8 @@ class ModelSpecProcessor:
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
         self._nmeas_list()
+        self._set_params_index()
+        self._set_constraints()
         if self.estimator == "wa":
             self._wa_period_weights()
             self._wa_storage_df()
@@ -1049,18 +1051,19 @@ class ModelSpecProcessor:
 
         return new_params
 
-
-    def _params_df(self):
-        index = params_index(
-            self.update_info,
+    def _set_params_index(self):
+        self.params_index = params_index(
+            self.update_info(),
             self.controls,
             self.factors,
             self.nemf,
             self.transition_names,
             self.included_factors,
         )
-        constraints = constraints(
-            self.update_info,
+
+    def _set_constraints(self):
+        self.constraints = constraints(
+            self.update_info(),
             self.controls,
             self.factors,
             self.normalizations,
@@ -1068,19 +1071,9 @@ class ModelSpecProcessor:
             self.nemf,
             self.stagemap,
             self.transition_names,
-            self.included_factors
+            self.included_factors,
+            self.time_invariant_measurement_system,
         )
-        df = pd.DataFrame(index=index)
-        df['value']
-
-
-    def _start_params_helper(self):
-        """Return a params_df that only contains free parameters and start values.
-
-        The start value can then be modified by the user.
-        """
-
-
 
     def _wa_period_weights(self):
         """Dataframe of shape (nperiods - 1, nfac) with weights.

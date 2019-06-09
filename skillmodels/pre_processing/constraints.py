@@ -1,11 +1,4 @@
-""".
-
-
-- intrinsic constraints for trans-coeffs
-    - probabaility constraints on all but last log_ces coeffs
-
-
-"""
+"""Construct an estimagic constraints list for a model."""
 import skillmodels.model_functions.transition_functions as tf
 import numpy as np
 
@@ -20,11 +13,14 @@ def constraints(
     stagemap,
     transition_names,
     included_factors,
+    invariant_meas_system,
 ):
 
     periods = list(range(len(stagemap)))
+    constr = []
 
-    constr = _invariant_meas_system_constraints(update_info, controls, factors)
+    if invariant_meas_system:
+        constr += _invariant_meas_system_constraints(update_info, controls, factors)
     constr += _normalization_constraints(normalizations)
     constr += _not_measured_constraints(update_info, measurements)
     constr += _w_constraints()
@@ -171,7 +167,7 @@ def _not_measured_constraints(update_info, measurements):
 
 def _w_constraints():
     """Constrain mixture weights to be between 0 and 1 and sum to 1."""
-    return [{"loc": "w", "type": "probabaility"}]
+    return [{"loc": "w", "type": "probability"}]
 
 
 def _p_constraints(nemf):

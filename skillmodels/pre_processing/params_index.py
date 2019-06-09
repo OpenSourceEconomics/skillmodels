@@ -34,7 +34,7 @@ def params_index(
     ind_tups += _h_index_tuples(factors, update_info)
     ind_tups += _r_index_tuples(update_info)
     ind_tups += _q_index_tuples(periods, factors)
-    ind_tups += _x_index_tuples(periods, factors)
+    ind_tups += _x_index_tuples(nemf, factors)
     ind_tups += _w_index_tuples(nemf)
     ind_tups += _p_index_tuples(nemf, factors)
     ind_tups += _trans_coeffs_index_tuples(

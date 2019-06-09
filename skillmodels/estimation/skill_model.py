@@ -23,7 +23,6 @@ from skillmodels.fast_routines.transform_sigma_points import transform_sigma_poi
 import numpy as np
 import skillmodels.model_functions.transition_functions as tf
 from skillmodels.estimation.parse_params import parse_params
-import skillmodels.estimation.parse_params as pp
 import skillmodels.model_functions.anchoring_functions as anch
 
 from itertools import product
@@ -38,6 +37,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from os.path import join
 from skillmodels.simulation.simulate_data import simulate_datasets
+from estimagic.optimization.start_helpers import make_start_params_helpers
+from estimagic.optimization.start_helpers import get_start_params_from_helpers
 
 
 class SkillModel(GenericLikelihoodModel):
@@ -103,7 +104,6 @@ class SkillModel(GenericLikelihoodModel):
             self.params_quants.append("x")
         if self.restrict_W_zeros is False and self.estimator == "chs":
             self.params_quants.append("w")
-
 
     def _initial_delta(self):
         """List of initial arrays for control variable params in each period.
@@ -224,13 +224,47 @@ class SkillModel(GenericLikelihoodModel):
         """Check if self.start_params has the correct length."""
         raise NotImplementedError
 
-    def generate_start_params(self):
+    def start_params_helpers(self):
+        """DataFrames with the free and fixed parameters of the model."""
+        free, fixed = make_start_params_helpers(
+            self.params_index, self.constraints)
+        return free, fixed
+
+    def generate_full_start_params(self):
         """Vector with start values for the optimization.
+
         If valid start_params are provided in the model dictionary, these will
-        be used. Else, if the model is compatible with the wa estimator, the
-        wa estimates will be used. Else, naive start_params are generated.
+        be used. Else, naive start_params are generated.
+
         """
-        raise NotImplementedError
+        free, fixed = self.start_params_helpers()
+        if hasattr(self, 'start_params'):
+            sp = self.start_params
+            assert isinstance(sp, pd.DataFrame)
+            if len(sp.index.intersection(self.params_index)) == len(self.params_index):
+                full_sp = sp
+
+            elif len(sp.index.intersection(free.index)) == len(free.index):
+                full_sp = get_start_params_from_helpers(
+                    sp, fixed, self.constraints, self.params_index)
+            else:
+                raise ValueError(
+                    "Index of start parameters has to be the same as the index of ",
+                    "free parameters from start_params_helpers.")
+        else:
+            free['value'] = 0.0
+            free.loc['h', 'value'] = 1.0
+            free.loc['r', 'value'] = 1.0
+            free.loc['q', 'value'] = 1.0
+            free.loc['trans_coeffs'] = 1 / self.nfac
+            free.loc['w'] = 1 / self.nemf
+            for emf in range(self.nemf):
+                p_diags = [("p", 0, emf, fac) for fac in self.factors]
+                free.loc[p_diags, 'value'] = 1
+
+            full_sp = get_start_params_from_helpers(
+                free, fixed, self.constraints, self.params_index)
+        return full_sp
 
     def sigma_weights(self):
         """Calculate the sigma weight according to the julier algorithm."""
