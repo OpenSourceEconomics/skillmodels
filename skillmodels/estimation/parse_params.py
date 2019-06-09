@@ -69,7 +69,8 @@ def _map_params_to_trans_coeffs(params, initial, factors):
 
     for factor, init in zip(factors, initial):
         for period in relevant_periods:
-            init[period] = params.loc['trans', period, factor].to_numpy()
+            if factor in params.loc['trans', period]:
+                init[period] = params.loc['trans', period, factor].to_numpy()
 
 
 def restore_unestimated_quantities(x=None, x_value=None, w=None, w_value=None):

@@ -281,7 +281,7 @@ def normal_unscented_predict(
     flat_sigma_points,
     s_weights_m,
     s_weights_c,
-    Q,
+    q,
     transform_sigma_points_args,
     out_flat_states,
     out_flat_covs,
@@ -297,7 +297,7 @@ def normal_unscented_predict(
             weights for the means.
         s_weights_c (np.ndarray): numpy array of length nsigma with sigma
             weights for the covariances.
-        Q (np.ndarray): numpy array of (nstages, nfac, nfac) with vaiances of
+        q (np.ndarray): numpy array of (nstages, nfac, nfac) with vaiances of
             the transition equation shocks.
         transform_sigma_points_args (dict): (see transform_sigma_points).
         out_flat_states (np.ndarray): output array of (nind * nemf, nfac).
@@ -309,7 +309,7 @@ def normal_unscented_predict(
 
     """
     nemf_times_nind, nsigma, nfac = sigma_points.shape
-    q = Q[stage]
+    q = q[stage]
     transform_sigma_points(stage, flat_sigma_points, **transform_sigma_points_args)
     # get them back into states
     predicted_states = np.dot(s_weights_m, sigma_points, out=out_flat_states)
@@ -358,7 +358,7 @@ def sqrt_unscented_predict(
     flat_sigma_points,
     s_weights_m,
     s_weights_c,
-    Q,
+    q,
     transform_sigma_points_args,
     out_flat_states,
     out_flat_covs,
@@ -390,7 +390,7 @@ def sqrt_unscented_predict(
 
     """
     nemf_times_nind, nsigma, nfac = sigma_points.shape
-    q = Q[stage]
+    q = q[stage]
     transform_sigma_points(stage, flat_sigma_points, **transform_sigma_points_args)
 
     # get them back into states
@@ -402,15 +402,3 @@ def sqrt_unscented_predict(
     qr_points[:, 0:nsigma, :] = devs * qr_weights
     qr_points[:, nsigma:, :] = np.sqrt(q)
     out_flat_covs[:, 1:, 1:] = array_qr(qr_points)[:, :nfac, :]
-
-
-def sqrt_probit_update(
-    k, t, j, states, covs, mix_weights, like_vec, y_data, c_data, deltas, H, R
-):
-    raise NotImplementedError("probit updates are not yet implemented")
-
-
-def normal_probit_update(
-    k, t, j, states, covs, mix_weights, like_vec, y_data, c_data, deltas, H, R
-):
-    raise NotImplementedError("probit updates are not yet implemented")

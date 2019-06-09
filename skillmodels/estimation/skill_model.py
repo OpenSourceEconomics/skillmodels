@@ -220,10 +220,6 @@ class SkillModel(GenericLikelihoodModel):
 
         return can_be_used
 
-    def _correct_len_of_start_params(self, raise_warning=True):
-        """Check if self.start_params has the correct length."""
-        raise NotImplementedError
-
     def start_params_helpers(self):
         """DataFrames with the free and fixed parameters of the model."""
         free, fixed = make_start_params_helpers(
@@ -249,8 +245,8 @@ class SkillModel(GenericLikelihoodModel):
                     sp, fixed, self.constraints, self.params_index)
             else:
                 raise ValueError(
-                    "Index of start parameters has to be the same as the index of ",
-                    "free parameters from start_params_helpers.")
+                    "Index of start parameters has to either self.params_index or "
+                    "the index of free parameters from start_params_helpers.")
         else:
             free['value'] = 0.0
             free.loc['h', 'value'] = 1.0

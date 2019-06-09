@@ -14,6 +14,8 @@ def constraints(
     transition_names,
     included_factors,
     invariant_meas_system,
+    anchored_factors,
+    anch_outcome,
 ):
 
     periods = list(range(len(stagemap)))
@@ -22,7 +24,7 @@ def constraints(
     if invariant_meas_system:
         constr += _invariant_meas_system_constraints(update_info, controls, factors)
     constr += _normalization_constraints(normalizations)
-    constr += _not_measured_constraints(update_info, measurements)
+    constr += _not_measured_constraints(update_info, measurements, anchored_factors, anch_outcome)
     constr += _w_constraints()
     constr += _p_constraints(nemf)
     constr += _stage_constraints(stagemap, factors, transition_names, included_factors)
@@ -134,7 +136,7 @@ def _normalization_constraints(normalizations):
     return constraints
 
 
-def _not_measured_constraints(update_info, measurements):
+def _not_measured_constraints(update_info, measurements, anchored_factors, anch_outcome):
     """Fix all loadings for non-measured factors to 0.
 
     Args:
@@ -156,6 +158,8 @@ def _not_measured_constraints(update_info, measurements):
         all_measurements = update_info.loc[period].index
         for factor in factors:
             used_measurements = measurements[factor][period]
+            if period == periods[-1] and factor in anchored_factors:
+                used_measurements.append(anch_outcome)
             for meas in all_measurements:
                 if meas not in used_measurements:
                     locs.append(("h", period, meas, factor))

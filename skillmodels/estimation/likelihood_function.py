@@ -5,8 +5,6 @@ from skillmodels.fast_routines.kalman_filters import normal_unscented_predict
 from skillmodels.fast_routines.kalman_filters import sqrt_unscented_predict
 from skillmodels.fast_routines.kalman_filters import normal_linear_update
 from skillmodels.fast_routines.kalman_filters import sqrt_linear_update
-from skillmodels.fast_routines.kalman_filters import normal_probit_update
-from skillmodels.fast_routines.kalman_filters import sqrt_probit_update
 from skillmodels.fast_routines.sigma_points import calculate_sigma_points
 
 

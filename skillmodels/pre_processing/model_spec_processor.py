@@ -288,6 +288,7 @@ class ModelSpecProcessor:
             self.anchoring = False
             self.anchored_factors = []
             self.anchor_in_predict = False
+            self.anch_outcome = None
 
     def _present(self, variable, period):
         """Check if **variable** is present in **period**.
@@ -1073,6 +1074,8 @@ class ModelSpecProcessor:
             self.transition_names,
             self.included_factors,
             self.time_invariant_measurement_system,
+            self.anchored_factors,
+            self.anch_outcome,
         )
 
     def _wa_period_weights(self):
