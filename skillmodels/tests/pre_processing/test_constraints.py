@@ -119,14 +119,14 @@ def test_not_measured_constraints():
         {"loc": ("h", 1, "m3", "fac1"), "type": "fixed", "value": 0.0},
     ]
 
-    calculated = _not_measured_constraints(uinfo, measurements)
+    calculated = _not_measured_constraints(uinfo, measurements, [], None)
 
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_w_constraints():
     calculated = _w_constraints()
-    expected = [{"loc": "w", "type": "probabaility"}]
+    expected = [{"loc": "w", "type": "probability"}]
     assert_list_equal_except_for_order(calculated, expected)
 
 

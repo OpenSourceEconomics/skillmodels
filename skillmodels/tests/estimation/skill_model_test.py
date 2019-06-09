@@ -160,50 +160,6 @@ def test_initial_trans_coeffs(mocker):
         aae(calc, exp)
 
 
-class TestLenParams:
-    def setup(self):
-        self.params_quants = ["a", "b"]
-        self.params_slices = Mock(return_value={"a": slice(0, 3), "b": slice(3, 5)})
-
-    def test_len_params(self):
-        assert_equal(smo.len_params(self, params_type="short"), 5)
-
-
-class TestGenerateStartParams:
-    def setup(self):
-        self.params_quants = ["deltas", "P_zero", "W_zero", "trans_coeffs"]
-        self.nemf = 3
-        self.nfac = 2
-        self.stages = [0, 1]
-        self.factors = ["f1", "f2"]
-        self.included_factors = self.factors
-        self.transition_names = ["some_func", "some_func"]
-        self.start_values_per_quantity = {
-            "deltas": 5,
-            "P_zero_off_diags": 0,
-            "P_zero_diags": 0.5,
-        }
-        self.restrict_P_zeros = False
-
-        slices = {
-            "deltas": slice(0, 4),
-            "P_zero": slice(4, 13),
-            "W_zero": slice(13, 16),
-            "trans_coeffs": [
-                [slice(16, 17), slice(17, 18)],
-                [slice(18, 19), slice(19, 20)],
-            ],
-        }
-        self.params_slices = Mock(return_value=slices)
-        self.len_params = Mock(return_value=20)
-
-    @patch("skillmodels.estimation.skill_model.tf")
-    def test_generate_start_params(self, mock_tf):
-        mock_tf.start_values_some_func.return_value = np.ones(1) * 7.7
-        expected = np.array([5] * 4 + [0.5, 0, 0.5] * 3 + [1 / 3] * 3 + [7.7] * 4)
-        aae(smo._generate_naive_start_params(self), expected)
-
-
 class TestSigmaWeightsAndScalingFactor:
     def setup(self):
         self.nemf = 2
