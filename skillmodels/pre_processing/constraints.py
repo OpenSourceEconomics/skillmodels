@@ -159,7 +159,7 @@ def _not_measured_constraints(update_info, measurements, anchored_factors, anch_
         for factor in factors:
             used_measurements = measurements[factor][period]
             if period == periods[-1] and factor in anchored_factors:
-                used_measurements.append(anch_outcome)
+                used_measurements = used_measurements + [anch_outcome]
             for meas in all_measurements:
                 if meas not in used_measurements:
                     locs.append(("h", period, meas, factor))
