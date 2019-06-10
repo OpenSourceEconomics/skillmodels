@@ -395,7 +395,7 @@ class SkillModel(GenericLikelihoodModel):
         sp_args["scaling_factor"] = self.sigma_scaling_factor()
         return sp_args
 
-    def likelihood_arguments_dict(self, params_type):
+    def likelihood_arguments_dict(self):
         """Construct a dict with arguments for the likelihood function."""
         initial_quantities = self._initial_quantities_dict()
 

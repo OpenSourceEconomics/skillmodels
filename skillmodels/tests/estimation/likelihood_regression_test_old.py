@@ -20,7 +20,7 @@ def test_likelihood_value():
     # with open('/home/janos/Dropbox/Projects/skillmodels/test_uinfo.p', 'wb') as p:
     #     pickle.dump(uinfo, p)
 
-    args = mod.likelihood_arguments_dict(params_type="short")
+    args = mod.likelihood_arguments_dict()
 
     params_df = pd.read_csv("skillmodels/tests/estimation/like_reg_params_new.csv")
     params_df["name2"].fillna("", inplace=True)
