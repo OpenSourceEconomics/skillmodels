@@ -14,7 +14,7 @@ def fake2(arr, coeffs, included_positions):
 
 class TestTransformSigmaPoints:
     def setup(self):
-        self.stage = 1
+        self.period = 1
         self.flat_sigma_points = np.arange(20, dtype=float).reshape(2, 10).T
         self.transition_argument_dicts = [
             [],
@@ -37,7 +37,7 @@ class TestTransformSigmaPoints:
         exp[:, 1] = np.arange(start=10, stop=20) + np.arange(10) - 0.2
 
         transform_sigma_points(
-            stage=self.stage,
+            period=self.period,
             flat_sigma_points=self.flat_sigma_points,
             transition_argument_dicts=self.transition_argument_dicts,
             transition_function_names=self.transition_function_names,
@@ -56,7 +56,7 @@ class TestTransformSigmaPoints:
         exp[:, 1] = np.arange(start=10, stop=20) + 0.5 * np.arange(10) - 0.1
 
         transform_sigma_points(
-            stage=self.stage,
+            period=self.period,
             flat_sigma_points=self.flat_sigma_points,
             transition_argument_dicts=self.transition_argument_dicts,
             transition_function_names=self.transition_function_names,

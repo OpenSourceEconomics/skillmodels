@@ -297,7 +297,7 @@ def normal_unscented_predict(
             weights for the means.
         s_weights_c (np.ndarray): numpy array of length nsigma with sigma
             weights for the covariances.
-        q (np.ndarray): numpy array of (nstages, nfac, nfac) with vaiances of
+        q (np.ndarray): numpy array of (nperiods - 1, nfac, nfac) with vaiances of
             the transition equation shocks.
         transform_sigma_points_args (dict): (see transform_sigma_points).
         out_flat_states (np.ndarray): output array of (nind * nemf, nfac).
@@ -378,7 +378,7 @@ def sqrt_unscented_predict(
             weights for the means.
         s_weights_c (np.ndarray): numpy array of length nsigma with sigma
             weights for the covariances.
-        Q (np.ndarray): numpy array of (nstages, nfac, nfac) with vaiances of
+        q (np.ndarray): numpy array of (nperiods - 1, nfac, nfac) with vaiances of
             the transition equation shocks.
         transform_sigma_points_args (dict): (see transform_sigma_points).
         out_flat_states (np.ndarray): output array of (nind * nemf, nfac).
