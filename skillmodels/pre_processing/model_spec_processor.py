@@ -18,10 +18,6 @@ class ModelSpecProcessor:
     Clean the model specs by handling variables that were specified but are
     not in the dataset or have no variance. Raise errors if specified.
 
-    Extend the model specs by inferring dimensions, generating automatic
-    normalization specifications or merging stages if too few measurements are
-    available for some factors.
-
     Transform the cleaned model specs into forms that are more practical for
     the construction of the quantities that are needed in the likelihood
     function.

@@ -12,7 +12,7 @@ def log_likelihood_per_individual(
     params,
     like_vec,
     parse_params_args,
-    stagemap,
+    periods,
     nmeas_list,
     anchoring,
     square_root_filters,
@@ -54,12 +54,12 @@ def log_likelihood_per_individual(
     restore_unestimated_quantities(**restore_args)
     parse_params(params, **parse_params_args)
     k = 0
-    for t, stage in enumerate(stagemap):
+    for t in periods:
         for j in range(nmeas_list[t]):
             # measurement updates
             update(square_root_filters, update_args[k])
             k += 1
-        if t < len(stagemap) - 1:
+        if t < periods[-1]:
             calculate_sigma_points(**calculate_sigma_points_args)
             predict(t, square_root_filters, predict_args)
     if anchoring is True:
