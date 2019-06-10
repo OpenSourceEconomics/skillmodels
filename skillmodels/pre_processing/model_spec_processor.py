@@ -72,16 +72,6 @@ class ModelSpecProcessor:
             "probit_measurements": False,
             "probanch_function": "odds_ratio",
             "ignore_intercept_in_linear_anchoring": True,
-            "start_values_per_quantity": {
-                "delta": 1.0,
-                "h": 1.0,
-                "r": 1.0,
-                "q": 0.1,
-                "p_diags": 0.4472135955,
-                "p_off_diags": 0.0,
-                "trans_coeffs": 1.0,
-            },
-            # "numba_target": "cpu",
             "wa_standard_error_method": "bootstrap",
             "chs_standard_error_method": "op_of_gradient",
             "save_intermediate_optimization_results": False,
@@ -731,7 +721,7 @@ class ModelSpecProcessor:
             for m, meas in enumerate(measurements):
                 # if meas is not the first measurement in period t
                 # and the measurement has already been used in period t
-                if (f > 0 or m > 0) and meas in df.loc[t].index:
+                if t in df.index and meas in df.loc[t].index:
                     # change corresponding row of the DataFrame
                     df.loc[(t, meas), factor] = 1
 
@@ -1112,6 +1102,5 @@ class ModelSpecProcessor:
             key: val for key, val in all_attributes.items() if not key.startswith("_")
         }
         public_attributes["update_info"] = self.update_info()
-        public_attributes["new_meas_coeffs"] = self.new_meas_coeffs()
         public_attributes["new_trans_coeffs"] = self.new_trans_coeffs()
         return public_attributes

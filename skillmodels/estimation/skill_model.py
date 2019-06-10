@@ -38,7 +38,7 @@ import seaborn as sns
 from os.path import join
 from skillmodels.simulation.simulate_data import simulate_datasets
 from estimagic.optimization.start_helpers import make_start_params_helpers
-from estimagic.optimization.start_helpers import get_start_params_from_helpers
+from estimagic.optimization.start_helpers import get_start_params_from_free_params
 
 
 class SkillModel(GenericLikelihoodModel):
@@ -241,8 +241,8 @@ class SkillModel(GenericLikelihoodModel):
                 full_sp = sp
 
             elif len(sp.index.intersection(free.index)) == len(free.index):
-                full_sp = get_start_params_from_helpers(
-                    sp, fixed, self.constraints, self.params_index)
+                full_sp = get_start_params_from_free_params(
+                    sp, self.constraints, self.params_index)
             else:
                 raise ValueError(
                     "Index of start parameters has to either self.params_index or "
@@ -258,8 +258,8 @@ class SkillModel(GenericLikelihoodModel):
                 p_diags = [("p", 0, emf, fac) for fac in self.factors]
                 free.loc[p_diags, 'value'] = 1
 
-            full_sp = get_start_params_from_helpers(
-                free, fixed, self.constraints, self.params_index)
+            full_sp = get_start_params_from_free_params(
+                free, self.constraints, self.params_index)
         return full_sp
 
     def sigma_weights(self):
