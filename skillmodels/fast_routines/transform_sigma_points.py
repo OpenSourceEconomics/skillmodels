@@ -4,11 +4,10 @@ import numpy as np
 
 
 def transform_sigma_points(
-    stage,
+    period,
     flat_sigma_points,
     transition_argument_dicts,
     transition_function_names,
-    anchoring_type=None,
     anchoring_positions=None,
     anch_params=None,
     intercept=None,
@@ -23,22 +22,22 @@ def transform_sigma_points(
     intermediate_array = np.empty_like(flat_sigma_points)
 
     # anchor the flat_sigma_points
-    if anchoring_type is not None:
-        anch_func = "anchor_flat_sigma_points_{}".format(anchoring_type)
+    if anch_params is not None:
+        anch_func = "anchor_flat_sigma_points_linear"
         getattr(anch, anch_func)(
             flat_sigma_points, anchoring_positions, anch_params, intercept
         )
 
     for f in range(nfac):
         intermediate_array[:, f] = getattr(trans, transition_function_names[f])(
-            flat_sigma_points, **transition_argument_dicts[stage][f]
+            flat_sigma_points, **transition_argument_dicts[period][f]
         )
 
     # copy them into the sigma_point array
     flat_sigma_points[:] = intermediate_array[:]
 
-    if anchoring_type is not None:
-        unanch_func = "unanchor_flat_sigma_points_{}".format(anchoring_type)
+    if anch_params is not None:
+        unanch_func = "unanchor_flat_sigma_points_linear"
         getattr(anch, unanch_func)(
             flat_sigma_points, anchoring_positions, anch_params, intercept
         )

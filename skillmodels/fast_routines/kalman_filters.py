@@ -276,7 +276,7 @@ def normal_linear_predict(state, cov, shocks_sds, transition_matrix):
 
 
 def normal_unscented_predict(
-    stage,
+    period,
     sigma_points,
     flat_sigma_points,
     s_weights_m,
@@ -289,7 +289,7 @@ def normal_unscented_predict(
     """Make a unscented Kalman filter predict step in square-root form.
 
     Args:
-        stage (int): the development stage in which the predict step is done.
+        period (int): period in which the predict step is done.
         sigma_points (np.ndarray): numpy array of (nemf * nind, nsigma, nfac)
         flat_sigma_points (np.ndarray): array of (nemf * nind * nsigma, nfac).
             It is a view on sigma_points.
@@ -309,8 +309,8 @@ def normal_unscented_predict(
 
     """
     nemf_times_nind, nsigma, nfac = sigma_points.shape
-    q = q[stage]
-    transform_sigma_points(stage, flat_sigma_points, **transform_sigma_points_args)
+    q = q[period]
+    transform_sigma_points(period, flat_sigma_points, **transform_sigma_points_args)
     # get them back into states
     predicted_states = np.dot(s_weights_m, sigma_points, out=out_flat_states)
     devs = sigma_points - predicted_states.reshape(nemf_times_nind, 1, nfac)
@@ -353,7 +353,7 @@ def sqrt_linear_predict(state, root_cov, shocks_sds, transition_matrix):
 
 
 def sqrt_unscented_predict(
-    stage,
+    period,
     sigma_points,
     flat_sigma_points,
     s_weights_m,
@@ -370,7 +370,7 @@ def sqrt_unscented_predict(
     usual form and also much faster.
 
     Args:
-        stage (int): the development stage in which the predict step is done.
+        period (int): the development period in which the predict step is done.
         sigma_points (np.ndarray): numpy array of (nemf * nind, nsigma, nfac)
         flat_sigma_points (np.ndarray): array of (nemf * nind * nsigma, nfac).
             It is a view on sigma_points.
@@ -390,8 +390,8 @@ def sqrt_unscented_predict(
 
     """
     nemf_times_nind, nsigma, nfac = sigma_points.shape
-    q = q[stage]
-    transform_sigma_points(stage, flat_sigma_points, **transform_sigma_points_args)
+    q = q[period]
+    transform_sigma_points(period, flat_sigma_points, **transform_sigma_points_args)
 
     # get them back into states
     predicted_states = np.dot(s_weights_m, sigma_points, out=out_flat_states)

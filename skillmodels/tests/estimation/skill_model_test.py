@@ -494,7 +494,6 @@ def fake_tsp(
     flat_sigma_points,
     transition_argument_dicts,
     transition_function_names,
-    anchoring_type=None,
     anchoring_positions=None,
     anch_params=None,
     intercept=None,

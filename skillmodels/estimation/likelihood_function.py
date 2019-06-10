@@ -61,7 +61,7 @@ def log_likelihood_per_individual(
             k += 1
         if t < len(stagemap) - 1:
             calculate_sigma_points(**calculate_sigma_points_args)
-            predict(stage, square_root_filters, predict_args)
+            predict(t, square_root_filters, predict_args)
     if anchoring is True:
         j += 1
         # anchoring update
@@ -85,7 +85,7 @@ def update(square_root_filters, update_args):
         normal_linear_update(*update_args)
 
 
-def predict(stage, square_root_filters, predict_args):
+def predict(period, square_root_filters, predict_args):
     """Select and call the correct predict function.
 
     The actual predict functions are implemented in several modules in
@@ -93,6 +93,6 @@ def predict(stage, square_root_filters, predict_args):
 
     """
     if square_root_filters is True:
-        sqrt_unscented_predict(stage, **predict_args)
+        sqrt_unscented_predict(period, **predict_args)
     else:
-        normal_unscented_predict(stage, **predict_args)
+        normal_unscented_predict(period, **predict_args)

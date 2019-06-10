@@ -60,7 +60,6 @@ class TestTransformSigmaPoints:
             flat_sigma_points=self.flat_sigma_points,
             transition_argument_dicts=self.transition_argument_dicts,
             transition_function_names=self.transition_function_names,
-            anchoring_type="linear",
             anchoring_positions=[1],
             anch_params=np.array([0, 2.0]),
         )
