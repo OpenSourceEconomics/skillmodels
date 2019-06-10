@@ -677,10 +677,6 @@ class ModelSpecProcessor:
         * purpose: takes one of the values in ['measurement', 'anchoring']
         * has_normalized_loading: True if any loading is normalized
         * has_normalized_intercept: True if the intercept is normalized
-        * is_repeated: True if the same measurement equation has appeared
-          in a previous period
-        * first_occurrence: Period in which the same measurement equation has
-          appeared first or np.nan.
 
         The row order within one period is arbitrary except for the last
         period, where the row that corresponds to the anchoring update comes
@@ -695,7 +691,6 @@ class ModelSpecProcessor:
             self._normalization_update_info(),
             self._stage_udpate_info(),
             self._purpose_update_info(),
-            self._invariance_update_info(),
         ]
 
         df = pd.concat(to_concat, axis=1)
@@ -796,174 +791,6 @@ class ModelSpecProcessor:
             anch_index = (self.nperiods - 1, self.anch_outcome)
             sr[anch_index] = "anchoring"
         return sr
-
-    def _invariance_update_info(self):
-        """Update information relevant for time invariant measurement systems.
-
-        Measurement equations are uniquely identified by their period and the
-        name of their measurement.
-
-        Two measurement equations count as equal if and only if:
-
-        * their measurements have the same name
-        * the same latent factors are measured
-        * they occur in a periods that use the same control variables.
-
-        """
-        factor_uinfo = self._factor_update_info()
-        ind = factor_uinfo.index
-        df = pd.DataFrame(
-            columns=["is_repeated", "first_occurence"],
-            index=ind,
-            data=[[False, np.nan]] * len(ind),
-        )
-
-        for t, meas in ind:
-            # find first occurrence
-            for t2, meas2 in ind:
-                if meas == meas2 and t2 <= t:
-                    if self.controls[t] == self.controls[t2]:
-                        info1 = factor_uinfo.loc[(t, meas)].to_numpy()
-                        info2 = factor_uinfo.loc[(t2, meas2)].to_numpy()
-                        if (info1 == info2).all():
-                            first = t2
-                            break
-
-            if t != first:
-                df.loc[(t, meas), "is_repeated"] = True
-                df.loc[(t, meas), "first_occurence"] = first
-        return df
-
-    def _rewrite_normalizations_for_time_inv_meas_system(self, df):
-        """Return a copy of df with rewritten normalization info.
-
-        make sure that all normalizations that are done in any occurrence of a
-        measurement equation are also present in all other occurrences.
-
-        """
-        assert (
-            self.time_invariant_measurement_system is True
-        ), "Must not be called if measurement system is not time invariant."
-        df = df.copy(deep=True)
-
-        loading_msg = (
-            "Incompatible normalizations of factor loadings for time "
-            "invariant measurement system. Check normalizations of "
-            "{} in periods {} and {} for factor {}"
-        )
-
-        other_msg = (
-            "Incompatible normalizations of {} for time invariant measurement "
-            "system. Check normalizations of {} in periods {} and {}"
-        )
-
-        # check normalizations and write them into first occurrence
-        for factor in self.factors:
-            normcol = "{}_loading_norm_value".format(factor)
-            norm_dummy = "has_normalized_loading"
-            for t, meas in df.index:
-                repeated = df.loc[(t, meas), "is_repeated"] == True
-                normalized = df.loc[(t, meas), normcol] != 0
-                if repeated and normalized:
-                    first_occ = df.loc[(t, meas), "first_occurence"]
-                    nval = df.loc[(t, meas), normcol]
-                    nval_first = df.loc[(first_occ, meas), normcol]
-                    assert nval_first in [0, nval], loading_msg.format(
-                        meas, first_occ, t, factor
-                    )
-                    df.loc[(first_occ, meas), normcol] = nval
-                    df.loc[(first_occ, meas), norm_dummy] = True
-
-        for norm_type in ["intercepts", "variances"]:
-            for t, meas in df.index:
-                normcol = "{}_norm_value".format(norm_type[:-1])
-                norm_dummy = "has_normalized_{}".format(norm_type[:-1])
-                repeated = df.loc[(t, meas), "is_repeated"] == True
-                normalized = df.loc[(t, meas), norm_dummy] == True
-                if repeated and normalized:
-                    first_occ = df.loc[(t, meas), "first_occurence"]
-                    nval = df.loc[(t, meas), normcol]
-                    nval_first = df.loc[(first_occ, meas), normcol]
-                    normalized_first = df.loc[(first_occ, meas), norm_dummy]
-                    if normalized_first == True:
-                        assert nval_first == nval, other_msg.format(
-                            norm_type, meas, first_occ, t
-                        )
-                    df.loc[(first_occ, meas), normcol] = nval
-                    df.loc[(first_occ, meas), norm_dummy] = True
-
-        # copy consolidated normalizations to all other occurrences
-        all_normcols = [
-            "{}_loading_norm_value".format(factor) for factor in self.factors
-        ]
-        all_normcols += [
-            "intercept_norm_value",
-            "variance_norm_value",
-            "has_normalized_loading",
-            "has_normalized_intercept",
-            "has_normalized_variance",
-        ]
-
-        for t, meas in df.index:
-            if df.loc[(t, meas), "is_repeated"] == True:
-                first_occurence = df.loc[(t, meas), "first_occurence"]
-                df.loc[(t, meas), all_normcols] = df.loc[
-                    (first_occurence, meas), all_normcols
-                ]
-
-        return df
-
-    def new_meas_coeffs(self):
-        """DataFrame that indicates if new parameters from params are needed.
-
-        The DataFrame has the same index as update_info. The columns are the
-        union of:
-
-        * the latent factors
-        * all control variables ever used
-        * intercept
-        * variance
-
-        The entry in column c of line (t, meas) is True if the measurement
-        equation of meas in period t needs a new entry from params for
-        the type of measurement parameter that is associated with column c.
-        Else it is False.
-
-        """
-        uinfo = self.update_info()
-        all_controls = self._all_controls_list()
-        new_params = pd.DataFrame(index=uinfo.index)
-
-        for param in self.factors:
-            normcol = "{}_loading_norm_value".format(param)
-            not_normalized = ~uinfo[normcol].astype(bool)
-            not_repeated = ~uinfo["is_repeated"]
-            applicable = uinfo[param].astype(bool)
-            if self.time_invariant_measurement_system is True:
-                new_params[param] = not_normalized & not_repeated & applicable
-            else:
-                new_params[param] = not_normalized & applicable
-
-        for param in ["intercept", "variance"]:
-            not_normalized = ~uinfo["has_normalized_{}".format(param)]
-            not_repeated = ~uinfo["is_repeated"]
-            if self.time_invariant_measurement_system is True:
-                new_params[param] = not_normalized & not_repeated
-            else:
-                new_params[param] = not_normalized
-
-        for param in all_controls:
-            not_repeated = ~uinfo["is_repeated"]
-            applicable = pd.Series(index=uinfo.index, data=True)
-            for t in self.periods:
-                if param not in self.controls[t]:
-                    applicable[t] = False
-            if self.time_invariant_measurement_system is True:
-                new_params[param] = not_repeated & applicable
-            else:
-                new_params[param] = applicable
-
-        return new_params
 
     def _all_controls_list(self):
         """Control variables without duplicates in order of occurrence."""
