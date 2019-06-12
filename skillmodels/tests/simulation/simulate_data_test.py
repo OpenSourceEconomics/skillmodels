@@ -128,6 +128,13 @@ def set_up_generate_datasets():
     out["meas_variances"] = pd.Series(
         data=np.zeros(len(loadings_df)), index=loadings_df.index
     )
+    out["policy_dict_list"] = [
+
+            {"period": 1, "factor": "f1", 
+             "effect_size": 0.1, "standard_deviation": 0},
+            {"period": 1, "factor": "f2", 
+             "effect_size": 0.2, "standard_deviation": 0}
+    ]
     return out
 
 
@@ -140,7 +147,7 @@ def expected_dataset():
     )  # constant over time
     controls["constant"] = 1
     states_p0 = np.array([[0, 0]] * 5)  # setup[means][0:2]
-    states_p1 = np.array([[0, 0.3]] * 5)  # transition_name(states_p0), called manually
+    states_p1 = np.array([[0+0.1, 0.3+0.2]] * 5)  # transition_name(states_p0), called manually
     states_p2 = np.array(
         [[0.06, 0.36]] * 5
     )  # transition_name(states_p1), called manually
@@ -148,7 +155,7 @@ def expected_dataset():
         [[0.4, 0.55]] * 5
     )  # meas_from_factor(factors_p0,controls), called manually
     meas_p1 = np.array(
-        [[0.52, 0.76]] * 5
+        [[0.65, 0.92]] * 5
     )  # meas_from_factor(factors_p1,controls), called manually
     meas_p2 = np.array(
         [[0.574, 0.814]] * 5
