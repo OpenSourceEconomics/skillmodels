@@ -101,7 +101,7 @@ def simulate_datasets(
             arguments should be in accordance with nfac + ncont
         weights (np.ndarray): size (nemf). The weight of each mixture element.
         policy_dict_list (list): list of dictionaries. Each dictionary specifies a
-            a stochastic shock to a latent factor at the end of "period" for "factor"
+            a stochastic shock to a latent factor AT THE END of "period" for "factor"
             with mean "effect_size" and "standard deviation"
 
     Returns:
@@ -128,7 +128,7 @@ def simulate_datasets(
             )
     else:
         def add_effect(fac, effect, sd, nobs):
-            """function to add stochastic effects to to a
+            """function to add stochastic effects to a
             vertical factor vector of lenght nobs
 
             """
@@ -166,13 +166,13 @@ def simulate_datasets(
             )
             for d in policy_dict_list:
                 period = d['period']
-                if period == t:
+                if period == t+1:
                     factor = d['factor']
-                    for i in range (0,nfac):
+                    for i in range(nfac):
                         if factor == factor_names[i]:
                             effect = d['effect_size']
                             sd = d['standard_deviation']
-                            fac[t,:,i] = add_effect(fac[t,:,i], effect, sd, nobs)
+                            fac[t+1,:,i] = add_effect(fac[t+1,:,i], effect, sd, nobs)
                         else:
                             pass
                 else:
