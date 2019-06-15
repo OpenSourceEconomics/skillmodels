@@ -112,71 +112,30 @@ def simulate_datasets(
         - the key names of dist_arg_dict can be looked up in the module
           _elliptical_functions. For multivariate_normal it's [mean, cov].
     """
+    policies = policies if policies is not None else []
     ncont = len(control_names)
     nfac = len(factor_names)
     fac = np.zeros((nper, nobs, nfac))
-    if policies is None:
-        fac[0], cont = generate_start_factors_and_control_variables_elliptical(
-            nobs, nfac, ncont, dist_name, dist_arg_dict, weights
+    fac[0], cont = generate_start_factors_and_control_variables_elliptical(
+        nobs, nfac, ncont, dist_name, dist_arg_dict, weights
+    )
+
+    cont = pd.DataFrame(data=cont, columns=['constant'] + control_names)
+
+    for t in range(nper - 1):
+        # if there is a shock in period t, add it here
+        policies_t = [p for p in policies if p['period'] == t]
+        for policy in policies_t:
+            position = factor_names.index(policy['factor'])
+            fac[t, :, position] += _get_shock(
+                mean=policy["effect_size"],
+                sd=policy["standard_deviation"],
+                size=nobs)
+
+        fac[t + 1] = next_period_factors(
+            fac[t], transition_names, transition_argument_dicts[t], shock_variances[t]
         )
 
-        cont = pd.DataFrame(data=cont, columns=['constant'] + control_names)
-
-        for t in range(nper - 1):
-            fac[t + 1] = next_period_factors(
-                fac[t], transition_names, transition_argument_dicts[t], shock_variances[t]
-            )
-    else:
-        def add_effect(fac, effect, sd, nobs):
-            """function to add stochastic effects to a
-            vertical factor vector of lenght nobs
-
-            """
-            if sd == 0:
-                fac += effect
-            elif sd > 0:
-                rand_effects = np.random.normal(effect, sd, nobs)
-                fac += rand_effects 
-            else:
-                raise ValueError('negative sd')
-            return fac
-
-        fac[0], cont = generate_start_factors_and_control_variables_elliptical(
-            nobs, nfac, ncont, dist_name, dist_arg_dict, weights
-        )
-        for d in policies:
-            period = d['period']
-            if period == 0:
-                factor = d['factor']
-                for i in range (0,nfac):
-                    if factor == factor_names[i]:
-                        effect = d['effect_size']
-                        sd = d['standard_deviation']
-                        fac[0,:,i] = add_effect(fac[0,:,i], effect, sd, nobs)
-                    else:
-                        pass
-            else:
-                pass
-
-        cont = pd.DataFrame(data=cont, columns=['constant'] + control_names)
-
-        for t in range(nper - 1):
-            fac[t + 1] = next_period_factors(
-                fac[t], transition_names, transition_argument_dicts[t], shock_variances[t]
-            )
-            for d in policies:
-                period = d['period']
-                if period == t+1:
-                    factor = d['factor']
-                    for i in range(nfac):
-                        if factor == factor_names[i]:
-                            effect = d['effect_size']
-                            sd = d['standard_deviation']
-                            fac[t+1,:,i] = add_effect(fac[t+1,:,i], effect, sd, nobs)
-                        else:
-                            pass
-                else:
-                    pass 
     observed_data_by_period = []
     for t in range(nper):
         meas = pd.DataFrame(
@@ -209,6 +168,27 @@ def simulate_datasets(
     latent_data.set_index(['id', 'period'], inplace=True)
 
     return observed_data, latent_data
+
+
+def _get_shock(mean, sd, size):
+    """Add stochastic effect to a  factor of length nobs.
+
+    Args:
+        mean (float): mean of the stochastic effect
+        sd (float): standard deviation of the effect
+        size (int): length of resulting array
+
+    Returns:
+        shock (np.array): 1d array of length nobs with the stochastic shock
+
+    """
+    if sd == 0:
+        shock = np.full(size, mean)
+    elif sd > 0:
+        shock = np.random.normal(mean, sd, size)
+    else:
+        raise ValueError('No negative standard deviation allowed.')
+    return shock
 
 
 def generate_start_factors_and_control_variables_elliptical(
