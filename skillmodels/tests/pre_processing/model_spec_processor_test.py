@@ -84,7 +84,6 @@ class TestCleanMesaurementSpecifications:
         self._facinf = inf
         self.factors = sorted(list(self._facinf.keys()))
         self.transition_names = ["log_ces", "blubb"]
-        self.estimator = "CHS"
 
     def test_clean_measuremnt_specifications_nothing_to_clean(self):
         self._present = Mock(return_value=True)
@@ -126,7 +125,6 @@ class TestCleanControlSpecifications:
         dat = np.zeros((10, 3))
         dat[5:, 0] = 1
         self.data = DataFrame(data=dat, columns=cols)
-        self.estimator = "chs"
 
     def test_clean_control_specs_nothing_to_clean(self):
         msp._clean_controls_specification(self)
@@ -172,7 +170,6 @@ class TestCheckAndCleanNormalizations:
         self.model_name = "model"
         self.dataset_name = "data"
         self.nperiods = len(self.periods)
-        self.estimator = "chs"
 
     def test_check_normalizations_lists(self):
         assert_raises(
@@ -253,7 +250,6 @@ class TestCheckAndFillNormalizationSpecifications:
         self._check_and_clean_normalizations_list = Mock(
             return_value=[{"a": 1}, {"a": 1}, {"a": 1}]
         )
-        self.estimator = "chs"
 
     def test_check_and_fill_normalization_specifications(self):
         res = {
@@ -482,60 +478,6 @@ class TestPurposeUpdateInfo:
         calc = msp._purpose_update_info(self)
         exp = purpose_uinfo()
         assert calc.equals(exp)
-
-
-class TestWAStorageDf:
-    def setup(self):
-        self.factors = ["fac1", "fac2"]
-
-        cols = [
-            "fac1_loading_norm_value",
-            "fac2_loading_norm_value",
-            "intercept_norm_value",
-            "has_normalized_intercept",
-            "has_normalized_loading",
-        ]
-        index = pd.MultiIndex.from_tuples([(0, "m1"), (0, "m2"), (1, "m1"), (1, "m2")])
-        update_data = np.array(
-            [
-                [1, 0, np.nan, False, True],
-                [0, 0, 2, True, False],
-                [0, 3, 0, True, True],
-                [0, 0, np.nan, False, False],
-            ]
-        )
-        df = pd.DataFrame(data=update_data, columns=cols, index=index)
-        df["purpose"] = "measurement"
-        df["fac1"] = 1
-        df["fac2"] = 0
-
-        self.update_info = Mock(return_value=df)
-
-        expected_data = np.array(
-            [
-                [True, False, 1, 0],
-                [False, True, 0, 2],
-                [True, True, 3, 0],
-                [False, False, 0, 0],
-            ]
-        )
-        expected_cols = [
-            "has_normalized_loading",
-            "has_normalized_intercept",
-            "loadings",
-            "intercepts",
-        ]
-        self.expected_res = pd.DataFrame(
-            data=expected_data, columns=expected_cols, index=index
-        )
-
-        self.expected_res["meas_error_variances"] = 0
-
-    def test_wa_storage_df(self):
-        msp._wa_storage_df(self)
-        print("exp", self.expected_res)
-        print("calc", self.storage_df)
-        assert_equal(self.storage_df.to_dict(), self.expected_res.to_dict())
 
 
 class TestNewTransitionCoeffs:

@@ -37,7 +37,6 @@ class SkillModel:
     Args:
         model_dict (dict): see :ref:`basic_usage`.
         dataset (DataFrame): datset in long format. see :ref:`basic_usage`.
-        estimator (str): currently only 'chs' is supported
         model_name (str): optional. Used to make error messages readable.
         dataset_name (str): same as model_name
         save_path (str): specifies where intermediate results are saved.
@@ -48,25 +47,19 @@ class SkillModel:
         self,
         model_dict,
         dataset,
-        estimator,
         model_name="some_model",
         dataset_name="some_dataset",
-        save_path=None,
     ):
-        self.estimator = estimator
-        assert estimator == 'chs', 'Currently only chs estimator is supported.'
         specs = ModelSpecProcessor(
             model_dict=model_dict,
             dataset=dataset,
-            estimator=estimator,
             model_name=model_name,
             dataset_name=dataset_name,
-            save_path=save_path,
         )
         specs_dict = specs.public_attribute_dict()
         data_proc = DataProcessor(specs_dict)
         self.data_proc = data_proc
-        self.c_data = data_proc.c_data() if self.estimator == "chs" else None
+        self.c_data = data_proc.c_data()
         self.y_data = data_proc.y_data()
         self.__dict__.update(specs_dict)
 
@@ -74,7 +67,7 @@ class SkillModel:
         self.params_quants = ["delta", "h", "r", "q", "p", "trans_coeffs"]
         if self.estimate_X_zeros is True:
             self.params_quants.append("x")
-        if self.restrict_W_zeros is False and self.estimator == "chs":
+        if self.restrict_W_zeros is False:
             self.params_quants.append("w")
 
     def _initial_delta(self):
@@ -263,31 +256,28 @@ class SkillModel:
         position_helper = self.update_info[self.factors].to_numpy().astype(bool)
 
         u_args_list = []
-        # this is necessary to make some parts of the likelihood arguments
-        # dictionaries usable to calculate marginal effecs with all estimators.
-        if self.estimator == "chs":
-            k = 0
-            for t in self.periods:
-                nmeas = self.nmeas_list[t]
-                if t == self.periods[-1] and self.anchoring is True:
-                    nmeas += 1
-                for j in range(nmeas):
-                    u_args = [
-                        initial_quantities["x"],
-                        initial_quantities["p"],
-                        like_vec,
-                        self.y_data[k],
-                        self.c_data[t],
-                        initial_quantities["delta"][t][j],
-                        initial_quantities["h"][k],
-                        initial_quantities["r"][k: k + 1],
-                        np.arange(self.nfac)[position_helper[k]],
-                        initial_quantities["w"],
-                    ]
-                    if self.square_root_filters is False:
-                        u_args.append(np.zeros((self.nobs, self.nfac)))
-                    u_args_list.append(u_args)
-                    k += 1
+        k = 0
+        for t in self.periods:
+            nmeas = self.nmeas_list[t]
+            if t == self.periods[-1] and self.anchoring is True:
+                nmeas += 1
+            for j in range(nmeas):
+                u_args = [
+                    initial_quantities["x"],
+                    initial_quantities["p"],
+                    like_vec,
+                    self.y_data[k],
+                    self.c_data[t],
+                    initial_quantities["delta"][t][j],
+                    initial_quantities["h"][k],
+                    initial_quantities["r"][k: k + 1],
+                    np.arange(self.nfac)[position_helper[k]],
+                    initial_quantities["w"],
+                ]
+                if self.square_root_filters is False:
+                    u_args.append(np.zeros((self.nobs, self.nfac)))
+                u_args_list.append(u_args)
+                k += 1
         return u_args_list
 
     def _transition_equation_args_dicts(self, initial_quantities):

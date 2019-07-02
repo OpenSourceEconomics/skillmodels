@@ -63,7 +63,6 @@ class TestCData:
         self.periods = [0, 1]
 
         self.obs_to_keep = np.array([True, True, True, False, True])
-        self.estimator = "chs"
 
     def test_c_data_with_constants(self):
         res1 = [
@@ -81,7 +80,7 @@ class TestCData:
         ]
         res = [res1, res2]
 
-        calculated = dc.c_data_chs(self)
+        calculated = dc.c_data(self)
         for i, calc in enumerate(calculated):
             aae(calc, np.array(res[i], dtype=object))
 
@@ -90,7 +89,6 @@ class TestYData:
     def setup(self):
         self.periods = [0, 1, 2, 3]
         self.different_meas = ["m1", "m2", "m3", "m4", "m5", "m6"]
-        self.estimator = "chs"
 
         ind_tuples = []
         for t in self.periods:
@@ -117,7 +115,7 @@ class TestYData:
         res = np.vstack([np.arange(6).repeat(3).reshape(6, 3)] * 4)
         res = np.vstack([res, np.ones(3) * 10])
 
-        aae(dc.y_data_chs(self), res)
+        aae(dc.y_data(self), res)
 
     def test_y_data_focus_on_columns(self):
         df = DataFrame(data=np.arange(4).repeat(4), columns=["__period__"])
@@ -134,4 +132,4 @@ class TestYData:
             ]
         )
 
-        aae(dc.y_data_chs(self), res)
+        aae(dc.y_data(self), res)

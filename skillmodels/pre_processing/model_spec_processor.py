@@ -28,19 +28,13 @@ class ModelSpecProcessor:
         self,
         model_dict,
         dataset,
-        estimator,
         model_name="some_model",
         dataset_name="some_dataset",
-        save_path=None,
-        bootstrap_samples=None,
     ):
         self.model_dict = model_dict
         self.data = pre_process_data(dataset)
-        self.estimator = estimator
         self.model_name = model_name
         self.dataset_name = dataset_name
-        self.save_path = save_path
-        self.bootstrap_samples = bootstrap_samples
         if "time_specific" in model_dict:
             self._timeinf = model_dict["time_specific"]
         else:
@@ -58,25 +52,15 @@ class ModelSpecProcessor:
             "missing_variables": "raise_error",
             "controls_with_missings": "raise_error",
             "variables_without_variance": "raise_error",
-            "robust_bounds": False,
-            "bounds_distance": 1e-200,
+            "robust_bounds": True,
+            "bounds_distance": 1e-20,
             "estimate_X_zeros": False,
             "order_X_zeros": 0,
             "restrict_W_zeros": True,
             "restrict_P_zeros": True,
-            "cholesky_of_P_zero": False,
-            "probit_measurements": False,
-            "probanch_function": "odds_ratio",
             "ignore_intercept_in_linear_anchoring": True,
-            "wa_standard_error_method": "bootstrap",
-            "chs_standard_error_method": "op_of_gradient",
-            "save_intermediate_optimization_results": False,
-            "save_params_before_calculating_standard_errors": False,
             "maxiter": 1000000,
             "maxfun": 1000000,
-            "bootstrap_nreps": 300,
-            "bootstrap_sample_size": None,
-            "bootstrap_nprocesses": None,
             "anchoring_mode": "only_estimate_anchoring_equation",
             "time_invariant_measurement_system": False,
             "base_color": "#035096",
@@ -85,59 +69,20 @@ class ModelSpecProcessor:
         if "general" in model_dict:
             general_settings.update(model_dict["general"])
         self.__dict__.update(general_settings)
-        self.standard_error_method = getattr(
-            self, "{}_standard_error_method".format(self.estimator)
-        )
-        if self.estimator == "wa":
-            self.nemf = 1
-            self.cholesky_of_P_zero = False
-            self.square_root_filters = False
         self._set_time_specific_attributes()
         self._check_general_specifications()
-        self._generate_save_directories()
         self._transition_equation_names()
         self._transition_equation_included_factors()
         self._set_anchoring_attributes()
         self._clean_measurement_specifications()
         self._clean_controls_specification()
         self.nobs = self.obs_to_keep.sum()
-        self._set_bootstrap_sample_size()
         self._check_and_fill_normalization_specification()
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
         self._nmeas_list()
         self._set_params_index()
         self._set_constraints()
-        if self.estimator == "wa":
-            self._wa_period_weights()
-            self._wa_storage_df()
-            self._wa_identified_transition_function_restrictions()
-            assert self.time_invariant_measurement_system is False, (
-                "Time invariant measurement system is not yet supported "
-                "with the wa estimator."
-            )
-
-    def _set_bootstrap_sample_size(self):
-        if self.bootstrap_samples is not None:
-            bs_n = len(self.bootstrap_samples[0])
-            if self.bootstrap_sample_size is not None:
-                if bs_n != self.bootstrap_sample_size:
-                    message = (
-                        "The bootsrap_sample_size you specified in the general"
-                        " section of the model dict in model {} does not "
-                        "coincide with the bootstrap_samples you provide "
-                        "and will be ignored."
-                    ).format(self.model_name)
-                    warnings.warn(message)
-            self.bootstrap_sample_size = bs_n
-        elif self.bootstrap_sample_size is None:
-            self.bootstrap_sample_size = self.nobs
-
-    def _generate_save_directories(self):
-        if self.save_intermediate_optimization_results is True:
-            os.makedirs(self.save_path + "/opt_results", exist_ok=True)
-        if self.save_params_before_calculating_standard_errors is True:
-            os.makedirs(self.save_path + "/params", exist_ok=True)
 
     def _set_time_specific_attributes(self):
         """Set model specs related to periods and stages as attributes."""
@@ -190,33 +135,6 @@ class ModelSpecProcessor:
                 "distribution of the latent factors. Check model {}"
             ).format(self.model_name)
 
-        assert self.wa_standard_error_method == "bootstrap", (
-            "Currently, the only standard error method supported with the wa "
-            "estimator is bootstrap."
-        )
-
-        chs_admissible = ["bootstrap", "op_of_gradient", "hessian_inverse"]
-        assert self.chs_standard_error_method in chs_admissible, (
-            "Currently, the only standard error methods supported with the "
-            "chs estimator are {}".format(chs_admissible)
-        )
-
-        something_ist_saved = (
-            self.save_intermediate_optimization_results
-            or self.save_params_before_calculating_standard_errors
-        )
-        if something_ist_saved is True:
-            assert self.save_path is not None, (
-                "If you specified to save intermediate optimization "
-                "results or estimated parameters you have to provide "
-                "a save_path."
-            )
-
-        if self.estimator == "wa":
-            assert self.probit_measurements is False, (
-                "It is not possible to estimate probit measurement equations "
-                "with the wa estimator."
-            )
 
     def _transition_equation_names(self):
         """Construct a list with the transition equation name for each factor.
@@ -248,6 +166,9 @@ class ModelSpecProcessor:
             pos_f = list(np.arange(self.nfac)[np.in1d(self.factors, args_f)])
             included_factors.append(args_f)
             included_positions.append(pos_f)
+            assert len(included_factors) >= 1, (
+                'Each latent factor needs at least one included factor. This is '
+                'violated for {}'.format(factor))
 
         self.included_factors = included_factors
         self.included_positions = included_positions
@@ -388,15 +309,6 @@ class ModelSpecProcessor:
                         "ments in period {}.".format(self.model_name, factor, t)
                     )
 
-            elif self.estimator == "wa":
-                for t in self.periods:
-                    assert len(measurements[factor][t]) >= 2, (
-                        "In model {} factor {} has a non-constant transition "
-                        "equation. Therefore it must have at least two "
-                        "measurements in every period. However, this is "
-                        "not the case in period {}".format(self.model_name, factor, t)
-                    )
-
         self.measurements = measurements
 
     def _clean_controls_specification(self):
@@ -431,14 +343,6 @@ class ModelSpecProcessor:
             for t in self.periods:
                 if len(self._timeinf["controls"][t]) > 0:
                     self.uses_controls = True
-
-        if self.estimator == "wa":
-            if self.uses_controls is True:
-                print(
-                    "The control variables you specified in model {} will "
-                    "be ignored when the model is estimated with the wa "
-                    "estimator.".format(self.model_name)
-                )
 
         obs_to_keep = np.ones(len(self.data) // self.nperiods, dtype=bool)
         controls = [[] for t in self.periods]
@@ -476,13 +380,6 @@ class ModelSpecProcessor:
                     "in the last period. In model {} you use the anchoring "
                     "outcome {} as measurement for factor {}"
                 ).format(self.model_name, self.anch_outcome, factor)
-
-        if self.anchoring is True and self.estimator == "wa":
-            assert self.anchor_in_predict is False, (
-                "For the wa estimator the only possible anchoring_mode is ",
-                "only_estimate_anchoring_equation. Check the specs of ",
-                "model {}".format(self.model_name),
-            )
 
     def _check_and_clean_normalizations_list(self, factor, norm_list, norm_type):
         """Check and clean a list with normalization specifications.
@@ -584,15 +481,6 @@ class ModelSpecProcessor:
                 if norm_type == "loadings":
                     assert n_val != 0, "Loadings cannot be normalized to 0."
 
-        if self.estimator == "wa":
-            for norminfo in norm_list:
-                msg = (
-                    "The wa estimator currently allows at most one "
-                    "normalization of {} in each period. This is "
-                    "violated for factor {}: {}"
-                )
-                assert len(norminfo) <= 1, msg.format(norm_type, factor, norminfo)
-
         return norm_list
 
     def _check_and_fill_normalization_specification(self):
@@ -621,12 +509,6 @@ class ModelSpecProcessor:
                         norm[factor][norm_type] = [{}] * self.nperiods
                 else:
                     norm[factor] = {nt: [{}] * self.nperiods for nt in norm_types}
-
-        if self.estimator == "wa":
-            for factor in self.factors:
-                assert (
-                    norm[factor]["variances"] == [{}] * self.nperiods
-                ), "Normalized variances and wa estimator are incompatible."
 
         self.normalizations = norm
 
@@ -797,40 +679,6 @@ class ModelSpecProcessor:
                     all_controls.append(cont)
         return all_controls
 
-    def _wa_storage_df(self):
-        df = self.update_info().copy(deep=True)
-        df = df[df["purpose"] == "measurement"]
-        assert (
-            df[self.factors].to_numpy().sum(axis=1) == 1
-        ).all(), "In the wa estimator each measurement can only measure 1 factor."
-        norm_cols = ["{}_loading_norm_value".format(f) for f in self.factors]
-        # storage column for factor loadings, initialized with zeros for un-
-        # normalized loadings and the norm_value for normalized loadings
-        df["loadings"] = df[norm_cols].sum(axis=1)
-        # storage column for intercepts, initialized with zeros for un-
-        # normalized intercepts and the norm_value for normalized intercepts.
-        df["intercepts"] = df["intercept_norm_value"].fillna(0)
-        relevant_columns = [
-            "has_normalized_intercept",
-            "has_normalized_loading",
-            "loadings",
-            "intercepts",
-        ]
-        storage_df = df[relevant_columns].copy(deep=True)
-        storage_df["meas_error_variances"] = 0.0
-        self.storage_df = storage_df
-
-    def _wa_identified_transition_function_restrictions(self):
-        restriction_dict = {}
-        for rtype in ["coeff_sum_value", "trans_intercept_value"]:
-            df = pd.DataFrame(
-                data=[[None] * self.nfac] * self.nstages,
-                columns=self.factors,
-                index=self.stages,
-            )
-            restriction_dict[rtype] = df
-        self.identified_restrictions = restriction_dict
-
     def new_trans_coeffs(self):
         """Array that indicates if new parameters from params are needed.
 
@@ -890,34 +738,6 @@ class ModelSpecProcessor:
             self.anchored_factors,
             self.anch_outcome,
         )
-
-    def _wa_period_weights(self):
-        """Dataframe of shape (nperiods - 1, nfac) with weights.
-
-        The weights are used to combine the transition parameters of several
-        periods if they belong to the same stage. In the case of an ar1
-        transition equations the paramaters of all periods are combined.
-        Currently, weights are the same for all periods in a stage and only
-        depend on the length of the stage and type of transition equation.
-        The format of the DataFrame was chosen to facilitate the
-        implementation of a more efficient weighting scheme later.
-
-        """
-        # OPTIONAL: base thes on new_params instead of special treatment for
-        # ar1 and constant.
-        arr = np.ones((self.nperiods - 1, self.nfac))
-
-        for t, f in product(self.periods[:-1], range(self.nfac)):
-            s = self.stagemap[t]
-            arr[t, f] /= self.stage_length_list[s]
-        df = pd.DataFrame(data=arr, index=self.periods[:-1], columns=self.factors)
-
-        for f, factor in enumerate(self.factors):
-            if self.transition_names[f] == "ar1":
-                df[factor] = 1 / (self.nperiods - 1)
-            elif self.transition_names[f] == "constant":
-                df[factor] = np.nan
-        self.wa_period_weights = df
 
     def public_attribute_dict(self):
         all_attributes = self.__dict__
