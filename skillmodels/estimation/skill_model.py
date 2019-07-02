@@ -1,7 +1,6 @@
 from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 from skillmodels.pre_processing.data_processor import DataProcessor
 from skillmodels.estimation.likelihood_function import log_likelihood_per_individual
-from skillmodels.estimation.wa_functions import calculate_wa_estimated_quantities
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -11,27 +10,14 @@ from skillmodels.visualization.text_functions import (
     write_figure_tex_snippet,
     get_preamble,
 )
-from statsmodels.base.model import GenericLikelihoodModel
-from statsmodels.base.model import LikelihoodModelResults
 import statsmodels.formula.api as smf
 
-from skillmodels.estimation.skill_model_results import (
-    SkillModelResults,
-    NotApplicableError,
-)
-from skillmodels.fast_routines.transform_sigma_points import transform_sigma_points
 import numpy as np
 import skillmodels.model_functions.transition_functions as tf
 from skillmodels.estimation.parse_params import parse_params
-import skillmodels.model_functions.anchoring_functions as anch
 
 from itertools import product
-from scipy.optimize import minimize
-from statsmodels.tools.numdiff import approx_hess, approx_fprime
 import pandas as pd
-import json
-from multiprocessing import Pool
-import warnings
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -41,28 +27,21 @@ from estimagic.optimization.start_helpers import make_start_params_helpers
 from estimagic.optimization.start_helpers import get_start_params_from_free_params
 
 
-class SkillModel(GenericLikelihoodModel):
+class SkillModel:
     """Estimate dynamic nonlinear latent factor models.
-    SkillModel is a subclass of GenericLikelihoodModel from statsmodels and
-    inherits many useful methods such as statistical tests and the calculation
-    of standard errors from its parent class. Its usage is described in
-    :ref:`basic_usage`.
+
+    Its usage is described in :ref:`basic_usage`.
     When initialized, all public attributes of ModelSpecProcessor and the
     arrays with c_data and y_data from DataProcessor are set as attributes.
-    In addition to the methods inherited from GenericLikelihoodModel,
-    SkillModel contains methods to:
-    * determine how the params vector has to be parsed
-    * calculate wa estimates
-    * construct arguments for the likelihood function of the chs estimator
-    * calculate covariance matrices of the estimated parameters
+
     Args:
         model_dict (dict): see :ref:`basic_usage`.
         dataset (DataFrame): datset in long format. see :ref:`basic_usage`.
-        estimator (str): takes the values 'wa' and 'chs'
+        estimator (str): currently only 'chs' is supported
         model_name (str): optional. Used to make error messages readable.
         dataset_name (str): same as model_name
         save_path (str): specifies where intermediate results are saved.
-        bootstrap_samples (list): optional, see docs of bootstrap functions.
+
     """
 
     def __init__(
@@ -73,9 +52,9 @@ class SkillModel(GenericLikelihoodModel):
         model_name="some_model",
         dataset_name="some_dataset",
         save_path=None,
-        bootstrap_samples=None,
     ):
         self.estimator = estimator
+        assert estimator == 'chs', 'Currently only chs estimator is supported.'
         specs = ModelSpecProcessor(
             model_dict=model_dict,
             dataset=dataset,
@@ -83,7 +62,6 @@ class SkillModel(GenericLikelihoodModel):
             model_name=model_name,
             dataset_name=dataset_name,
             save_path=save_path,
-            bootstrap_samples=bootstrap_samples,
         )
         specs_dict = specs.public_attribute_dict()
         data_proc = DataProcessor(specs_dict)
@@ -91,12 +69,6 @@ class SkillModel(GenericLikelihoodModel):
         self.c_data = data_proc.c_data() if self.estimator == "chs" else None
         self.y_data = data_proc.y_data()
         self.__dict__.update(specs_dict)
-
-        if bootstrap_samples is not None:
-            self.bootstrap_samples = bootstrap_samples
-            self._check_bs_samples()
-        else:
-            self.bootstrap_samples = self._generate_bs_samples()
 
         # create a list of all quantities that depend from params vector
         self.params_quants = ["delta", "h", "r", "q", "p", "trans_coeffs"]
@@ -186,39 +158,6 @@ class SkillModel(GenericLikelihoodModel):
     def reduceparams(self, params):
         """Convert a params vector of type long to type short."""
         raise NotImplementedError
-
-    def _wa_params_can_be_used_for_start_params(self, raise_warning=True):
-        """Check if results of WA can be used as start params for CHS."""
-        reasons = []
-        if self.nemf != 1:
-            reasons.append("A mixture distribution is estimated.")
-        if self.uses_controls is True:
-            reasons.append("Control variables are used.")
-        df = self.update_info.copy(deep=True)
-        df = df[df["purpose"] == "measurement"]
-        if not (df[self.factors].to_numpy().sum(axis=1) == 1).all():
-            reasons.append("Some measurements measure more than 1 factor.")
-        if self.anchoring_mode == "truly_anchor_latent_factors":
-            reasons.append("The anchoring mode is not supported in wa.")
-        if "log_ces" in self.transition_names:
-            reasons.append("The log_ces cannot be used in wa.")
-        # if self.update_info["has_normalized_variance"].any():
-        #     reasons.append("Normalized variances are incompatible with wa")
-
-        can_be_used = False if len(reasons) > 0 else True
-
-        warn_message = (
-            "In model {} with dataset {} it is not possible to use "
-            "estimates from the wa estimator as start values for the "
-            "chs estimator because of the following reasons:"
-        ).format(self.model_name, self.dataset_name)
-        for r in reasons:
-            warn_message += "\n" + r
-
-        if raise_warning is True:
-            warnings.warn(warn_message)
-
-        return can_be_used
 
     def start_params_helpers(self):
         """DataFrames with the free and fixed parameters of the model."""
@@ -503,595 +442,9 @@ class SkillModel(GenericLikelihoodModel):
 
         return observed_data, latent_data
 
-    def nloglikeobs(self, params, args):
-        """Negative log likelihood function per individual.
-        This is the function used to calculate the standard errors based on
-        the outer product of gradients.
-        """
-        return -log_likelihood_per_individual(params, **args)
-
-    def nloglike(self, params, args):
-        """Negative log likelihood function.
-        This is the function used to fit the model as numeric optimization
-        methods are implemented as minimizers.
-        """
-        if self.save_intermediate_optimization_results is True:
-            path = self.save_path + "/opt_results/iteration{}.json"
-            with open(path.format(self.optimize_iteration_counter), "w") as j:
-                json.dump(params.tolist(), j)
-            self.optimize_iteration_counter += 1
-        return -log_likelihood_per_individual(params, **args).sum()
-
-    def loglikeobs(self, params, args):
-        """Log likelihood per individual."""
-        return log_likelihood_per_individual(params, **args)
-
-    def loglike(self, params, args):
-        """Log likelihood."""
-        return log_likelihood_per_individual(params, **args).sum()
-
-    def estimate_params_chs(
-        self, start_params=None, params_type="short", return_optimize_dict=True
-    ):
-        """Estimate the params vector with the chs estimator.
-        Args:
-            start_params (np.ndarray): start values that take precedence over
-                all other ways of specifying start values.
-            params_type (str): specify which type of params is returned.
-                the default is short.
-            return_optimize_dict (bool): if True, in addition to the params
-                vector a dictionary with information from the numerical
-                optimization is returned.
-        """
-        if start_params is None:
-            start_params = self.generate_start_params()
-        bounds = self.bounds_list()
-        args = self.likelihood_arguments_dict(params_type="short")
-        if self.save_intermediate_optimization_results is True:
-            self.optimize_iteration_counter = 0
-        res = minimize(
-            self.nloglike,
-            start_params,
-            args=(args),
-            method="L-BFGS-B",
-            bounds=bounds,
-            options={"maxiter": self.maxiter, "maxfun": self.maxfun},
-        )
-
-        optimize_dict = {}
-        optimize_dict["success"] = res.success
-        optimize_dict["nfev"] = res.nfev
-        optimize_dict["log_lh_value"] = -res.fun
-        optimize_dict["xopt"] = res.x.tolist()
-
-        params = self.expandparams(res.x) if params_type == "long" else res.x
-
-        if optimize_dict["success"] is False:
-            warnings.warn(
-                "The model {} in dataset {} terminated unsuccessfully. Its "
-                "parameters should not be used.".format(
-                    self.model_name, self.dataset_name
-                )
-            )
-
-        if self.save_params_before_calculating_standard_errors is True:
-            path = self.save_path + "/params/params.json"
-            with open(path, "w") as j:
-                json.dump(params.tolist(), j)
-
-        if return_optimize_dict is True:
-            return params, optimize_dict
-        else:
-            return params
-
-    def estimate_params_wa(self):
-        """Estimate the params vector with wa."""
-        storage_df, X_zero, P_zero, trans_coeffs, trans_var_df, anch_intercept, anch_loadings, anch_variance = calculate_wa_estimated_quantities(
-            self.identified_restrictions,
-            self.y_data,
-            self.measurements,
-            self.normalizations,
-            self.storage_df,
-            self.factors,
-            self.transition_names,
-            self.included_factors,
-            self.nstages,
-            self.stages,
-            self.periods,
-            self.stagemap,
-            self.anchored_factors,
-            self.anch_outcome,
-            self.wa_period_weights,
-            self.anchoring,
-        )
-
-        params = np.zeros(self.len_params(params_type="long"))
-        slices = self.params_slices(params_type="long")
-
-        # write intercepts in params
-        delta_start_index = slices["deltas"][0].start
-        delta_stop_index = slices["deltas"][-1].stop
-        all_intercepts = list(
-            storage_df[storage_df["has_normalized_intercept"] == False][
-                "intercepts"
-            ].to_numpy()
-        )
-        if anch_intercept is not None:
-            all_intercepts.append(anch_intercept)
-        params[delta_start_index:delta_stop_index] = all_intercepts
-        # write loadings in params
-        all_loadings = list(
-            storage_df[storage_df[
-                "has_normalized_loading"] == False]["loadings"].to_numpy()
-        )
-        if anch_loadings is not None:
-            all_loadings += list(anch_loadings)
-        params[slices["H"]] = all_loadings
-
-        # write measurement variances in params
-        all_meas_variances = list(storage_df["meas_error_variances"].to_numpy())
-        if anch_variance is not None:
-            all_meas_variances.append(anch_variance)
-        params[slices["R"]] = all_meas_variances
-
-        # write transition variances (Q) in params.
-
-        # first take the mean of those trans_var estimates that have to be
-        # averaged between stages. This is for example necessary if the
-        # transition function is ar1. Averaging reduces to a addition as the
-        # estimates are weighted already.
-        for f, factor in enumerate(self.factors):
-            if self.transition_names[f] != "constant":
-                for s in reversed(self.stages):
-                    if self.new_trans_coeffs[s, f] == 0:
-                        trans_var_df.loc[s - 1, factor] += trans_var_df.loc[s, factor]
-                        trans_var_df.loc[s, factor] = np.nan
-
-        # then write them in a flat list in the correct order
-        trans_var_list = []
-        for s in self.stages:
-            for f, factor in enumerate(self.factors):
-                if self.new_trans_coeffs[s, f] == 1:
-                    trans_var_list.append(trans_var_df.loc[s, factor])
-
-        # finally write them in params
-        params[slices["Q"]] = trans_var_list
-
-        # write P_zero in params
-        params[slices["P_zero"]] = P_zero
-
-        # write trans_coeffs in params
-        for f in range(self.nfac):
-            for coeffs, sl in zip(trans_coeffs[f], slices["trans_coeffs"][f]):
-                params[sl] += coeffs
-
-        # write X_zero in params
-        if self.estimate_X_zeros is True:
-            params[slices["X_zero"]] = X_zero
-
-        if self.save_params_before_calculating_standard_errors is True:
-            path = self.save_path + "/params/params.json"
-            with open(path, "w") as j:
-                json.dump(params.tolist(), j)
-
-        return params
-
-    def score(self, params):
-        """Gradient of loglike with respect to each parameter.
-        To calculate the gradient, simple numerical derivatives are used.
-        """
-        if self.estimator == "wa":
-            raise NotApplicableError(
-                "score only works for likelihood based estimators."
-            )
-        elif not hasattr(self, "stored_score"):
-            args = self.likelihood_arguments_dict("long")
-            self.stored_score = approx_fprime(
-                params, self.loglike, args=(args,), centered=True
-            ).ravel()
-
-        return self.stored_score
-
-    def score_obs(self, params):
-        """Gradient of loglikeobs with respect to each parameter.
-        To calculate the gradient, simple numerical derivatives are used.
-        """
-        if self.estimator == "wa":
-            raise NotApplicableError(
-                "score_obs only works for likelihood based estimators."
-            )
-        elif not hasattr(self, "stored_score_obs"):
-            args = self.likelihood_arguments_dict("long")
-            self.stored_score_obs = approx_fprime(
-                params, self.loglikeobs, args=(args,), centered=True
-            )
-        return self.stored_score_obs
-
-    def hessian(self, params):
-        """Hessian matrix of loglike.
-        To calculate the hessian, simple numerical derivatives are used.
-        """
-        if self.estimator == "wa":
-            raise NotApplicableError(
-                "hessian only works for likelihood based estimators."
-            )
-        elif not hasattr(self, "stored_hessian"):
-            args = self.likelihood_arguments_dict("long")
-            self.stored_hessian = approx_hess(params, self.loglike, args=(args,))
-        return self.stored_hessian
-
-    def op_of_gradient_cov_matrix(self, params):
-        """Covariance matrix of params based on outer product of gradients."""
-        assert len(params) == self.len_params("long"), (
-            "Standard errors can only be calculated for params vectors of the "
-            "long type. Your params vector has incorrect length in model {} "
-            "with dataset {}"
-        ).format(self.model_name, self.dataset_name)
-
-        gradient = self.score_obs(params)
-        # what follows is equivalent to:
-        # cov = np.linalg.inv(np.dot(gradient.T, gradient))
-        # but it ensures that the resulting covariance matrix is
-        # positive semi-definite
-        u = np.linalg.qr(gradient)[1]
-        u_inv = np.linalg.inv(u)
-        cov = np.dot(u_inv, u_inv.T)
-        return cov
-
-    def hessian_inverse_cov_matrix(self, params):
-        """Covariance matrix of params based on inverse of hessian."""
-        assert len(params) == self.len_params("long"), (
-            "Standard errors can only be calculated for params vectors of the "
-            "long type. Your params vector has incorrect length in model {} "
-            "with dataset {}"
-        ).format(self.model_name, self.dataset_name)
-
-        hessian = self.hessian(params)
-        cov = np.linalg.inv(-hessian)
-        return cov
-
-    def _check_bs_samples(self):
-        """Check validity of provided bootstrap samples."""
-        assert hasattr(self.bootstrap_samples, "__iter__"), (
-            "The bootstrap_samples you provided are not iterable. "
-            "The bootstrap_samples must be iterable with each item providing "
-            "the person_identifiers chosen to be in that bootstrap sample. "
-            "See the documentation on model_specs for more information. "
-            "This error occured in model {} and dataset {}".format(
-                self.model_name, self.dataset_name
-            )
-        )
-
-        identifiers = self.data['__id__'].unique()
-        for item in self.bootstrap_samples:
-            assert set(item).issubset(identifiers), (
-                "The bootstrap_samples you provided contain person_identifiers"
-                " which are not in the dataset {}. These missing identifiers "
-                "are {}.\nYou specified {} as person_identifier. This error "
-                "occurred in model {}".format(
-                    self.dataset_name,
-                    [i for i in item if i not in identifiers],
-                    '__id__',
-                    self.model_name,
-                )
-            )
-
-        assert len(self.bootstrap_samples) >= self.bootstrap_nreps, (
-            "You only provided {} bootstrap samples but specified {} "
-            "replications. You must either reduce the number of replications "
-            "or provide more samples in model {} and dataset {}".format(
-                len(self.bootstrap_samples),
-                self.bootstrap_nreps,
-                self.model_name,
-                self.dataset_name,
-            )
-        )
-
-    def _generate_bs_samples(self):
-        """List of lists.
-        Each sublist contains the 'person_identifiers' of the individuals that
-        were sampled from the dataset with replacement.
-        """
-        individuals = np.array(self.data['__id__'].unique())
-        selected_indices = np.random.randint(
-            low=0,
-            high=len(individuals),
-            size=(self.bootstrap_nreps, self.bootstrap_sample_size),
-        )
-        bootstrap_samples = individuals[selected_indices].tolist()
-        return bootstrap_samples
-
-    def _select_bootstrap_data(self, rep):
-        """Return the data of the resampled individuals."""
-        data = self.data.set_index(
-            ['__id__', '__period__'], drop=False
-        )
-        current_sample = self.bootstrap_samples[rep]
-        bs_index = pd.MultiIndex.from_product(
-            [current_sample, self.periods],
-            names=['__id__', '__period__'],
-        )
-        bs_data = data.loc[bs_index].reset_index(drop=True)
-        return bs_data
-
-    def _bs_fit(self, rep, params):
-        """Check the bootstrap data and re-fit the model with it."""
-        bootstrap_data = self._select_bootstrap_data(rep)
-
-        if self.save_path is not None:
-            bs_save_path = self.save_path + "/bootstrap/{}".format(rep)
-        else:
-            bs_save_path = None
-
-        new_mod = SkillModel(
-            model_dict=self.model_dict,
-            dataset=bootstrap_data,
-            estimator=self.estimator,
-            model_name=self.model_name + "_{}".format(rep),
-            dataset_name=self.dataset_name + "_{}".format(rep),
-            save_path=bs_save_path,
-        )
-
-        if new_mod.len_params("long") != len(params):
-            warn_message = (
-                "No bootstrap results were calculated for replication {} "
-                "because the resulting parameter vectors would not have "
-                "had the right length. This can be caused if variables "
-                "were dropped automatically because they had no variance. "
-                "in the bootstrap data. It happened in model {} for "
-                "dataset {}."
-            ).format(rep, self.model_name, self.dataset_name)
-            warnings.warn(warn_message)
-            bs_params = [np.nan] * len(params)
-            if self.estimator == "chs":
-                optimize_dict = {
-                    "success": "Not started because the resulting " +
-                    "parameter vector would have had the wrong length."
-                }
-
-        elif self.estimator == "chs":
-            start_params = new_mod.reduceparams(params)
-            bs_params, optimize_dict = new_mod.estimate_params_chs(
-                start_params=start_params, return_optimize_dict=True, params_type="long"
-            )
-
-        elif self.estimator == "wa":
-            bs_params = new_mod.estimate_params_wa()
-
-        if self.estimator == "chs" and optimize_dict["success"] is False:
-            bs_params = [np.nan] * len(bs_params)
-            warnings.warn(
-                "The optimization for bootstrap replication {} has failed. "
-                "It is therefore not included in the calculation of standard "
-                "errors. This occured for model {} in dataset {}".format(
-                    rep, self.model_name, self.dataset_name
-                )
-            )
-            bs_params = [np.nan] * len(params)
-        return bs_params
-
-    def all_bootstrap_params(self, params):
-        """Return a DataFrame of all bootstrap parameters.
-        Create the resampled datasets from lists of person identifiers and fit
-        re-fit the model.
-        The boostrap replications are estimated in parallel, using the
-        Multiprocessing module from the Python Standard Library.
-        """
-        assert len(params) == self.len_params("long"), (
-            "Standard errors can only be calculated for params vectors of the "
-            "long type. Your params vector has incorrect length in model {} "
-            "with dataset {}"
-        ).format(self.model_name, self.dataset_name)
-
-        if not hasattr(self, "stored_bootstrap_params"):
-            bs_fit_args = [(r, params) for r in range(self.bootstrap_nreps)]
-            with Pool(self.bootstrap_nprocesses) as p:
-                bootstrap_params = p.starmap(self._bs_fit, bs_fit_args)
-            ind = ["rep_{}".format(rep) for rep in range(self.bootstrap_nreps)]
-            cols = self.param_names("long")
-            bootstrap_params_df = pd.DataFrame(
-                data=bootstrap_params, index=ind, columns=cols
-            )
-            bootstrap_params_df.dropna(inplace=True)
-            self.stored_bootstrap_params = bootstrap_params_df
-        return self.stored_bootstrap_params
-
-    def bootstrap_conf_int(self, params, alpha=0.05):
-        """Parameter confidence intervals from bootstrap parametres.
-        args:
-            bootstrap_params (df): pandas DataFrame where each column gives the
-                parameters from one bootstrap replication.
-            alpha (float): the significance level of the confidence interval.
-        Returns:
-            conf_int_df (df): pandas DataFrame with two columns that give the
-            lower and upper bound of the confidence interval based on the
-            distribution of the bootstrap parameters.
-        """
-        bs_params = self.all_bootstrap_params(params)
-
-        lower = bs_params.quantile(0.5 * alpha, axis=0).rename("lower")
-        upper = bs_params.quantile(1 - 0.5 * alpha, axis=0).rename("upper")
-        conf_int_df = pd.concat([lower, upper], axis=1)
-        return conf_int_df
-
-    def bootstrap_cov_matrix(self, params):
-        """Calculate the paramater covariance matrix using bootstrap."""
-        bs_params = self.all_bootstrap_params(params)
-        return bs_params.cov()
-
-    def bootstrap_mean(self, params):
-        bs_params = self.all_bootstrap_params(params)
-        return bs_params.mean()
-
-    def bootstrap_pvalues(self, params):
-        bs_params = self.all_bootstrap_params(params)
-        # safety measure
-        params = np.array(params)
-        nan_where_less_extreme = bs_params[abs(bs_params) >= abs(params)]
-        numerator = nan_where_less_extreme.count() + 1
-        p_values = numerator / (len(bs_params) + 1)
-        return p_values
-
     def fit(self, start_params=None, params=None):
         """Fit the model and return an instance of SkillModelResults."""
-        if self.estimator == "chs":
-            params, optimize_dict = self.estimate_params_chs(
-                start_params, return_optimize_dict=True, params_type="long"
-            )
-
-        elif self.estimator == "wa":
-            params = self.estimate_params_wa()
-            optimize_dict = None
-
-        cov_func = getattr(self, "{}_cov_matrix".format(self.standard_error_method))
-        cov = cov_func(params)
-
-        like_res = LikelihoodModelResults(self, params, cov)
-
-        skillmodel_res = SkillModelResults(self, like_res, optimize_dict)
-        return skillmodel_res
-
-    def _generate_start_factors(self):
-        """Start factors for simulations or marginal effects.
-        Returns:
-            start_factors (np.ndarray): array of size (self.nobs, self.nfac)
-                with a simulated sample of initial latent factors.
-        """
-        assert self.nemf == 1, (
-            "Start factors for simulation can currently only be generated "
-            "if nemf == 1."
-        )
-
-        # get start means
-        slices = self.params_slices("long")
-        if "X_zero" in self.params_quants:
-            X_zero = self.me_params[slices["X_zero"]]
-        else:
-            X_zero = np.zeros(self.nfac)
-
-        # get start covariance matrix
-        p_params = self.me_params[slices["P_zero"]]
-        p_helper = np.zeros((self.nfac, self.nfac))
-        p_helper[np.triu_indices(self.nfac)] = p_params
-
-        if self.estimator == "chs" and self.cholesky_of_P_zero is True:
-            P_zero = np.dot(p_helper.T, p_helper)
-        else:
-            p_helper_2 = (p_helper - np.diag(np.diagonal(p_helper))).T
-            P_zero = p_helper + p_helper_2
-        # generate the sample
-        start_factors = np.random.multivariate_normal(
-            mean=X_zero, cov=P_zero, size=self.nobs
-        )
-
-        return start_factors
-
-    def _machine_accuracy(self):
-        return np.MachAr().eps
-
-    def _get_epsilon(self, centered):
-        change = np.zeros(self.nperiods - 1)
-        intermediate_factors = self._predict_final_factors(
-            change, return_intermediate=True
-        )
-
-        pos = self.factors.index(self.me_of)
-        epsilon = np.zeros(self.nperiods - 1)
-        for t in self.periods[:-1]:
-            epsilon[t] = np.abs(intermediate_factors[t][:, pos]).max()
-
-        epsilon[epsilon <= 0.1] = 0.1
-
-        accuracy = self._machine_accuracy()
-        exponent = 1 / 2 if centered is False else 1 / 3
-
-        epsilon *= accuracy ** exponent
-        return epsilon
-
-    def _predict_final_factors(self, change, return_intermediate=False):
-
-        assert (
-            len(change) == self.nperiods - 1
-        ), "factor_change must have len nperiods - 1."
-
-        if return_intermediate is True:
-            intermediate_factors = []
-
-        changed_pos = self.factors.index(self.me_of)
-        args = self.likelihood_arguments_dict("long")
-        tsp_args = args["predict_args"]["transform_sigma_points_args"]
-        pp_args = args["parse_params_args"]
-        parse_params(self.me_params, **pp_args)
-
-        factors = self.me_at.copy()
-
-        for t, stage in enumerate(self.stagemap[:-1]):
-            if return_intermediate is True:
-                intermediate_factors.append(factors.copy())
-            factors[:, changed_pos] += change[t]
-            transform_sigma_points(t, factors, **tsp_args)
-
-        if return_intermediate is False:
-            return factors
-        else:
-            return intermediate_factors
-
-    def _select_final_factor(self, final_factors):
-        pos = self.factors.index(self.me_on)
-        return final_factors[:, pos]
-
-    def _anchor_final_factors(self, final_factors, anch_loadings):
-
-        if self.anchoring is True:
-            anch_func = "anchor_flat_sigma_points_linear"
-            getattr(anch, anch_func)(
-                final_factors, self.anch_positions, anch_loadings, intercept=None
-            )
-
-        return final_factors
-
-    def _anchoring_outcome_from_final_factors(
-        self, final_factors, anch_loadings, anch_intercept
-    ):
-
-        assert self.anchoring is True, (
-            "Marginal effects on a anchoring outcome can only be calculated "
-            "if anchoring equations were estimated."
-        )
-
-        anchored = self._anchor_final_factors(final_factors, anch_loadings)
-        selector = anch_loadings.astype(bool).astype(int)
-        anch_outcome = np.dot(anchored, selector) + anch_intercept
-        return anch_outcome
-
-    def _marginal_effect_outcome(self, change):
-
-        final_factors = self._predict_final_factors(change)
-
-        if self.anchoring is True:
-            # construct_anch_loadings and anch_intercept
-            slices = self.params_slices("long")
-            relevant_params = self.me_params[slices["H"]][-len(self.anchored_factors):]
-
-            anch_loadings = np.zeros(self.nfac)
-            for p, pos in enumerate(self.anch_positions):
-                anch_loadings[pos] = relevant_params[p]
-
-            # the last entry of the last delta slice
-            anch_intercept = self.me_params[slices["deltas"][-1]][-1]
-
-            if self.me_on == "anch_outcome":
-                return self._anchoring_outcome_from_final_factors(
-                    final_factors, anch_loadings, anch_intercept
-                )
-            elif self.me_anchor_on is True:
-                anchored_final_factors = self._anchor_final_factors(
-                    final_factors, anch_loadings
-                )
-                return self._select_final_factor(anchored_final_factors)
-
-        else:
-            return self._select_final_factor(final_factors)
+        raise NotImplemented
 
     def _basic_heatmap_args(self):
         args = {

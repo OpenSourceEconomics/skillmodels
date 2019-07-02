@@ -1,6 +1,11 @@
 import numpy as np
 import pandas as pd
-from skillmodels.estimation.wa_functions import prepend_index_level
+
+
+def prepend_index_level(df, to_prepend):
+    df = df.copy()
+    df.index = pd.MultiIndex.from_tuples([(to_prepend, x) for x in df.index])
+    return df
 
 
 def pre_process_data(df):

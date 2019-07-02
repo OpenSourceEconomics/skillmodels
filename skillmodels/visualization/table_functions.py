@@ -4,7 +4,7 @@ The functions are used in several parts of skillmodels.
 
 """
 import pandas as pd
-from skillmodels.estimation.wa_functions import prepend_index_level
+from skillmodels.pre_processing.data_processor import prepend_index_level
 
 
 def df_to_tex_table(df, title):
