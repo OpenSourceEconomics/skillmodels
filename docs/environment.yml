@@ -3,6 +3,7 @@ name: skillmodels
 channels:
   - defaults
   - conda-forge
+  - janosg
 
 dependencies:
   - numpy
@@ -13,3 +14,5 @@ dependencies:
   - scipy
   - numba
   - statsmodels
+  - estimagic=0.0.6
+

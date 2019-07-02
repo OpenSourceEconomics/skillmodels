@@ -30,9 +30,10 @@ Installation
 
 The package can be installed via conda. To do so, type the following in a terminal:
 
-conda install -c janosg skillmodels
 
-This should work for all platforms, but only 64-bit linux is tested.
+conda config --add channels conda-forge
+conda config --add channels janosg
+conda install skillmodels
 
 
 Documentation

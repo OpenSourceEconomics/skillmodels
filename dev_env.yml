@@ -3,6 +3,7 @@ name: skillmodels_dev
 channels:
   - defaults
   - conda-forge
+  - janosg
 
 dependencies:
 
@@ -16,4 +17,5 @@ dependencies:
   - pytest=4.0.2
   - pytest-mock
   - nose=1.3.7
+  - estimagic=0.0.6
 
