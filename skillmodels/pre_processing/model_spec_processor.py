@@ -2,7 +2,6 @@ import pandas as pd
 from pandas import DataFrame
 import numpy as np
 from itertools import product
-import os
 import warnings
 from skillmodels.pre_processing.data_processor import pre_process_data
 from skillmodels.pre_processing.params_index import params_index
@@ -134,7 +133,6 @@ class ModelSpecProcessor:
                 "possible to have more than one element in the mixture "
                 "distribution of the latent factors. Check model {}"
             ).format(self.model_name)
-
 
     def _transition_equation_names(self):
         """Construct a list with the transition equation name for each factor.
@@ -444,9 +442,10 @@ class ModelSpecProcessor:
                 cleaned.append({norminfo[0]: norminfo[1]})
 
         if norm_list != cleaned:
-            raise DeprecationWarning(
+            warnings.warn(
                 "Using lists of lists instead of lists of dicts for the "
-                "normalization specification is deprecated."
+                "normalization specification is deprecated.",
+                DeprecationWarning
             )
 
         norm_list = cleaned
@@ -546,15 +545,7 @@ class ModelSpecProcessor:
 
         * A column for each factor: df.loc[(t, meas), fac1] is 1 if meas is a
             measurement for fac1 in period t, else it is 0.
-        * A column with the loading_norm_values for each factor:
-            df.loc[(t, meas), fac1] is equal to the normalized value if meas is
-            a measurement with normalized factor loading for fac1 in period t.
-            else it is 0.
-        * intercept_norm_value: the value the intercept is normalized to or NaN
-        * stage: maps updates to stages
         * purpose: takes one of the values in ['measurement', 'anchoring']
-        * has_normalized_loading: True if any loading is normalized
-        * has_normalized_intercept: True if the intercept is normalized
 
         The row order within one period is arbitrary except for the last
         period, where the row that corresponds to the anchoring update comes
@@ -566,8 +557,6 @@ class ModelSpecProcessor:
         """
         to_concat = [
             self._factor_update_info(),
-            self._normalization_update_info(),
-            self._stage_udpate_info(),
             self._purpose_update_info(),
         ]
 
@@ -616,48 +605,6 @@ class ModelSpecProcessor:
             df = df.append(anch_row)
         return df
 
-    def _normalization_update_info(self):
-        bdf = self._factor_update_info()
-        load_cols = ["{}_loading_norm_value".format(f) for f in self.factors]
-        # for some reason it affects the likelihood value of a test model
-        # whether the loading norm values have dtype float or int
-        # therefore I fill them with 0.0 to have them explicitly as float.
-        df = pd.DataFrame(index=bdf.index, columns=load_cols).fillna(0.0)
-
-        df["intercept_norm_value"] = np.nan
-        df["variance_norm_value"] = np.nan
-
-        for (t, meas), factor in product(df.index, self.factors):
-            if bdf.loc[(t, meas), factor] == 1:
-                load_norm_column = "{}_loading_norm_value".format(factor)
-                load_norminfo = self.normalizations[factor]["loadings"][t]
-
-                if meas in load_norminfo:
-                    df.loc[(t, meas), load_norm_column] = load_norminfo[meas]
-
-                msg = "Incompatible normalizations of {} for {} in period {}"
-                for normtype in ["intercepts", "variances"]:
-                    norminfo = self.normalizations[factor][normtype][t]
-                    if meas in norminfo:
-                        col = "{}_norm_value".format(normtype[:-1])
-                        if df.loc[(t, meas), col] != norminfo[meas]:
-                            assert np.isnan(df.loc[(t, meas), col]), msg.format(
-                                normtype, meas, t
-                            )
-                        df.loc[(t, meas), col] = norminfo[meas]
-
-        df["has_normalized_loading"] = df[load_cols].sum(axis=1).astype(bool)
-        df["has_normalized_intercept"] = pd.notnull(df["intercept_norm_value"])
-        df["has_normalized_variance"] = pd.notnull(df["variance_norm_value"])
-        return df
-
-    def _stage_udpate_info(self):
-        replace_dict = {t: stage for t, stage in enumerate(self.stagemap)}
-        df = self._factor_update_info()
-        df["period"] = df.index.get_level_values("period")
-        df["stage"] = df["period"].replace(replace_dict)
-        return df["stage"]
-
     def _purpose_update_info(self):
         factor_uinfo = self._factor_update_info()
         sr = pd.Series(
@@ -669,49 +616,6 @@ class ModelSpecProcessor:
             anch_index = (self.nperiods - 1, self.anch_outcome)
             sr[anch_index] = "anchoring"
         return sr
-
-    def _all_controls_list(self):
-        """Control variables without duplicates in order of occurrence."""
-        all_controls = []
-        for cont_list in self.controls:
-            for cont in cont_list:
-                if cont not in all_controls:
-                    all_controls.append(cont)
-        return all_controls
-
-    def new_trans_coeffs(self):
-        """Array that indicates if new parameters from params are needed.
-
-        The transition equation of a factor either uses new parameters in each
-        stage, reuses the parameters from the previous stage or does not need
-        parameters at all.
-
-        * For an AR1 process only one parameter is taken from params in the
-          first stage. Then it is reused in all other stages.
-        * For a constant process no parameters are needed at all.
-
-        Returns:
-            array of [nstages, nfac]. The s_th element in the
-            f_th row is 1 if new parameters from params are used in stage s
-            for the transition equation of factor f. It is 0 in the case
-            of reuse and -1 if the transition equation doesn't take
-            parameters at all.
-
-        """
-        new_params = np.zeros((self.nstages, self.nfac))
-
-        for f, factor in enumerate(self.factors):
-            name = self.transition_names[f]
-
-            if name == "constant":
-                new_params[:, f] = -1
-            elif name == "ar1":
-                new_params[0, f] = 1
-                new_params[1:, f] = 0
-            else:
-                new_params[:, f] = 1
-
-        return new_params
 
     def _set_params_index(self):
         self.params_index = params_index(
@@ -745,5 +649,4 @@ class ModelSpecProcessor:
             key: val for key, val in all_attributes.items() if not key.startswith("_")
         }
         public_attributes["update_info"] = self.update_info()
-        public_attributes["new_trans_coeffs"] = self.new_trans_coeffs()
         return public_attributes

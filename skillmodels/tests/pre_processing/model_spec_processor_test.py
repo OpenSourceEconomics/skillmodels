@@ -171,16 +171,6 @@ class TestCheckAndCleanNormalizations:
         self.dataset_name = "data"
         self.nperiods = len(self.periods)
 
-    def test_check_normalizations_lists(self):
-        assert_raises(
-            DeprecationWarning,
-            msp._check_and_clean_normalizations_list,
-            self,
-            "f1",
-            [["m1", 1], ["m1", 1]],
-            "loadings",
-        )
-
     def test_check_normalizations_no_error_dictionaries(self):
         result = msp._check_and_clean_normalizations_list(
             self, "f1", self.f1_norm_list, "loadings"
@@ -304,71 +294,10 @@ def factor_uinfo():
     return df
 
 
-def norm_uinfo():
-    n = np.nan
-    f = False
-    t = True
-    dat = [
-        [0, "m1", 2.0, 0.0, 0.0, 0.0, 1.0, t, t, t],
-        [0, "m2", 0, 0, 0, n, n, f, f, f],
-        [0, "m3", 0, 1, 0, 1, n, t, t, f],
-        [0, "m4", 0, 0, 0, n, n, f, f, f],
-        [0, "m5", 0, 0, 4, 4, n, t, t, f],
-        [0, "m6", 0, 0, 0, n, n, f, f, f],
-        [1, "m1", 2, 0, 0, 0, 1, t, t, t],
-        [1, "m2", 0, 0, 0, n, n, f, f, f],
-        [1, "m3", 0, 1, 0, 1, n, t, t, f],
-        [1, "m4", 0, 0, 0, n, n, f, f, f],
-        [1, "m5", 0, 0, 4, 4, n, t, t, f],
-        [1, "m6", 0, 0, 0, n, n, f, f, f],
-        [2, "m1", 2, 0, 0, 0, 1, t, t, t],
-        [2, "m2", 0, 0, 0, n, n, f, f, f],
-        [2, "m3", 0, 1, 0, 1, n, t, t, f],
-        [2, "m4", 0, 0, 0, n, n, f, f, f],
-        [2, "m5", 0, 0, 4, 4, n, t, t, f],
-        [2, "m6", 0, 0, 0, n, n, f, f, f],
-        [3, "m1", 2, 0, 0, 0, 1, t, t, t],
-        [3, "m2", 0, 0, 0, n, n, f, f, f],
-        [3, "m3", 0, 0, 0, n, n, f, f, f],
-        [3, "m4", 0, 0, 0, n, n, f, f, f],
-        [3, "m5", 0, 5, 4, 4, n, t, t, f],
-        [3, "m6", 0, 0, 0, n, n, f, f, f],
-        [3, "a", 0, 0, 0, n, n, f, f, f],
-    ]
-    cols = [
-        "period",
-        "variable",
-        "f1_loading_norm_value",
-        "f2_loading_norm_value",
-        "f3_loading_norm_value",
-        "intercept_norm_value",
-        "variance_norm_value",
-        "has_normalized_loading",
-        "has_normalized_intercept",
-        "has_normalized_variance",
-    ]
-
-    df = DataFrame(data=dat, columns=cols)
-    df.set_index(["period", "variable"], inplace=True)
-    return df
-
-
-def stage_uinfo():
-    ind = factor_uinfo().index
-    dat = [0] * 12 + [1] * 13
-    return pd.Series(index=ind, data=dat, name="stage")
-
-
 def purpose_uinfo():
     ind = factor_uinfo().index
     dat = ["measurement"] * 24 + ["anchoring"]
     return pd.Series(index=ind, data=dat, name="purpose")
-
-
-def type_uinfo():
-    ind = factor_uinfo().index
-    dat = ["linear", "linear", "probit"] * 8 + ["linear"]
-    return pd.Series(data=dat, index=ind, name="type")
 
 
 class TestFactorUpdateInfo:
@@ -397,76 +326,6 @@ class TestFactorUpdateInfo:
         assert meas[-1] == self.anch_outcome
 
 
-class TestNormalizationUpdateInfo:
-    def setup(self):
-        self._factor_update_info = Mock(return_value=factor_uinfo())
-        self.factors = ["f1", "f2", "f3"]
-
-        n = {"f1": {}, "f2": {}, "f3": {}}
-
-        n["f1"]["loadings"] = [{"m1": 2}] * 4
-        n["f2"]["loadings"] = [{"m3": 1}, {"m3": 1}, {"m3": 1}, {"m5": 5}]
-        n["f3"]["loadings"] = [{"m5": 4}] * 4
-
-        n["f1"]["intercepts"] = [{"m1": 0}] * 4
-        # set normalization of m5 to 5 to check correct raising
-        n["f2"]["intercepts"] = [{"m3": 1}, {"m3": 1}, {"m3": 1}, {"m5": 4}]
-        n["f3"]["intercepts"] = [{"m5": 4}] * 4
-
-        n["f1"]["variances"] = [{"m1": 1}, {"m1": 1}, {"m1": 1}, {"m1": 1}]
-        n["f2"]["variances"] = [{}] * 4
-        n["f3"]["variances"] = [{}] * 4
-
-        self.normalizations = n
-
-    def test_loading_normalizations(self):
-        normcols = ["{}_loading_norm_value".format(f) for f in self.factors]
-        calc = msp._normalization_update_info(self)[normcols]
-        exp = norm_uinfo()[normcols]
-        for col in calc.columns:
-            assert calc[col].equals(exp[col])
-
-    def test_invalid_intercept_normalizations(self):
-        self.normalizations["f2"]["intercepts"][-1] = {"m5": 5}
-        assert_raises(AssertionError, msp._normalization_update_info, self)
-
-    def test_valid_intercept_normalizations(self):
-        calc = msp._normalization_update_info(self)["intercept_norm_value"]
-        exp = norm_uinfo()["intercept_norm_value"]
-        assert calc.equals(exp)
-
-    def test_variance_normalizations(self):
-        calc = msp._normalization_update_info(self)["variance_norm_value"]
-        exp = norm_uinfo()["variance_norm_value"]
-        assert calc.equals(exp)
-
-    def test_update_info_has_normalized_loading(self):
-        calc = msp._normalization_update_info(self)["has_normalized_loading"]
-        exp = norm_uinfo()["has_normalized_loading"]
-        assert calc.equals(exp)
-
-    def test_update_info_has_normalized_intercept(self):
-        calc = msp._normalization_update_info(self)["has_normalized_intercept"]
-        exp = norm_uinfo()["has_normalized_intercept"]
-        assert calc.equals(exp)
-
-    def test_update_info_has_normalized_variance(self):
-        calc = msp._normalization_update_info(self)["has_normalized_variance"]
-        exp = norm_uinfo()["has_normalized_variance"]
-        assert calc.equals(exp)
-
-
-class TestStageUpdateInfo:
-    def setup(self):
-        self._factor_update_info = Mock(return_value=factor_uinfo())
-        self.stagemap = [0, 0, 1, 1]
-
-    def test_update_info_stages(self):
-        calc = msp._stage_udpate_info(self)
-        exp = stage_uinfo()
-        assert calc.equals(exp)
-
-
 class TestPurposeUpdateInfo:
     def setup(self):
         self.anchoring = True
@@ -478,19 +337,3 @@ class TestPurposeUpdateInfo:
         calc = msp._purpose_update_info(self)
         exp = purpose_uinfo()
         assert calc.equals(exp)
-
-
-class TestNewTransitionCoeffs:
-    def setup(self):
-        self.stages = [0, 1, 2]
-        self.nstages = len(self.stages)
-
-        self.factors = ["f1", "f2", "f3", "f4", "f5"]
-        self.nfac = len(self.factors)
-        self.transition_names = ["constant", "ar1", "ces", "bla", "blubb"]
-        arr = np.array([[1, 1, 1, 1, 0], [1, 1, 1, 1, 1], [1, 1, 0, 1, 1]], dtype=bool)
-        self.enough_measurements_array = arr
-
-    def test_new_transition_parameters(self):
-        res = np.array([[-1, 1, 1, 1, 1], [-1, 0, 1, 1, 1], [-1, 0, 1, 1, 1]])
-        aae(msp.new_trans_coeffs(self), res)
