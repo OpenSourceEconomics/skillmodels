@@ -1,6 +1,6 @@
 from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 from skillmodels.pre_processing.data_processor import DataProcessor
-from skillmodels.estimation.likelihood_function import log_likelihood_contributions
+from skillmodels.estimation.likelihood_function import likelihood_contributions
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -435,8 +435,12 @@ class SkillModel:
         start_params = self.generate_full_start_params(start_params)
 
         def criterion(params, args):
-            like_vec = log_likelihood_contributions(params, **args)
-            return like_vec.sum()
+            like_contributions = likelihood_contributions(params, **args)
+
+            small = 1e-250
+            like_vec = np.prod(like_contributions, axis=0)
+            like_vec[like_vec < small] = small
+            return np.log(like_vec).sum()
 
         db_options = {"rollover": 1000}
 
