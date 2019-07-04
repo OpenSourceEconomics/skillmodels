@@ -178,8 +178,16 @@ class SkillModel:
             full_sp = get_start_params_from_free_params(
                 free, self.constraints, self.params_index)
 
-        full_sp["group"] = None
+        full_sp['group'] = None
 
+        for period in self.periods:
+            full_sp.loc[('h', period), 'group'] = f'Loadings in Period {period}'
+            full_sp.loc[('r', period), 'group'] = f'Meas-Variances in Period {period}'
+
+        for period in self.periods[:-1]:
+            full_sp.loc[('trans', period), 'group'] = f'Transition Parameters in Period {period}'
+        full_sp.loc['p', 'group'] = 'Factor Covariance Matrix'
+        full_sp.loc[fixed.index, "group"] = None
         full_sp = add_bounds(full_sp, bounds_distance=self.bounds_distance)
         return full_sp
 
@@ -421,7 +429,7 @@ class SkillModel:
 
         return observed_data, latent_data
 
-    def fit(self, start_params=None, params=None):
+    def fit(self, start_params=None, params=None, dashboard=False):
         """Fit the model and return an instance of SkillModelResults."""
         args = self.likelihood_arguments_dict()
         start_params = self.generate_full_start_params(start_params)
@@ -438,7 +446,8 @@ class SkillModel:
             constraints=self.constraints,
             algorithm='scipy_L-BFGS-B',
             criterion_args=(args, ),
-            dashboard=False,
+            dashboard=dashboard,
+            db_options=db_options,
         )
         return res
 
