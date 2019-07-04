@@ -2,7 +2,7 @@ import pickle
 import json
 import pandas as pd
 from skillmodels import SkillModel
-from skillmodels.estimation.likelihood_function import log_likelihood_per_individual
+from skillmodels.estimation.likelihood_function import log_likelihood_contributions
 
 from numpy.testing import assert_array_almost_equal as aaae
 import pytest
@@ -47,7 +47,7 @@ def test_likelihood_value(model, params, data, model_name):
     # free.to_csv('skillmodels/tests/regression/{}.csv'.format(model_name))
     # assert False
 
-    res = log_likelihood_per_individual(full_params, **args)
+    res = log_likelihood_contributions(full_params, **args)
 
     in_path = "skillmodels/tests/regression/{}_result.pickle".format(model_name)
     with open(in_path, "rb") as p:

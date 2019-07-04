@@ -8,9 +8,9 @@ from skillmodels.fast_routines.kalman_filters import sqrt_linear_update
 from skillmodels.fast_routines.sigma_points import calculate_sigma_points
 
 
-def log_likelihood_per_individual(
+def log_likelihood_contributions(
     params,
-    like_vec,
+    like_contributions,
     parse_params_args,
     periods,
     nmeas_list,
@@ -50,9 +50,11 @@ def log_likelihood_per_individual(
     anchoring equation into the likelihood.
 
     """
-    like_vec[:] = 1.0
     restore_unestimated_quantities(**restore_args)
+    like_contributions[:] = 1.0
+
     parse_params(params, **parse_params_args)
+
     k = 0
     for t in periods:
         for j in range(nmeas_list[t]):
@@ -68,6 +70,7 @@ def log_likelihood_per_individual(
         update(square_root_filters, update_args[k])
 
     small = 1e-250
+    like_vec = np.prod(like_contributions, axis=0)
     like_vec[like_vec < small] = small
     return np.log(like_vec)
 

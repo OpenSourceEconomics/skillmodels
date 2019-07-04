@@ -2,7 +2,7 @@ import pickle
 import json
 import pandas as pd
 from skillmodels import SkillModel
-from skillmodels.estimation.likelihood_function import log_likelihood_per_individual
+from skillmodels.estimation.likelihood_function import log_likelihood_contributions
 
 from numpy.testing import assert_array_almost_equal as aaae
 
@@ -31,7 +31,7 @@ def test_likelihood_value():
     full_params_df = mod.generate_full_start_params()
     params = full_params_df["value"]
 
-    res = log_likelihood_per_individual(params, **args)
+    res = log_likelihood_contributions(params, **args)
 
     in_path = "skillmodels/tests/estimation/regression_test_fixture.pickle"
     with open(in_path, "rb") as p:

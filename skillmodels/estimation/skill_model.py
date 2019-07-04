@@ -1,6 +1,6 @@
 from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 from skillmodels.pre_processing.data_processor import DataProcessor
-from skillmodels.estimation.likelihood_function import log_likelihood_per_individual
+from skillmodels.estimation.likelihood_function import log_likelihood_contributions
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -227,6 +227,8 @@ class SkillModel:
             self.nemf * self.nobs * self.nsigma, self.nfac
         )
 
+        init_dict['like_contributions'] = np.ones((self.nupdates, self.nobs))
+
         return init_dict
 
     def _parse_params_args_dict(self, initial_quantities):
@@ -249,7 +251,7 @@ class SkillModel:
             r_args["w_value"] = 1 / self.nemf
         return r_args
 
-    def _update_args_dict(self, initial_quantities, like_vec):
+    def _update_args_dict(self, initial_quantities):
         position_helper = self.update_info[self.factors].to_numpy().astype(bool)
 
         u_args_list = []
@@ -262,7 +264,7 @@ class SkillModel:
                 u_args = [
                     initial_quantities["x"],
                     initial_quantities["p"],
-                    like_vec,
+                    initial_quantities["like_contributions"][k],
                     self.y_data[k],
                     self.c_data[t],
                     initial_quantities["delta"][t][j],
@@ -326,15 +328,13 @@ class SkillModel:
         initial_quantities = self._initial_quantities_dict()
 
         args = {}
-        args["like_vec"] = np.ones(self.nobs)
+        args["like_contributions"] = initial_quantities["like_contributions"]
         args["parse_params_args"] = self._parse_params_args_dict(initial_quantities)
         args["periods"] = self.periods
         args["nmeas_list"] = self.nmeas_list
         args["anchoring"] = self.anchoring
         args["square_root_filters"] = self.square_root_filters
-        args["update_args"] = self._update_args_dict(
-            initial_quantities, args["like_vec"]
-        )
+        args["update_args"] = self._update_args_dict(initial_quantities)
         args["predict_args"] = self._predict_args_dict(initial_quantities)
         args["calculate_sigma_points_args"] = self._calculate_sigma_points_args_dict(
             initial_quantities
@@ -435,7 +435,7 @@ class SkillModel:
         start_params = self.generate_full_start_params(start_params)
 
         def criterion(params, args):
-            like_vec = log_likelihood_per_individual(params, **args)
+            like_vec = log_likelihood_contributions(params, **args)
             return like_vec.sum()
 
         db_options = {"rollover": 1000}
