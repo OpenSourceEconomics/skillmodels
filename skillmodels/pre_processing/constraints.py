@@ -16,6 +16,8 @@ def constraints(
     invariant_meas_system,
     anchored_factors,
     anch_outcome,
+    bounds_distance,
+    estimate_x
 ):
 
     periods = list(range(len(stagemap)))
@@ -25,12 +27,12 @@ def constraints(
         constr += _invariant_meas_system_constraints(update_info, controls, factors)
     constr += _normalization_constraints(normalizations)
     constr += _not_measured_constraints(update_info, measurements, anchored_factors, anch_outcome)
-    constr += _w_constraints()
-    constr += _p_constraints(nemf)
+    constr += _w_constraints(nemf)
+    constr += _p_constraints(nemf, bounds_distance)
     constr += _stage_constraints(stagemap, factors, transition_names, included_factors)
     constr += _constant_factors_constraints(factors, transition_names, periods)
     constr += _ar1_contraints(factors, transition_names, included_factors, periods)
-    constr += _x_constraints(nemf, factors)
+    constr += _x_constraints(nemf, factors, estimate_x)
     constr += _trans_coeff_constraints(
         factors, transition_names, included_factors, periods
     )
@@ -169,12 +171,15 @@ def _not_measured_constraints(update_info, measurements, anchored_factors, anch_
     return constraints
 
 
-def _w_constraints():
+def _w_constraints(nemf):
     """Constrain mixture weights to be between 0 and 1 and sum to 1."""
-    return [{"loc": "w", "type": "probability"}]
+    if nemf == 1:
+        return [{"loc": "w", "type": "fixed", "value": 1.0}]
+    else:
+        return [{"loc": "w", "type": "probability"}]
 
 
-def _p_constraints(nemf):
+def _p_constraints(nemf, bounds_distance):
     """Constraint initial covariance matrices to be positive semi-definite.
 
     Args:
@@ -186,7 +191,7 @@ def _p_constraints(nemf):
     """
     constraints = []
     for emf in range(nemf):
-        constraints.append({"loc": ("p", 0, emf), "type": "covariance"})
+        constraints.append({"loc": ("p", 0, emf), "type": "covariance", "bounds_distance": bounds_distance})
     return constraints
 
 
@@ -285,7 +290,7 @@ def _ar1_contraints(factors, transition_names, included_factors, periods):
     return constraints
 
 
-def _x_constraints(nemf, factors):
+def _x_constraints(nemf, factors, estimate_x):
     """Enforce that the x values of the first factor are increasing.
 
     Otherwise the model would only be identified up to the order of the start factors.
@@ -299,7 +304,12 @@ def _x_constraints(nemf, factors):
 
     """
     ind_tups = [("x", 0, emf, factors[0]) for emf in range(nemf)]
-    return [{"loc": ind_tups, "type": "increasing"}]
+    if estimate_x:
+        constr = [{"loc": ind_tups, "type": "increasing"}]
+    else:
+        constr = [{"loc": 'x', "type": "fixed", "value": 0.0}]
+
+    return constr
 
 
 def _trans_coeff_constraints(factors, transition_names, included_factors, periods):

@@ -25,6 +25,8 @@ from os.path import join
 from skillmodels.simulation.simulate_data import simulate_datasets
 from estimagic.optimization.start_helpers import make_start_params_helpers
 from estimagic.optimization.start_helpers import get_start_params_from_free_params
+from estimagic.optimization.optimize import maximize
+from skillmodels.pre_processing.constraints import add_bounds
 
 
 class SkillModel:
@@ -135,30 +137,13 @@ class SkillModel:
             initial.append(np.zeros((self.nperiods - 1, nparams)))
         return initial
 
-    def len_params(self, params_type):
-        """Return the length of params, dependig on the :ref:`params_type`."""
-        slices = self.params_slices(params_type)
-        last_slice = slices[self.params_quants[-1]]
-        while type(last_slice) == list:
-            last_slice = last_slice[-1]
-        len_params = last_slice.stop
-        return len_params
-
-    def expandparams(self, params):
-        """Convert a params vector of type short to type long."""
-        raise NotImplementedError
-
-    def reduceparams(self, params):
-        """Convert a params vector of type long to type short."""
-        raise NotImplementedError
-
     def start_params_helpers(self):
         """DataFrames with the free and fixed parameters of the model."""
         free, fixed = make_start_params_helpers(
             self.params_index, self.constraints)
         return free, fixed
 
-    def generate_full_start_params(self):
+    def generate_full_start_params(self, start_params):
         """Vector with start values for the optimization.
 
         If valid start_params are provided in the model dictionary, these will
@@ -166,8 +151,8 @@ class SkillModel:
 
         """
         free, fixed = self.start_params_helpers()
-        if hasattr(self, 'start_params'):
-            sp = self.start_params
+        if start_params is not None:
+            sp = start_params
             assert isinstance(sp, pd.DataFrame)
             if len(sp.index.intersection(self.params_index)) == len(self.params_index):
                 full_sp = sp
@@ -177,21 +162,25 @@ class SkillModel:
                     sp, self.constraints, self.params_index)
             else:
                 raise ValueError(
-                    "Index of start parameters has to either self.params_index or "
+                    "Index of start parameters has to be either self.params_index or "
                     "the index of free parameters from start_params_helpers.")
         else:
             free['value'] = 0.0
             free.loc['h', 'value'] = 1.0
             free.loc['r', 'value'] = 1.0
             free.loc['q', 'value'] = 1.0
-            free.loc['trans_coeffs'] = 1 / self.nfac
-            free.loc['w'] = 1 / self.nemf
+            free.loc['trans', 'value'] = 1 / self.nfac
+            free.loc['w', 'value'] = 1 / self.nemf
             for emf in range(self.nemf):
-                p_diags = [("p", 0, emf, fac) for fac in self.factors]
+                p_diags = [("p", 0, emf, f"{fac}-{fac}") for fac in self.factors]
                 free.loc[p_diags, 'value'] = 1
 
             full_sp = get_start_params_from_free_params(
                 free, self.constraints, self.params_index)
+
+        full_sp["group"] = None
+
+        full_sp = add_bounds(full_sp, bounds_distance=self.bounds_distance)
         return full_sp
 
     def sigma_weights(self):
@@ -434,7 +423,24 @@ class SkillModel:
 
     def fit(self, start_params=None, params=None):
         """Fit the model and return an instance of SkillModelResults."""
-        raise NotImplemented
+        args = self.likelihood_arguments_dict()
+        start_params = self.generate_full_start_params(start_params)
+
+        def criterion(params, args):
+            like_vec = log_likelihood_per_individual(params, **args)
+            return like_vec.sum()
+
+        db_options = {"rollover": 1000}
+
+        res = maximize(
+            criterion,
+            start_params,
+            constraints=self.constraints,
+            algorithm='scipy_L-BFGS-B',
+            criterion_args=(args, ),
+            dashboard=False,
+        )
+        return res
 
     def _basic_heatmap_args(self):
         args = {

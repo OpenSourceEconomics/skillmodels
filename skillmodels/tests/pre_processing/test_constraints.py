@@ -124,20 +124,26 @@ def test_not_measured_constraints():
     assert_list_equal_except_for_order(calculated, expected)
 
 
-def test_w_constraints():
-    calculated = _w_constraints()
+def test_w_constraints_mixture():
+    calculated = _w_constraints(nemf=2)
     expected = [{"loc": "w", "type": "probability"}]
+    assert_list_equal_except_for_order(calculated, expected)
+
+
+def test_w_constraints_normal():
+    calculated = _w_constraints(nemf=1)
+    expected = [{"loc": "w", "type": "fixed", "value": 1.0}]
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_p_constraints():
     nemf = 2
     expected = [
-        {"loc": ("p", 0, 0), "type": "covariance"},
-        {"loc": ("p", 0, 1), "type": "covariance"},
+        {"loc": ("p", 0, 0), "type": "covariance", "bounds_distance": 0.0},
+        {"loc": ("p", 0, 1), "type": "covariance", "bounds_distance": 0.0},
     ]
 
-    calculated = _p_constraints(nemf)
+    calculated = _p_constraints(nemf, 0.0)
     assert_list_equal_except_for_order(calculated, expected)
 
 
@@ -229,7 +235,7 @@ def test_x_constraints():
 
     expected = [{"loc": ind_tups, "type": "increasing"}]
 
-    calculated = _x_constraints(nemf, factors)
+    calculated = _x_constraints(nemf, factors, True)
     assert_list_equal_except_for_order(calculated, expected)
 
 

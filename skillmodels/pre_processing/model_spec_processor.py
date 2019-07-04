@@ -51,7 +51,6 @@ class ModelSpecProcessor:
             "missing_variables": "raise_error",
             "controls_with_missings": "raise_error",
             "variables_without_variance": "raise_error",
-            "robust_bounds": True,
             "bounds_distance": 1e-20,
             "estimate_X_zeros": False,
             "order_X_zeros": 0,
@@ -641,6 +640,8 @@ class ModelSpecProcessor:
             self.time_invariant_measurement_system,
             self.anchored_factors,
             self.anch_outcome,
+            self.bounds_distance,
+            self.estimate_X_zeros,
         )
 
     def public_attribute_dict(self):

@@ -40,8 +40,7 @@ for model, par, model_name in zip(model_dicts, start_params, model_names):
 @pytest.mark.parametrize('model, params, data, model_name', test_cases)
 def test_likelihood_value(model, params, data, model_name):
     mod = SkillModel(model_dict=model, dataset=data)
-    mod.start_params = params
-    full_params = mod.generate_full_start_params()['value']
+    full_params = mod.generate_full_start_params(params)['value']
 
     args = mod.likelihood_arguments_dict()
     # free, fixed = mod.start_params_helpers()
