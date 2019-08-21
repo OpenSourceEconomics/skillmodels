@@ -57,8 +57,6 @@ The value that corresponds to the ``normalizations`` key is a dictionary in whic
 
 The example model has no normalizations on intercepts and this is ok due to the known location and scale of the CES production function. The same result would have obtained if one had simply omitted 'intercepts' in the normalization dictionary (as was the case for normalized variances).
 
-.. Note:: Normalizations of variances are not compatible with the WA-estimator.
-
 .. Note:: A previous version of skillmodels supported automatic generation of normalization specifications. This was dropped because I don't need it and it would have been hard to maintain while implementing time invariant measurement systems.
 
 .. Note:: The model shown below deliberately uses too many normalizations in order to make the results comparable with the parameters from the CHS replication files.
@@ -70,12 +68,8 @@ The value that corresponds to the ``trans_eq`` key is a dictionary. The ``name``
     * ``constant``
     * ``ar1`` (linear equation with only one included factor and the same coefficient in all stages)
     * ``translog`` (non KLS version; a log-linear-in-parameters function including squares and interaction terms.
-    * ``no_squares_translog`` (as translog but without squares and therefore supported by wa estimator.)
+    * ``no_squares_translog`` (as translog but without squares. Used by Wiswall and Agostinelli.
 
-.. Note:: The general translog function can currently not be used with the wa estimator. While Wiswall and Agostinelli call their transition function a translog function, they use what is called no_squares_translog in skillmodels. The reason is that the square-terms in the translog inflate the error term in the iv regressions with variances of measurement errors. I can think of two solution for the problem:
-
-    #) Circumvent the problem: Instead of replacing the square of a factor in the iv equation by the square of a residual measurement one could use the product of two different residual measurements of the same factor. However, this increases the number of required measurements to at least 3 per period and factor and requires changes at several places of the code.
-    #) Correction approach: As skillmodels already implements an extended version of the wa estimator where measurement variances are estimated, one could simply subtract those variances (scaled with several model parameters) from the intercept in the iv equation. This requires relatively few changes in the code but one drawback is that the measurement variances are estimated very imprecisely.
 
 To see how new types of transition equations can be added see :ref:`model_functions`.
 
@@ -85,8 +79,6 @@ The specification for fac2 is very similar and not reproduced here. The specific
     :lines: 54-77
 
 Here it is important to note that empty sublists have to be added to the ``measurements`` and ``normalizations`` key if no measurements are available in certain periods. Simply leaving the sublists out will result in an error.
-
-.. Note:: If the WA estimator is used, factors with constant transition equation can only have measurements in the initial period and all other factors need at least two measurements per period. If the CHS estimator is used these limitations do not hold as long as there are enough measurements to identify the model. If development stages span more than one period, models can be identified even if some factors have no measurements in some periods.
 
 Points 4 and 5 are only specified once for all factors by adding entries to the ``time_specific`` key of the model dictionary:
 
@@ -121,8 +113,6 @@ Usually a research project comprises the estimation of more than one model and t
     * ``order_X_zeros``: Takes an integer value between 0 and nfac - 1.  If ``estimate_X_zeros`` is true and nemf > 1 the model would not be identified without imposing an order on the start means. The value of order_X_zeros determines which factor (in the alphabetically ordered factor list) is used to impose this order. Only used in CHS estimator.
     * ``restrict_W_zeros``: takes the values true or false. If true the start weights of the mixture distribution is not estimated but set to 1 / nemf for each factor. Only used in CHS estimator.
     * ``restrict_P_zeros``: takes the values true or false. If true the covariance matrices of all elements in the mixture distribution of the factors is required to be the same. CHS use this because their models with nemf > 1 do not converge otherwise. Only used in CHS estimator.
-    * ``cholesky_of_P_zero``: takes the values true or false. If true both the "long" and "short" parameter vector contain the cholesky factor of the covariance matrix of the factor distribution, which increases robustness. Else the "short" vector contains the cholesky factor and the "long" version the entries of the normal covariance matrix. See :ref:`params_type` for an explanation. Only used in CHS estimator.
-    * ``probit_measurements``: takes the values true and false. If true measurements that take only the values 0 and 1 are not incorporated with a linear measurement equation but similar to a probit model. Only used in CHS estimator.
 
     .. Note:: This is not yet ready and will raise a NotImplementedError.
 
@@ -131,40 +121,12 @@ Usually a research project comprises the estimation of more than one model and t
     .. Note:: Probability anchoring is not yet ready and will raise a NotImplementedError.
 
     * ``ignore_intercept_in_linear_anchoring``: takes the values true and false. Often the results remain interpretable if the intercept of the anchoring equation is ignored in the anchoring process. CHS do so in the example model (see equation above). Only used if anchoring_mode equals 'truly_anchor_latent_factors'
-    * ``anchoring_mode``: Takes the values 'only_estimate_anchoring_equation' and 'truly_anchor_latent_factors'. The default is 'only_estimate_anchoring_equation'. In the WA estimator this is the only possible option. It means that an anchoring equation is estimated that can be used for the calculation of interpretable marginal effects. This option does, however, not make the estimated transition parameters interpretable. The other other option requires more computer power and can make the transition parameters interpretable if enough age invariant measures are available and used for normalizations.
-    * ``start_params``: a start vector for the maximization. Only used in CHS estimator. If no start_params are provided in the model dictionary, SkillModel will try to fit the model with the wa estimator in order to get good start values. If this fails or is not possible because the model uses options that are not supported by the wa estimator, naive start value will be generated, based on 'start_values_per_quantity'.
-    * ``start_values_per_quantity``: a dictionary with values that are used to construct the start vector for the maximization if the start vector is not provided directly. Only used in CHS estimator.
-    * ``wa_standard_error_method``: a string that indicates which method is used to calculate standard_errors if the WA estimator is used. Curently "bootstrap" is the only option.
-    * ``chs_standard_error_method``:  a string that indicates which method is used to calculate standard_errors if the CHS estimator is used. Currently the options "op_of_gradient" (outer product of gradient), "hessian_inverse" and "bootstrap" are supported with the CHS estimator.
-    * ``save_intermediate_optimization_results``: boolean variable. If True, the optional arguments of SkillModel a save_path has to be specified. The default value is False.
-    * ``save_params_before_calculating_standard_errors``: boolean variable. If True, the optional arguments of SkillModel a save_path has to be specified. The default value is False. Only used in CHS estimator.
+    * ``anchoring_mode``: Takes the values 'only_estimate_anchoring_equation' and 'truly_anchor_latent_factors'. The default is 'only_estimate_anchoring_equation'. It means that an anchoring equation is estimated that can be used for the calculation of interpretable marginal effects. This option does, however, not make the estimated transition parameters interpretable. The other other option requires more computer power and can make the transition parameters interpretable if enough age invariant measures are available and used for normalizations.
 
-    .. Note:: The save-options carry over to bootstrap. For this, the save_path will automatically be adapted to generate subdirectories.
-
-    * ``maxiter`` and ``maxfun``: the maximal number of iterations or function evaluations for estimators that use numerical optimization techniques. The default for both is one million which probably won't be reached in practice.
-    * ``bootstrap_nreps``: number of bootstrap replications if the standard_error_method of the chosen estimator is bootstrap. Default is 300.
-    * ``bootstrap_sample_size``: size of the samples that are drawn from the dataset with replacement if no bootstrap_samples are provided. Default is the number of observations in the dataset nobs.
-    * ``bootstrap_nprocesses``: amount of multiprocessing during the calculation of bootstrap standard errors. The default is 'None' which means that all available cores are used.
     * ``time_invariant_measurement_system``: Takes the values True or False (default). If True, measurement equations that occur in several periods are restricted to have the same parameters across those periods. To determine whether a measurement equation occurs more than once, the notion of equality has to be defined for measurement equations. Measurement equations are equal if and only if: 1) they use the same measurement variable. 2) The same latent factors are measured. 3) They occur in periods that use the same control variables. Currently, time invariant measurement system can only be used with the CHS-estimator.
 
     .. Note:: If ``time_invariant_measurement_system`` is True, the normalizations across all occurrences of a measurement equation have to be compatible. It is considered compatible if a parameter is normalized in some periods but not in others. It is not compatible if a parameter is normalized to different values. In this case, an error will be raised.
 
-Differences between estimators:
-*******************************
-
-Skillmodels has the aim of using the same model specification for all estimators. However, the WA estimator is a bit less general than the CHS estimator. Therefore, in some cases it is note possible to use the results of the MUCH FASTER(!!!) wa estimator as start values for the chs estimator:
-
-    * if control variables are used
-    * if probit or logit updates are used
-    * if nemf > 1 (actually, here the wa estimator is more general as it does not make any distributional assumptions and thus doesn't need a mixture of normals but it is still a problem when using wa estimates as start values.)
-    * if measurements measure more than one latent factor
-    * if anchoring model == 'truly_anchor_latent_factors'
-    * if one or more transition functions are not linear in parameters, such as the log_ces function.
-
-Currently, in any of these cases the WA estimates are not used at all in the generation of start values. In some cases it might be possible to at least recover some parameters. You are invited to add this functionality to skillmodels.
-
-.. _replication files:
-    https://www.econometricsociety.org/content/supplement-estimating-technology-cognitive-and-noncognitive-skill-formation-0
 
 
 A note on endogeneity correction methods:

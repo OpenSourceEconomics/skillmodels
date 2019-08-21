@@ -36,17 +36,3 @@ params is a vector with all estimated parameters of the model. To evaluate the l
 For efficiency reasons all of these quantities are only created once and then overwritten with new parameters in each iteration of the likelihood maximization.
 
 
-.. _params_type:
-
-Params type
-***********
-
-Two types of params vectors are used: 'short' and 'long'.
-
-The 'long' version is the normal params vector that contains the parameters of interest. It is used to calculate the standard errors and to present results.
-
-'short' refers to a reparameterized version of params used during maximization of the likelihood. Some of its elements were transformed to impose constraints on the parameters, as for example the constraints that the share parameters of the CES production parameters have to sum to one. This particular example lead to the name: for each estimated CES function, the reparameterized params vector becomes one item shorter. Another example is the initial covariance matrix of the factor distribution P_zero. To ensure its positive semi-definiteness the 'short' params contains elements of the cholesky factor of P_zero.
-
-SkillModel.reduceparams and SkillModel.expandparams convert the types of the params vector.
-
-
