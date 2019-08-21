@@ -429,8 +429,11 @@ class SkillModel:
 
         return observed_data, latent_data
 
-    def fit(self, start_params=None, dashboard=False):
+    def fit(self, start_params=None, dashboard=False, db_options=None):
         """Fit the model and return an instance of SkillModelResults."""
+
+        db_options = {} if db_options is None else db_options
+
         args = self.likelihood_arguments_dict()
         start_params = self.generate_full_start_params(start_params)
 
@@ -439,7 +442,6 @@ class SkillModel:
             log_like_contributions[log_like_contributions < -1e300] = -1e300
             return np.mean(log_like_contributions)
 
-        db_options = {"rollover": 1000}
         algo_options = {"maxfun": 1000000, "maxiter": 1000000}
 
         res = maximize(
