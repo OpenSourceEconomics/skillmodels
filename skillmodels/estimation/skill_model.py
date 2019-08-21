@@ -1,6 +1,6 @@
 from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 from skillmodels.pre_processing.data_processor import DataProcessor
-from skillmodels.estimation.likelihood_function import likelihood_contributions
+from skillmodels.estimation.likelihood_function import log_likelihood_contributions
 from skillmodels.visualization.table_functions import (
     statsmodels_results_to_df,
     df_to_tex_table,
@@ -227,7 +227,7 @@ class SkillModel:
             self.nemf * self.nobs * self.nsigma, self.nfac
         )
 
-        init_dict['like_contributions'] = np.ones((self.nupdates, self.nobs))
+        init_dict['like_contributions'] = np.zeros((self.nupdates, self.nobs))
 
         return init_dict
 
@@ -429,20 +429,18 @@ class SkillModel:
 
         return observed_data, latent_data
 
-    def fit(self, start_params=None, params=None, dashboard=False):
+    def fit(self, start_params=None, dashboard=False):
         """Fit the model and return an instance of SkillModelResults."""
         args = self.likelihood_arguments_dict()
         start_params = self.generate_full_start_params(start_params)
 
         def criterion(params, args):
-            like_contributions = likelihood_contributions(params, **args)
-
-            small = 1e-250
-            like_vec = np.prod(like_contributions, axis=0)
-            like_vec[like_vec < small] = small
-            return np.log(like_vec).sum()
+            log_like_contributions = log_likelihood_contributions(params, **args)
+            log_like_contributions[log_like_contributions < -1e300] = -1e300
+            return np.mean(log_like_contributions)
 
         db_options = {"rollover": 1000}
+        algo_options = {"maxfun": 1000000, "maxiter": 1000000}
 
         res = maximize(
             criterion,
@@ -452,6 +450,7 @@ class SkillModel:
             criterion_args=(args, ),
             dashboard=dashboard,
             db_options=db_options,
+            algo_options=algo_options,
         )
         return res
 

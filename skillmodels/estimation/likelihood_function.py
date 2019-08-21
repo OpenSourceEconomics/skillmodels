@@ -8,7 +8,7 @@ from skillmodels.fast_routines.kalman_filters import sqrt_linear_update
 from skillmodels.fast_routines.sigma_points import calculate_sigma_points
 
 
-def likelihood_contributions(
+def log_likelihood_contributions(
     params,
     like_contributions,
     parse_params_args,
@@ -21,7 +21,7 @@ def likelihood_contributions(
     calculate_sigma_points_args,
     restore_args,
 ):
-    """Return the likelihood contributions for each update and individual in the sample.
+    """Return the log likelihood contributions per update and individual in the sample.
 
     Users do not have to call this function directly and do not have to bother
     about its arguments but the function nicely shows how the likelihood
@@ -51,7 +51,7 @@ def likelihood_contributions(
 
     """
     restore_unestimated_quantities(**restore_args)
-    like_contributions[:] = 1.0
+    like_contributions[:] = 0.0
 
     parse_params(params, **parse_params_args)
 

@@ -71,7 +71,7 @@ def sqrt_linear_update(
     m = nfac + 1
     ncontrol = delta.shape[0]
     # invariant = 0.398942280401432702863218082711682654917240142822265625
-    invariant = 1 / (2 * np.pi) ** 0.5
+    invariant = np.log(1 / (2 * np.pi) ** 0.5)
     invar_diff = y[0]
     if np.isfinite(invar_diff):
         # same for all factor distributions
@@ -113,23 +113,23 @@ def sqrt_linear_update(
                             cov[emf, g, k_] = -s_ * helper1 + c_ * helper2
 
             sigma = cov[emf, 0, 0]
-            prob = invariant / np.abs(sigma) * np.exp(-diff ** 2 / (2 * sigma ** 2))
+            log_prob = invariant - np.log(np.abs(sigma)) - diff ** 2 / (2 * sigma ** 2)
 
             diff /= sigma
             for f in range(nfac):
                 state[emf, f] += cov[emf, 0, f + 1] * diff
 
             if nemf == 1:
-                like_vec[0] *= prob
+                like_vec[0] = log_prob
             else:
-                weights[emf] *= max(prob, 1e-250)
+                weights[emf] *= max(np.exp(log_prob), 1e-250)
 
         if nemf >= 2:
             sum_wprob = 0.0
             for emf in range(nemf):
                 sum_wprob += weights[emf]
 
-            like_vec[0] *= sum_wprob
+            like_vec[0] += np.log(sum_wprob)
 
             for emf in range(nemf):
                 weights[emf] /= sum_wprob
@@ -197,7 +197,7 @@ def normal_linear_update(
     nemf, nfac = state.shape
     ncontrol = delta.shape[0]
     # invariant = 0.398942280401432702863218082711682654917240142822265625
-    invariant = 1 / (2 * np.pi) ** 0.5
+    invariant = np.log(1 / (2 * np.pi) ** 0.5)
     invar_diff = y[0]
     if np.isfinite(invar_diff):
         # same for all factor distributions
@@ -219,11 +219,7 @@ def normal_linear_update(
             for pos in positions:
                 sigma_squared += kf[pos] * h[pos]
 
-            prob = (
-                invariant
-                / np.sqrt(sigma_squared)
-                * np.exp(-diff ** 2 / (2 * sigma_squared))
-            )
+            log_prob = invariant - 0.5 * np.log(sigma_squared) - diff ** 2 / (2 * sigma_squared)
 
             diff /= sigma_squared
             for f in range(nfac):
@@ -235,16 +231,16 @@ def normal_linear_update(
 
             if nemf == 1:
                 pass
-                like_vec[0] *= prob
+                like_vec[0] = log_prob
             else:
-                weights[emf] *= max(prob, 1e-250)
+                weights[emf] *= max(np.exp(log_prob), 1e-250)
 
         if nemf >= 2:
             sum_wprob = 0.0
             for emf in range(nemf):
                 sum_wprob += weights[emf]
 
-            like_vec[0] *= sum_wprob
+            like_vec[0] += np.log(sum_wprob)
 
             for emf in range(nemf):
                 weights[emf] /= sum_wprob

@@ -1,10 +1,13 @@
 """Parse the params into quantities for the likelihood function."""
 import numpy as np
 from estimagic.optimization.utilities import cov_params_to_matrix
+import pandas as pd
 
 
 def parse_params(params, initial_quantities, factors, square_root_filters):
     """Parse params into the quantities that depend on it."""
+    if isinstance(params, pd.DataFrame):
+        params = params['value']
     _map_params_to_delta(params, initial_quantities['delta'])
     _map_params_to_h(params, initial_quantities['h'])
     _map_params_to_r(params, initial_quantities['r'], square_root_filters)

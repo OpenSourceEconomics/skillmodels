@@ -8,23 +8,20 @@ channels:
 dependencies:
 
   - python=3.7
-  - numba=0.42
+  - numba>=0.42
   - statsmodels=0.9.0
   - seaborn=0.9.0
   - matplotlib=3.0.2
-  - pandas=0.24
-  - pytest=4.0.2
+  - pandas>=0.24
+  - pytest=5.1
   - pytest-mock
   - nose=1.3.7
   - pip=19.0.3
-  - numpy=1.16
-  - pygmo=2.10
-  - numdifftools>= 0.9.20
-  - bokeh=1.1
-  - scipy=1.2.1
+  - numpy
+  - scipy=1.2
   - jupyter
-  - fuzzywuzzy
   - mkl-service
+  - estimagic>=0.0.12
   - pip:
     - doc8
     - pre-commit

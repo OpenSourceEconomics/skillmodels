@@ -2,7 +2,7 @@ import pickle
 import json
 import pandas as pd
 from skillmodels import SkillModel
-from skillmodels.estimation.likelihood_function import likelihood_contributions
+from skillmodels.estimation.likelihood_function import log_likelihood_contributions
 
 from numpy.testing import assert_array_almost_equal as aaae
 import numpy as np
@@ -31,7 +31,8 @@ def test_likelihood_value():
 
     full_params = mod.generate_full_start_params()['value']
 
-    like_contributions = likelihood_contributions(full_params, **args)
+    log_like_contributions = log_likelihood_contributions(full_params, **args)
+    like_contributions = np.exp(log_like_contributions)
     small = 1e-250
     like_vec = np.prod(like_contributions, axis=0)
     like_vec[like_vec < small] = small

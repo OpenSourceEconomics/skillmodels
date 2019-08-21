@@ -554,11 +554,10 @@ class ModelSpecProcessor:
         to_concat = [
             self._factor_update_info(),
             self._purpose_update_info(),
+            self._invariance_update_info(),
         ]
 
         df = pd.concat(to_concat, axis=1)
-        if self.time_invariant_measurement_system is True:
-            df = self._rewrite_normalizations_for_time_inv_meas_system(df)
 
         return df
 
@@ -599,6 +598,39 @@ class ModelSpecProcessor:
             anch_row = df.loc[anch_index]
             df.drop(anch_index, axis=0, inplace=True)
             df = df.append(anch_row)
+        return df
+
+    def _invariance_update_info(self):
+        """Update information relevant for time invariant measurement systems.
+        Measurement equations are uniquely identified by their period and the
+        name of their measurement.
+        Two measurement equations count as equal if and only if:
+        * their measurements have the same name
+        * the same latent factors are measured
+        * they occur in a periods that use the same control variables.
+        """
+        factor_uinfo = self._factor_update_info()
+        ind = factor_uinfo.index
+        df = pd.DataFrame(
+            columns=["is_repeated", "first_occurence"],
+            index=ind,
+            data=[[False, np.nan]] * len(ind),
+        )
+
+        for t, meas in ind:
+            # find first occurrence
+            for t2, meas2 in ind:
+                if meas == meas2 and t2 <= t:
+                    if self.controls[t] == self.controls[t2]:
+                        info1 = factor_uinfo.loc[(t, meas)].to_numpy()
+                        info2 = factor_uinfo.loc[(t2, meas2)].to_numpy()
+                        if (info1 == info2).all():
+                            first = t2
+                            break
+
+            if t != first:
+                df.loc[(t, meas), "is_repeated"] = True
+                df.loc[(t, meas), "first_occurence"] = first
         return df
 
     def _purpose_update_info(self):

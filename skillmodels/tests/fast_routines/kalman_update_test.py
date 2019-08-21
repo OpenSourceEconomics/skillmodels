@@ -25,7 +25,7 @@ def unpack_update_fixture(
     kwargs = {
         "state": np.array([state]).astype(float),
         "covs": np.array([state_cov]).astype(float),
-        "like_vec": np.array([1]).astype(float),
+        "like_vec": np.array([0]).astype(float),
         "y": np.array([measurement]).astype(float),
         "c": np.array(range(0)),
         "delta": np.array(range(0)),
@@ -63,7 +63,7 @@ def setup_linear_update():
     cholcovs = mcovs[:, :, 1:, 1:]
     out["cholcovs"] = cholcovs
 
-    out["like_vector"] = np.ones(nind)
+    out["like_vector"] = np.zeros(nind)
 
     out["y"] = np.array([3.5, 2.3, np.nan, 3.1, 4, np.nan])
 
@@ -134,7 +134,7 @@ def expected_linear_update():
         ]
     )
 
-    out["expected_like_vector"] = np.array(
+    out["expected_like_vector"] = np.log(
         [0.25601173, 0.16118176, 1.0, 0.23496064, 0.25883987, 1.0]
     )
 
