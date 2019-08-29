@@ -128,6 +128,12 @@ def set_up_generate_datasets():
     out["meas_variances"] = pd.Series(
         data=np.zeros(len(loadings_df)), index=loadings_df.index
     )
+    out["policy_dict_list"] = [
+            {"period": 0, "factor": "f1", 
+             "effect_size": 0.2, "standard_deviation": 0.0},
+            {"period": 1, "factor": "f2", 
+             "effect_size": 0.1, "standard_deviation": 0.0}
+    ] #fac2 works only for p2
     return out
 
 
@@ -139,19 +145,19 @@ def expected_dataset():
         data=np.array([[0.5, 0.5]] * 15), columns=["c1", "c2"], index=id_obs
     )  # constant over time
     controls["constant"] = 1
-    states_p0 = np.array([[0, 0]] * 5)  # setup[means][0:2]
-    states_p1 = np.array([[0, 0.3]] * 5)  # transition_name(states_p0), called manually
+    states_p0 = np.array([[0.2, 0]] * 5)  # setup[means][0:2]
+    states_p1 = np.array([[0.04, 0.44]] * 5)  # transition_name(states_p0), called manually
     states_p2 = np.array(
-        [[0.06, 0.36]] * 5
+        [[0.096, 0.396]] * 5
     )  # transition_name(states_p1), called manually
     meas_p0 = np.array(
-        [[0.4, 0.55]] * 5
+        [[0.5, 0.59]] * 5
     )  # meas_from_factor(factors_p0,controls), called manually
     meas_p1 = np.array(
-        [[0.52, 0.76]] * 5
+        [[0.596, 0.866]] * 5
     )  # meas_from_factor(factors_p1,controls), called manually
     meas_p2 = np.array(
-        [[0.574, 0.814]] * 5
+        [[0.6064, 0.8464]] * 5
     )  # meas_from_factor(factors_p2,controls), called manually
     periods = np.repeat(np.arange(3), 5).reshape(15, 1)
     meas = pd.DataFrame(
