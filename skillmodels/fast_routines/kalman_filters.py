@@ -71,7 +71,7 @@ def sqrt_linear_update(
     m = nfac + 1
     ncontrol = delta.shape[0]
     # invariant = 0.398942280401432702863218082711682654917240142822265625
-    invariant = 1 / (2 * np.pi) ** 0.5
+    invariant = np.log(1 / (2 * np.pi) ** 0.5)
     invar_diff = y[0]
     if np.isfinite(invar_diff):
         # same for all factor distributions
@@ -113,23 +113,23 @@ def sqrt_linear_update(
                             cov[emf, g, k_] = -s_ * helper1 + c_ * helper2
 
             sigma = cov[emf, 0, 0]
-            prob = invariant / np.abs(sigma) * np.exp(-diff ** 2 / (2 * sigma ** 2))
+            log_prob = invariant - np.log(np.abs(sigma)) - diff ** 2 / (2 * sigma ** 2)
 
             diff /= sigma
             for f in range(nfac):
                 state[emf, f] += cov[emf, 0, f + 1] * diff
 
             if nemf == 1:
-                like_vec[0] *= prob
+                like_vec[0] = log_prob
             else:
-                weights[emf] *= max(prob, 1e-250)
+                weights[emf] *= max(np.exp(log_prob), 1e-250)
 
         if nemf >= 2:
             sum_wprob = 0.0
             for emf in range(nemf):
                 sum_wprob += weights[emf]
 
-            like_vec[0] *= sum_wprob
+            like_vec[0] += np.log(sum_wprob)
 
             for emf in range(nemf):
                 weights[emf] /= sum_wprob
@@ -197,7 +197,7 @@ def normal_linear_update(
     nemf, nfac = state.shape
     ncontrol = delta.shape[0]
     # invariant = 0.398942280401432702863218082711682654917240142822265625
-    invariant = 1 / (2 * np.pi) ** 0.5
+    invariant = np.log(1 / (2 * np.pi) ** 0.5)
     invar_diff = y[0]
     if np.isfinite(invar_diff):
         # same for all factor distributions
@@ -219,11 +219,7 @@ def normal_linear_update(
             for pos in positions:
                 sigma_squared += kf[pos] * h[pos]
 
-            prob = (
-                invariant
-                / np.sqrt(sigma_squared)
-                * np.exp(-diff ** 2 / (2 * sigma_squared))
-            )
+            log_prob = invariant - 0.5 * np.log(sigma_squared) - diff ** 2 / (2 * sigma_squared)
 
             diff /= sigma_squared
             for f in range(nfac):
@@ -235,16 +231,16 @@ def normal_linear_update(
 
             if nemf == 1:
                 pass
-                like_vec[0] *= prob
+                like_vec[0] = log_prob
             else:
-                weights[emf] *= max(prob, 1e-250)
+                weights[emf] *= max(np.exp(log_prob), 1e-250)
 
         if nemf >= 2:
             sum_wprob = 0.0
             for emf in range(nemf):
                 sum_wprob += weights[emf]
 
-            like_vec[0] *= sum_wprob
+            like_vec[0] += np.log(sum_wprob)
 
             for emf in range(nemf):
                 weights[emf] /= sum_wprob
@@ -276,12 +272,12 @@ def normal_linear_predict(state, cov, shocks_sds, transition_matrix):
 
 
 def normal_unscented_predict(
-    stage,
+    period,
     sigma_points,
     flat_sigma_points,
     s_weights_m,
     s_weights_c,
-    Q,
+    q,
     transform_sigma_points_args,
     out_flat_states,
     out_flat_covs,
@@ -289,7 +285,7 @@ def normal_unscented_predict(
     """Make a unscented Kalman filter predict step in square-root form.
 
     Args:
-        stage (int): the development stage in which the predict step is done.
+        period (int): period in which the predict step is done.
         sigma_points (np.ndarray): numpy array of (nemf * nind, nsigma, nfac)
         flat_sigma_points (np.ndarray): array of (nemf * nind * nsigma, nfac).
             It is a view on sigma_points.
@@ -297,7 +293,7 @@ def normal_unscented_predict(
             weights for the means.
         s_weights_c (np.ndarray): numpy array of length nsigma with sigma
             weights for the covariances.
-        Q (np.ndarray): numpy array of (nstages, nfac, nfac) with vaiances of
+        q (np.ndarray): numpy array of (nperiods - 1, nfac, nfac) with vaiances of
             the transition equation shocks.
         transform_sigma_points_args (dict): (see transform_sigma_points).
         out_flat_states (np.ndarray): output array of (nind * nemf, nfac).
@@ -309,8 +305,8 @@ def normal_unscented_predict(
 
     """
     nemf_times_nind, nsigma, nfac = sigma_points.shape
-    q = Q[stage]
-    transform_sigma_points(stage, flat_sigma_points, **transform_sigma_points_args)
+    q = q[period]
+    transform_sigma_points(period, flat_sigma_points, **transform_sigma_points_args)
     # get them back into states
     predicted_states = np.dot(s_weights_m, sigma_points, out=out_flat_states)
     devs = sigma_points - predicted_states.reshape(nemf_times_nind, 1, nfac)
@@ -353,12 +349,12 @@ def sqrt_linear_predict(state, root_cov, shocks_sds, transition_matrix):
 
 
 def sqrt_unscented_predict(
-    stage,
+    period,
     sigma_points,
     flat_sigma_points,
     s_weights_m,
     s_weights_c,
-    Q,
+    q,
     transform_sigma_points_args,
     out_flat_states,
     out_flat_covs,
@@ -370,7 +366,7 @@ def sqrt_unscented_predict(
     usual form and also much faster.
 
     Args:
-        stage (int): the development stage in which the predict step is done.
+        period (int): the development period in which the predict step is done.
         sigma_points (np.ndarray): numpy array of (nemf * nind, nsigma, nfac)
         flat_sigma_points (np.ndarray): array of (nemf * nind * nsigma, nfac).
             It is a view on sigma_points.
@@ -378,7 +374,7 @@ def sqrt_unscented_predict(
             weights for the means.
         s_weights_c (np.ndarray): numpy array of length nsigma with sigma
             weights for the covariances.
-        Q (np.ndarray): numpy array of (nstages, nfac, nfac) with vaiances of
+        q (np.ndarray): numpy array of (nperiods - 1, nfac, nfac) with vaiances of
             the transition equation shocks.
         transform_sigma_points_args (dict): (see transform_sigma_points).
         out_flat_states (np.ndarray): output array of (nind * nemf, nfac).
@@ -390,8 +386,8 @@ def sqrt_unscented_predict(
 
     """
     nemf_times_nind, nsigma, nfac = sigma_points.shape
-    q = Q[stage]
-    transform_sigma_points(stage, flat_sigma_points, **transform_sigma_points_args)
+    q = q[period]
+    transform_sigma_points(period, flat_sigma_points, **transform_sigma_points_args)
 
     # get them back into states
     predicted_states = np.dot(s_weights_m, sigma_points, out=out_flat_states)
@@ -402,15 +398,3 @@ def sqrt_unscented_predict(
     qr_points[:, 0:nsigma, :] = devs * qr_weights
     qr_points[:, nsigma:, :] = np.sqrt(q)
     out_flat_covs[:, 1:, 1:] = array_qr(qr_points)[:, :nfac, :]
-
-
-def sqrt_probit_update(
-    k, t, j, states, covs, mix_weights, like_vec, y_data, c_data, deltas, H, R
-):
-    raise NotImplementedError("probit updates are not yet implemented")
-
-
-def normal_probit_update(
-    k, t, j, states, covs, mix_weights, like_vec, y_data, c_data, deltas, H, R
-):
-    raise NotImplementedError("probit updates are not yet implemented")

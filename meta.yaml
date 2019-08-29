@@ -17,9 +17,10 @@ requirements:
     - numpy
     - pandas >=0.24
     - statsmodels >=0.6.1
-    - scipy
+    - scipy=1.2
     - seaborn
     - matplotlib
+    - estimagic >=0.0.12
 
 test:
   commands:
