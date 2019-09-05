@@ -12,12 +12,12 @@ The aims of this package are as follows:
     - Use the same model specification for all
     - Use the same result processing for all
 
-I start implementing two estimators: the Kalman filter based maximum likelihood estimator proposed by Cunha, Heckman and Schennach (CHS),  `Econometrica (2010)`_
+I start implementing the Kalman filter based maximum likelihood estimator proposed by Cunha, Heckman and Schennach (CHS),  `Econometrica (2010)`_
 .. _Econometrica (2010):
     http://onlinelibrary.wiley.com/doi/10.3982/ECTA6551/abstract
 
 
-It was developed for skill formation models but is by no means limited to this particular application. It can be applied to any dynamic nonlinear latent factor model.
+Skillmodels was developed for skill formation models but is by no means limited to this particular application. It can be applied to any dynamic nonlinear latent factor model.
 
 The CHS estimator implemented here differs in two points from the one implemented in their `replication files`_: 1) It uses different normalizations that take into account the `critique`_ of Wiswall and Agostinelli. 2) It can optionally use more robust square-root implementations of the Kalman filters.
 
