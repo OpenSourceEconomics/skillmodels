@@ -1,4 +1,4 @@
-name: skillmodels_dev
+name: skillmodels
 
 channels:
   - defaults
@@ -22,6 +22,8 @@ dependencies:
   - jupyter
   - mkl-service
   - estimagic>=0.0.12
+  - sphinxcontrib-bibtex
+  - sphinx_rtd_theme
   - pip:
     - doc8
     - pre-commit
