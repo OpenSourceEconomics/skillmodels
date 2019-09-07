@@ -1,6 +1,7 @@
 """Construct an estimagic constraints list for a model."""
-import skillmodels.model_functions.transition_functions as tf
 import numpy as np
+
+import skillmodels.model_functions.transition_functions as tf
 
 
 def constraints(
@@ -17,7 +18,7 @@ def constraints(
     anchored_factors,
     anch_outcome,
     bounds_distance,
-    estimate_x
+    estimate_x,
 ):
 
     periods = list(range(len(stagemap)))
@@ -26,7 +27,9 @@ def constraints(
     if invariant_meas_system:
         constr += _invariant_meas_system_constraints(update_info, controls, factors)
     constr += _normalization_constraints(normalizations)
-    constr += _not_measured_constraints(update_info, measurements, anchored_factors, anch_outcome)
+    constr += _not_measured_constraints(
+        update_info, measurements, anchored_factors, anch_outcome
+    )
     constr += _w_constraints(nemf)
     constr += _p_constraints(nemf, bounds_distance)
     constr += _stage_constraints(stagemap, factors, transition_names, included_factors)
@@ -138,7 +141,9 @@ def _normalization_constraints(normalizations):
     return constraints
 
 
-def _not_measured_constraints(update_info, measurements, anchored_factors, anch_outcome):
+def _not_measured_constraints(
+    update_info, measurements, anchored_factors, anch_outcome
+):
     """Fix all loadings for non-measured factors to 0.
 
     Args:
@@ -191,7 +196,13 @@ def _p_constraints(nemf, bounds_distance):
     """
     constraints = []
     for emf in range(nemf):
-        constraints.append({"loc": ("p", 0, emf), "type": "covariance", "bounds_distance": bounds_distance})
+        constraints.append(
+            {
+                "loc": ("p", 0, emf),
+                "type": "covariance",
+                "bounds_distance": bounds_distance,
+            }
+        )
     return constraints
 
 
@@ -307,7 +318,7 @@ def _x_constraints(nemf, factors, estimate_x):
     if estimate_x:
         constr = [{"loc": ind_tups, "type": "increasing"}]
     else:
-        constr = [{"loc": 'x', "type": "fixed", "value": 0.0}]
+        constr = [{"loc": "x", "type": "fixed", "value": 0.0}]
 
     return constr
 

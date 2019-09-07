@@ -1,8 +1,10 @@
-from numpy.testing import assert_array_almost_equal as aaae
+import json
+
 import numpy as np
 from numpy.linalg import cholesky
+from numpy.testing import assert_array_almost_equal as aaae
+
 from skillmodels.fast_routines.sigma_points import calculate_sigma_points
-import json
 
 
 class TestSigmaPointConstructionAgainstFilterpy:

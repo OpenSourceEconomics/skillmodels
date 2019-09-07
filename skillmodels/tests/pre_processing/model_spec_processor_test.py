@@ -1,12 +1,17 @@
-from nose.tools import assert_equal, assert_raises
-import pandas as pd
-from pandas import DataFrame
-import numpy as np
-from unittest.mock import Mock, call, patch  # noqa
 from itertools import cycle
+from unittest.mock import call
+from unittest.mock import Mock
+from unittest.mock import patch
+
+import numpy as np
+import pandas as pd
+from nose.tools import assert_equal
+from nose.tools import assert_raises
 from numpy.testing import assert_array_equal as aae
-from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor as msp
+from pandas import DataFrame
 from pandas.testing import assert_frame_equal
+
+from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor as msp
 
 
 class TestTransitionEquationNames:

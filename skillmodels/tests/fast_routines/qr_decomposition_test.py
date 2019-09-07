@@ -1,7 +1,9 @@
-from numpy.testing import assert_array_almost_equal as aaae
-#from numpy.core.umath_tests import matrix_multiply
 import numpy as np
+from numpy.testing import assert_array_almost_equal as aaae
+
 from skillmodels.fast_routines.qr_decomposition import array_qr
+
+# from numpy.core.umath_tests import matrix_multiply
 
 
 def a_prime_a(a):

@@ -1,11 +1,13 @@
+import warnings
+from itertools import product
+
+import numpy as np
 import pandas as pd
 from pandas import DataFrame
-import numpy as np
-from itertools import product
-import warnings
+
+from skillmodels.pre_processing.constraints import constraints
 from skillmodels.pre_processing.data_processor import pre_process_data
 from skillmodels.pre_processing.params_index import params_index
-from skillmodels.pre_processing.constraints import constraints
 
 
 class ModelSpecProcessor:
@@ -24,11 +26,7 @@ class ModelSpecProcessor:
     """
 
     def __init__(
-        self,
-        model_dict,
-        dataset,
-        model_name="some_model",
-        dataset_name="some_dataset",
+        self, model_dict, dataset, model_name="some_model", dataset_name="some_dataset"
     ):
         self.model_dict = model_dict
         self.data = pre_process_data(dataset)
@@ -161,8 +159,9 @@ class ModelSpecProcessor:
             included_factors.append(args_f)
             included_positions.append(pos_f)
             assert len(included_factors) >= 1, (
-                'Each latent factor needs at least one included factor. This is '
-                'violated for {}'.format(factor))
+                "Each latent factor needs at least one included factor. This is "
+                "violated for {}".format(factor)
+            )
 
         self.included_factors = included_factors
         self.included_positions = included_positions
@@ -217,7 +216,7 @@ class ModelSpecProcessor:
         ).format(self.model_name, variable, self.dataset_name, period)
 
         columns = set(self.data.columns)
-        df = self.data.query('__period__ == {}'.format(period))
+        df = self.data.query(f"__period__ == {period}")
         if variable in columns and df[variable].notnull().any():
             return True
         elif self.missing_variables == "raise_error":
@@ -251,7 +250,7 @@ class ModelSpecProcessor:
             'to "drop_variable".'
         )
 
-        series = self.data.query('__period__ == {}'.format(period))[variable]
+        series = self.data.query(f"__period__ == {period}")[variable]
         unique_non_missing_values = list(series[pd.notnull(series)].unique())
         nr_unique = len(unique_non_missing_values)
 
@@ -349,7 +348,7 @@ class ModelSpecProcessor:
                 )
 
             for t in self.periods:
-                df = self.data.query('__period__ == {}'.format(t))
+                df = self.data.query(f"__period__ == {t}")
                 for c, control in enumerate(present_controls[t]):
                     if df[control].notnull().all():
                         controls[t].append(control)
@@ -441,7 +440,7 @@ class ModelSpecProcessor:
             warnings.warn(
                 "Using lists of lists instead of lists of dicts for the "
                 "normalization specification is deprecated.",
-                DeprecationWarning
+                DeprecationWarning,
             )
 
         norm_list = cleaned
@@ -563,9 +562,7 @@ class ModelSpecProcessor:
 
     def _factor_update_info(self):
         # create an empty DataFrame with and empty MultiIndex
-        index = pd.MultiIndex(
-            levels=[[], []], codes=[[], []], names=["period", "name"]
-        )
+        index = pd.MultiIndex(levels=[[], []], codes=[[], []], names=["period", "name"])
         df = DataFrame(data=None, index=index)
 
         # append rows for each update that has to be performed

@@ -1,6 +1,7 @@
+import numpy as np
+
 import skillmodels.model_functions.anchoring_functions as anch
 import skillmodels.model_functions.transition_functions as trans
-import numpy as np
 
 
 def transform_sigma_points(

@@ -22,11 +22,13 @@ def pre_process_data(df):
             level is called __period__ and counts periods, starting at 0.
 
     """
-    assert '__id__' not in df.columns, (
-        'The variable name __id__ is used internally and must not occur.')
+    assert (
+        "__id__" not in df.columns
+    ), "The variable name __id__ is used internally and must not occur."
 
-    assert '__period__' not in df.columns, (
-        'The variable name __period__ is used internally and must not occur.')
+    assert (
+        "__period__" not in df.columns
+    ), "The variable name __period__ is used internally and must not occur."
 
     df = df.sort_index()
     all_ids, all_periods = list(df.index.levels[0]), list(df.index.levels[1])
@@ -40,12 +42,12 @@ def pre_process_data(df):
 
     balanced = pd.DataFrame(
         data=np.column_stack([old_id, old_period, new_id, new_period]),
-        columns=df.index.names + ['__id__', '__period__'])
+        columns=df.index.names + ["__id__", "__period__"],
+    )
 
     balanced.set_index(df.index.names, inplace=True)
     balanced = pd.concat([balanced, df], axis=1)
-    balanced.set_index(['__id__', '__period__'], inplace=True, drop=False)
-
+    balanced.set_index(["__id__", "__period__"], inplace=True, drop=False)
 
     return balanced
 
@@ -55,7 +57,6 @@ class DataProcessor:
 
     def __init__(self, specs_processor_attribute_dict):
         self.__dict__.update(specs_processor_attribute_dict)
-
 
     def c_data(self):
         """A List of 2d arrays with control variables for each period.
@@ -68,7 +69,7 @@ class DataProcessor:
         const_list = ["constant"]
 
         for t in self.periods:
-            df = self.data[self.data['__period__'] == t]
+            df = self.data[self.data["__period__"] == t]
             arr = df[const_list + self.controls[t]].to_numpy()[self.obs_to_keep]
             c_data.append(arr)
         return c_data
@@ -85,7 +86,7 @@ class DataProcessor:
         counter = 0
         for t in self.periods:
             measurements = list(self.update_info.loc[t].index)
-            df = self.data[self.data['__period__'] == t][measurements]
+            df = self.data[self.data["__period__"] == t][measurements]
 
             y_data[counter : counter + len(measurements), :] = df.to_numpy()[
                 self.obs_to_keep
@@ -115,21 +116,21 @@ class DataProcessor:
 
         period_dfs = []
         for period in periods:
-            relevant_variables = ['__id__']
+            relevant_variables = ["__id__"]
             for factor in factors:
                 for meas in self.measurements[factor][period]:
                     if meas not in relevant_variables:
                         relevant_variables.append(meas)
             relevant_variables += other_vars_dict[period]
-            df = self.data[self.data['__period__'] == period]
-            df = df[relevant_variables].set_index('__id__')
+            df = self.data[self.data["__period__"] == period]
+            df = df[relevant_variables].set_index("__id__")
             period_dfs.append(df)
 
         if len(period_dfs) == 1:
             measurements_df = period_dfs[0]
         else:
             for period, df in enumerate(period_dfs):
-                rename_dict = {col: col + "_{}".format(period) for col in df.columns}
+                rename_dict = {col: col + f"_{period}" for col in df.columns}
                 df.rename(columns=rename_dict, inplace=True)
 
             measurements_df = pd.concat(period_dfs, axis=1)
@@ -203,7 +204,7 @@ class DataProcessor:
         for period in periods:
             df = period_dfs[period]
             if len(periods) > 1:
-                rename_dict = {col: col + "_{}".format(period) for col in df.columns}
+                rename_dict = {col: col + f"_{period}" for col in df.columns}
                 df.rename(columns=rename_dict, inplace=True)
             to_concat.append(df)
         score_df = pd.concat(to_concat, axis=1)
@@ -215,7 +216,7 @@ class DataProcessor:
             ordered_columns = []
             for factor in factors:
                 for period in periods:
-                    ordered_columns.append("{}_{}".format(factor, period))
+                    ordered_columns.append(f"{factor}_{period}")
             for col in score_df.columns:
                 if col not in ordered_columns:
                     ordered_columns.append(col)
@@ -263,4 +264,3 @@ class DataProcessor:
 
         reg_df = pd.concat(period_dfs, axis=0)
         return reg_df
-

@@ -1,5 +1,6 @@
-import skillmodels.model_functions.transition_functions as tf
 import pandas as pd
+
+import skillmodels.model_functions.transition_functions as tf
 
 
 def params_index(
@@ -168,7 +169,7 @@ def _p_index_tuples(nemf, factors):
         for row, factor1 in enumerate(factors):
             for col, factor2 in enumerate(factors):
                 if col <= row:
-                    ind_tups.append(("p", 0, emf, "{}-{}".format(factor1, factor2)))
+                    ind_tups.append(("p", 0, emf, f"{factor1}-{factor2}"))
     return ind_tups
 
 

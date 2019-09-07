@@ -1,12 +1,12 @@
 import json
-from pytest_mock import mocker
-import pytest
 
 import numpy as np
 import pandas as pd
+import pytest
 from nose.tools import assert_almost_equal
 from numpy.testing import assert_array_equal as aae
 from pandas import DataFrame
+from pytest_mock import mocker
 
 from skillmodels import SkillModel as smo
 
@@ -137,16 +137,18 @@ def test_initial_p_normal_filters(p_mocker):
 
 
 def test_initial_trans_coeffs(mocker):
-    mocker.factors = ['fac1', 'fac2', 'fac3']
-    mocker.transition_names = ['linear', 'linear', 'log_ces']
-    mocker.included_factors = [['fac1', 'fac2'], ['fac2'], ['fac2', 'fac3']]
+    mocker.factors = ["fac1", "fac2", "fac3"]
+    mocker.transition_names = ["linear", "linear", "log_ces"]
+    mocker.included_factors = [["fac1", "fac2"], ["fac2"], ["fac2", "fac3"]]
     mocker.nperiods = 5
 
     mock_linear = mocker.patch(
-        'skillmodels.estimation.skill_model.tf.index_tuples_linear')
+        "skillmodels.estimation.skill_model.tf.index_tuples_linear"
+    )
     mock_linear.return_value = [0, 1, 2, 3]
     mock_log_ces = mocker.patch(
-        'skillmodels.estimation.skill_model.tf.index_tuples_log_ces')
+        "skillmodels.estimation.skill_model.tf.index_tuples_log_ces"
+    )
     mock_log_ces.return_value = [0, 1, 2]
 
     expected = [np.zeros((4, 4)), np.zeros((4, 4)), np.zeros((4, 3))]

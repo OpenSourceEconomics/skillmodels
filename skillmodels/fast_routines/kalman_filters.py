@@ -1,11 +1,11 @@
 """Contains Kalman Update and Predict functions in several flavors."""
-
-from numba import float64 as f64
-from numba import int64 as i64
-from numba import guvectorize
 import numpy as np
-from skillmodels.fast_routines.transform_sigma_points import transform_sigma_points
+from numba import float64 as f64
+from numba import guvectorize
+from numba import int64 as i64
+
 from skillmodels.fast_routines.qr_decomposition import array_qr
+from skillmodels.fast_routines.transform_sigma_points import transform_sigma_points
 
 
 @guvectorize(
@@ -219,7 +219,11 @@ def normal_linear_update(
             for pos in positions:
                 sigma_squared += kf[pos] * h[pos]
 
-            log_prob = invariant - 0.5 * np.log(sigma_squared) - diff ** 2 / (2 * sigma_squared)
+            log_prob = (
+                invariant
+                - 0.5 * np.log(sigma_squared)
+                - diff ** 2 / (2 * sigma_squared)
+            )
 
             diff /= sigma_squared
             for f in range(nfac):

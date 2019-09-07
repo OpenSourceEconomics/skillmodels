@@ -1,19 +1,18 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 from pandas.testing import assert_frame_equal
-from skillmodels.pre_processing.constraints import (
-    add_bounds,
-    _invariant_meas_system_constraints,
-    _normalization_constraints,
-    _not_measured_constraints,
-    _w_constraints,
-    _p_constraints,
-    _stage_constraints,
-    _constant_factors_constraints,
-    _ar1_contraints,
-    _x_constraints,
-    _trans_coeff_constraints,
-)
+
+from skillmodels.pre_processing.constraints import _ar1_contraints
+from skillmodels.pre_processing.constraints import _constant_factors_constraints
+from skillmodels.pre_processing.constraints import _invariant_meas_system_constraints
+from skillmodels.pre_processing.constraints import _normalization_constraints
+from skillmodels.pre_processing.constraints import _not_measured_constraints
+from skillmodels.pre_processing.constraints import _p_constraints
+from skillmodels.pre_processing.constraints import _stage_constraints
+from skillmodels.pre_processing.constraints import _trans_coeff_constraints
+from skillmodels.pre_processing.constraints import _w_constraints
+from skillmodels.pre_processing.constraints import _x_constraints
+from skillmodels.pre_processing.constraints import add_bounds
 
 
 def test_add_bounds():
@@ -277,6 +276,6 @@ def test_trans_coeff_constraints():
 
 def assert_list_equal_except_for_order(list1, list2):
     for item in list1:
-        assert item in list2, "{} is in list1 but not in list2".format(item)
+        assert item in list2, f"{item} is in list1 but not in list2"
     for item in list2:
-        assert item in list1, "{} is in list2 but not in list1".format(item)
+        assert item in list1, f"{item} is in list2 but not in list1"

@@ -1,9 +1,10 @@
+import numpy as np
+import pandas as pd
+from numpy.testing import assert_array_equal as aae
+from pandas import DataFrame
+
 from skillmodels.pre_processing.data_processor import DataProcessor as dc
 from skillmodels.pre_processing.data_processor import pre_process_data
-import pandas as pd
-from pandas import DataFrame
-import numpy as np
-from numpy.testing import assert_array_equal as aae
 
 
 def test_pre_process_data():
@@ -48,15 +49,11 @@ class TestCData:
         df = DataFrame(
             data=np.array([0] * 5 + [1] * 5).reshape(10, 1), columns=["__period__"]
         )
-        df["c1"] = ["c1_t0_{}".format(i) for i in range(5)] + [
-            "c1_t1_{}".format(i) for i in range(5)
-        ]
+        df["c1"] = [f"c1_t0_{i}" for i in range(5)] + [f"c1_t1_{i}" for i in range(5)]
 
-        df["c2"] = ["c2_t0_{}".format(i) for i in range(5)] + [
-            "c2_t1_{}".format(i) for i in range(5)
-        ]
+        df["c2"] = [f"c2_t0_{i}" for i in range(5)] + [f"c2_t1_{i}" for i in range(5)]
 
-        df["c3"] = ["blubb"] * 5 + ["c3_t1_{}".format(i) for i in range(5)]
+        df["c3"] = ["blubb"] * 5 + [f"c3_t1_{i}" for i in range(5)]
 
         self.data = df
 

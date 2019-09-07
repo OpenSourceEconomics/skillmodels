@@ -1,10 +1,12 @@
 """Tests for the linear Kalman predict step."""
-import skillmodels.fast_routines.kalman_filters as kf
-from skillmodels.tests.fast_routines.kalman_update_test import make_unique
-from numpy.testing import assert_array_almost_equal as aaae
+import json
+
 import numpy as np
 import pytest
-import json
+from numpy.testing import assert_array_almost_equal as aaae
+
+import skillmodels.fast_routines.kalman_filters as kf
+from skillmodels.tests.fast_routines.kalman_update_test import make_unique
 
 # ======================================================================================
 # manual tests
@@ -330,16 +332,16 @@ shocks_sd = np.array(
 
 
 def unpack_predict_fixture(fixture):
-    nfac = len(fixture['state'])
+    nfac = len(fixture["state"])
 
     args = (
-        np.array(fixture['state']).reshape(1, nfac),
-        np.array(fixture['state_cov']).reshape(1, nfac, nfac),
-        np.array(fixture['shock_sds']),
-        np.array(fixture['transition_matrix'])
+        np.array(fixture["state"]).reshape(1, nfac),
+        np.array(fixture["state_cov"]).reshape(1, nfac, nfac),
+        np.array(fixture["shock_sds"]),
+        np.array(fixture["transition_matrix"]),
     )
-    exp_state = np.array(fixture['expected_post_means'])
-    exp_cov = np.array(fixture['expected_post_state_cov'])
+    exp_state = np.array(fixture["expected_post_means"])
+    exp_cov = np.array(fixture["expected_post_state_cov"])
     return args, exp_state, exp_cov
 
 
@@ -361,8 +363,8 @@ def convert_normal_to_sqrt_args(args):
 # for the normal linear predict
 # ------------------------------
 
-fix_path = 'skillmodels/tests/fast_routines/generated_fixtures_predict.json'
-with open(fix_path, 'r') as f:
+fix_path = "skillmodels/tests/fast_routines/generated_fixtures_predict.json"
+with open(fix_path, "r") as f:
     id_to_fix = json.load(f)
 ids, fixtures = zip(*id_to_fix.items())
 
@@ -393,7 +395,7 @@ def test_sqrt_linear_predicted_state_against_filterpy(fixture):
     aaae(after_state.flatten(), exp_state)
 
 
-np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
+np.set_printoptions(formatter={"float": "{: 0.3f}".format})
 
 
 @pytest.mark.parametrize("fixture", fixtures, ids=ids)

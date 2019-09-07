@@ -1,37 +1,29 @@
 name: skillmodels
-
 channels:
-  - defaults
   - conda-forge
   - janosg
-
 dependencies:
-
   - python=3.7
-  - numba>=0.42
-  - statsmodels=0.9.0
-  - seaborn
+  - pip
+  - conda-build
+  - doc8
+  - estimagic>=0.0.12
+  - jupyter
   - matplotlib
+  - mkl-service
+  - nose
+  - numba>=0.42
+  - numpy
   - pandas>=0.24
   - pytest
   - pytest-mock
-  - nose
-  - pip
-  - numpy
-  - scipy=1.2
-  - jupyter
-  - mkl-service
-  - estimagic>=0.0.12
+  - pytest-xdist
+  - restructuredtext_lint
+  - tox-conda
+  - scipy>=1.2
+  - seaborn
   - sphinxcontrib-bibtex
   - sphinx_rtd_theme
+  - statsmodels>=0.9.0
   - pip:
-    - doc8
     - pre-commit
-    - pytest
-    - pytest-mock
-    - pytest-xdist
-    - restructuredtext_lint
-    - tox-conda
-    - black
-
-

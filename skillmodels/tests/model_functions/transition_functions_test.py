@@ -1,7 +1,8 @@
-import skillmodels.model_functions.transition_functions as tf
 import numpy as np
-from numpy.testing import assert_array_almost_equal as aaae
 import pytest
+from numpy.testing import assert_array_almost_equal as aaae
+
+import skillmodels.model_functions.transition_functions as tf
 
 
 # ======================================================================================
@@ -64,6 +65,7 @@ def test_linear_with_constant(setup_linear, expected_linear):
 # ar1
 # ======================================================================================
 
+
 @pytest.fixture
 def setup_ar1_transition_equation():
     # nemf_nind_nsigma is nemf*nind*nsigma
@@ -95,6 +97,7 @@ def test_ar1_transition_equation(
 # log_ces
 # ======================================================================================
 
+
 @pytest.fixture
 def setup_log_ces():
     nsigma = 5
@@ -122,6 +125,7 @@ def test_log_ces(setup_log_ces, expected_log_ces):
 # ======================================================================================
 # translog
 # ======================================================================================
+
 
 @pytest.fixture
 def setup_translog():
