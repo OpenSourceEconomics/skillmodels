@@ -60,7 +60,7 @@ def sqrt_linear_update(
 
         positions (np.ndarray): the positions of the factors measured by y.
 
-        weights (np.ndarray): numpy array of (nemf, nind)
+        weights (np.ndarray): numpy array of (nemf, nind).
 
     References:
         Robert Grover Brown. Introduction to Random Signals and Applied

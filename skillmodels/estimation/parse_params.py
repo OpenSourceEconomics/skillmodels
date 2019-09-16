@@ -1,4 +1,6 @@
 """Parse the params into quantities for the likelihood function."""
+import warnings
+
 import numpy as np
 import pandas as pd
 from estimagic.optimization.utilities import cov_params_to_matrix
@@ -8,16 +10,21 @@ def parse_params(params, initial_quantities, factors, square_root_filters):
     """Parse params into the quantities that depend on it."""
     if isinstance(params, pd.DataFrame):
         params = params["value"]
-    _map_params_to_delta(params, initial_quantities["delta"])
-    _map_params_to_h(params, initial_quantities["h"])
-    _map_params_to_r(params, initial_quantities["r"], square_root_filters)
-    _map_params_to_q(params, initial_quantities["q"])
-    if "x" in initial_quantities:
-        _map_params_to_x(params, initial_quantities["x"])
-    if "w" in initial_quantities:
-        _map_params_to_w(params, initial_quantities["w"])
-    _map_params_to_p(params, initial_quantities["p"], square_root_filters)
-    _map_params_to_trans_coeffs(params, initial_quantities["trans_coeffs"], factors)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message="indexing past lexsort depth may impact performance."
+        )
+        _map_params_to_delta(params, initial_quantities["delta"])
+        _map_params_to_h(params, initial_quantities["h"])
+        _map_params_to_r(params, initial_quantities["r"], square_root_filters)
+        _map_params_to_q(params, initial_quantities["q"])
+        if "x" in initial_quantities:
+            _map_params_to_x(params, initial_quantities["x"])
+        if "w" in initial_quantities:
+            _map_params_to_w(params, initial_quantities["w"])
+        _map_params_to_p(params, initial_quantities["p"], square_root_filters)
+        _map_params_to_trans_coeffs(params, initial_quantities["trans_coeffs"], factors)
 
 
 def _map_params_to_delta(params, initial):

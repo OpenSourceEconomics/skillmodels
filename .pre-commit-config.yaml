@@ -16,11 +16,11 @@ repos:
     hooks:
     -   id: reorder-python-imports
         types: [python]
--   repo: https://github.com/python/black
-    rev: 19.3b0
-    hooks:
-    -   id: black
-        types: [python]
+#-   repo: https://github.com/python/black
+#    rev: 19.3b0
+#    hooks:
+#    -   id: black
+#        types: [python]
 -   repo: https://github.com/asottile/blacken-docs
     rev: v1.3.0
     hooks:
@@ -45,18 +45,8 @@ repos:
         language: system
         types: [rst]
         name: doc8 - Lint the documentation.
-    #-   id: restructuredtext-lint
-        #entry: rst-lint
-        #language: system
-        #files: '(README.rst)'
-        #name: restructuredtext-lint - Is the README PyPi-compliant?
-# -   repo: https://github.com/mgedmin/check-manifest
-#     rev: "0.39"
-#     hooks:
-#     -   id: check-manifest
 -   repo: meta
     hooks:
     -   id: check-hooks-apply
     -   id: check-useless-excludes
 
-    # -   id: identity  # Prints all files passed to pre-commits. Debugging.

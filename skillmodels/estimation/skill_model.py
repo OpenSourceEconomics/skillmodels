@@ -502,7 +502,7 @@ class SkillModel:
     def measurement_heatmap(
         self,
         periods="all",
-        factors="all",  # noqa RST301
+        factors="all",
         figsize=None,
         heatmap_kws=None,
         save_path=None,
@@ -512,6 +512,7 @@ class SkillModel:
         height=None,
     ):
         """Heatmap of the correlation matrix of measurements.
+
         Args:
             periods: periods to include. Can be the name of one period, a list
                 like object with periods or 'all'.
@@ -526,6 +527,11 @@ class SkillModel:
                 saved in the same directory.
             dpi (int): resolution of the plot
             write_tex (bool): if True, a tex file with the plot is written.
+
+
+        Returns:
+            fig, ax
+
          """
         heatmap_kws = {} if heatmap_kws is None else heatmap_kws
         if write_tex is True:

@@ -27,7 +27,9 @@ Variables related to dimensions
 Params and the quantities that depend on it
 *******************************************
 
-params is a vector with all estimated parameters of the model. To evaluate the likelihood function, params has to be parsed into several quantities (Names follow conventions of Kalman filtering literature where possible):
+params is a vector with all estimated parameters of the model. To evaluate the
+likelihood function, params has to be parsed into several quantities (Names
+follow conventions of Kalman filtering literature where possible):
 
     * **deltas**: list with one matrix per period with the estimated parameters
       related to control variables in the measurement and anchoring
