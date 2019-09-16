@@ -43,6 +43,7 @@ autodoc_mock_imports = [
     "pandas",
     "scipy",
     "seaborn",
+    "statsmodels",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
