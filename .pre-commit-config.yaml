@@ -38,13 +38,10 @@ repos:
             pep8-naming, pydocstyle<4.0,
         ]
         exclude: 'conf.py'
--   repo: local
+-   repo: https://github.com/PyCQA/doc8
+    rev: 0.8.1rc2
     hooks:
-    -   id: doc8
-        entry: doc8
-        language: system
-        types: [rst]
-        name: doc8 - Lint the documentation.
+        -   id: doc8
 -   repo: meta
     hooks:
     -   id: check-hooks-apply
