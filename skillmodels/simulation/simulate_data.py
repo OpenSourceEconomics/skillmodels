@@ -233,11 +233,11 @@ def generate_start_factors_and_control_variables_elliptical(
         ncont (int): number of control variables
         dist_name (string): the elliptical distribution to use in the mixture
         dist_arg_dict (list or dict): list of length nemf of dictionaries with the
-          relevant arguments of the mixture distributions. Arguments with default
-          values should NOT be included in the dictionaries. Lengths of arrays in the
-          arguments should be in accordance with nfac + ncont
-        weights (np.ndarray): size (nemf). The weight of each mixture element.
-                              Default value is equal to 1.
+            relevant arguments of the mixture distributions. Arguments with default
+            values should NOT be included in the dictionaries. Lengths of arrays in the
+            arguments should be in accordance with nfac + ncont
+            weights (np.ndarray): size (nemf). The weight of each mixture element.
+            Default value is equal to 1.
 
     Returns:
         start_factors (np.ndarray): shape (nobs, nfac),
@@ -278,7 +278,6 @@ def next_period_factors(
 
     """
     nobs, nfac = factors.shape
-    # sigma_points = factors
     factors_tp1 = np.zeros((nobs, nfac))
     for i in range(nfac):
         factors_tp1[:, i] = getattr(tf, transition_names[i])(

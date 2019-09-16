@@ -59,14 +59,29 @@ The scale of w in period t + 1 chosen by this function is thus 1 / 2.1 or approx
 Why the CES and log_CES functions are problematic
 *************************************************
 
-The definition of Known Location and Scale refers only to the scale of the (always one-dimensional) output of a transition function. After reading the Wiswall and Agostinelli critique, I wondered if the CES and log_CES functions also pose restrictions on the scales of their inputs, i.e. can describe a system only at a certain location or scale of inputs.
+The definition of Known Location and Scale refers only to the scale of the
+(always one-dimensional) output of a transition function. After reading the
+Wiswall and Agostinelli critique, I wondered if the CES and log_CES functions
+also pose restrictions on the scales of their inputs, i.e. can describe a system
+only at a certain location or scale of inputs.
 
-According to Wiswall and Agostinelli, when using a log_CES function (which belongs to the KLS class), one needs initial normalizations of location and scale for all factors in the model.
-I made some pen-and-paper-calculations and estimated models with simulated data and the results suggest that less normalizations are needed with the log_CES function.
+According to Wiswall and Agostinelli, when using a log_CES function (which
+belongs to the KLS class), one needs initial normalizations of location and
+scale for all factors in the model. I made some pen-and-paper-calculations and
+estimated models with simulated data and the results suggest that less
+normalizations are needed with the log_CES function.
 
-While one does need to make initial normalizations for the location of all factors, it is sufficient to normalize the scale of only one factor in the initial period and the model is still identified. However, these are only simulations and I do not have a formal result that shows that the restrictions the log_CES function poses on the scale of its inputs are always enough for identification.
+While one does need to make initial normalizations for the location of all
+factors, it is sufficient to normalize the scale of only one factor in the
+initial period and the model is still identified. However, these are only
+simulations and I do not have a formal result that shows that the restrictions
+the log_CES function poses on the scale of its inputs are always enough for
+identification.
 
-I would therefore currently advise not to use the CES or log_CES function without thinking deeply about the normalizations you need. The automatic generation of normalizations treats the log_ces function simply as a KLS function.
+I would therefore currently advise not to use the CES or log_CES function
+without thinking deeply about the normalizations you need. The automatic
+generation of normalizations treats the log_ces function simply as a KLS
+function.
 
 
 .. _normalization_and_stages:
@@ -74,11 +89,22 @@ I would therefore currently advise not to use the CES or log_CES function withou
 Normalizations and Development stages
 *************************************
 
-CHS use development stages, i.e. several periods of childhood in which the parameters of the technology of skill formation remain the same. Wiswall and Agostinelli do not use or analyze this case, but development stages do change the normalization requirements.
+CHS use development stages, i.e. several periods of childhood in which the
+parameters of the technology of skill formation remain the same. Wiswall and
+Agostinelli do not use or analyze this case, but development stages do change
+the normalization requirements.
 
-I always had the intuition that with development stages it is possible to identify a scale from the first period of the stage, such that no later normalizations are necessary until the next stage. When extending the WA estimator to be compatible with development stages, I could confirm this intuition as one nice feature of this estimator is that its identification strategy has to be very explicit.
+I always had the intuition that with development stages it is possible to
+identify a scale from the first period of the stage, such that no later
+normalizations are necessary until the next stage. When extending the WA
+estimator to be compatible with development stages, I could confirm this
+intuition as one nice feature of this estimator is that its identification
+strategy has to be very explicit.
 
-If development stages are used, one only has to make normalizations in the first period of each stage, except for the initial stage where the first two periods have to be normalized. My recommendation is to use automatic normalizations if you use development stages because it is very easy to get confused.
+If development stages are used, one only has to make normalizations in the first
+period of each stage, except for the initial stage where the first two periods
+have to be normalized. My recommendation is to use automatic normalizations if
+you use development stages because it is very easy to get confused.
 
 This shows another type of over-normalization in the original CHS paper.
 

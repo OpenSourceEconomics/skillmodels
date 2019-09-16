@@ -36,12 +36,16 @@ What has to be specified?
 
 Before thinking about how to translate the above example into a model specification it is helpful to recall what information is needed to define a general latent factor model:
 
-    #. What are the latent factors of the model and how are they related over time? (transition equations)
-    #. What are the measurement variables of each factor in each period and how are measurements and factors related? (measurement equations)
-    #. What are the normalizations of scale (normalized factor loadings or variances) and location (normalized intercepts or means)?
+    #. What are the latent factors of the model and how are they related over time?
+       (transition equations)
+    #. What are the measurement variables of each factor in each period and how are
+       measurements and factors related? (measurement equations)
+    #. What are the normalizations of scale (normalized factor loadings or variances)
+       and location (normalized intercepts or means)?
     #. What are the control variables in each period?
     #. If development stages are used: Which periods belong to which stage?
-    #. If anchoring is used: Which factors are anchored and what is the anchoring outcome?
+    #. If anchoring is used: Which factors are anchored and what is the anchoring
+       outcome?
 
 Translate the example to a model dictionary
 *******************************************
@@ -66,9 +70,12 @@ The value that corresponds to the ``trans_eq`` key is a dictionary. The ``name``
     * ``linear``
     * ``log_ces`` (Known Location and Scale (KLS) version. See :ref:`log_ces_problem`.)
     * ``constant``
-    * ``ar1`` (linear equation with only one included factor and the same coefficient in all stages)
-    * ``translog`` (non KLS version; a log-linear-in-parameters function including squares and interaction terms.
-    * ``no_squares_translog`` (as translog but without squares. Used by Wiswall and Agostinelli.
+    * ``ar1`` (linear equation with only one included factor and the same coefficient in
+      all stages)
+    * ``translog`` (non KLS version; a log-linear-in-parameters function including
+      squares and interaction terms.
+    * ``no_squares_translog`` (as translog but without squares. Used by Wiswall and
+      Agostinelli.
 
 
 To see how new types of transition equations can be added see :ref:`model_functions`.
@@ -101,18 +108,54 @@ The "general" section of the model dictionary:
 
 Usually a research project comprises the estimation of more than one model and there are some specifications that are likely not to vary across these models. The default values for these specifications are hardcoded. If some or all of these values are redefined in the "general" section of the model dictionary the ones from the model dictionary have precedence. The specifications are:
 
-    * ``nemf``: number of elements in the mixture of normals distribution of the latent factors. Usually set to 1 which corresponds to the assumption that the factors are normally distributed. Only used in CHS estimator.
-    * ``kappa``: scaling parameter for the sigma_points. Usually set to 2. Only used in CHS estimator.
-    * ``square_root_filters``: takes the values true (default) and false and specifies if square-root implementations of the kalman filters are used. I strongly recommend always using square-root filters. As mentioned in section 3.2.2 of CHS' readme file the standard filters often crash unless very good start values for the maximization are available. Using the square-root filters completely avoids this problem. Only used in CHS estimator.
-    * ``missing_variables``: Takes the values "raise_error" or "drop_variable" and specifies what happens if a variable is not in the dataset or has only missing values. Automatically dropping these variables is handy when the same model is estimated with several similar but not exactly equal datasets.
-    * ``controls_with_missings``: Takes the values "raise_error", "drop_variable" or "drop_observations". Recall that measurement variables can have missing observations as long as they are missing at random and at least some observations are not missing. For control variables this is not the case and it is necessary to drop the missing observations or the contol variable.
-    * ``variables_without_variance``: takes the same values as ``missing_variables`` and specifies what happens if a measurement or anchoring variable has no variance. Control variables without variance are not dropped as this would drop constants.
-    * ``robust_bounds``: takes the values true or false and refers to the bounds on some parameters during the maximization of the likelihood function. If true the lower bound for estimated variances is not set to zero but to ``bounds_distance``. This improves the stability of the estimator but is usually unnecessary if square-root filters are used. Only used in CHS estimator.
+    * ``nemf``: number of elements in the mixture of normals distribution of the latent
+      factors. Usually set to 1 which corresponds to the assumption that the factors
+      are normally distributed. Only used in CHS estimator.
+    * ``kappa``: scaling parameter for the sigma_points. Usually set to 2.
+      Only used in CHS estimator.
+    * ``square_root_filters``: takes the values true (default) and false and
+      specifies if square-root implementations of the kalman filters are used.
+      I strongly recommend always using square-root filters. As mentioned in
+      section 3.2.2 of CHS' readme file the standard filters often crash unless
+      very good start values for the maximization are available. Using the
+      square-root filters completely avoids this problem. Only used in CHS
+      estimator.
+    * ``missing_variables``: Takes the values "raise_error" or "drop_variable" and
+      specifies what happens if a variable is not in the dataset or has only missing
+      values. Automatically dropping these variables is handy when the same model is
+      estimated with several similar but not exactly equal datasets.
+    * ``controls_with_missings``: Takes the values "raise_error", "drop_variable" or
+      "drop_observations". Recall that measurement variables can have missing
+      observations as long as they are missing at random and at least some observations
+      are not missing. For control variables this is not the case and it is necessary
+      to drop the missing observations or the contol variable.
+    * ``variables_without_variance``: takes the same values as ``missing_variables`` and
+      specifies what happens if a measurement or anchoring variable has no variance.
+      Control variables without variance are not dropped as this would drop constants.
+    * ``robust_bounds``: takes the values true or false and refers to the bounds on
+      some parameters during the maximization of the likelihood function. If true the
+      lower bound for estimated variances is not set to zero but to ``bounds_distance``.
+      This improves the stability of the estimator but is usually unnecessary if
+      square-root filters are used. Only used in CHS estimator.
     * ``bounds_distance``: a small number. Only used in CHS estimator.
-    * ``estimate_X_zeros``: takes the values true or false. If true the start mean of the factor distribution is estimated, else it is normalized to zero. This is an alternative normalization of location in the initial period. If set to False you have to specify less normalizations of intercepts that otherwise. The automatic generation of normalizations correctly handles this case. If nemf > 1 you have to set estimate_X_zeros to True.
-    * ``order_X_zeros``: Takes an integer value between 0 and nfac - 1.  If ``estimate_X_zeros`` is true and nemf > 1 the model would not be identified without imposing an order on the start means. The value of order_X_zeros determines which factor (in the alphabetically ordered factor list) is used to impose this order. Only used in CHS estimator.
-    * ``restrict_W_zeros``: takes the values true or false. If true the start weights of the mixture distribution is not estimated but set to 1 / nemf for each factor. Only used in CHS estimator.
-    * ``restrict_P_zeros``: takes the values true or false. If true the covariance matrices of all elements in the mixture distribution of the factors is required to be the same. CHS use this because their models with nemf > 1 do not converge otherwise. Only used in CHS estimator.
+    * ``estimate_X_zeros``: takes the values true or false. If true the start mean of
+      the factor distribution is estimated, else it is normalized to zero. This is an
+      alternative normalization of location in the initial period. If set to False you
+      have to specify less normalizations of intercepts that otherwise. The automatic
+      generation of normalizations correctly handles this case. If nemf > 1 you have to
+      set estimate_X_zeros to True.
+    * ``order_X_zeros``: Takes an integer value between 0 and nfac - 1.  If
+      ``estimate_X_zeros`` is true and nemf > 1 the model would not be identified
+      without imposing an order on the start means. The value of order_X_zeros
+      determines which factor (in the alphabetically ordered factor list) is used
+      to impose this order. Only used in CHS estimator.
+    * ``restrict_W_zeros``: takes the values true or false. If true the start weights
+      of the mixture distribution is not estimated but set to 1 / nemf for each factor.
+      Only used in CHS estimator.
+    * ``restrict_P_zeros``: takes the values true or false. If true the covariance
+      matrices of all elements in the mixture distribution of the factors is required
+      to be the same. CHS use this because their models with nemf > 1 do not converge
+      otherwise. Only used in CHS estimator.
 
     .. Note:: This is not yet ready and will raise a NotImplementedError.
 
@@ -148,12 +191,7 @@ Wiswall and Agostinelli use a simpler model of endegeneity of investments that c
     https://dl.dropboxusercontent.com/u/45673846/agostinelli_wiswall_estimation.pdf
 
 
+    .. _replication files:
+        https://www.econometricsociety.org/content/supplement-estimating-technology-cognitive-and-noncognitive-skill-formation-0
 
-
-
-
-
-
-
-
-
+  

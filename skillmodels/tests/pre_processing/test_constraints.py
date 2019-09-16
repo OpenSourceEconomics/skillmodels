@@ -266,8 +266,6 @@ def test_trans_coeff_constraints():
         factors, transition_names, included_factors, periods
     )
 
-    print(calculated)
-
     assert_list_equal_except_for_order(calculated, expected)
 
 

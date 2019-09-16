@@ -1,6 +1,6 @@
 """Sample from elliptical distributions.
 
-    Contains functions for simulating random vectors of arbitrary size from:
+   Contains functions for simulating random vectors of arbitrary size from:
     - multivariate student's t
     - multivariate symmetric stable (based on Nolan (2018) and Nolan (2013))
     - calls multivariate normal from np.random to be able to use with getattr()

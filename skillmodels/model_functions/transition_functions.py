@@ -99,7 +99,7 @@ def index_tuples_ar1(factor, included_factors, period):
 
 
 # =============================================================================
-# log_ces (KLS-Verion)
+# log_ces function, (KLS-Verion)
 # =============================================================================
 
 
@@ -134,7 +134,7 @@ def constraints_log_ces(factor, included_factors, period):
 
 
 # =============================================================================
-# translog (Non-KLS-Version)
+# translog function, (Non-KLS-Version)
 # =============================================================================
 
 

@@ -18,9 +18,6 @@ def test_likelihood_value():
     mod = SkillModel(
         model_dict=model_dict, dataset=df, estimator="chs", model_name="test_model"
     )
-    # uinfo = mod.update_info
-    # with open('/home/janos/Dropbox/Projects/skillmodels/test_uinfo.p', 'wb') as p:
-    #     pickle.dump(uinfo, p)
 
     args = mod.likelihood_arguments_dict()
 
@@ -44,10 +41,3 @@ def test_likelihood_value():
         last_result = pickle.load(p)
 
     aaae(res, last_result)
-
-    # update the regression test
-    # do not uncomment this if you are not absolutely sure that you want to
-    # update the regression test!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    # with open(in_path, 'wb') as p:
-    #     pickle.dump(res, p)

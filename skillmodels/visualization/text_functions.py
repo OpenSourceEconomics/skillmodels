@@ -94,7 +94,8 @@ def write_figure_tex_snippet(figure_path, title, width=None, height=None):
     end_figure = r"\end{figure}" + newline
 
     include = (
-        r"\includegraphics[width={}\textwidth,height={}\textheight,keepaspectratio]{{{}}}"
+        r"""\includegraphics[width={}\textwidth,height={}\textheight,keepaspectratio]
+        {{{}}}"""
         + newline
     )
     caption = r"\caption{{{}}}" + newline

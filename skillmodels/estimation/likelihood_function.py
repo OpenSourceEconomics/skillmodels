@@ -1,5 +1,3 @@
-import numpy as np
-
 from skillmodels.estimation.parse_params import parse_params
 from skillmodels.estimation.parse_params import restore_unestimated_quantities
 from skillmodels.fast_routines.kalman_filters import normal_linear_update
@@ -58,7 +56,7 @@ def log_likelihood_contributions(
 
     k = 0
     for t in periods:
-        for j in range(nmeas_list[t]):
+        for _j in range(nmeas_list[t]):
             # measurement updates
             update(square_root_filters, update_args[k])
             k += 1
@@ -66,8 +64,6 @@ def log_likelihood_contributions(
             calculate_sigma_points(**calculate_sigma_points_args)
             predict(t, square_root_filters, predict_args)
     if anchoring is True:
-        j += 1
-        # anchoring update
         update(square_root_filters, update_args[k])
 
     return like_contributions

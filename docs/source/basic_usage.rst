@@ -51,12 +51,16 @@ The main object a user interacts with is ``SkillModel`` (see :ref:`estimation`).
 
 The mandatory arguments of SkillModel are:
 
-* model_dict: dictionary that defines the model (usually loaded from a json file). See :ref:`model_specs` for details.
-* dataset: a pandas dataframe in long format. Needs to have a MultiIndex in which the first level indicates the individual and the second the period.
+* model_dict: dictionary that defines the model (usually loaded from a json file).
+  See :ref:`model_specs` for details.
+* dataset: a pandas dataframe in long format. Needs to have a MultiIndex in which
+  the first level indicates the individual and the second the period.
 
 Optional arguments of SkillModel are:
 
-* model_name: a string that gives a name to the model that will be used in error messages or warnings. If you estimate several models it will help you a lot to locate the problems.
+* model_name: a string that gives a name to the model that will be used in error
+  messages or warnings. If you estimate several models it will help you a lot to
+  locate the problems.
 * dataset_name: same as model_name
 
 Using the fit() method of ``SkillModel`` like so:
@@ -79,3 +83,5 @@ Using the fit() method of ``SkillModel`` like so:
 
 .. _json module:
     https://docs.python.org/3.4/library/json.html
+.. _Statsmodels:
+    https://pypi.org/project/statsmodels/

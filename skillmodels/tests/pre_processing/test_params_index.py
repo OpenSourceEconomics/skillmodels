@@ -129,8 +129,6 @@ def test_p_index_tuples():
     ]
 
     calculated = _p_index_tuples(nemf, factors)
-
-    print(calculated)
     assert calculated == expected
 
 
@@ -161,5 +159,4 @@ def test_trans_coeffs_index_tuples():
         factors, periods, transition_names, included_factors
     )
 
-    print(calculated)
     assert calculated == expected

@@ -13,8 +13,6 @@ The aims of this package are as follows:
     - Use the same result processing for all
 
 I start implementing the Kalman filter based maximum likelihood estimator proposed by Cunha, Heckman and Schennach (CHS),  `Econometrica (2010)`_
-.. _Econometrica (2010):
-    http://onlinelibrary.wiley.com/doi/10.3982/ECTA6551/abstract
 
 
 Skillmodels was developed for skill formation models but is by no means limited to this particular application. It can be applied to any dynamic nonlinear latent factor model.
@@ -36,7 +34,7 @@ It took countless hours to write skillmodels. I make it available under a very p
 
 If you find skillmodels helpful for research or teaching, please let me know. If you encounter any problems with the installation or while using skillmodels, please complain or open an issue at `GitHub`_.
 
-Ich
+
 
 .. _critique:
     https://dl.dropboxusercontent.com/u/33774399/wiswall_webpage/agostinelli_wiswall_renormalizations.pdf
@@ -46,20 +44,5 @@ Ich
 
 .. _GitHub:
     https://github.com/janosg/skillmodels
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+.. _Econometrica (2010):
+    http://onlinelibrary.wiley.com/doi/10.3982/ECTA6551/abstract

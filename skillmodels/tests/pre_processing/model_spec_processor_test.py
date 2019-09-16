@@ -1,7 +1,5 @@
 from itertools import cycle
-from unittest.mock import call
 from unittest.mock import Mock
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -11,7 +9,7 @@ from numpy.testing import assert_array_equal as aae
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 
-from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor as msp
+from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 
 
 class TestTransitionEquationNames:
@@ -24,7 +22,7 @@ class TestTransitionEquationNames:
         }
 
     def test_transition_equation_names(self):
-        msp._transition_equation_names(self)
+        ModelSpecProcessor._transition_equation_names(self)
         assert_equal(self.transition_names, ["linear", "ces", "ar1"])
 
 
@@ -39,11 +37,11 @@ class TestTransitionEquationIncludedFactors:
         self.nfac = 2
 
     def test_transition_equation_included_factors(self):
-        msp._transition_equation_included_factors(self)
+        ModelSpecProcessor._transition_equation_included_factors(self)
         assert_equal(self.included_factors, [["f1", "f2"], ["f2"]])
 
     def test_transition_equation_included_factor_positions(self):
-        msp._transition_equation_included_factors(self)
+        ModelSpecProcessor._transition_equation_included_factors(self)
         assert_equal(self.included_positions, [[0, 1], [1]])
 
 
@@ -60,24 +58,24 @@ class TestVariableCheckMethods:
         self.dataset_name = "dataset"
 
     def test_present_where_true(self):
-        assert_equal(msp._present(self, "var1", 0), True)
+        assert_equal(ModelSpecProcessor._present(self, "var1", 0), True)
 
     def test_present_where_false_no_raise(self):
-        assert_equal(msp._present(self, "var1", 1), False)
+        assert_equal(ModelSpecProcessor._present(self, "var1", 1), False)
 
     def test_present_where_false__raise(self):
         self.missing_variables = "raise_error"
-        assert_raises(KeyError, msp._present, self, "var1", 1)
+        assert_raises(KeyError, ModelSpecProcessor._present, self, "var1", 1)
 
     def test_has_variance_where_true(self):
-        assert_equal(msp._has_variance(self, "var1", 0), True)
+        assert_equal(ModelSpecProcessor._has_variance(self, "var1", 0), True)
 
     def test_has_variance_where_false_non_missing(self):
         self.data.loc[1, "var1"] = 0
-        assert_equal(msp._has_variance(self, "var1", 0), False)
+        assert_equal(ModelSpecProcessor._has_variance(self, "var1", 0), False)
 
     def test_has_variance_where_false_missing(self):
-        assert_equal(msp._has_variance(self, "var2", 0), False)
+        assert_equal(ModelSpecProcessor._has_variance(self, "var2", 0), False)
 
 
 class TestCleanMesaurementSpecifications:
@@ -96,7 +94,7 @@ class TestCleanMesaurementSpecifications:
         res = {}
         res["f1"] = self._facinf["f1"]["measurements"]
         res["f2"] = self._facinf["f2"]["measurements"]
-        msp._clean_measurement_specifications(self)
+        ModelSpecProcessor._clean_measurement_specifications(self)
         assert_equal(self.measurements, res)
 
     def test_clean_measurement_specifications_half_of_variables_missing(self):
@@ -105,7 +103,7 @@ class TestCleanMesaurementSpecifications:
         res = {}
         res["f1"] = [["m1", "m3"]] * 2
         res["f2"] = [["m5", "m7"]] * 2
-        msp._clean_measurement_specifications(self)
+        ModelSpecProcessor._clean_measurement_specifications(self)
         assert_equal(self.measurements, res)
 
     def test_clean_measurement_specs_half_of_variables_without_variance(self):
@@ -132,21 +130,21 @@ class TestCleanControlSpecifications:
         self.data = DataFrame(data=dat, columns=cols)
 
     def test_clean_control_specs_nothing_to_clean(self):
-        msp._clean_controls_specification(self)
+        ModelSpecProcessor._clean_controls_specification(self)
         res = [["c1", "c2"], ["c1", "c2"]]
         assert_equal(self.controls, res)
         aae(self.obs_to_keep, np.ones(5, dtype=bool))
 
     def test_clean_control_specs_missing_variable(self):
         self._present = Mock(side_effect=[True, False, True, True])
-        msp._clean_controls_specification(self)
+        ModelSpecProcessor._clean_controls_specification(self)
         res = [["c1"], ["c1", "c2"]]
         assert_equal(self.controls, res)
         aae(self.obs_to_keep, np.ones(5, dtype=bool))
 
     def test_clean_control_specs_missing_observations_drop_variable(self):
         self.data.loc[2, "c2"] = np.nan
-        msp._clean_controls_specification(self)
+        ModelSpecProcessor._clean_controls_specification(self)
         res = [["c1"], ["c1", "c2"]]
         assert_equal(self.controls, res)
         aae(self.obs_to_keep, np.ones(5, dtype=bool))
@@ -154,7 +152,7 @@ class TestCleanControlSpecifications:
     def test_clean_control_specs_missing_observation_drop_observation(self):
         self.data.loc[2, "c2"] = np.nan
         self.controls_with_missings = "drop_observations"
-        msp._clean_controls_specification(self)
+        ModelSpecProcessor._clean_controls_specification(self)
         res = [["c1", "c2"], ["c1", "c2"]]
         assert_equal(self.controls, res)
         aae(self.obs_to_keep, np.array([True, True, False, True, True]))
@@ -162,7 +160,9 @@ class TestCleanControlSpecifications:
     def test_clean_control_specs_missing_observations_error(self):
         self.data.loc[2, "c2"] = np.nan
         self.controls_with_missings = "raise_error"
-        assert_raises(ValueError, msp._clean_controls_specification, self)
+        assert_raises(
+            ValueError, ModelSpecProcessor._clean_controls_specification, self
+        )
 
 
 class TestCheckAndCleanNormalizations:
@@ -177,7 +177,7 @@ class TestCheckAndCleanNormalizations:
         self.nperiods = len(self.periods)
 
     def test_check_normalizations_no_error_dictionaries(self):
-        result = msp._check_and_clean_normalizations_list(
+        result = ModelSpecProcessor._check_and_clean_normalizations_list(
             self, "f1", self.f1_norm_list, "loadings"
         )
         assert_equal(result, [{"m1": 1}, {"m1": 1}])
@@ -186,7 +186,7 @@ class TestCheckAndCleanNormalizations:
         f1_norm_list = [{"m10": 1}, {"m1": 1}]
         assert_raises(
             KeyError,
-            msp._check_and_clean_normalizations_list,
+            ModelSpecProcessor._check_and_clean_normalizations_list,
             self,
             "f1",
             f1_norm_list,
@@ -197,7 +197,7 @@ class TestCheckAndCleanNormalizations:
         self.measurements = {"f1": [["m2", "m3", "m4"]] * 2}
         assert_raises(
             KeyError,
-            msp._check_and_clean_normalizations_list,
+            ModelSpecProcessor._check_and_clean_normalizations_list,
             self,
             "f1",
             self.f1_norm_list,
@@ -207,7 +207,7 @@ class TestCheckAndCleanNormalizations:
     def test_check_normalizations_invalid_length_of_list(self):
         assert_raises(
             AssertionError,
-            msp._check_and_clean_normalizations_list,
+            ModelSpecProcessor._check_and_clean_normalizations_list,
             self,
             "f1",
             self.f1_norm_list * 2,
@@ -218,7 +218,7 @@ class TestCheckAndCleanNormalizations:
         f1_norm_list = [["m1"], ["m1", 1]]
         assert_raises(
             AssertionError,
-            msp._check_and_clean_normalizations_list,
+            ModelSpecProcessor._check_and_clean_normalizations_list,
             self,
             "f1",
             f1_norm_list,
@@ -260,7 +260,7 @@ class TestCheckAndFillNormalizationSpecifications:
             },
         }
 
-        msp._check_and_fill_normalization_specification(self)
+        ModelSpecProcessor._check_and_fill_normalization_specification(self)
         assert_equal(self.normalizations, res)
 
 
@@ -321,12 +321,12 @@ class TestFactorUpdateInfo:
         self.anchoring = True
 
     def test_factor_update_info(self):
-        calc = msp._factor_update_info(self)
+        calc = ModelSpecProcessor._factor_update_info(self)
         exp = factor_uinfo()
         assert_frame_equal(calc, exp, check_dtype=False)
 
     def test_that_anchoring_comes_last(self):
-        calc = msp._factor_update_info(self)
+        calc = ModelSpecProcessor._factor_update_info(self)
         meas = list(calc.index.get_level_values("variable"))
         assert meas[-1] == self.anch_outcome
 
@@ -339,6 +339,6 @@ class TestPurposeUpdateInfo:
         self._factor_update_info = Mock(return_value=factor_uinfo())
 
     def test_update_info_purpose(self):
-        calc = msp._purpose_update_info(self)
+        calc = ModelSpecProcessor._purpose_update_info(self)
         exp = purpose_uinfo()
         assert calc.equals(exp)

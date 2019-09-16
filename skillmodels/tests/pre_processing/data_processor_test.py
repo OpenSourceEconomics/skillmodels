@@ -3,7 +3,7 @@ import pandas as pd
 from numpy.testing import assert_array_equal as aae
 from pandas import DataFrame
 
-from skillmodels.pre_processing.data_processor import DataProcessor as dc
+from skillmodels.pre_processing.data_processor import DataProcessor
 from skillmodels.pre_processing.data_processor import pre_process_data
 
 
@@ -77,7 +77,7 @@ class TestCData:
         ]
         res = [res1, res2]
 
-        calculated = dc.c_data(self)
+        calculated = DataProcessor.c_data(self)
         for i, calc in enumerate(calculated):
             aae(calc, np.array(res[i], dtype=object))
 
@@ -112,7 +112,7 @@ class TestYData:
         res = np.vstack([np.arange(6).repeat(3).reshape(6, 3)] * 4)
         res = np.vstack([res, np.ones(3) * 10])
 
-        aae(dc.y_data(self), res)
+        aae(DataProcessor.y_data(self), res)
 
     def test_y_data_focus_on_columns(self):
         df = DataFrame(data=np.arange(4).repeat(4), columns=["__period__"])
@@ -129,4 +129,4 @@ class TestYData:
             ]
         )
 
-        aae(dc.y_data(self), res)
+        aae(DataProcessor.y_data(self), res)

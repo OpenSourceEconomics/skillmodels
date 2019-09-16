@@ -94,7 +94,8 @@ class DataProcessor:
             counter += len(measurements)
         return y_data
 
-    def measurements_df(self, periods="all", factors="all", other_vars=[]):
+    def measurements_df(self, periods="all", factors="all", other_vars=None):
+        other_vars = [] if other_vars is None else other_vars
         if periods == "all":
             periods = self.periods
 
@@ -141,12 +142,11 @@ class DataProcessor:
         self,
         periods="all",
         factors="all",
-        other_vars=[],
+        other_vars=None,
         agg_method="mean",
         order="by_factor",
     ):
-
-        # mean, z_scaled, norm_scaled
+        other_vars = [] if other_vars is None else other_vars
         if periods == "all":
             periods = self.periods
 
@@ -224,8 +224,8 @@ class DataProcessor:
 
         return score_df
 
-    def reg_df(self, factor, period=None, stage=None, controls=[], agg_method="mean"):
-
+    def reg_df(self, factor, period=None, stage=None, controls=None, agg_method="mean"):
+        controls = [] if controls is None else controls
         assert (
             period is None or stage is None
         ), "You cannot specify a period and a stage for a score regression."

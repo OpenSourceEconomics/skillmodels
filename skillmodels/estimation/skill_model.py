@@ -347,8 +347,8 @@ class SkillModel:
             nobs (int): number of observations to simulate
             params (np.array): parameters
             policy_dict_list (list): list of dictionaries. Each dictionary specifies a
-                a stochastic shock to a latent factor at the end of "period" for "factor"
-                with mean "effect_size" and "standard deviation"
+            a stochastic shock to a latent factor at the end of "period" for "factor"
+            with mean "effect_size" and "standard deviation"
 
         Returns:
             observed_data (pd.DataFrame)
@@ -390,15 +390,15 @@ class SkillModel:
 
         dist_name = "multivariate_normal"
 
-        X_zero = initial_quantities["x"]
-        P_zero = initial_quantities["p"]
+        x_zero = initial_quantities["x"]
+        p_zero = initial_quantities["p"]
 
         dist_arg_dict = []
         for n in range(self.nemf):
-            factor_mean = X_zero[0, n]
+            factor_mean = x_zero[0, n]
             control_mean = np.zeros(len(control_names))
 
-            factor_cov = P_zero[0, n]
+            factor_cov = p_zero[0, n]
             if self.square_root_filters is True:
                 factor_cov = factor_cov[1:, 1:]
                 factor_cov = np.dot(factor_cov.T, factor_cov)
@@ -502,9 +502,9 @@ class SkillModel:
     def measurement_heatmap(
         self,
         periods="all",
-        factors="all",
+        factors="all",  # noqa RST301
         figsize=None,
-        heatmap_kws={},
+        heatmap_kws=None,
         save_path=None,
         dpi=200,
         write_tex=False,
@@ -527,6 +527,7 @@ class SkillModel:
             dpi (int): resolution of the plot
             write_tex (bool): if True, a tex file with the plot is written.
          """
+        heatmap_kws = {} if heatmap_kws is None else heatmap_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -566,14 +567,14 @@ class SkillModel:
         factors="all",
         agg_method="means",
         figsize=None,
-        heatmap_kws={},
+        heatmap_kws=None,
         save_path=None,
         dpi=200,
         write_tex=False,
         width=None,
         height=None,
     ):
-
+        heatmap_kws = {} if heatmap_kws is None else heatmap_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -615,14 +616,14 @@ class SkillModel:
         periods="all",
         factors="all",
         group=None,
-        pair_kws={},
+        pair_kws=None,
         save_path=None,
         dpi=200,
         write_tex=False,
         width=None,
         height=None,
     ):
-
+        pair_kws = {} if pair_kws is None else pair_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -643,9 +644,9 @@ class SkillModel:
         kwargs = self._basic_pairplot_args()
         kwargs.update(pair_kws)
 
-        vars = [col for col in df.columns if col != group]
+        variables = [col for col in df.columns if col != group]
 
-        grid = sns.pairplot(data=df, vars=vars, hue=group, **kwargs)
+        grid = sns.pairplot(data=df, vars=variables, hue=group, **kwargs)
 
         base_title = "Joint Distribution of Measurements"
         title = title_text(base_title, periods=periods, factors=factors)
@@ -663,14 +664,14 @@ class SkillModel:
         factors="all",
         agg_method="means",
         group=None,
-        pair_kws={},
+        pair_kws=None,
         save_path=None,
         dpi=200,
         write_tex=False,
         width=None,
         height=None,
     ):
-
+        pair_kws = {} if pair_kws is None else pair_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -694,9 +695,9 @@ class SkillModel:
         kwargs = self._basic_pairplot_args()
         kwargs.update(pair_kws)
 
-        vars = [col for col in df.columns if col != group]
+        variables = [col for col in df.columns if col != group]
 
-        grid = sns.pairplot(data=df, hue=group, vars=vars, **kwargs)
+        grid = sns.pairplot(data=df, hue=group, vars=variables, **kwargs)
 
         base_title = "Joint Distribution of Factor Scores"
         title = title_text(base_title, periods=periods, factors=factors)
@@ -713,7 +714,7 @@ class SkillModel:
         period,
         factor,
         agg_method="mean",
-        reg_kws={},
+        reg_kws=None,
         figsize=(10, 5),
         save_path=None,
         dpi=200,
@@ -721,7 +722,7 @@ class SkillModel:
         width=None,
         height=None,
     ):
-
+        reg_kws = {} if reg_kws is None else reg_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -759,17 +760,19 @@ class SkillModel:
         factor,
         period=None,
         stage=None,
-        controls=[],
-        other_vars=[],
+        controls=None,
+        other_vars=None,
         agg_method="mean",
-        reg_kws={},
+        reg_kws=None,
         save_path=None,
         write_tex=False,
         width=None,
         height=None,
         dpi=200,
     ):
-
+        controls = [] if controls is None else controls
+        other_vars = [] if other_vars is None else other_vars
+        reg_kws = {} if reg_kws is None else reg_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -876,7 +879,7 @@ class SkillModel:
         period,
         anchor_var,
         agg_method="mean",
-        reg_kws={},
+        reg_kws=None,
         figsize=None,
         write_tex=False,
         dpi=200,
@@ -884,7 +887,7 @@ class SkillModel:
         width=None,
         height=None,
     ):
-
+        reg_kws = {} if reg_kws is None else reg_kws
         if figsize is None:
             figsize = (12, 7)
 
@@ -934,12 +937,12 @@ class SkillModel:
         self,
         periods=None,
         stages=None,
-        controls=[],
+        controls=None,
         agg_method="mean",
         write_tex=False,
         save_path=None,
     ):
-
+        controls = [] if controls is None else controls
         assert (
             periods is None or stages is None
         ), "You cannot specify periods and stages for a score regression."
@@ -1003,13 +1006,10 @@ class SkillModel:
             with open(save_path, "w") as t:
                 t.write(df_to_tex_table(df, title))
 
-        # base_name =
-        # if output == 'tex':
-
         return df
 
     def _score_regression_model(
-        self, factor, period=None, stage=None, controls=[], agg_method="mean"
+        self, factor, period=None, stage=None, controls=None, agg_method="mean"
     ):
 
         df = self.data_proc.reg_df(
@@ -1019,7 +1019,7 @@ class SkillModel:
             controls=controls,
             agg_method=agg_method,
         )
-
+        controls = [] if controls is None else controls
         ind = self.factors.index(factor)
         included = self.included_factors[ind]
 
@@ -1038,7 +1038,7 @@ class SkillModel:
         transition equation deviate from linearity.
         Args:
             save_path (str): path to a directory in which plots and tex output
-                is saved.
+            is saved.
         """
         tex_lines = []
         tex_input = r"\input{{{}}}"
@@ -1060,7 +1060,6 @@ class SkillModel:
             base_name = f"meas_heat_in_period_{period}"
             path = join(save_path, f"{base_name}.png")
             self.measurement_heatmap(periods=period, save_path=path, write_tex=True)
-            # plt.show()
             plt.close()
             tex_lines.append(tex_input.format(base_name + ".tex"))
             for factor in self.factors:
@@ -1080,7 +1079,6 @@ class SkillModel:
             base_name = f"meas_heat_for_factor_{factor}"
             path = join(save_path, f"{base_name}.png")
             self.measurement_heatmap(factors=factor, save_path=path, write_tex=True)
-            # plt.show()
             plt.close()
             tex_lines.append(tex_input.format(base_name + ".tex"))
 

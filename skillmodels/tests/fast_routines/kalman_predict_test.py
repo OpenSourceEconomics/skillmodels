@@ -157,10 +157,10 @@ def setup_unscented_predict():
     out["sws_m"] = sws_m
     out["sws_c"] = sws_m
 
-    q = np.eye(nfac)
-    Q = np.zeros((2, nfac, nfac))
-    Q[:] = q
-    out["Q"] = Q
+    qq = np.eye(nfac)
+    q = np.zeros((2, nfac, nfac))
+    q[:] = qq
+    out["q"] = q
 
     out["transform_sps_args"] = {}
 
@@ -198,7 +198,7 @@ def test_normal_unscented_predict_focus_on_colums(setup_unscented_predict, mocke
         d["flat_sps1"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_covs"],
@@ -219,7 +219,7 @@ def test_normal_unscented_predict_focus_on_weighting(setup_unscented_predict, mo
         d["flat_sps2"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_covs"],
@@ -235,14 +235,14 @@ def test_normal_unscented_predict_focus_on_covs(setup_unscented_predict, mocker)
     )
     mock_transform.return_value = d["sps3"]
 
-    d["Q"][:] = np.eye(3) * 0.25 + np.ones((3, 3)) * 0.5
+    d["q"][:] = np.eye(3) * 0.25 + np.ones((3, 3)) * 0.5
     kf.normal_unscented_predict(
         d["stage"],
         d["sps3"],
         d["flat_sps3"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_covs"],
@@ -263,7 +263,7 @@ def test_sqrt_unscented_predict_focus_on_colums(setup_unscented_predict, mocker)
         d["flat_sps1"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_sqrt_covs"],
@@ -285,7 +285,7 @@ def test_sqrt_unscented_predict_focus_on_weighting(setup_unscented_predict, mock
         d["flat_sps2"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_sqrt_covs"],
@@ -306,7 +306,7 @@ def test_sqrt_unscented_predict_focus_on_covs(setup_unscented_predict, mocker):
         d["flat_sps3"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_sqrt_covs"],

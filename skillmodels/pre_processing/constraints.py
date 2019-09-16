@@ -81,7 +81,7 @@ def _invariant_meas_system_constraints(update_info, controls, factors):
     """
     locs = []
     for period, meas in update_info.index:
-        if update_info.loc[(period, meas), "is_repeated"] == True:
+        if update_info.loc[(period, meas), "is_repeated"]:
             first = update_info.loc[(period, meas), "first_occurence"]
             for cont in ["constant"] + controls[period]:
                 locs.append(
@@ -294,7 +294,7 @@ def _ar1_contraints(factors, transition_names, included_factors, periods):
                         "type": "equality",
                     }
                 )
-                func = getattr(tf, "index_tuples_ar1")
+                func = getattr(tf, "index_tuples_ar1")  # noqa
                 ind1 = func(factor, included_factors[f], period - 1)
                 ind2 = func(factor, included_factors[f], period)
                 constraints += _pairwise_equality_constraint(ind1, ind2)

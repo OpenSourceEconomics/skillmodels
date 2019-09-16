@@ -46,14 +46,6 @@ def statsmodels_result_to_string_series(res, decimals=2, report_se=True):
         se_col = " (" + se_col + ")"
         df[res_col] += se_col
 
-    # this has a bug. it does not ensure that r_squared and nobs is moved
-    # to the end and it breaks my tex build
-
-    # df.loc['number of obs.', res_col] = str(int(res.nobs))
-    # try:
-    #     df.loc['adj. $R^2$', res_col] = fmt_str.format(res.rsquared_adj)
-    # except AttributeError:
-    #     pass
     return df[res_col]
 
 

@@ -43,27 +43,14 @@ for model, par, model_name in zip(model_dicts, start_params, model_names):
 def test_likelihood_value(model, params, data, model_name):
     mod = SkillModel(model_dict=model, dataset=data)
     full_params = mod.generate_full_start_params(params)["value"]
-
     args = mod.likelihood_arguments_dict()
-    # free, fixed = mod.start_params_helpers()
-    # free.to_csv('skillmodels/tests/regression/{}.csv'.format(model_name))
-    # assert False
-
     log_like_contributions = log_likelihood_contributions(full_params, **args)
     like_contributions = np.exp(log_like_contributions)
     small = 1e-250
     like_vec = np.prod(like_contributions, axis=0)
     like_vec[like_vec < small] = small
     res = np.log(like_vec)
-
     in_path = f"skillmodels/tests/regression/{model_name}_result.pickle"
     with open(in_path, "rb") as p:
         last_result = pickle.load(p)
     aaae(res, last_result)
-
-    # update the regression test
-    # do not uncomment this if you are not absolutely sure that you want to
-    # update the regression test!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    # with open(in_path, 'wb') as p:
-    #     pickle.dump(res, p)

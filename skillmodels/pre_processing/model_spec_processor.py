@@ -349,7 +349,7 @@ class ModelSpecProcessor:
 
             for t in self.periods:
                 df = self.data.query(f"__period__ == {t}")
-                for c, control in enumerate(present_controls[t]):
+                for _c, control in enumerate(present_controls[t]):
                     if df[control].notnull().all():
                         controls[t].append(control)
                     elif self.controls_with_missings == "drop_observations":
@@ -387,12 +387,12 @@ class ModelSpecProcessor:
 
         Four forms of invalid specification are checked and custom error
         messages are raised in each case:
-            #. Invalid length of the specification list
-            #. Invalid length of the entries in the specification list
-            #. Normalized variables that were not specified as measurement
-               variables in the period where they were used
-            #. Normalized variables that have been dropped because they were
-               not present in the dataset in the period where they were used.
+        * Invalid length of the specification list
+        * Invalid length of the entries in the specification list
+        * Normalized variables that were not specified as measurement variables
+          in the period where they were used
+        * Normalized variables that have been dropped because they were
+          not present in the dataset in the period where they were used.
 
         Errors are raised even if ``self.missing_variables == 'drop_variable'``
         . This is because in some cases the correct normalization is extremely
@@ -468,8 +468,8 @@ class ModelSpecProcessor:
                         )
 
         # check validity of values
-        for t, norminfo in enumerate(norm_list):
-            for n_meas, n_val in norminfo.items():
+        for norminfo in norm_list:  #
+            for n_val in norminfo.values():
                 if norm_type == "variances":
                     assert n_val > 0, "Variances can only be normalized to a value > 0."
                 if norm_type == "loadings":
@@ -566,13 +566,13 @@ class ModelSpecProcessor:
         df = DataFrame(data=None, index=index)
 
         # append rows for each update that has to be performed
-        for t, (f, factor) in product(self.periods, enumerate(self.factors)):
+        for t, (_f, factor) in product(self.periods, enumerate(self.factors)):
             measurements = self.measurements[factor][t].copy()
             if self.anchoring is True:
                 if t == self.nperiods - 1 and factor in self.anchored_factors:
                     measurements.append(self.anch_outcome)
 
-            for m, meas in enumerate(measurements):
+            for _m, meas in enumerate(measurements):
                 # if meas is not the first measurement in period t
                 # and the measurement has already been used in period t
                 if t in df.index and meas in df.loc[t].index:

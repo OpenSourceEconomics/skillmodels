@@ -23,7 +23,7 @@ if __name__ == "__main__":
         out_root, os = split(helper)
         pfs = [pf for pf in platforms if pf != os]
         convert(path, output_dir=out_root, platforms=pfs)
-        print(
+        print(  # noqa
             "\n{} was converted to the following platforms: {}\n".format(
                 package_name, pfs
             )
@@ -35,4 +35,4 @@ if __name__ == "__main__":
     for package in all_packages:
         _, package_name = split(package)
         run(["anaconda", "upload", package])
-        print(f"\n{package_name} was uploaded to anaconda.org")
+        print(f"\n{package_name} was uploaded to anaconda.org")  # noqa

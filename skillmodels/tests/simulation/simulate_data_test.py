@@ -328,8 +328,7 @@ def set_up_generate_datasets_mock():
     out["meas_variances"] = pd.Series(
         data=np.zeros(len(loadings_df)), index=loadings_df.index
     )
-    # out["controls_mock"] = np.array([[0.5, 0.5]] * 5)
-    # out["start_states_mock"] = np.array([[0, 0]] * 5)
+
     return out
 
 

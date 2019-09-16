@@ -1,11 +1,8 @@
-from unittest.mock import patch
-
 import numpy as np
 import pandas as pd
 import pytest
 from numpy.testing import assert_array_equal as aae
 
-import skillmodels.estimation.parse_params as pp
 from skillmodels.estimation.parse_params import _map_params_to_delta
 from skillmodels.estimation.parse_params import _map_params_to_h
 from skillmodels.estimation.parse_params import _map_params_to_p

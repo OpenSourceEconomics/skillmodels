@@ -4,8 +4,6 @@ from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.fast_routines.choldate import array_choldate
 
-# from numpy.core.umath_tests import matrix_multiply
-
 
 def setup_(weight):
     to_update = np.zeros((20, 4, 4))

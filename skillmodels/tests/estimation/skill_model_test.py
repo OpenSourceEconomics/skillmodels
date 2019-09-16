@@ -6,9 +6,9 @@ import pytest
 from nose.tools import assert_almost_equal
 from numpy.testing import assert_array_equal as aae
 from pandas import DataFrame
-from pytest_mock import mocker
+from pytest_mock import mocker  # noqa
 
-from skillmodels import SkillModel as smo
+from skillmodels import SkillModel
 
 
 class TestDeltaRelatedMethods:
@@ -38,7 +38,7 @@ class TestDeltaRelatedMethods:
     def test_initial_delta_without_controls_besides_constant(self):
         self.controls = [[], [], []]
         expected = [np.zeros((6, 1)), np.zeros((3, 1)), np.zeros((4, 1))]
-        calculated = smo._initial_delta(self)
+        calculated = SkillModel._initial_delta(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
@@ -46,35 +46,35 @@ class TestDeltaRelatedMethods:
 
         expected = [np.zeros((6, 3)), np.zeros((3, 4)), np.zeros((4, 3))]
 
-        calculated = smo._initial_delta(self)
+        calculated = SkillModel._initial_delta(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
 
-def test_initial_h(mocker):
+def test_initial_h(mocker):  # noqa
     mocker.nfac = 5
     mocker.nupdates = 10
-    calculated = smo._initial_h(mocker)
+    calculated = SkillModel._initial_h(mocker)
     expected = np.zeros((10, 5))
     aae(calculated, expected)
 
 
-def test_initial_r(mocker):
+def test_initial_r(mocker):  # noqa
     mocker.nupdates = 8
-    calculated = smo._initial_r(mocker)
+    calculated = SkillModel._initial_r(mocker)
     expected = np.zeros(8)
     aae(calculated, expected)
 
 
-def test_initial_q(mocker):
+def test_initial_q(mocker):  # noqa
     mocker.nperiods = 5
     mocker.nfac = 3
     expected = np.zeros((4, 3, 3))
-    calculated = smo._initial_q(mocker)
+    calculated = SkillModel._initial_q(mocker)
     aae(calculated, expected)
 
 
-def test_initial_x(mocker):
+def test_initial_x(mocker):  # noqa
     mocker.nobs = 10
     mocker.nemf = 2
     mocker.nfac = 3
@@ -82,28 +82,27 @@ def test_initial_x(mocker):
     exp1 = np.zeros((10, 2, 3))
     exp2 = np.zeros((20, 3))
 
-    calc1, calc2 = smo._initial_x(mocker)
+    calc1, calc2 = SkillModel._initial_x(mocker)
 
     aae(calc1, exp1)
     aae(calc2, exp2)
 
-    # test that the second is pointing to the same data as the first.
     calc1 += 1
     aae(calc2, np.ones((20, 3)))
 
 
-def test_initial_w(mocker):
+def test_initial_w(mocker):  # noqa
     mocker.nobs = 10
     mocker.nemf = 3
 
     expected = np.ones((10, 3)) / 3
 
-    calculated = smo._initial_w(mocker)
+    calculated = SkillModel._initial_w(mocker)
     aae(calculated, expected)
 
 
 @pytest.fixture
-def p_mocker(mocker):
+def p_mocker(mocker):  # noqa
     mocker.nobs = 10
     mocker.nemf = 2
     mocker.nfac = 3
@@ -113,7 +112,7 @@ def p_mocker(mocker):
 def test_initial_p_square_root_filters(p_mocker):
     p_mocker.square_root_filters = True
     expected = [np.zeros((10, 2, 4, 4)), np.zeros((20, 4, 4))]
-    calculated = smo._initial_p(p_mocker)
+    calculated = SkillModel._initial_p(p_mocker)
     for calc, exp in zip(calculated, expected):
         aae(calc, exp)
 
@@ -126,7 +125,7 @@ def test_initial_p_square_root_filters(p_mocker):
 def test_initial_p_normal_filters(p_mocker):
     p_mocker.square_root_filters = False
     expected = [np.zeros((10, 2, 3, 3)), np.zeros((20, 3, 3))]
-    calculated = smo._initial_p(p_mocker)
+    calculated = SkillModel._initial_p(p_mocker)
     for calc, exp in zip(calculated, expected):
         aae(calc, exp)
 
@@ -136,7 +135,7 @@ def test_initial_p_normal_filters(p_mocker):
     aae(calc2, np.ones_like(calc2))
 
 
-def test_initial_trans_coeffs(mocker):
+def test_initial_trans_coeffs(mocker):  # noqa
     mocker.factors = ["fac1", "fac2", "fac3"]
     mocker.transition_names = ["linear", "linear", "log_ces"]
     mocker.included_factors = [["fac1", "fac2"], ["fac2"], ["fac2", "fac3"]]
@@ -153,7 +152,7 @@ def test_initial_trans_coeffs(mocker):
 
     expected = [np.zeros((4, 4)), np.zeros((4, 4)), np.zeros((4, 3))]
 
-    calculated = smo._initial_trans_coeffs(mocker)
+    calculated = SkillModel._initial_trans_coeffs(mocker)
     for calc, exp in zip(calculated, expected):
         aae(calc, exp)
 
@@ -174,8 +173,8 @@ class TestSigmaWeightsAndScalingFactor:
 
     def test_julier_sigma_weight_construction(self):
         expected_sws = self.fixtures["julier_wm"]
-        aae(smo.sigma_weights(self)[0], expected_sws)
+        aae(SkillModel.sigma_weights(self)[0], expected_sws)
 
     def test_julier_scaling_factor(self):
         expected_sf = 2.34520787991
-        assert_almost_equal(smo.sigma_scaling_factor(self), expected_sf)
+        assert_almost_equal(SkillModel.sigma_scaling_factor(self), expected_sf)
