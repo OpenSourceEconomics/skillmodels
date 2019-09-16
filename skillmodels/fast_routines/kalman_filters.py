@@ -1,28 +1,13 @@
 """Contains Kalman Update and Predict functions in several flavors."""
 import numpy as np
-from numba import float64 as f64
 from numba import guvectorize
-from numba import int64 as i64
 
 from skillmodels.fast_routines.qr_decomposition import array_qr
 from skillmodels.fast_routines.transform_sigma_points import transform_sigma_points
 
 
 @guvectorize(
-    [
-        (
-            f64[:, :],
-            f64[:, :, :],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            i64[:],
-            f64[:],
-        )
-    ],
+    [("f8[:, :], f8[:, :, :], f8[:], f8[:], f8[:], f8[:], f8[:], f8[:], i8[:], f8[:]")],
     (
         "(nemf, nfac), (nemf, nfac_, nfac_), (), (), (ncon), "
         "(ncon), (nfac), (), (ninc), (nemf)"
@@ -136,19 +121,8 @@ def sqrt_linear_update(
 
 @guvectorize(
     [
-        (
-            f64[:, :],
-            f64[:, :, :],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            i64[:],
-            f64[:],
-            f64[:],
-        )
+        "f8[:, :], f8[:, :, :], f8[:], f8[:], f8[:], "
+        "f8[:], f8[:], f8[:], i8[:], f8[:], f8[:]"
     ],
     (
         "(nemf, nfac), (nemf, nfac, nfac), (), (), (ncon), "
@@ -364,7 +338,6 @@ def sqrt_unscented_predict(
     out_flat_states,
     out_flat_covs,
 ):
-
     """Make a unscented Kalman filter predict step in square-root form.
 
     The square-root form of the Kalman predict is much more robust than the
