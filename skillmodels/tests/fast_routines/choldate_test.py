@@ -1,8 +1,8 @@
-from numpy.testing import assert_array_almost_equal as aaae
-from skillmodels.fast_routines.choldate import array_choldate
-#from numpy.core.umath_tests import matrix_multiply
 import numpy as np
 from numpy.linalg import cholesky
+from numpy.testing import assert_array_almost_equal as aaae
+
+from skillmodels.fast_routines.choldate import array_choldate
 
 
 def setup_(weight):

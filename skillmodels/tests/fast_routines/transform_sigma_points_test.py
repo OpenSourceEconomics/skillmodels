@@ -1,7 +1,9 @@
-from skillmodels.fast_routines.transform_sigma_points import transform_sigma_points
 from unittest.mock import patch
+
 import numpy as np
 from numpy.testing import assert_array_almost_equal as aaae
+
+from skillmodels.fast_routines.transform_sigma_points import transform_sigma_points
 
 
 def fake1(arr, coeffs, included_positions):

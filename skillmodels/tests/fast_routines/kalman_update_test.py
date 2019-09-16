@@ -1,9 +1,11 @@
 """Tests for the linear Kalman update step."""
-import skillmodels.fast_routines.kalman_filters as kf
-from numpy.testing import assert_array_almost_equal as aaae
+import json
+
 import numpy as np
 import pytest
-import json
+from numpy.testing import assert_array_almost_equal as aaae
+
+import skillmodels.fast_routines.kalman_filters as kf
 
 # ======================================================================================
 # helper functions
@@ -20,8 +22,15 @@ def make_unique(qr_result_arr):
 
 
 def unpack_update_fixture(
-        factors, state, measurement, state_cov, loadings, meas_var,
-        expected_post_means=None, expected_post_state_cov=None):
+    factors,
+    state,
+    measurement,
+    state_cov,
+    loadings,
+    meas_var,
+    expected_post_means=None,
+    expected_post_state_cov=None,
+):
     kwargs = {
         "state": np.array([state]).astype(float),
         "covs": np.array([state_cov]).astype(float),
@@ -31,12 +40,16 @@ def unpack_update_fixture(
         "delta": np.array(range(0)),
         "h": np.array(loadings).astype(float),
         "r": np.array([meas_var]).astype(float),
-        "positions": np.array([i for i, x in enumerate(loadings) if x != 0]).astype(int),
+        "positions": np.array([i for i, x in enumerate(loadings) if x != 0]).astype(
+            int
+        ),
         "weights": np.array([[1]]).astype(float),
-        "kf": np.zeros((1, len(state))).astype(float)}
+        "kf": np.zeros((1, len(state))).astype(float),
+    }
     sk_type_exp_states = np.array([expected_post_means])
     sk_type_exp_cov = np.array([expected_post_state_cov])
     return kwargs, sk_type_exp_states, sk_type_exp_cov
+
 
 # ======================================================================================
 # manual tests
@@ -353,46 +366,78 @@ def test_normal_weight_update_with_nans(setup_linear_update, expected_linear_upd
 def setup_linear_update_2():
     # to conform with the jsons that contain setup and result of filterpy
     # this fixture contains the setup and expected result
-    factors = ['c', 'n', 'i', 'cp', 'np']
+    factors = ["c", "n", "i", "cp", "np"]
     state = np.array([11, 11.5, 12, 12.5, 10])
     root_cov = np.linalg.cholesky(
-        [[1.00, 0.10, 0.15, 0.20, 0.05],
-         [0.10, 1.40, 0.20, 0.30, 0.25],
-         [0.15, 0.20, 1.10, 0.20, 0.10],
-         [0.20, 0.30, 0.20, 1.50, 0.15],
-         [0.05, 0.25, 0.10, 0.15, 0.90]])
+        [
+            [1.00, 0.10, 0.15, 0.20, 0.05],
+            [0.10, 1.40, 0.20, 0.30, 0.25],
+            [0.15, 0.20, 1.10, 0.20, 0.10],
+            [0.20, 0.30, 0.20, 1.50, 0.15],
+            [0.05, 0.25, 0.10, 0.15, 0.90],
+        ]
+    )
     measurement = 29
     loadings = np.array([1.5, 0, 1.2, 0, 0])
     meas_var = 2.25
 
     expected_updated_means = np.array(
-        [10.51811594, 11.38813406, 11.55683877, 12.3451087, 9.94406703])
-    expected_updated_cov = np.array([
-        [5.73913043e-01, 1.08695652e-03, -2.41847826e-01,
-         6.30434783e-02, 5.43478261e-04],
-        [1.08695652e-03, 1.37703804e+00, 1.09035326e-01,
-         2.68206522e-01, 2.38519022e-01],
-        [-2.41847826e-01, 1.09035326e-01, 7.39639946e-01,
-         7.40489130e-02, 5.45176630e-02],
-        [6.30434783e-02, 2.68206522e-01, 7.40489130e-02,
-         1.45597826e+00, 1.34103261e-01],
-        [5.43478261e-04, 2.38519022e-01, 5.45176630e-02,
-         1.34103261e-01, 8.94259511e-01]])
+        [10.51811594, 11.38813406, 11.55683877, 12.3451087, 9.94406703]
+    )
+    expected_updated_cov = np.array(
+        [
+            [
+                5.73913043e-01,
+                1.08695652e-03,
+                -2.41847826e-01,
+                6.30434783e-02,
+                5.43478261e-04,
+            ],
+            [
+                1.08695652e-03,
+                1.37703804e00,
+                1.09035326e-01,
+                2.68206522e-01,
+                2.38519022e-01,
+            ],
+            [
+                -2.41847826e-01,
+                1.09035326e-01,
+                7.39639946e-01,
+                7.40489130e-02,
+                5.45176630e-02,
+            ],
+            [
+                6.30434783e-02,
+                2.68206522e-01,
+                7.40489130e-02,
+                1.45597826e00,
+                1.34103261e-01,
+            ],
+            [
+                5.43478261e-04,
+                2.38519022e-01,
+                5.45176630e-02,
+                1.34103261e-01,
+                8.94259511e-01,
+            ],
+        ]
+    )
 
     return {
-        'factors': factors,
-        'state': state,
-        'measurement': measurement,
-        'state_cov': root_cov.dot(root_cov.T),
-        'loadings': loadings,
-        'meas_var': meas_var,
-        'expected_post_means': expected_updated_means,
-        'expected_post_state_cov': expected_updated_cov}
+        "factors": factors,
+        "state": state,
+        "measurement": measurement,
+        "state_cov": root_cov.dot(root_cov.T),
+        "loadings": loadings,
+        "meas_var": meas_var,
+        "expected_post_means": expected_updated_means,
+        "expected_post_state_cov": expected_updated_cov,
+    }
 
 
 def test_normal_state_and_cov_update_without_nan(setup_linear_update_2):
-    d, exp_states, exp_cov = \
-        unpack_update_fixture(**setup_linear_update_2)
+    d, exp_states, exp_cov = unpack_update_fixture(**setup_linear_update_2)
     kf.normal_linear_update(
         d["state"],
         d["covs"],
@@ -414,8 +459,8 @@ def test_normal_state_and_cov_update_without_nan(setup_linear_update_2):
 # tests from filterpy
 # =============================================================================
 
-fix_path = 'skillmodels/tests/fast_routines/generated_fixtures_update.json'
-with open(fix_path, 'r') as f:
+fix_path = "skillmodels/tests/fast_routines/generated_fixtures_update.json"
+with open(fix_path, "r") as f:
     id_to_fix = json.load(f)
 ids, fixtures = zip(*id_to_fix.items())
 

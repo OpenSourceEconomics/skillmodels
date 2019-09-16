@@ -4,6 +4,7 @@ The functions are used in several parts of skillmodels.
 
 """
 import pandas as pd
+
 from skillmodels.pre_processing.data_processor import prepend_index_level
 
 
@@ -45,14 +46,6 @@ def statsmodels_result_to_string_series(res, decimals=2, report_se=True):
         se_col = " (" + se_col + ")"
         df[res_col] += se_col
 
-    # this has a bug. it does not ensure that r_squared and nobs is moved
-    # to the end and it breaks my tex build
-
-    # df.loc['number of obs.', res_col] = str(int(res.nobs))
-    # try:
-    #     df.loc['adj. $R^2$', res_col] = fmt_str.format(res.rsquared_adj)
-    # except AttributeError:
-    #     pass
     return df[res_col]
 
 
@@ -60,13 +53,13 @@ def statsmodels_results_to_df(
     res_list, decimals=2, period_name="Period", report_se=True
 ):
     sr_list = []
-    periods = sorted(list(set([res.period for res in res_list])))
+    periods = sorted(list({res.period for res in res_list}))
 
     for res in res_list:
         sr = statsmodels_result_to_string_series(res, decimals=decimals)
         sr.name = res.name
         if len(periods) > 1:
-            sr.index = ("\hspace{0.5cm} " + sr.index).str.replace("_", "\_")
+            sr.index = (r"\hspace{0.5cm} " + sr.index).str.replace("_", r"\_")
             sr = prepend_index_level(sr, res.period)
         sr_list.append(sr)
 

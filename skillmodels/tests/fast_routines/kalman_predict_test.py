@@ -1,10 +1,12 @@
 """Tests for the linear Kalman predict step."""
-import skillmodels.fast_routines.kalman_filters as kf
-from skillmodels.tests.fast_routines.kalman_update_test import make_unique
-from numpy.testing import assert_array_almost_equal as aaae
+import json
+
 import numpy as np
 import pytest
-import json
+from numpy.testing import assert_array_almost_equal as aaae
+
+import skillmodels.fast_routines.kalman_filters as kf
+from skillmodels.tests.fast_routines.kalman_update_test import make_unique
 
 # ======================================================================================
 # manual tests
@@ -155,10 +157,10 @@ def setup_unscented_predict():
     out["sws_m"] = sws_m
     out["sws_c"] = sws_m
 
-    q = np.eye(nfac)
-    Q = np.zeros((2, nfac, nfac))
-    Q[:] = q
-    out["Q"] = Q
+    qq = np.eye(nfac)
+    q = np.zeros((2, nfac, nfac))
+    q[:] = qq
+    out["q"] = q
 
     out["transform_sps_args"] = {}
 
@@ -196,7 +198,7 @@ def test_normal_unscented_predict_focus_on_colums(setup_unscented_predict, mocke
         d["flat_sps1"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_covs"],
@@ -217,7 +219,7 @@ def test_normal_unscented_predict_focus_on_weighting(setup_unscented_predict, mo
         d["flat_sps2"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_covs"],
@@ -233,14 +235,14 @@ def test_normal_unscented_predict_focus_on_covs(setup_unscented_predict, mocker)
     )
     mock_transform.return_value = d["sps3"]
 
-    d["Q"][:] = np.eye(3) * 0.25 + np.ones((3, 3)) * 0.5
+    d["q"][:] = np.eye(3) * 0.25 + np.ones((3, 3)) * 0.5
     kf.normal_unscented_predict(
         d["stage"],
         d["sps3"],
         d["flat_sps3"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_covs"],
@@ -261,7 +263,7 @@ def test_sqrt_unscented_predict_focus_on_colums(setup_unscented_predict, mocker)
         d["flat_sps1"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_sqrt_covs"],
@@ -283,7 +285,7 @@ def test_sqrt_unscented_predict_focus_on_weighting(setup_unscented_predict, mock
         d["flat_sps2"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_sqrt_covs"],
@@ -304,7 +306,7 @@ def test_sqrt_unscented_predict_focus_on_covs(setup_unscented_predict, mocker):
         d["flat_sps3"],
         d["sws_m"],
         d["sws_c"],
-        d["Q"],
+        d["q"],
         d["transform_sps_args"],
         d["out_states"],
         d["out_sqrt_covs"],
@@ -330,16 +332,16 @@ shocks_sd = np.array(
 
 
 def unpack_predict_fixture(fixture):
-    nfac = len(fixture['state'])
+    nfac = len(fixture["state"])
 
     args = (
-        np.array(fixture['state']).reshape(1, nfac),
-        np.array(fixture['state_cov']).reshape(1, nfac, nfac),
-        np.array(fixture['shock_sds']),
-        np.array(fixture['transition_matrix'])
+        np.array(fixture["state"]).reshape(1, nfac),
+        np.array(fixture["state_cov"]).reshape(1, nfac, nfac),
+        np.array(fixture["shock_sds"]),
+        np.array(fixture["transition_matrix"]),
     )
-    exp_state = np.array(fixture['expected_post_means'])
-    exp_cov = np.array(fixture['expected_post_state_cov'])
+    exp_state = np.array(fixture["expected_post_means"])
+    exp_cov = np.array(fixture["expected_post_state_cov"])
     return args, exp_state, exp_cov
 
 
@@ -361,8 +363,8 @@ def convert_normal_to_sqrt_args(args):
 # for the normal linear predict
 # ------------------------------
 
-fix_path = 'skillmodels/tests/fast_routines/generated_fixtures_predict.json'
-with open(fix_path, 'r') as f:
+fix_path = "skillmodels/tests/fast_routines/generated_fixtures_predict.json"
+with open(fix_path, "r") as f:
     id_to_fix = json.load(f)
 ids, fixtures = zip(*id_to_fix.items())
 
@@ -393,7 +395,7 @@ def test_sqrt_linear_predicted_state_against_filterpy(fixture):
     aaae(after_state.flatten(), exp_state)
 
 
-np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
+np.set_printoptions(formatter={"float": "{: 0.3f}".format})
 
 
 @pytest.mark.parametrize("fixture", fixtures, ids=ids)

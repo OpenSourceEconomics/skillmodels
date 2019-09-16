@@ -3,8 +3,11 @@
 The functions are used in several parts of skillmodels.
 
 """
+from os.path import basename
+from os.path import dirname
+from os.path import join
+from os.path import splitext
 from textwrap import wrap
-from os.path import splitext, basename, dirname, join
 
 
 def decompose_path(path):
@@ -66,11 +69,11 @@ def title_text(basic_name, factors=None, periods=None, stages=None, wrap_width=N
 
     title = basic_name
     if factors is not None:
-        title += " of {}".format(title_f)
+        title += f" of {title_f}"
     if periods is not None:
-        title += " in {}".format(title_p)
+        title += f" in {title_p}"
     if stages is not None:
-        title += " in {}".format(title_s)
+        title += f" in {title_s}"
 
     if wrap_width is not None:
         title = wrap(title, wrap_width)
@@ -88,13 +91,14 @@ def write_figure_tex_snippet(figure_path, title, width=None, height=None):
 
     newline = "\n"
     begin_figure = r"\begin{figure}[h!]\centering" + newline
-    end_figure = "\end{figure}" + newline
+    end_figure = r"\end{figure}" + newline
 
     include = (
-        r"\includegraphics[width={}\textwidth,height={}\textheight,keepaspectratio]{{{}}}"
+        r"""\includegraphics[width={}\textwidth,height={}\textheight,keepaspectratio]
+        {{{}}}"""
         + newline
     )
-    caption = "\caption{{{}}}" + newline
+    caption = r"\caption{{{}}}" + newline
 
     with open(tex_path, "w") as t:
         t.write(begin_figure)

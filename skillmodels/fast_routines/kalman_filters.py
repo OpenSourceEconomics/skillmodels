@@ -1,28 +1,13 @@
 """Contains Kalman Update and Predict functions in several flavors."""
-
-from numba import float64 as f64
-from numba import int64 as i64
-from numba import guvectorize
 import numpy as np
-from skillmodels.fast_routines.transform_sigma_points import transform_sigma_points
+from numba import guvectorize
+
 from skillmodels.fast_routines.qr_decomposition import array_qr
+from skillmodels.fast_routines.transform_sigma_points import transform_sigma_points
 
 
 @guvectorize(
-    [
-        (
-            f64[:, :],
-            f64[:, :, :],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            i64[:],
-            f64[:],
-        )
-    ],
+    [("f8[:, :], f8[:, :, :], f8[:], f8[:], f8[:], f8[:], f8[:], f8[:], i8[:], f8[:]")],
     (
         "(nemf, nfac), (nemf, nfac_, nfac_), (), (), (ncon), "
         "(ncon), (nfac), (), (ninc), (nemf)"
@@ -60,17 +45,16 @@ def sqrt_linear_update(
 
         positions (np.ndarray): the positions of the factors measured by y.
 
-        weights (np.ndarray): numpy array of (nemf, nind)
+        weights (np.ndarray): numpy array of (nemf, nind).
 
     References:
         Robert Grover Brown. Introduction to Random Signals and Applied
-            Kalman Filtering. Wiley and sons, 2012.
+        Kalman Filtering. Wiley and sons, 2012.
 
     """
     nemf, nfac = state.shape
     m = nfac + 1
     ncontrol = delta.shape[0]
-    # invariant = 0.398942280401432702863218082711682654917240142822265625
     invariant = np.log(1 / (2 * np.pi) ** 0.5)
     invar_diff = y[0]
     if np.isfinite(invar_diff):
@@ -137,19 +121,8 @@ def sqrt_linear_update(
 
 @guvectorize(
     [
-        (
-            f64[:, :],
-            f64[:, :, :],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            f64[:],
-            i64[:],
-            f64[:],
-            f64[:],
-        )
+        "f8[:, :], f8[:, :, :], f8[:], f8[:], f8[:], "
+        "f8[:], f8[:], f8[:], i8[:], f8[:], f8[:]"
     ],
     (
         "(nemf, nfac), (nemf, nfac, nfac), (), (), (ncon), "
@@ -191,12 +164,12 @@ def normal_linear_update(
 
     References:
         Robert Grover Brown. Introduction to Random Signals and Applied
-            Kalman Filtering. Wiley and sons, 2012.
+        Kalman Filtering. Wiley and sons, 2012.
+
 
     """
     nemf, nfac = state.shape
     ncontrol = delta.shape[0]
-    # invariant = 0.398942280401432702863218082711682654917240142822265625
     invariant = np.log(1 / (2 * np.pi) ** 0.5)
     invar_diff = y[0]
     if np.isfinite(invar_diff):
@@ -219,7 +192,11 @@ def normal_linear_update(
             for pos in positions:
                 sigma_squared += kf[pos] * h[pos]
 
-            log_prob = invariant - 0.5 * np.log(sigma_squared) - diff ** 2 / (2 * sigma_squared)
+            log_prob = (
+                invariant
+                - 0.5 * np.log(sigma_squared)
+                - diff ** 2 / (2 * sigma_squared)
+            )
 
             diff /= sigma_squared
             for f in range(nfac):
@@ -248,6 +225,7 @@ def normal_linear_update(
 
 def normal_linear_predict(state, cov, shocks_sds, transition_matrix):
     """Make a linear kalman predict step in linear form.
+
     Args:
         state (np.ndarray): numpy array of (nemf * nobs, nfac).
         cov (np.ndarray): numpy array of (nemf * nobs, nfac, nfac).
@@ -262,10 +240,10 @@ def normal_linear_predict(state, cov, shocks_sds, transition_matrix):
     """
     nstates, nfac = state.shape
     predicted_states = np.dot(transition_matrix, state.T).T
-    Q = np.diag(shocks_sds ** 2)
+    q = np.diag(shocks_sds ** 2)
     # reshape transition matrix to get the same dimension as cov
     predicted_covs = (
-        np.matmul(np.matmul(transition_matrix, cov), transition_matrix.T) + Q
+        np.matmul(np.matmul(transition_matrix, cov), transition_matrix.T) + q
     )
 
     return predicted_states, predicted_covs
@@ -321,27 +299,28 @@ def normal_unscented_predict(
 
 def sqrt_linear_predict(state, root_cov, shocks_sds, transition_matrix):
     """Make a linear kalman predict step in linear form.
+
     Args:
         state (np.ndarray): numpy array of (nemf * nobs, nfac).
         root_cov (np.ndarray): upper triangular cholesky factor of the covariance
-            matrix of (nemf * nobs, nfac, nfac).
+        matrix of (nemf * nobs, nfac, nfac).
         shocks_sds (np.ndarray): numpy array of (nfac).
         transition_matrix (np.ndarray): state transition matrix of (nfac, nfac),
             the same for all obs.
 
     References:
-    Robert Grover Brown. Introduction to Random Signals and Applied
+        Robert Grover Brown. Introduction to Random Signals and Applied
         Kalman Filtering. Wiley and sons, 2012.
 
 
     """
     nstates, nfac = state.shape
     predicted_states = np.dot(transition_matrix, state.T).T
-    root_Q = np.diag(shocks_sds)
+    root_q = np.diag(shocks_sds)
 
     m = np.empty([nstates, 2 * nfac, nfac])
     m[:, :nfac] = np.matmul(root_cov, transition_matrix.T)
-    m[:, nfac:] = root_Q
+    m[:, nfac:] = root_q
     # array_qr modifies matrix m in place
     predicted_root_covs = array_qr(m)[:, :nfac, :]
 
@@ -359,7 +338,6 @@ def sqrt_unscented_predict(
     out_flat_states,
     out_flat_covs,
 ):
-
     """Make a unscented Kalman filter predict step in square-root form.
 
     The square-root form of the Kalman predict is much more robust than the

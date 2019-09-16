@@ -1,32 +1,27 @@
-from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
-from skillmodels.pre_processing.data_processor import DataProcessor
-from skillmodels.estimation.likelihood_function import log_likelihood_contributions
-from skillmodels.visualization.table_functions import (
-    statsmodels_results_to_df,
-    df_to_tex_table,
-)
-from skillmodels.visualization.text_functions import (
-    title_text,
-    write_figure_tex_snippet,
-    get_preamble,
-)
-import statsmodels.formula.api as smf
-
-import numpy as np
-import skillmodels.model_functions.transition_functions as tf
-from skillmodels.estimation.parse_params import parse_params
-
 from itertools import product
-import pandas as pd
+from os.path import join
 
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
-from os.path import join
-from skillmodels.simulation.simulate_data import simulate_datasets
-from estimagic.optimization.start_helpers import make_start_params_helpers
-from estimagic.optimization.start_helpers import get_start_params_from_free_params
+import statsmodels.formula.api as smf
 from estimagic.optimization.optimize import maximize
+from estimagic.optimization.start_helpers import get_start_params_from_free_params
+from estimagic.optimization.start_helpers import make_start_params_helpers
+
+import skillmodels.model_functions.transition_functions as tf
+from skillmodels.estimation.likelihood_function import log_likelihood_contributions
+from skillmodels.estimation.parse_params import parse_params
 from skillmodels.pre_processing.constraints import add_bounds
+from skillmodels.pre_processing.data_processor import DataProcessor
+from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
+from skillmodels.simulation.simulate_data import simulate_datasets
+from skillmodels.visualization.table_functions import df_to_tex_table
+from skillmodels.visualization.table_functions import statsmodels_results_to_df
+from skillmodels.visualization.text_functions import get_preamble
+from skillmodels.visualization.text_functions import title_text
+from skillmodels.visualization.text_functions import write_figure_tex_snippet
 
 
 class SkillModel:
@@ -46,11 +41,7 @@ class SkillModel:
     """
 
     def __init__(
-        self,
-        model_dict,
-        dataset,
-        model_name="some_model",
-        dataset_name="some_dataset",
+        self, model_dict, dataset, model_name="some_model", dataset_name="some_dataset"
     ):
         specs = ModelSpecProcessor(
             model_dict=model_dict,
@@ -132,15 +123,15 @@ class SkillModel:
         initial = []
         for f, factor in enumerate(self.factors):
             func = getattr(tf, "index_tuples_{}".format(self.transition_names[f]))
-            nparams = len(func(
-                factor=factor, included_factors=self.included_factors[f], period=0))
+            nparams = len(
+                func(factor=factor, included_factors=self.included_factors[f], period=0)
+            )
             initial.append(np.zeros((self.nperiods - 1, nparams)))
         return initial
 
     def start_params_helpers(self):
         """DataFrames with the free and fixed parameters of the model."""
-        free, fixed = make_start_params_helpers(
-            self.params_index, self.constraints)
+        free, fixed = make_start_params_helpers(self.params_index, self.constraints)
         return free, fixed
 
     def generate_full_start_params(self, start_params):
@@ -159,34 +150,39 @@ class SkillModel:
 
             elif len(sp.index.intersection(free.index)) == len(free.index):
                 full_sp = get_start_params_from_free_params(
-                    sp, self.constraints, self.params_index)
+                    sp, self.constraints, self.params_index
+                )
             else:
                 raise ValueError(
                     "Index of start parameters has to be either self.params_index or "
-                    "the index of free parameters from start_params_helpers.")
+                    "the index of free parameters from start_params_helpers."
+                )
         else:
-            free['value'] = 0.0
-            free.loc['h', 'value'] = 1.0
-            free.loc['r', 'value'] = 1.0
-            free.loc['q', 'value'] = 1.0
-            free.loc['trans', 'value'] = 1 / self.nfac
-            free.loc['w', 'value'] = 1 / self.nemf
+            free["value"] = 0.0
+            free.loc["h", "value"] = 1.0
+            free.loc["r", "value"] = 1.0
+            free.loc["q", "value"] = 1.0
+            free.loc["trans", "value"] = 1 / self.nfac
+            free.loc["w", "value"] = 1 / self.nemf
             for emf in range(self.nemf):
                 p_diags = [("p", 0, emf, f"{fac}-{fac}") for fac in self.factors]
-                free.loc[p_diags, 'value'] = 1
+                free.loc[p_diags, "value"] = 1
 
             full_sp = get_start_params_from_free_params(
-                free, self.constraints, self.params_index)
+                free, self.constraints, self.params_index
+            )
 
-        full_sp['group'] = None
+        full_sp["group"] = None
 
         for period in self.periods:
-            full_sp.loc[('h', period), 'group'] = f'Loadings in Period {period}'
-            full_sp.loc[('r', period), 'group'] = f'Meas-Variances in Period {period}'
+            full_sp.loc[("h", period), "group"] = f"Loadings in Period {period}"
+            full_sp.loc[("r", period), "group"] = f"Meas-Variances in Period {period}"
 
         for period in self.periods[:-1]:
-            full_sp.loc[('trans', period), 'group'] = f'Transition Parameters in Period {period}'
-        full_sp.loc['p', 'group'] = 'Factor Covariance Matrix'
+            full_sp.loc[
+                ("trans", period), "group"
+            ] = f"Transition Parameters in Period {period}"
+        full_sp.loc["p", "group"] = "Factor Covariance Matrix"
         full_sp.loc[fixed.index, "group"] = None
         full_sp = add_bounds(full_sp, bounds_distance=self.bounds_distance)
         return full_sp
@@ -215,11 +211,11 @@ class SkillModel:
 
         for quant in needed_quantities:
             if quant not in ["x", "p"]:
-                init_dict[quant] = getattr(self, "_initial_{}".format(quant))()
+                init_dict[quant] = getattr(self, f"_initial_{quant}")()
             else:
-                normal, flat = getattr(self, "_initial_{}".format(quant))()
+                normal, flat = getattr(self, f"_initial_{quant}")()
                 init_dict[quant] = normal
-                init_dict["flat_{}".format(quant)] = flat
+                init_dict[f"flat_{quant}"] = flat
 
         sp = np.zeros((self.nemf * self.nobs, self.nsigma, self.nfac))
         init_dict["sigma_points"] = sp
@@ -227,15 +223,15 @@ class SkillModel:
             self.nemf * self.nobs * self.nsigma, self.nfac
         )
 
-        init_dict['like_contributions'] = np.zeros((self.nupdates, self.nobs))
+        init_dict["like_contributions"] = np.zeros((self.nupdates, self.nobs))
 
         return init_dict
 
     def _parse_params_args_dict(self, initial_quantities):
         pp = {
-            'initial_quantities': initial_quantities,
-            'factors': self.factors,
-            'square_root_filters': self.square_root_filters
+            "initial_quantities": initial_quantities,
+            "factors": self.factors,
+            "square_root_filters": self.square_root_filters,
         }
 
         return pp
@@ -269,7 +265,7 @@ class SkillModel:
                     self.c_data[t],
                     initial_quantities["delta"][t][j],
                     initial_quantities["h"][k],
-                    initial_quantities["r"][k: k + 1],
+                    initial_quantities["r"][k : k + 1],
                     np.arange(self.nfac)[position_helper[k]],
                     initial_quantities["w"],
                 ]
@@ -351,8 +347,8 @@ class SkillModel:
             nobs (int): number of observations to simulate
             params (np.array): parameters
             policy_dict_list (list): list of dictionaries. Each dictionary specifies a
-                a stochastic shock to a latent factor at the end of "period" for "factor"
-                with mean "effect_size" and "standard deviation"
+            a stochastic shock to a latent factor at the end of "period" for "factor"
+            with mean "effect_size" and "standard deviation"
 
         Returns:
             observed_data (pd.DataFrame)
@@ -367,39 +363,42 @@ class SkillModel:
         factor_names = self.factors
 
         for period in self.periods:
-            assert self.controls[period] == self.controls[0], (
-                'simulate only works if the same controls are used in each period.')
+            assert (
+                self.controls[period] == self.controls[0]
+            ), "simulate only works if the same controls are used in each period."
 
         control_names = self.controls[0]
 
         loadings_df = pd.DataFrame(
-            data=initial_quantities['h'],
+            data=initial_quantities["h"],
             columns=self.factors,
-            index=self.update_info.index
+            index=self.update_info.index,
         )
-        deltas = initial_quantities['delta']
+        deltas = initial_quantities["delta"]
         transition_names = self.transition_names
         transition_argument_dicts = self._transition_equation_args_dicts(
-            initial_quantities)
+            initial_quantities
+        )
 
-        shock_variances = np.diagonal(initial_quantities['q'], axis1=1, axis2=2)
+        shock_variances = np.diagonal(initial_quantities["q"], axis1=1, axis2=2)
 
         meas_variances = pd.Series(
-            data=initial_quantities['r'], index=self.update_info.index)
+            data=initial_quantities["r"], index=self.update_info.index
+        )
         if self.square_root_filters is True:
             meas_variances **= 2
 
-        dist_name = 'multivariate_normal'
+        dist_name = "multivariate_normal"
 
-        X_zero = initial_quantities['x']
-        P_zero = initial_quantities['p']
+        x_zero = initial_quantities["x"]
+        p_zero = initial_quantities["p"]
 
         dist_arg_dict = []
         for n in range(self.nemf):
-            factor_mean = X_zero[0, n]
+            factor_mean = x_zero[0, n]
             control_mean = np.zeros(len(control_names))
 
-            factor_cov = P_zero[0, n]
+            factor_cov = p_zero[0, n]
             if self.square_root_filters is True:
                 factor_cov = factor_cov[1:, 1:]
                 factor_cov = np.dot(factor_cov.T, factor_cov)
@@ -407,13 +406,10 @@ class SkillModel:
             dim = nfac + len(control_names)
             full_cov = np.eye(dim) * 0.9 + np.ones((dim, dim)) * 0.1
             full_cov[:nfac, :nfac] = factor_cov
-            d = {
-                "mean": np.hstack([factor_mean, control_mean]),
-                "cov": full_cov
-            }
+            d = {"mean": np.hstack([factor_mean, control_mean]), "cov": full_cov}
             dist_arg_dict.append(d)
         weights = np.ones(self.nemf)
-        
+
         if policy_dict_list is None:
             observed_data, latent_data = simulate_datasets(
                 factor_names=factor_names,
@@ -445,7 +441,7 @@ class SkillModel:
                 dist_name=dist_name,
                 dist_arg_dict=dist_arg_dict,
                 weights=weights,
-                policy_dict_list=policy_dict_list
+                policy_dict_list=policy_dict_list,
             )
 
         return observed_data, latent_data
@@ -469,8 +465,8 @@ class SkillModel:
             criterion,
             start_params,
             constraints=self.constraints,
-            algorithm='scipy_L-BFGS-B',
-            criterion_args=(args, ),
+            algorithm="scipy_L-BFGS-B",
+            criterion_args=(args,),
             dashboard=dashboard,
             db_options=db_options,
             algo_options=algo_options,
@@ -508,7 +504,7 @@ class SkillModel:
         periods="all",
         factors="all",
         figsize=None,
-        heatmap_kws={},
+        heatmap_kws=None,
         save_path=None,
         dpi=200,
         write_tex=False,
@@ -516,6 +512,7 @@ class SkillModel:
         height=None,
     ):
         """Heatmap of the correlation matrix of measurements.
+
         Args:
             periods: periods to include. Can be the name of one period, a list
                 like object with periods or 'all'.
@@ -530,7 +527,13 @@ class SkillModel:
                 saved in the same directory.
             dpi (int): resolution of the plot
             write_tex (bool): if True, a tex file with the plot is written.
+
+
+        Returns:
+            fig, ax
+
          """
+        heatmap_kws = {} if heatmap_kws is None else heatmap_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -570,14 +573,14 @@ class SkillModel:
         factors="all",
         agg_method="means",
         figsize=None,
-        heatmap_kws={},
+        heatmap_kws=None,
         save_path=None,
         dpi=200,
         write_tex=False,
         width=None,
         height=None,
     ):
-
+        heatmap_kws = {} if heatmap_kws is None else heatmap_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -619,14 +622,14 @@ class SkillModel:
         periods="all",
         factors="all",
         group=None,
-        pair_kws={},
+        pair_kws=None,
         save_path=None,
         dpi=200,
         write_tex=False,
         width=None,
         height=None,
     ):
-
+        pair_kws = {} if pair_kws is None else pair_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -647,9 +650,9 @@ class SkillModel:
         kwargs = self._basic_pairplot_args()
         kwargs.update(pair_kws)
 
-        vars = [col for col in df.columns if col != group]
+        variables = [col for col in df.columns if col != group]
 
-        grid = sns.pairplot(data=df, vars=vars, hue=group, **kwargs)
+        grid = sns.pairplot(data=df, vars=variables, hue=group, **kwargs)
 
         base_title = "Joint Distribution of Measurements"
         title = title_text(base_title, periods=periods, factors=factors)
@@ -667,14 +670,14 @@ class SkillModel:
         factors="all",
         agg_method="means",
         group=None,
-        pair_kws={},
+        pair_kws=None,
         save_path=None,
         dpi=200,
         write_tex=False,
         width=None,
         height=None,
     ):
-
+        pair_kws = {} if pair_kws is None else pair_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -698,9 +701,9 @@ class SkillModel:
         kwargs = self._basic_pairplot_args()
         kwargs.update(pair_kws)
 
-        vars = [col for col in df.columns if col != group]
+        variables = [col for col in df.columns if col != group]
 
-        grid = sns.pairplot(data=df, hue=group, vars=vars, **kwargs)
+        grid = sns.pairplot(data=df, hue=group, vars=variables, **kwargs)
 
         base_title = "Joint Distribution of Factor Scores"
         title = title_text(base_title, periods=periods, factors=factors)
@@ -717,7 +720,7 @@ class SkillModel:
         period,
         factor,
         agg_method="mean",
-        reg_kws={},
+        reg_kws=None,
         figsize=(10, 5),
         save_path=None,
         dpi=200,
@@ -725,7 +728,7 @@ class SkillModel:
         width=None,
         height=None,
     ):
-
+        reg_kws = {} if reg_kws is None else reg_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -742,7 +745,7 @@ class SkillModel:
 
         fig, ax = plt.subplots(figsize=figsize)
 
-        x = "{}_{}".format(factor, period)
+        x = f"{factor}_{period}"
         y = "{}_{}".format(factor, period + 1)
 
         sns.regplot(x=x, y=y, data=df, ax=ax, **kwargs)
@@ -763,17 +766,19 @@ class SkillModel:
         factor,
         period=None,
         stage=None,
-        controls=[],
-        other_vars=[],
+        controls=None,
+        other_vars=None,
         agg_method="mean",
-        reg_kws={},
+        reg_kws=None,
         save_path=None,
         write_tex=False,
         width=None,
         height=None,
         dpi=200,
     ):
-
+        controls = [] if controls is None else controls
+        other_vars = [] if other_vars is None else other_vars
+        reg_kws = {} if reg_kws is None else reg_kws
         if write_tex is True:
             assert (
                 save_path is not None
@@ -802,7 +807,7 @@ class SkillModel:
         data["residuals"] = res.resid
         data["fitted"] = res.fittedvalues
 
-        y_name = "{}_t_plusone".format(factor)
+        y_name = f"{factor}_t_plusone"
         to_plot = [col for col in data.columns if col not in ["residuals", y_name]]
         figsize = (10, len(to_plot) * 5)
         fig, axes = plt.subplots(nrows=len(to_plot), figsize=figsize)
@@ -843,7 +848,7 @@ class SkillModel:
             df = self.data_proc.score_df(
                 periods=period,
                 factors=factor,
-                other_vars=[group, '__period__'],
+                other_vars=[group, "__period__"],
                 agg_method=agg_method,
             )
             to_concat.append(df)
@@ -852,7 +857,7 @@ class SkillModel:
 
         fig, ax = plt.subplots(figsize=figsize)
         sns.pointplot(
-            x='__period__',
+            x="__period__",
             y=factor,
             hue=group,
             data=data,
@@ -880,7 +885,7 @@ class SkillModel:
         period,
         anchor_var,
         agg_method="mean",
-        reg_kws={},
+        reg_kws=None,
         figsize=None,
         write_tex=False,
         dpi=200,
@@ -888,7 +893,7 @@ class SkillModel:
         width=None,
         height=None,
     ):
-
+        reg_kws = {} if reg_kws is None else reg_kws
         if figsize is None:
             figsize = (12, 7)
 
@@ -938,12 +943,12 @@ class SkillModel:
         self,
         periods=None,
         stages=None,
-        controls=[],
+        controls=None,
         agg_method="mean",
         write_tex=False,
         save_path=None,
     ):
-
+        controls = [] if controls is None else controls
         assert (
             periods is None or stages is None
         ), "You cannot specify periods and stages for a score regression."
@@ -1007,13 +1012,10 @@ class SkillModel:
             with open(save_path, "w") as t:
                 t.write(df_to_tex_table(df, title))
 
-        # base_name =
-        # if output == 'tex':
-
         return df
 
     def _score_regression_model(
-        self, factor, period=None, stage=None, controls=[], agg_method="mean"
+        self, factor, period=None, stage=None, controls=None, agg_method="mean"
     ):
 
         df = self.data_proc.reg_df(
@@ -1023,7 +1025,7 @@ class SkillModel:
             controls=controls,
             agg_method=agg_method,
         )
-
+        controls = [] if controls is None else controls
         ind = self.factors.index(factor)
         included = self.included_factors[ind]
 
@@ -1042,15 +1044,15 @@ class SkillModel:
         transition equation deviate from linearity.
         Args:
             save_path (str): path to a directory in which plots and tex output
-                is saved.
+            is saved.
         """
         tex_lines = []
-        tex_input = "\input{{{}}}"
+        tex_input = r"\input{{{}}}"
         cp = "\n" + r"\clearpage" + "\n"
         float_barrier = r"\FloatBarrier" + "\n"
         section = cp + float_barrier + r"\section{{{}}}" + "\n"
         subsection = float_barrier + r"\subsection{{{}}}" + "\n"
-        maketitle = "\maketitle\n"
+        maketitle = "\\maketitle\n"
         toc = r"\tableofcontents" + "\n"
         title = r"\title{{{}}}" + "\n"
         title = title.format(
@@ -1061,10 +1063,9 @@ class SkillModel:
         tex_lines.append(subsection.format("Correlations by Period"))
 
         for period in self.periods:
-            base_name = "meas_heat_in_period_{}".format(period)
-            path = join(save_path, "{}.png".format(base_name))
+            base_name = f"meas_heat_in_period_{period}"
+            path = join(save_path, f"{base_name}.png")
             self.measurement_heatmap(periods=period, save_path=path, write_tex=True)
-            # plt.show()
             plt.close()
             tex_lines.append(tex_input.format(base_name + ".tex"))
             for factor in self.factors:
@@ -1072,7 +1073,7 @@ class SkillModel:
                     base_name = "meas_pair_in_period_{}_for_factor_{}".format(
                         period, factor
                     )
-                    path = join(save_path, "{}.png".format(base_name))
+                    path = join(save_path, f"{base_name}.png")
                     self.measurement_pairplot(
                         periods=period, factors=factor, save_path=path, write_tex=True
                     )
@@ -1081,10 +1082,9 @@ class SkillModel:
         tex_lines.append(subsection.format("Correlations by Factor"))
 
         for factor in self.factors:
-            base_name = "meas_heat_for_factor_{}".format(factor)
-            path = join(save_path, "{}.png".format(base_name))
+            base_name = f"meas_heat_for_factor_{factor}"
+            path = join(save_path, f"{base_name}.png")
             self.measurement_heatmap(factors=factor, save_path=path, write_tex=True)
-            # plt.show()
             plt.close()
             tex_lines.append(tex_input.format(base_name + ".tex"))
 
@@ -1095,15 +1095,15 @@ class SkillModel:
             ind = self.factors.index(factor)
             trans_name = self.transition_names[ind]
             if trans_name != "constant":
-                base_name = "score_heat_for_factor_{}".format(factor)
-                path = join(save_path, "{}.png".format(base_name))
+                base_name = f"score_heat_for_factor_{factor}"
+                path = join(save_path, f"{base_name}.png")
                 self.score_heatmap(factors=factor, save_path=path, write_tex=True)
                 plt.close()
                 tex_lines.append(tex_input.format(base_name + ".tex"))
 
         tex_lines.append(subsection.format("Joint Distribution by Period"))
         for period in self.periods:
-            base_name = "score_pair_in_period_{}".format(period)
+            base_name = f"score_pair_in_period_{period}"
             path = join(save_path, base_name + ".png")
             self.score_pairplot(periods=period, save_path=path, write_tex=True)
             plt.close()
@@ -1119,7 +1119,7 @@ class SkillModel:
                     base_name = "autoreg_for_factor_{}_in_period_{}".format(
                         factor, period
                     )
-                    path = join(save_path, "{}.png".format(base_name))
+                    path = join(save_path, f"{base_name}.png")
                     self.autoregression_plot(
                         period=period, factor=factor, save_path=path, write_tex=True
                     )
@@ -1129,8 +1129,8 @@ class SkillModel:
         if anchor_var is not None:
             tex_lines.append(section.format("Anchoring"))
             for period in self.periods:
-                base_name = "anchorplot_in_period_{}".format(period)
-                path = join(save_path, "{}.png".format(base_name))
+                base_name = f"anchorplot_in_period_{period}"
+                path = join(save_path, f"{base_name}.png")
                 self.anchoring_plot(
                     period=period, anchor_var=anchor_var, write_tex=True, save_path=path
                 )
@@ -1159,8 +1159,8 @@ class SkillModel:
             trans_name = self.transition_names[ind]
             if trans_name != "constant":
                 for stage in self.stages:
-                    base_name = "resid_for_factor_{}_in_stage_{}".format(factor, stage)
-                    path = join(save_path, "{}.png".format(base_name))
+                    base_name = f"resid_for_factor_{factor}_in_stage_{stage}"
+                    path = join(save_path, f"{base_name}.png")
                     self.score_regression_residual_plot(
                         factor=factor, stage=stage, save_path=path, write_tex=True
                     )
@@ -1169,7 +1169,7 @@ class SkillModel:
 
         preamble = get_preamble()
 
-        base_name = "visualization_of_{}.tex".format(self.model_name)
+        base_name = f"visualization_of_{self.model_name}.tex"
 
         with open(join(save_path, base_name), "w") as t:
             t.write(preamble + "\n\n\n")
@@ -1179,4 +1179,4 @@ class SkillModel:
             for line in tex_lines:
                 t.write(line + "\n")
 
-            t.write("\n\n\n\end{document}\n")
+            t.write("\n\n\n\\end{document}\n")

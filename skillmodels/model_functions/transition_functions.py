@@ -54,8 +54,7 @@ def linear(sigma_points, coeffs, included_positions):
 def index_tuples_linear(factor, included_factors, period):
     ind_tups = []
     for incl_fac in included_factors:
-        ind_tups.append(
-            ('trans', period, factor, 'lincoeff-{}'.format(incl_fac)))
+        ind_tups.append(("trans", period, factor, f"lincoeff-{incl_fac}"))
     return ind_tups
 
 
@@ -69,7 +68,7 @@ def linear_with_constant(sigma_points, coeffs, included_positions):
 
 def index_tuples_linear_with_constant(factor, included_factors, period):
     ind_tups = index_tuples_linear(factor, included_factors, period)
-    ind_tups.append(('trans', period, factor, 'lincoeff-constant'))
+    ind_tups.append(("trans", period, factor, "lincoeff-constant"))
     return ind_tups
 
 
@@ -85,6 +84,7 @@ def constant(sigma_points, coeffs, included_positions):
 def index_tuples_constant(factor, included_factors, period):
     return []
 
+
 # =============================================================================
 # ar1
 # =============================================================================
@@ -95,11 +95,11 @@ def ar1(sigma_points, coeffs, included_positions):
 
 
 def index_tuples_ar1(factor, included_factors, period):
-    return [('trans', period, factor, 'ar1coeff')]
+    return [("trans", period, factor, "ar1coeff")]
 
 
 # =============================================================================
-# log_ces (KLS-Verion)
+# log_ces function, (KLS-Verion)
 # =============================================================================
 
 
@@ -122,18 +122,19 @@ def log_ces(sigma_points, coeffs, included_positions):
 def index_tuples_log_ces(factor, included_factors, period):
     ind_tups = []
     for incl_fac in included_factors:
-        ind_tups.append(('trans', period, factor, 'gamma-{}'.format(incl_fac)))
-    ind_tups.append(('trans', period, factor, 'phi'))
+        ind_tups.append(("trans", period, factor, f"gamma-{incl_fac}"))
+    ind_tups.append(("trans", period, factor, "phi"))
     return ind_tups
 
 
 def constraints_log_ces(factor, included_factors, period):
     ind_tups = index_tuples_log_ces(factor, included_factors, period)
     loc = ind_tups[:-1]
-    return {'loc': loc, 'type': 'probability'}
+    return {"loc": loc, "type": "probability"}
+
 
 # =============================================================================
-# translog (Non-KLS-Version)
+# translog function, (Non-KLS-Version)
 # =============================================================================
 
 
@@ -167,17 +168,17 @@ def translog(sigma_points, coeffs, included_positions):
 def index_tuples_translog(factor, included_factors, period):
     ind_tups = []
     for i_fac in included_factors:
-        ind_tups.append(('trans', period, factor, 'translog-{}'.format(i_fac)))
+        ind_tups.append(("trans", period, factor, f"translog-{i_fac}"))
 
     for i, i_fac1 in enumerate(included_factors):
         for i_fac2 in included_factors[i:]:
             if i_fac1 == i_fac2:
-                ind_tups.append(
-                    ('trans', period, factor, 'translog-{}-squared'.format(i_fac1)))
+                ind_tups.append(("trans", period, factor, f"translog-{i_fac1}-squared"))
             else:
                 ind_tups.append(
-                    ('trans', period, factor, 'translog-{}-{}'.format(i_fac1, i_fac2)))
-    ind_tups.append(('trans', period, factor, 'translog-tfp'))
+                    ("trans", period, factor, f"translog-{i_fac1}-{i_fac2}")
+                )
+    ind_tups.append(("trans", period, factor, "translog-tfp"))
     return ind_tups
 
 
@@ -206,7 +207,7 @@ def no_squares_translog(sigma_points, coeffs, included_positions):
             # add the factor term
             res += coeffs[p] * fac
             # add the interaction terms
-            for pos2 in included_positions[p + 1:]:
+            for pos2 in included_positions[p + 1 :]:
                 res += coeffs[next_coeff] * fac * sigma_points[i, pos2]
                 next_coeff += 1
         result_array[i] = res
@@ -216,11 +217,10 @@ def no_squares_translog(sigma_points, coeffs, included_positions):
 def index_tuples_no_squares_translog(factor, included_factors, period):
     ind_tups = []
     for i_fac in included_factors:
-        ind_tups.append(('trans', period, factor, 'translog-{}'.format(i_fac)))
+        ind_tups.append(("trans", period, factor, f"translog-{i_fac}"))
 
     for i, i_fac1 in enumerate(included_factors):
-        for i_fac2 in included_factors[i + 1:]:
-            ind_tups.append(
-                ('trans', period, factor, 'translog-{}-{}'.format(i_fac1, i_fac2)))
-    ind_tups.append(('trans', period, factor, 'translog-tfp'))
+        for i_fac2 in included_factors[i + 1 :]:
+            ind_tups.append(("trans", period, factor, f"translog-{i_fac1}-{i_fac2}"))
+    ind_tups.append(("trans", period, factor, "translog-tfp"))
     return ind_tups

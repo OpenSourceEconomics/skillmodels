@@ -1,25 +1,23 @@
-import pickle
 import json
+import pickle
+
+import numpy as np
 import pandas as pd
+from numpy.testing import assert_array_almost_equal as aaae
+
 from skillmodels import SkillModel
 from skillmodels.estimation.likelihood_function import log_likelihood_contributions
-
-from numpy.testing import assert_array_almost_equal as aaae
-import numpy as np
 
 
 def test_likelihood_value():
     df = pd.read_stata("skillmodels/tests/estimation/chs_test_ex2.dta")
-    df.set_index(['id', 'period'], inplace=True)
+    df.set_index(["id", "period"], inplace=True)
     with open("skillmodels/tests/estimation/test_model2.json") as j:
         model_dict = json.load(j)
 
     mod = SkillModel(
         model_dict=model_dict, dataset=df, estimator="chs", model_name="test_model"
     )
-    # uinfo = mod.update_info
-    # with open('/home/janos/Dropbox/Projects/skillmodels/test_uinfo.p', 'wb') as p:
-    #     pickle.dump(uinfo, p)
 
     args = mod.likelihood_arguments_dict()
 
@@ -29,7 +27,7 @@ def test_likelihood_value():
     params_df.set_index(["category", "period", "name1", "name2"], inplace=True)
     mod.start_params = params_df
 
-    full_params = mod.generate_full_start_params()['value']
+    full_params = mod.generate_full_start_params()["value"]
 
     log_like_contributions = log_likelihood_contributions(full_params, **args)
     like_contributions = np.exp(log_like_contributions)
@@ -43,10 +41,3 @@ def test_likelihood_value():
         last_result = pickle.load(p)
 
     aaae(res, last_result)
-
-    # update the regression test
-    # do not uncomment this if you are not absolutely sure that you want to
-    # update the regression test!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    # with open(in_path, 'wb') as p:
-    #     pickle.dump(res, p)

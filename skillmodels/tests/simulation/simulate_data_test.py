@@ -1,10 +1,12 @@
 """Tests for functions in simulate_data module."""
+from unittest import mock
+
 import numpy as np
 import pandas as pd
+import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 from pandas.testing import assert_frame_equal as adfeq
-import pytest
-from unittest import mock
+
 import skillmodels.simulation.simulate_data as sd
 
 
@@ -129,11 +131,9 @@ def set_up_generate_datasets():
         data=np.zeros(len(loadings_df)), index=loadings_df.index
     )
     out["policy_dict_list"] = [
-            {"period": 0, "factor": "f1", 
-             "effect_size": 0.2, "standard_deviation": 0.0},
-            {"period": 1, "factor": "f2", 
-             "effect_size": 0.1, "standard_deviation": 0.0}
-    ] #fac2 works only for p2
+        {"period": 0, "factor": "f1", "effect_size": 0.2, "standard_deviation": 0.0},
+        {"period": 1, "factor": "f2", "effect_size": 0.1, "standard_deviation": 0.0},
+    ]  # fac2 works only for p2
     return out
 
 
@@ -146,7 +146,9 @@ def expected_dataset():
     )  # constant over time
     controls["constant"] = 1
     states_p0 = np.array([[0.2, 0]] * 5)  # setup[means][0:2]
-    states_p1 = np.array([[0.04, 0.44]] * 5)  # transition_name(states_p0), called manually
+    states_p1 = np.array(
+        [[0.04, 0.44]] * 5
+    )  # transition_name(states_p0), called manually
     states_p2 = np.array(
         [[0.096, 0.396]] * 5
     )  # transition_name(states_p1), called manually
@@ -326,8 +328,7 @@ def set_up_generate_datasets_mock():
     out["meas_variances"] = pd.Series(
         data=np.zeros(len(loadings_df)), index=loadings_df.index
     )
-    # out["controls_mock"] = np.array([[0.5, 0.5]] * 5)
-    # out["start_states_mock"] = np.array([[0, 0]] * 5)
+
     return out
 
 

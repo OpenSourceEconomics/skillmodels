@@ -1,0 +1,49 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.3.0
+    hooks:
+    -   id: check-yaml
+        exclude: meta\.yaml
+    -   id: check-merge-conflict
+    -   id: debug-statements
+-   repo: https://github.com/asottile/pyupgrade
+    rev: v1.23.0
+    hooks:
+    -   id: pyupgrade
+        args: [--py36-plus]
+-   repo: https://github.com/asottile/reorder_python_imports
+    rev: v1.6.1
+    hooks:
+    -   id: reorder-python-imports
+        types: [python]
+-   repo: https://github.com/python/black
+    rev: 19.3b0
+    hooks:
+    -   id: black
+        types: [python]
+-   repo: https://github.com/asottile/blacken-docs
+    rev: v1.3.0
+    hooks:
+    -   id: blacken-docs
+        additional_dependencies: [black]
+        types: [rst]
+-   repo: https://gitlab.com/pycqa/flake8
+    rev: 3.7.8
+    hooks:
+    -   id: flake8
+        types: [python]
+        additional_dependencies: [
+            flake8-bugbear, flake8-builtins, flake8-comprehensions, flake8-docstrings,
+            flake8-eradicate, flake8-print, flake8-rst-docstrings, flake8-todo,
+            pep8-naming, pydocstyle<4.0,
+        ]
+        exclude: 'conf.py'
+-   repo: https://github.com/PyCQA/doc8
+    rev: 0.8.1rc2
+    hooks:
+        -   id: doc8
+-   repo: meta
+    hooks:
+    -   id: check-hooks-apply
+    -   id: check-useless-excludes
+

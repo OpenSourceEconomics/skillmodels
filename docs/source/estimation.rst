@@ -5,7 +5,11 @@
 The estimation directory
 ************************
 
-The directory *skillmodels.estimation* contains the actual code for the estimators such as the likelihood function module, the parse_params module and the main SkillModel class. The estimators are quite complex. Users certainly do not have to understand all of the implementation details documented below to use them.
+The directory *skillmodels.estimation* contains the actual code for the
+estimators such as the likelihood function module, the parse_params module and
+the main SkillModel class. The estimators are quite complex. Users certainly
+do not have to understand all of the implementation details documented below
+to use them.
 
 
 The SkillModel Class
