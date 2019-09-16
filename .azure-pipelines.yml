@@ -46,7 +46,7 @@ jobs:
   - powershell: conda update conda --yes --quiet
     displayName: Update conda.
 
-  - powershell: conda create --yes --quiet --name skillmodels python=$env:PYTHON_VERSION tox-conda numpy pillow pygmo>=2.1 scipy>=1.2.1 -c conda-forge
+  - powershell: conda create --yes --quiet --name skillmodels python=$env:PYTHON_VERSION conda=4.6.14 tox-conda numpy pillow pygmo>=2.1 scipy>=1.2.1 -c conda-forge
     displayName: Create Anaconda environment.
 
   - script: |
