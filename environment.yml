@@ -25,5 +25,6 @@ dependencies:
   - sphinxcontrib-bibtex
   - sphinx_rtd_theme
   - statsmodels>=0.9.0
+  - anaconda-client
   - pip:
     - pre-commit

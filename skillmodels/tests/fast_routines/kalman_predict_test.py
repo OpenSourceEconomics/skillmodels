@@ -6,11 +6,19 @@ import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
 import skillmodels.fast_routines.kalman_filters as kf
-from skillmodels.tests.fast_routines.kalman_update_test import make_unique
 
 # ======================================================================================
 # manual tests
 # ======================================================================================
+
+
+def make_unique(qr_result_arr):
+    long_side, m, n = qr_result_arr.shape
+    for u in range(long_side):
+        for j in range(n):
+            if qr_result_arr[u, j, j] < 0:
+                for k in range(n):
+                    qr_result_arr[u, j, k] *= -1
 
 
 @pytest.fixture

@@ -69,7 +69,7 @@ class ModelSpecProcessor:
         self._set_anchoring_attributes()
         self._clean_measurement_specifications()
         self._clean_controls_specification()
-        self.nobs = self.obs_to_keep.sum()
+        self.nobs = int(len(self.data) / self.nperiods)
         self._check_and_fill_normalization_specification()
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
@@ -305,63 +305,51 @@ class ModelSpecProcessor:
         self.measurements = measurements
 
     def _clean_controls_specification(self):
-        """Check if control variables have NaNs and handle them as specified.
-
-        Check for each control variable if it is present. If not, drop it or
-        raise an error according to ``self.missing_variables``.
-
-        Then check if they have missing values for some observations and drop
-        the variable, drop the observations or raise a ValueError according to
-        ``self.controls_with_missings``.
-
-        Set the cleaned list of controls as class attribute ``controls``.
-
-        Set a boolean array of length nr_individuals_in_the_sample that is True
-        for observations that should be kept and False for observations that
-        have to be dropped because of missing values in control variables
-        as class attribute ``obs_to_keep``.
-
-        """
         message = (
             "In model {} you use variable {} which has missing observations "
             "in period {} as control variable. You can either delete the "
             'variable in the model_specs or set the "controls_with_missings" '
-            'key to "drop_variable" or "drop_observation" to automatically '
+            'key to "drop_variable" or "drop_observations" to automatically '
             "drop the variable (in period {}) or the missing observations "
             "(in all periods!), respectively"
         )
 
-        self.uses_controls = False
-        if "controls" in self._timeinf:
-            for t in self.periods:
-                if len(self._timeinf["controls"][t]) > 0:
-                    self.uses_controls = True
+        raw_controls = self._timeinf.get("controls", [[]] * self.nperiods)
+        controls = []
+        bad_missings_list = []
+        for t in self.periods:
+            all_measurements = []
+            for factor in self.factors:
+                all_measurements += self.measurements[factor][t]
+            df = self.data.query(f"__period__ == {t}")
+            bad_missings = pd.Series(data=False, index=df.index)
+            meas_df = df[all_measurements]
+            controls_t = []
+            for control in raw_controls[t]:
+                new_bad_missings = df[control].isnull() & ~meas_df.isnull().all(axis=1)
 
-        obs_to_keep = np.ones(len(self.data) // self.nperiods, dtype=bool)
-        controls = [[] for t in self.periods]
-
-        if self.uses_controls:
-            present_controls = []
-            for t in self.periods:
-                present_controls.append(
-                    [c for c in self._timeinf["controls"][t] if (self._present(c, t))]
-                )
-
-            for t in self.periods:
-                df = self.data.query(f"__period__ == {t}")
-                for _c, control in enumerate(present_controls[t]):
-                    if df[control].notnull().all():
-                        controls[t].append(control)
-                    elif self.controls_with_missings == "drop_observations":
-                        controls[t].append(control)
-                        obs_to_keep = np.logical_and(
-                            obs_to_keep, df[control].notnull().to_numpy()
-                        )
+                if self._present(control, t) and self._has_variance(control, t):
+                    if not new_bad_missings.any():
+                        controls_t.append(control)
                     elif self.controls_with_missings == "raise_error":
                         raise ValueError(message.format(self.model_name, control, t, t))
+                    elif self.controls_with_missings == "drop_variable":
+                        pass
+                    elif self.controls_with_missings == "drop_observations":
+                        controls_t.append(control)
+                    else:
+                        raise ValueError(
+                            "controls_with_missings has to be raise_error, "
+                            "drop_variable or drop_observation."
+                        )
 
+                bad_missings = bad_missings | new_bad_missings
+
+            bad_missings_list.append(bad_missings)
+            controls.append(controls_t)
+
+        self.bad_missings = bad_missings_list
         self.controls = controls
-        self.obs_to_keep = obs_to_keep
 
     def _check_anchoring_specification(self):
         """Consistency checks for the model specs related to anchoring."""

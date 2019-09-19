@@ -59,13 +59,12 @@ class TestCData:
 
         self.periods = [0, 1]
 
-        self.obs_to_keep = np.array([True, True, True, False, True])
-
     def test_c_data_with_constants(self):
         res1 = [
             [1.0, "c1_t0_0", "c2_t0_0"],
             [1.0, "c1_t0_1", "c2_t0_1"],
             [1.0, "c1_t0_2", "c2_t0_2"],
+            [1.0, "c1_t0_3", "c2_t0_3"],
             [1.0, "c1_t0_4", "c2_t0_4"],
         ]
 
@@ -73,6 +72,7 @@ class TestCData:
             [1.0, "c1_t1_0", "c2_t1_0", "c3_t1_0"],
             [1.0, "c1_t1_1", "c2_t1_1", "c3_t1_1"],
             [1.0, "c1_t1_2", "c2_t1_2", "c3_t1_2"],
+            [1.0, "c1_t1_3", "c2_t1_3", "c3_t1_3"],
             [1.0, "c1_t1_4", "c2_t1_4", "c3_t1_4"],
         ]
         res = [res1, res2]
@@ -99,8 +99,11 @@ class TestYData:
         self.update_info = df
 
         self.nupdates = 25
-        self.nobs = 3
+        self.nobs = 4
 
+        self.bad_missings = [
+            pd.Series(index=df.loc[t].index, data=False) for t in self.periods
+        ]
         self.obs_to_keep = np.array([True, True, False, True])
 
     def test_y_data_focus_on_rows(self):
@@ -109,8 +112,8 @@ class TestYData:
         self.data["__period__"] = np.arange(4).repeat(4)
         self.data["a"] = 10
 
-        res = np.vstack([np.arange(6).repeat(3).reshape(6, 3)] * 4)
-        res = np.vstack([res, np.ones(3) * 10])
+        res = np.vstack([np.arange(6).repeat(4).reshape(6, 4)] * 4)
+        res = np.vstack([res, np.ones(4) * 10])
 
         aae(DataProcessor.y_data(self), res)
 
@@ -122,10 +125,10 @@ class TestYData:
 
         res = np.vstack(
             [
-                np.array([[0, 1, 3]] * 6),
-                np.array([[4, 5, 7]] * 6),
-                np.array([[8, 9, 11]] * 6),
-                np.array([[12, 13, 15]] * 7),
+                np.array([[0, 1, 2, 3]] * 6),
+                np.array([[4, 5, 6, 7]] * 6),
+                np.array([[8, 9, 10, 11]] * 6),
+                np.array([[12, 13, 14, 15]] * 7),
             ]
         )
 
