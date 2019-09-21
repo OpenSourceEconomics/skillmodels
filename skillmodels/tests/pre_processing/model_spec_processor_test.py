@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 from nose.tools import assert_equal
 from nose.tools import assert_raises
-from numpy.testing import assert_array_equal as aae
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 
@@ -124,30 +123,29 @@ class TestCleanControlSpecifications:
         self.controls_with_missings = "drop_variable"
         self.model_name = "model"
         self.dataset_name = "data"
-        cols = ["__period__", "c1", "c2"]
-        dat = np.zeros((10, 3))
+        cols = ["__period__", "c1", "c2", "m1", "m2"]
+        dat = np.zeros((10, 5))
         dat[5:, 0] = 1
         self.data = DataFrame(data=dat, columns=cols)
+        self.measurements = {"f1": [["m1", "m2"]] * 2, "f2": [["m1", "m2"]] * 2}
+        self.factors = ["f1", "f2"]
 
     def test_clean_control_specs_nothing_to_clean(self):
         ModelSpecProcessor._clean_controls_specification(self)
         res = [["c1", "c2"], ["c1", "c2"]]
         assert_equal(self.controls, res)
-        aae(self.obs_to_keep, np.ones(5, dtype=bool))
 
     def test_clean_control_specs_missing_variable(self):
         self._present = Mock(side_effect=[True, False, True, True])
         ModelSpecProcessor._clean_controls_specification(self)
         res = [["c1"], ["c1", "c2"]]
         assert_equal(self.controls, res)
-        aae(self.obs_to_keep, np.ones(5, dtype=bool))
 
     def test_clean_control_specs_missing_observations_drop_variable(self):
         self.data.loc[2, "c2"] = np.nan
         ModelSpecProcessor._clean_controls_specification(self)
         res = [["c1"], ["c1", "c2"]]
         assert_equal(self.controls, res)
-        aae(self.obs_to_keep, np.ones(5, dtype=bool))
 
     def test_clean_control_specs_missing_observation_drop_observation(self):
         self.data.loc[2, "c2"] = np.nan
@@ -155,7 +153,6 @@ class TestCleanControlSpecifications:
         ModelSpecProcessor._clean_controls_specification(self)
         res = [["c1", "c2"], ["c1", "c2"]]
         assert_equal(self.controls, res)
-        aae(self.obs_to_keep, np.array([True, True, False, True, True]))
 
     def test_clean_control_specs_missing_observations_error(self):
         self.data.loc[2, "c2"] = np.nan

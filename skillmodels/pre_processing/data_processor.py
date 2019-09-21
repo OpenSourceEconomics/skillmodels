@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -70,7 +72,7 @@ class DataProcessor:
 
         for t in self.periods:
             df = self.data[self.data["__period__"] == t]
-            arr = df[const_list + self.controls[t]].to_numpy()[self.obs_to_keep]
+            arr = df[const_list + self.controls[t]].to_numpy()
             c_data.append(arr)
         return c_data
 
@@ -86,11 +88,20 @@ class DataProcessor:
         counter = 0
         for t in self.periods:
             measurements = list(self.update_info.loc[t].index)
-            df = self.data[self.data["__period__"] == t][measurements]
+            df = self.data[self.data["__period__"] == t][measurements].copy(deep=True)
+            bm_index = self.bad_missings[t][self.bad_missings[t]].index
+            num_missing = len(bm_index)
 
-            y_data[counter : counter + len(measurements), :] = df.to_numpy()[
-                self.obs_to_keep
-            ].T
+            if num_missing > 0:
+                warnings.warn(
+                    f"In model {self.model_name}, period {t} the measurements of "
+                    f"{num_missing} observations have been set to np.nan because a "
+                    "control variable is missing and controls_with_missings is set to "
+                    "drop_observations.\n"
+                )
+                df.loc[bm_index] = np.nan
+
+            y_data[counter : counter + len(measurements), :] = df.to_numpy().T
             counter += len(measurements)
         return y_data
 

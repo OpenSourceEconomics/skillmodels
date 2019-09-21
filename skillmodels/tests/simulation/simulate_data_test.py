@@ -130,7 +130,7 @@ def set_up_generate_datasets():
     out["meas_variances"] = pd.Series(
         data=np.zeros(len(loadings_df)), index=loadings_df.index
     )
-    out["policy_dict_list"] = [
+    out["policies"] = [
         {"period": 0, "factor": "f1", "effect_size": 0.2, "standard_deviation": 0.0},
         {"period": 1, "factor": "f2", "effect_size": 0.1, "standard_deviation": 0.0},
     ]  # fac2 works only for p2
