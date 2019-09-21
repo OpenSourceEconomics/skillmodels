@@ -346,15 +346,19 @@ class SkillModel:
         Args:
             nobs (int): number of observations to simulate
             params (np.array): parameters
-            policies (list): list of dictionaries. Each dictionary specifies a
-            a stochastic shock to a latent factor at the end of "period" for "factor"
-            with mean "effect_size" and "standard deviation"
+            policies (list): list of dictionaries or dictionary. Each dictionary
+                specifies a potentially stochastic shock to a latent factor at the end
+                of "period" for "factor" with mean "effect_size" and
+                "standard deviation".
 
         Returns:
             observed_data (pd.DataFrame)
             latent_data (pd.DataFrame)
 
         """
+        if isinstance(policies, dict):
+            policies = [policies]
+
         initial_quantities = self._initial_quantities_dict()
         pp_args = self._parse_params_args_dict(initial_quantities)
 
