@@ -248,7 +248,7 @@ class SkillModel:
         return r_args
 
     def _update_args_dict(self, initial_quantities):
-        position_helper = self.update_info[self.factors].to_numpy().astype(bool)
+        position_helper = self.update_info[list(self.factors)].to_numpy().astype(bool)
 
         u_args_list = []
         k = 0
