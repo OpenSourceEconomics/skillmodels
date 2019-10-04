@@ -88,7 +88,7 @@ class ModelSpecProcessor:
             self.stagemap = sm
 
         self.periods = tuple(range(self.nperiods))
-        self.stages = tuple(set(self.stagemap))
+        self.stages = tuple(sorted(set(self.stagemap)))
         self.nstages = len(self.stages)
         self.stage_length_list = tuple(
             list(self.stagemap[:-1]).count(s) for s in self.stages
