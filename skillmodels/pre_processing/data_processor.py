@@ -72,7 +72,7 @@ class DataProcessor:
 
         for t in self.periods:
             df = self.data[self.data["__period__"] == t]
-            arr = df[const_list + self.controls[t]].to_numpy()
+            arr = df[const_list + list(self.controls[t])].to_numpy()
             c_data.append(arr)
         return c_data
 

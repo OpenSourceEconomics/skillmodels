@@ -156,8 +156,8 @@ class ModelSpecProcessor:
             trans_inf = self._facinf[factor]["trans_eq"]
             args_f = sorted(trans_inf["included_factors"])
             pos_f = list(np.arange(self.nfac)[np.in1d(self.factors, args_f)])
-            included_factors.append(args_f)
-            included_positions.append(pos_f)
+            included_factors.append(tuple(args_f))
+            included_positions.append(tuple(pos_f))
             assert len(included_factors) >= 1, (
                 "Each latent factor needs at least one included factor. This is "
                 "violated for {}".format(factor)
@@ -346,7 +346,7 @@ class ModelSpecProcessor:
                 bad_missings = bad_missings | new_bad_missings
 
             bad_missings_list.append(bad_missings)
-            controls.append(controls_t)
+            controls.append(tuple(controls_t))
 
         self.bad_missings = tuple(bad_missings_list)
         self.controls = tuple(controls)

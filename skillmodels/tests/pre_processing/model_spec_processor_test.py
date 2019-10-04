@@ -13,7 +13,7 @@ from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
 
 class TestTransitionEquationNames:
     def setup(self):
-        self.factors = ["f1", "f2", "f3"]
+        self.factors = ("f1", "f2", "f3")
         names = ["linear", "ces", "ar1"]
         self._facinf = {
             factor: {"trans_eq": {"name": name}}
@@ -22,12 +22,12 @@ class TestTransitionEquationNames:
 
     def test_transition_equation_names(self):
         ModelSpecProcessor._transition_equation_names(self)
-        assert_equal(self.transition_names, ["linear", "ces", "ar1"])
+        assert_equal(self.transition_names, ("linear", "ces", "ar1"))
 
 
 class TestTransitionEquationIncludedFactors:
     def setup(self):
-        self.factors = ["f1", "f2"]
+        self.factors = ("f1", "f2")
         self._facinf = {
             factor: {"trans_eq": {"included_factors": []}} for factor in self.factors
         }
@@ -37,11 +37,11 @@ class TestTransitionEquationIncludedFactors:
 
     def test_transition_equation_included_factors(self):
         ModelSpecProcessor._transition_equation_included_factors(self)
-        assert_equal(self.included_factors, [["f1", "f2"], ["f2"]])
+        assert_equal(self.included_factors, (("f1", "f2"), ("f2",)))
 
     def test_transition_equation_included_factor_positions(self):
         ModelSpecProcessor._transition_equation_included_factors(self)
-        assert_equal(self.included_positions, [[0, 1], [1]])
+        assert_equal(self.included_positions, ((0, 1), (1,)))
 
 
 class TestVariableCheckMethods:
@@ -79,13 +79,13 @@ class TestVariableCheckMethods:
 
 class TestCleanMesaurementSpecifications:
     def setup(self):
-        self.periods = [0, 1]
+        self.periods = (0, 1)
         inf = {"f1": {}, "f2": {}}
         inf["f1"]["measurements"] = [["m1", "m2", "m3", "m4"]] * 2
         inf["f2"]["measurements"] = [["m5", "m6", "m7", "m8"]] * 2
         self._facinf = inf
-        self.factors = sorted(list(self._facinf.keys()))
-        self.transition_names = ["log_ces", "blubb"]
+        self.factors = tuple(sorted(list(self._facinf.keys())))
+        self.transition_names = ("log_ces", "blubb")
 
     def test_clean_measuremnt_specifications_nothing_to_clean(self):
         self._present = Mock(return_value=True)
@@ -132,26 +132,26 @@ class TestCleanControlSpecifications:
 
     def test_clean_control_specs_nothing_to_clean(self):
         ModelSpecProcessor._clean_controls_specification(self)
-        res = [["c1", "c2"], ["c1", "c2"]]
+        res = (("c1", "c2"), ("c1", "c2"))
         assert_equal(self.controls, res)
 
     def test_clean_control_specs_missing_variable(self):
         self._present = Mock(side_effect=[True, False, True, True])
         ModelSpecProcessor._clean_controls_specification(self)
-        res = [["c1"], ["c1", "c2"]]
+        res = (("c1",), ("c1", "c2"))
         assert_equal(self.controls, res)
 
     def test_clean_control_specs_missing_observations_drop_variable(self):
         self.data.loc[2, "c2"] = np.nan
         ModelSpecProcessor._clean_controls_specification(self)
-        res = [["c1"], ["c1", "c2"]]
+        res = (("c1",), ("c1", "c2"))
         assert_equal(self.controls, res)
 
     def test_clean_control_specs_missing_observation_drop_observation(self):
         self.data.loc[2, "c2"] = np.nan
         self.controls_with_missings = "drop_observations"
         ModelSpecProcessor._clean_controls_specification(self)
-        res = [["c1", "c2"], ["c1", "c2"]]
+        res = (("c1", "c2"), ("c1", "c2"))
         assert_equal(self.controls, res)
 
     def test_clean_control_specs_missing_observations_error(self):
