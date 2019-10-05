@@ -37,7 +37,7 @@ class ModelSpecProcessor:
         else:
             self._timeinf = {}
         self._facinf = model_dict["factor_specific"]
-        self.factors = sorted(list(self._facinf.keys()))
+        self.factors = tuple(sorted(list(self._facinf.keys())))
         self.nfac = len(self.factors)
         self.nsigma = 2 * self.nfac + 1
 
@@ -87,12 +87,12 @@ class ModelSpecProcessor:
             sm[-1] = sm[-2]
             self.stagemap = sm
 
-        self.periods = list(range(self.nperiods))
-        self.stages = sorted(list(set(self.stagemap)))
+        self.periods = tuple(range(self.nperiods))
+        self.stages = tuple(sorted(set(self.stagemap)))
         self.nstages = len(self.stages)
-        self.stage_length_list = [
+        self.stage_length_list = tuple(
             list(self.stagemap[:-1]).count(s) for s in self.stages
-        ]
+        )
 
         assert len(self.stagemap) == self.nperiods, (
             "You have to specify a list of length nperiods "
@@ -134,9 +134,9 @@ class ModelSpecProcessor:
         The result is set as class attribute ``transition_names``.
 
         """
-        self.transition_names = [
+        self.transition_names = tuple(
             self._facinf[f]["trans_eq"]["name"] for f in self.factors
-        ]
+        )
 
     def _transition_equation_included_factors(self):
         """Included factors and their position for each transition equation.
@@ -156,15 +156,15 @@ class ModelSpecProcessor:
             trans_inf = self._facinf[factor]["trans_eq"]
             args_f = sorted(trans_inf["included_factors"])
             pos_f = list(np.arange(self.nfac)[np.in1d(self.factors, args_f)])
-            included_factors.append(args_f)
-            included_positions.append(pos_f)
+            included_factors.append(tuple(args_f))
+            included_positions.append(tuple(pos_f))
             assert len(included_factors) >= 1, (
                 "Each latent factor needs at least one included factor. This is "
                 "violated for {}".format(factor)
             )
 
-        self.included_factors = included_factors
-        self.included_positions = included_positions
+        self.included_factors = tuple(included_factors)
+        self.included_positions = tuple(included_positions)
 
     def _set_anchoring_attributes(self):
         """Set attributes related to anchoring and make some checks."""
@@ -177,16 +177,16 @@ class ModelSpecProcessor:
                 "anchoring"
             ].items()
             self.anchoring = True
-            self.anch_positions = [
+            self.anch_positions = tuple(
                 f for f in range(self.nfac) if self.factors[f] in self.anchored_factors
-            ]
+            )
             if self.anchoring_mode == "truly_anchor_latent_factors":
                 self.anchor_in_predict = True
             else:
                 self.anchor_in_predict = False
         else:
             self.anchoring = False
-            self.anchored_factors = []
+            self.anchored_factors = ()
             self.anchor_in_predict = False
             self.anch_outcome = None
 
@@ -346,10 +346,10 @@ class ModelSpecProcessor:
                 bad_missings = bad_missings | new_bad_missings
 
             bad_missings_list.append(bad_missings)
-            controls.append(controls_t)
+            controls.append(tuple(controls_t))
 
-        self.bad_missings = bad_missings_list
-        self.controls = controls
+        self.bad_missings = tuple(bad_missings_list)
+        self.controls = tuple(controls)
 
     def _check_anchoring_specification(self):
         """Consistency checks for the model specs related to anchoring."""
@@ -496,13 +496,14 @@ class ModelSpecProcessor:
 
     def _nmeas_list(self):
         info = self.update_info()
-        self.nmeas_list = []
+        nmeas_list = []
         last_period = self.periods[-1]
         for t in self.periods:
             if t != last_period or self.anchoring is False:
-                self.nmeas_list.append(len(info.loc[t]))
+                nmeas_list.append(len(info.loc[t]))
             else:
-                self.nmeas_list.append(len(info.loc[t]) - 1)
+                nmeas_list.append(len(info.loc[t]) - 1)
+        self.nmeas_list = tuple(nmeas_list)
 
     def update_info(self):
         """A DataFrame with all relevant information on Kalman updates.

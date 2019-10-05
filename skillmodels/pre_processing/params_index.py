@@ -60,7 +60,7 @@ def _delta_index_tuples(controls, update_info):
     """
     ind_tups = []
     for period, meas in update_info.index:
-        for cont in ["constant"] + controls[period]:
+        for cont in ["constant"] + list(controls[period]):
             ind_tups.append(("delta", period, meas, cont))
     return ind_tups
 
