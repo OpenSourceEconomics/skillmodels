@@ -1,0 +1,12 @@
+name: skillmodels_rtd
+channels:
+  - conda-forge
+  - janosg
+dependencies:
+  - python=3.7
+  - skillmodels
+  - sphinxcontrib-bibtex
+  - sphinx_rtd_theme
+  - sphinx
+  - nbsphinx
+  - statsmodels
