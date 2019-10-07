@@ -89,8 +89,8 @@ class DataProcessor:
         for t in self.periods:
             measurements = list(self.update_info.loc[t].index)
             df = self.data[self.data["__period__"] == t][measurements].copy(deep=True)
-            bm_index = self.bad_missings[t][self.bad_missings[t]].index
-            num_missing = len(bm_index)
+            missing_index = self.missing_controls[t][self.missing_controls[t]].index
+            num_missing = len(missing_index)
 
             if num_missing > 0:
                 warnings.warn(
@@ -99,7 +99,7 @@ class DataProcessor:
                     "control variable is missing and controls_with_missings is set to "
                     "drop_observations.\n"
                 )
-                df.loc[bm_index] = np.nan
+                df.loc[missing_index] = np.nan
 
             y_data[counter : counter + len(measurements), :] = df.to_numpy().T
             counter += len(measurements)

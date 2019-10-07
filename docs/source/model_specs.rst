@@ -190,18 +190,6 @@ the ones from the model dictionary have precedence. The specifications are:
       very good start values for the maximization are available. Using the
       square-root filters completely avoids this problem. Only used in CHS
       estimator.
-    * ``missing_variables``: Takes the values "raise_error" or "drop_variable" and
-      specifies what happens if a variable is not in the dataset or has only missing
-      values. Automatically dropping these variables is handy when the same model is
-      estimated with several similar but not exactly equal datasets.
-    * ``controls_with_missings``: Takes the values "raise_error", "drop_variable" or
-      "drop_observations". Recall that measurement variables can have missing
-      observations as long as they are missing at random and at least some observations
-      are not missing. For control variables this is not the case and it is necessary
-      to drop the missing observations or the contol variable.
-    * ``variables_without_variance``: takes the same values as ``missing_variables`` and
-      specifies what happens if a measurement or anchoring variable has no variance.
-      Control variables without variance are not dropped as this would drop constants.
     * ``robust_bounds``: takes the values true or false and refers to the bounds on
       some parameters during the maximization of the likelihood function. If true the
       lower bound for estimated variances is not set to zero but to ``bounds_distance``.

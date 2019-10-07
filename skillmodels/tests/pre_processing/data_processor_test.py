@@ -101,7 +101,7 @@ class TestYData:
         self.nupdates = 25
         self.nobs = 4
 
-        self.bad_missings = [
+        self.missing_controls = [
             pd.Series(index=df.loc[t].index, data=False) for t in self.periods
         ]
         self.obs_to_keep = np.array([True, True, False, True])
