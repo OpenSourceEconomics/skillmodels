@@ -1,3 +1,4 @@
+import warnings
 from itertools import product
 from os.path import join
 
@@ -134,58 +135,66 @@ class SkillModel:
         free, fixed = make_start_params_helpers(self.params_index, self.constraints)
         return free, fixed
 
-    def generate_full_start_params(self, start_params):
+    def generate_full_start_params(self, start_params=None):
         """Vector with start values for the optimization.
 
         If valid start_params are provided in the model dictionary, these will
         be used. Else, naive start_params are generated.
 
         """
-        free, fixed = self.start_params_helpers()
-        if start_params is not None:
-            sp = start_params
-            assert isinstance(sp, pd.DataFrame)
-            if len(sp.index.intersection(self.params_index)) == len(self.params_index):
-                full_sp = sp
-
-            elif len(sp.index.intersection(free.index)) == len(free.index):
-                full_sp = get_start_params_from_free_params(
-                    sp, self.constraints, self.params_index
-                )
-            else:
-                raise ValueError(
-                    "Index of start parameters has to be either self.params_index or "
-                    "the index of free parameters from start_params_helpers."
-                )
-        else:
-            free["value"] = 0.0
-            free.loc["h", "value"] = 1.0
-            free.loc["r", "value"] = 1.0
-            free.loc["q", "value"] = 1.0
-            free.loc["trans", "value"] = 1 / self.nfac
-            free.loc["w", "value"] = 1 / self.nemf
-            for emf in range(self.nemf):
-                p_diags = [("p", 0, emf, f"{fac}-{fac}") for fac in self.factors]
-                free.loc[p_diags, "value"] = 1
-
-            full_sp = get_start_params_from_free_params(
-                free, self.constraints, self.params_index
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="indexing past lexsort depth may impact performance."
             )
+            free, fixed = self.start_params_helpers()
+            if start_params is not None:
+                sp = start_params
+                assert isinstance(sp, pd.DataFrame)
+                if len(sp.index.intersection(self.params_index)) == len(
+                    self.params_index
+                ):
+                    full_sp = sp
 
-        full_sp["group"] = None
+                elif len(sp.index.intersection(free.index)) == len(free.index):
+                    full_sp = get_start_params_from_free_params(
+                        sp, self.constraints, self.params_index
+                    )
+                else:
+                    raise ValueError(
+                        "Index of start parameters has to be either self.params_index "
+                        "or the index of free parameters from start_params_helpers."
+                    )
+            else:
+                free["value"] = 0.0
+                free.loc["h", "value"] = 1.0
+                free.loc["r", "value"] = 1.0
+                free.loc["q", "value"] = 1.0
+                free.loc["trans", "value"] = 1 / self.nfac
+                free.loc["w", "value"] = 1 / self.nemf
+                for emf in range(self.nemf):
+                    p_diags = [("p", 0, emf, f"{fac}-{fac}") for fac in self.factors]
+                    free.loc[p_diags, "value"] = 1
 
-        for period in self.periods:
-            full_sp.loc[("h", period), "group"] = f"Loadings in Period {period}"
-            full_sp.loc[("r", period), "group"] = f"Meas-Variances in Period {period}"
+                full_sp = get_start_params_from_free_params(
+                    free, self.constraints, self.params_index
+                )
 
-        for period in self.periods[:-1]:
-            full_sp.loc[
-                ("trans", period), "group"
-            ] = f"Transition Parameters in Period {period}"
-        full_sp.loc["p", "group"] = "Factor Covariance Matrix"
-        full_sp.loc[fixed.index, "group"] = None
-        full_sp = add_bounds(full_sp, bounds_distance=self.bounds_distance)
-        return full_sp
+            full_sp["group"] = None
+
+            for period in self.periods:
+                full_sp.loc[("h", period), "group"] = f"Loadings in Period {period}"
+                full_sp.loc[
+                    ("r", period), "group"
+                ] = f"Meas-Variances in Period {period}"
+
+            for period in self.periods[:-1]:
+                full_sp.loc[
+                    ("trans", period), "group"
+                ] = f"Transition Parameters in Period {period}"
+            full_sp.loc["p", "group"] = "Factor Covariance Matrix"
+            full_sp.loc[fixed.index, "group"] = None
+            full_sp = add_bounds(full_sp, bounds_distance=self.bounds_distance)
+            return full_sp
 
     def sigma_weights(self):
         """Calculate the sigma weight according to the julier algorithm."""
@@ -433,10 +442,39 @@ class SkillModel:
 
         return observed_data, latent_data
 
-    def fit(self, start_params=None, dashboard=False, db_options=None):
-        """Fit the model and return an instance of SkillModelResults."""
+    def fit(
+        self,
+        start_params=None,
+        algorithm="scipy_L-BFGS-B",
+        user_constraints=None,
+        algo_options=None,
+        dashboard=False,
+        db_options=None,
+    ):
+        """Fit the model and return the estimated parameters.
 
+        Args:
+            start_params (pd.DataFrame): Start values for the maximization.
+            algorithm (str): The optimization algorithm.
+            user_constraints (list): List with additional constraints and/or constraint
+                killers that will be combined with the constraints that are generated
+                automatically by skillmodels.
+            algo_options (dict): Additonal keyword arguments for the optimizer.
+            dashboard (bool): Run an estimagic dashboard to monitor the optimization
+            db_options (dict): Arguments to configure the dashboard.
+
+        Returns
+            res (optimization result)
+
+        For a more detailed description of the arguments, check the
+        `estimagic documentation <https://tinyurl.com/y3hbgmam>`_
+
+        """
+        user_constraints = user_constraints if user_constraints is not None else []
         db_options = {} if db_options is None else db_options
+        combined_algo_options = {"maxfun": 1000000, "maxiter": 1000000}
+        if algo_options is not None:
+            combined_algo_options.update(algo_options)
 
         args = self.likelihood_arguments_dict()
         start_params = self.generate_full_start_params(start_params)
@@ -446,17 +484,15 @@ class SkillModel:
             log_like_contributions[log_like_contributions < -1e300] = -1e300
             return np.mean(log_like_contributions)
 
-        algo_options = {"maxfun": 1000000, "maxiter": 1000000}
-
         res = maximize(
             criterion,
             start_params,
-            constraints=self.constraints,
-            algorithm="scipy_L-BFGS-B",
+            constraints=self.constraints + user_constraints,
+            algorithm=algorithm,
             criterion_args=(args,),
             dashboard=dashboard,
             db_options=db_options,
-            algo_options=algo_options,
+            algo_options=combined_algo_options,
         )
         return res
 

@@ -13,13 +13,13 @@ requirements:
     - setuptools
   run:
     - python {{ python }}
-    - numba >=0.27
+    - numba >=0.42
     - numpy
     - pandas >=0.24
     - statsmodels >=0.6.1
     - seaborn
     - matplotlib
-    - estimagic >=0.0.12
+    - estimagic >=0.0.17
 
 test:
   commands:

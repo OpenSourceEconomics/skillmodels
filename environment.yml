@@ -13,7 +13,6 @@ dependencies:
   - mkl-service
   - nose
   - numba>=0.42
-  - numpy
   - pandas>=0.24
   - pytest
   - pytest-mock
