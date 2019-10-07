@@ -1,5 +1,4 @@
 from skillmodels.estimation.parse_params import parse_params
-from skillmodels.estimation.parse_params import restore_unestimated_quantities
 from skillmodels.fast_routines.kalman_filters import normal_linear_update
 from skillmodels.fast_routines.kalman_filters import normal_unscented_predict
 from skillmodels.fast_routines.kalman_filters import sqrt_linear_update
@@ -18,7 +17,6 @@ def log_likelihood_contributions(
     update_args,
     predict_args,
     calculate_sigma_points_args,
-    restore_args,
 ):
     """Return the log likelihood contributions per update and individual in the sample.
 
@@ -49,7 +47,6 @@ def log_likelihood_contributions(
     anchoring equation into the likelihood.
 
     """
-    restore_unestimated_quantities(**restore_args)
     like_contributions[:] = 0.0
 
     parse_params(params, **parse_params_args)

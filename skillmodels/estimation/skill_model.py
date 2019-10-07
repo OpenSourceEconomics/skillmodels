@@ -58,11 +58,7 @@ class SkillModel:
         self.__dict__.update(specs_dict)
 
         # create a list of all quantities that depend from params vector
-        self.params_quants = ["delta", "h", "r", "q", "p", "trans_coeffs"]
-        if self.estimate_X_zeros is True:
-            self.params_quants.append("x")
-        if self.restrict_W_zeros is False:
-            self.params_quants.append("w")
+        self.params_quants = ["delta", "h", "r", "q", "p", "trans_coeffs", "x", "w"]
 
     def _initial_delta(self):
         """List of initial arrays for control variable params in each period.
@@ -211,14 +207,8 @@ class SkillModel:
 
     def _initial_quantities_dict(self):
         init_dict = {}
-        needed_quantities = self.params_quants.copy()
 
-        if "x" not in needed_quantities:
-            needed_quantities.append("x")
-        if "w" not in needed_quantities:
-            needed_quantities.append("w")
-
-        for quant in needed_quantities:
+        for quant in self.params_quants:
             if quant not in ["x", "p"]:
                 init_dict[quant] = getattr(self, f"_initial_{quant}")()
             else:
@@ -244,17 +234,6 @@ class SkillModel:
         }
 
         return pp
-
-    def _restore_unestimated_quantities_args_dict(self, initial_quantities):
-        r_args = {}
-        if "x" not in self.params_quants:
-            r_args["x"] = initial_quantities["x"]
-            # this could be vectors
-            r_args["x_value"] = 0.0
-        if "w" not in self.params_quants:
-            r_args["w"] = initial_quantities["w"]
-            r_args["w_value"] = 1 / self.nemf
-        return r_args
 
     def _update_args_dict(self, initial_quantities):
         position_helper = self.update_info[list(self.factors)].to_numpy().astype(bool)
@@ -342,9 +321,6 @@ class SkillModel:
         args["update_args"] = self._update_args_dict(initial_quantities)
         args["predict_args"] = self._predict_args_dict(initial_quantities)
         args["calculate_sigma_points_args"] = self._calculate_sigma_points_args_dict(
-            initial_quantities
-        )
-        args["restore_args"] = self._restore_unestimated_quantities_args_dict(
             initial_quantities
         )
         return args

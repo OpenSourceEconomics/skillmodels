@@ -19,10 +19,8 @@ def parse_params(params, initial_quantities, factors, square_root_filters):
         _map_params_to_h(params, initial_quantities["h"])
         _map_params_to_r(params, initial_quantities["r"], square_root_filters)
         _map_params_to_q(params, initial_quantities["q"])
-        if "x" in initial_quantities:
-            _map_params_to_x(params, initial_quantities["x"])
-        if "w" in initial_quantities:
-            _map_params_to_w(params, initial_quantities["w"])
+        _map_params_to_x(params, initial_quantities["x"])
+        _map_params_to_w(params, initial_quantities["w"])
         _map_params_to_p(params, initial_quantities["p"], square_root_filters)
         _map_params_to_trans_coeffs(params, initial_quantities["trans_coeffs"], factors)
 
@@ -81,11 +79,3 @@ def _map_params_to_trans_coeffs(params, initial, factors):
         for period in relevant_periods:
             if factor in params.loc["trans", period]:
                 init[period] = params.loc["trans", period, factor].to_numpy()
-
-
-def restore_unestimated_quantities(x=None, x_value=None, w=None, w_value=None):
-    """Restore x and w for the next evaluation of the likelihood."""
-    if x is not None:
-        x[:] = x_value
-    if w is not None:
-        w[:] = w_value

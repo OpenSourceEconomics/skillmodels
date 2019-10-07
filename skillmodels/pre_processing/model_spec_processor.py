@@ -46,10 +46,7 @@ class ModelSpecProcessor:
             "nemf": 1,
             "kappa": 2,
             "square_root_filters": True,
-            "bounds_distance": 1e-20,
-            "estimate_X_zeros": False,
-            "restrict_W_zeros": True,
-            "restrict_P_zeros": True,
+            "bounds_distance": 1e-6,
             "ignore_intercept_in_linear_anchoring": True,
             "anchoring_mode": "only_estimate_anchoring_equation",
             "time_invariant_measurement_system": False,
@@ -60,7 +57,6 @@ class ModelSpecProcessor:
             general_settings.update(model_dict["general"])
         self.__dict__.update(general_settings)
         self._set_time_specific_attributes()
-        self._check_general_specifications()
         self._transition_equation_names()
         self._transition_equation_included_factors()
         self._set_anchoring_attributes()
@@ -115,15 +111,6 @@ class ModelSpecProcessor:
                 "you have one list with length {} and another with length "
                 "{}."
             ).format(self.model_name, self.nperiods, length)
-
-    def _check_general_specifications(self):
-        """Check consistency of the "general" model specifications."""
-        if self.estimate_X_zeros is False:
-            assert self.nemf == 1, (
-                "If start states (X_zero) are not estimated it is not "
-                "possible to have more than one element in the mixture "
-                "distribution of the latent factors. Check model {}"
-            ).format(self.model_name)
 
     def _transition_equation_names(self):
         """Construct a list with the transition equation name for each factor.
@@ -495,7 +482,6 @@ class ModelSpecProcessor:
             self.anchored_factors,
             self.anch_outcome,
             self.bounds_distance,
-            self.estimate_X_zeros,
         )
 
     def public_attribute_dict(self):

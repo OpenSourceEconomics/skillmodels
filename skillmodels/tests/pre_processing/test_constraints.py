@@ -234,7 +234,7 @@ def test_x_constraints():
 
     expected = [{"loc": ind_tups, "type": "increasing"}]
 
-    calculated = _x_constraints(nemf, factors, True)
+    calculated = _x_constraints(nemf, factors)
     assert_list_equal_except_for_order(calculated, expected)
 
 

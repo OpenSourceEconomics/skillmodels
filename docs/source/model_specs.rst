@@ -179,10 +179,9 @@ these values are redefined in the "general" section of the model dictionary
 the ones from the model dictionary have precedence. The specifications are:
 
     * ``nemf``: number of elements in the mixture of normals distribution of the latent
-      factors. Usually set to 1 which corresponds to the assumption that the factors
+      factors. Default 1, which corresponds to the assumption that the factors
       are normally distributed. Only used in CHS estimator.
-    * ``kappa``: scaling parameter for the sigma_points. Usually set to 2.
-      Only used in CHS estimator.
+    * ``kappa``: scaling parameter for the sigma_points. Default 2.
     * ``square_root_filters``: takes the values true (default) and false and
       specifies if square-root implementations of the kalman filters are used.
       I strongly recommend always using square-root filters. As mentioned in
@@ -190,39 +189,12 @@ the ones from the model dictionary have precedence. The specifications are:
       very good start values for the maximization are available. Using the
       square-root filters completely avoids this problem. Only used in CHS
       estimator.
-    * ``robust_bounds``: takes the values true or false and refers to the bounds on
-      some parameters during the maximization of the likelihood function. If true the
-      lower bound for estimated variances is not set to zero but to ``bounds_distance``.
-      This improves the stability of the estimator but is usually unnecessary if
-      square-root filters are used. Only used in CHS estimator.
-    * ``bounds_distance``: a small number. Only used in CHS estimator.
-    * ``estimate_X_zeros``: takes the values true or false. If true the start mean of
-      the factor distribution is estimated, else it is normalized to zero. This is an
-      alternative normalization of location in the initial period. If set to False you
-      have to specify less normalizations of intercepts that otherwise. The automatic
-      generation of normalizations correctly handles this case. If nemf > 1 you have to
-      set estimate_X_zeros to True.
-    * ``order_X_zeros``: Takes an integer value between 0 and nfac - 1.  If
-      ``estimate_X_zeros`` is true and nemf > 1 the model would not be identified
-      without imposing an order on the start means. The value of order_X_zeros
-      determines which factor (in the alphabetically ordered factor list) is used
-      to impose this order. Only used in CHS estimator.
-    * ``restrict_W_zeros``: takes the values true or false. If true the start weights
-      of the mixture distribution is not estimated but set to 1 / nemf for each factor.
-      Only used in CHS estimator.
-    * ``restrict_P_zeros``: takes the values true or false. If true the covariance
-      matrices of all elements in the mixture distribution of the factors is required
-      to be the same. CHS use this because their models with nemf > 1 do not converge
-      otherwise. Only used in CHS estimator.
-
-    .. Note:: This is not yet ready and will raise a NotImplementedError.
-
-    * ``probanch_function``: takes the values "probability" and "odds_ratio".
-      See Appendix 7.2 of the CHS paper for an explanation.
-
-    .. Note:: Probability anchoring is not yet ready and will raise a NotImplementedError.
-
-    * ``ignore_intercept_in_linear_anchoring``: takes the values true and
+    * ``robust_bounds``: takes the values true or false (default) and refers to the
+      bounds on parameters during the maximization of the likelihood function.
+      If true the lower bound for estimated variances is not set to zero but to
+      ``bounds_distance``. This improves the stability of the estimator.
+    * ``bounds_distance``: a small number. Default 1e-6
+    * ``ignore_intercept_in_linear_anchoring``: takes the values true (default) and
       false. Often the results remain interpretable if the intercept of the
       anchoring equation is ignored in the anchoring process. CHS do so in the
       example model (see equation above). Only used if anchoring_mode equals

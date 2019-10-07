@@ -18,7 +18,6 @@ def constraints(
     anchored_factors,
     anch_outcome,
     bounds_distance,
-    estimate_x,
 ):
 
     periods = list(range(len(stagemap)))
@@ -35,7 +34,7 @@ def constraints(
     constr += _stage_constraints(stagemap, factors, transition_names, included_factors)
     constr += _constant_factors_constraints(factors, transition_names, periods)
     constr += _ar1_contraints(factors, transition_names, included_factors, periods)
-    constr += _x_constraints(nemf, factors, estimate_x)
+    constr += _x_constraints(nemf, factors)
     constr += _trans_coeff_constraints(
         factors, transition_names, included_factors, periods
     )
@@ -301,7 +300,7 @@ def _ar1_contraints(factors, transition_names, included_factors, periods):
     return constraints
 
 
-def _x_constraints(nemf, factors, estimate_x):
+def _x_constraints(nemf, factors):
     """Enforce that the x values of the first factor are increasing.
 
     Otherwise the model would only be identified up to the order of the start factors.
@@ -315,10 +314,7 @@ def _x_constraints(nemf, factors, estimate_x):
 
     """
     ind_tups = [("x", 0, emf, factors[0]) for emf in range(nemf)]
-    if estimate_x:
-        constr = [{"loc": ind_tups, "type": "increasing"}]
-    else:
-        constr = [{"loc": "x", "type": "fixed", "value": 0.0}]
+    constr = [{"loc": ind_tups, "type": "increasing"}]
 
     return constr
 
