@@ -137,12 +137,16 @@ def test_initial_p_normal_filters(p_mocker):
 
 def test_initial_trans_coeffs(mocker):  # noqa
     mocker.factors = ["fac1", "fac2", "fac3"]
-    mocker.transition_names = ["linear", "linear", "log_ces"]
+    mocker.transition_names = [
+        "linear_with_constant",
+        "linear_with_constant",
+        "log_ces",
+    ]
     mocker.included_factors = [["fac1", "fac2"], ["fac2"], ["fac2", "fac3"]]
     mocker.nperiods = 5
 
     mock_linear = mocker.patch(
-        "skillmodels.estimation.skill_model.tf.index_tuples_linear"
+        "skillmodels.estimation.skill_model.tf.index_tuples_linear_with_constant"
     )
     mock_linear.return_value = [0, 1, 2, 3]
     mock_log_ces = mocker.patch(

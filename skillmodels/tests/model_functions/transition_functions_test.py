@@ -33,32 +33,18 @@ def expected_linear():
     expected_result[1, :, :] *= 2
     expected_result[:, :, 0] = 9
     expected_result = expected_result.flatten()
+    expected_result += 0.5
     return expected_result
-
-
-def test_linear(setup_linear, expected_linear):
-    aaae(tf.linear(**setup_linear), expected_linear)
 
 
 # ======================================================================================
 # linear with constant
 # ======================================================================================
-@pytest.fixture
-def expected_linear_with_constant():
-    nemf, nind, nsigma = 2, 10, 7
-    coeffs = [0.5, 1.0, 1.5, 0.5]
-    expected_result = np.ones((nemf, nind, nsigma)) * 3
-    expected_result[1, :, :] *= 2
-    expected_result[:, :, 0] = 9
-    expected_result = expected_result.flatten()
-
-    return coeffs[-1] + expected_result
 
 
 def test_linear_with_constant(setup_linear, expected_linear):
     setup_linear["coeffs"] = [0.5, 1.0, 1.5, 0.5]
-    expected_linear_with_constant = expected_linear + 0.5
-    aaae(tf.linear_with_constant(**setup_linear), expected_linear_with_constant)
+    aaae(tf.linear_with_constant(**setup_linear), expected_linear)
 
 
 # ======================================================================================

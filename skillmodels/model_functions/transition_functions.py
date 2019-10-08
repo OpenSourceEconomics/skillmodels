@@ -39,35 +39,23 @@ import numpy as np
 from numba import jit
 
 # =============================================================================
-# linear
+# linear_with_constant
 # =============================================================================
 
 
-def linear(sigma_points, coeffs, included_positions):
+def linear_with_constant(sigma_points, coeffs, included_positions):
     nfac = sigma_points.shape[1]
     coeff_vec = np.zeros(nfac)
     for p, pos in enumerate(included_positions):
         coeff_vec[pos] = coeffs[p]
-    return np.dot(sigma_points, coeff_vec)
-
-
-def index_tuples_linear(factor, included_factors, period):
-    ind_tups = []
-    for incl_fac in included_factors:
-        ind_tups.append(("trans", period, factor, f"lincoeff-{incl_fac}"))
-    return ind_tups
-
-
-# =============================================================================
-# linear with constant
-# =============================================================================
-def linear_with_constant(sigma_points, coeffs, included_positions):
-    without_constant = linear(sigma_points, coeffs[:-1], included_positions)
+    without_constant = np.dot(sigma_points, coeff_vec)
     return coeffs[-1] + without_constant
 
 
 def index_tuples_linear_with_constant(factor, included_factors, period):
-    ind_tups = index_tuples_linear(factor, included_factors, period)
+    ind_tups = []
+    for incl_fac in included_factors:
+        ind_tups.append(("trans", period, factor, f"lincoeff-{incl_fac}"))
     ind_tups.append(("trans", period, factor, "lincoeff-constant"))
     return ind_tups
 

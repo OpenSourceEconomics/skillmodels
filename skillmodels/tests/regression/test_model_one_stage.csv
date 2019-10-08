@@ -202,3 +202,4 @@ trans,0,fac1,gamma-fac2,0.4
 trans,0,fac1,gamma-fac3,0.2
 trans,0,fac1,phi,-0.6
 trans,0,fac2,lincoeff-fac2,0.65
+trans,0,fac2,lincoeff-constant,0
