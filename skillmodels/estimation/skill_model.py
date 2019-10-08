@@ -195,14 +195,14 @@ class SkillModel:
     def sigma_weights(self):
         """Calculate the sigma weight according to the julier algorithm."""
         nsigma = 2 * self.nfac + 1
-        s_weights_m = np.ones(nsigma) / (2 * (self.nfac + self.kappa))
-        s_weights_m[0] = self.kappa / (self.nfac + self.kappa)
+        s_weights_m = np.ones(nsigma) / (2 * (self.nfac + self.sigma_points_scale))
+        s_weights_m[0] = self.sigma_points_scale / (self.nfac + self.sigma_points_scale)
         s_weights_c = s_weights_m
         return s_weights_m, s_weights_c
 
     def sigma_scaling_factor(self):
         """Calculate invariant part of sigma points according to the julier."""
-        scaling_factor = np.sqrt(self.kappa + self.nfac)
+        scaling_factor = np.sqrt(self.sigma_points_scale + self.nfac)
         return scaling_factor
 
     def _initial_quantities_dict(self):

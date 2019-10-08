@@ -44,7 +44,7 @@ class ModelSpecProcessor:
         # set the general model specifications
         general_settings = {
             "nemf": 1,
-            "kappa": 2,
+            "sigma_points_scale": 2,
             "square_root_filters": True,
             "bounds_distance": 1e-6,
             "ignore_intercept_in_linear_anchoring": True,

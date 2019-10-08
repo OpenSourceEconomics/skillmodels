@@ -176,7 +176,7 @@ the ones from the model dictionary have precedence. The specifications are:
     * ``nemf``: number of elements in the mixture of normals distribution of the latent
       factors. Default 1, which corresponds to the assumption that the factors
       are normally distributed. Only used in CHS estimator.
-    * ``kappa``: scaling parameter for the sigma_points. Default 2.
+    * ``sigma_points_scale``: scaling parameter for the sigma_points. Default 2.
     * ``square_root_filters``: takes the values true (default) and false and
       specifies if square-root implementations of the kalman filters are used.
       I strongly recommend always using square-root filters. As mentioned in

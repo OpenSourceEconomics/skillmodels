@@ -162,7 +162,7 @@ class TestSigmaWeightsAndScalingFactor:
         self.nemf = 2
         self.nobs = 10
         self.nfac = 4
-        self.kappa = 1.5
+        self.sigma_points_scale = 1.5
 
         # these test results have been calculated with the sigma_point
         # function of the filterpy library
