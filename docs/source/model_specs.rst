@@ -120,16 +120,11 @@ The value that corresponds to the ``trans_eq`` key is a dictionary. The
 ``included_factors`` entry specifies which factors enter the transition
 equation. The transition equations already implemented are:
 
-    * ``linear``
+    * ``linear`` (Including a constant.)
     * ``log_ces`` (Known Location and Scale (KLS) version. See :ref:`log_ces_problem`.)
     * ``constant``
-    * ``ar1`` (linear equation with only one included factor and the same coefficient in
-      all stages)
     * ``translog`` (non KLS version; a log-linear-in-parameters function including
       squares and interaction terms.
-    * ``no_squares_translog`` (as translog but without squares. Used by Wiswall and
-      Agostinelli.
-
 
 To see how new types of transition equations can be added see :ref:`model_functions`.
 

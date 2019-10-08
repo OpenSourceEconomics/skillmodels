@@ -45,11 +45,11 @@ def set_up_npfac():
     out["factors"] = np.array([[0.5, 0.5, 0.5, 0.5, 0.5, 0.5], [1, 1, 1, 1, 1, 1]])
     out["transition_names"] = [
         "translog",
-        "linear_with_constant",
+        "linear",
         "log_ces",
-        "linear_with_constant",
+        "linear",
         "constant",
-        "linear_with_constant",
+        "linear",
     ]
     out["transition_argument_dicts"] = [
         {"coeffs": np.array([0.02] * 28), "included_positions": [0, 1, 2, 3, 5]},
@@ -110,7 +110,7 @@ def set_up_generate_datasets():
     out["dist_name"] = "_mv_student_t"
     out["dist_arg_dict"] = [{"mean": means, "cov": covs, "d_f": 3}]
     out["weights"] = 1
-    out["transition_names"] = ["linear_with_constant", "linear_with_constant"]
+    out["transition_names"] = ["linear", "linear"]
     out["transition_argument_dicts"] = [
         [
             {"coeffs": np.array([0.2, 0.2, 0.0]), "included_positions": [0, 1]},
@@ -220,7 +220,7 @@ def set_up_generate_datasets_2_mix():
         {"mean": means[1], "cov": covs[1]},
     ]
     out["weights"] = np.array([0.5, 0.5])
-    out["transition_names"] = ["linear_with_constant", "linear_with_constant"]
+    out["transition_names"] = ["linear", "linear"]
     out["transition_argument_dicts"] = [
         [
             {"coeffs": np.array([0.2, 0.2, 0.0]), "included_positions": [0, 1]},
@@ -309,7 +309,7 @@ def set_up_generate_datasets_mock():
     out["dist_name"] = "multivariate_normal"
     out["dist_arg_dict"] = {"mean": means, "cov": covs}
     out["weights"] = 1
-    out["transition_names"] = ["linear_with_constant", "linear_with_constant"]
+    out["transition_names"] = ["linear", "linear"]
     out["transition_argument_dicts"] = [
         [
             {"coeffs": np.array([0.2, 0.2, 0.0]), "included_positions": [0, 1]},
@@ -434,7 +434,7 @@ def set_up_generate_datasets_mock_mix_2():
         {"mean": means[1], "cov": covs[1]},
     ]
     out["weights"] = np.array([0.5, 0.5])
-    out["transition_names"] = ["linear_with_constant", "linear_with_constant"]
+    out["transition_names"] = ["linear", "linear"]
     out["transition_argument_dicts"] = [
         [
             {"coeffs": np.array([0.2, 0.2, 0.0]), "included_positions": [0, 1]},

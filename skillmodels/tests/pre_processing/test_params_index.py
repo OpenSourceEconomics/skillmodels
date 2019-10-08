@@ -135,7 +135,7 @@ def test_p_index_tuples():
 def test_trans_coeffs_index_tuples():
     factors = ["fac1", "fac2", "fac3"]
     periods = [0, 1, 2]
-    transition_names = ["linear_with_constant", "constant", "log_ces"]
+    transition_names = ["linear", "constant", "log_ces"]
     included_factors = [["fac1", "fac2"], ["fac2"], ["fac2", "fac3"]]
 
     expected = [

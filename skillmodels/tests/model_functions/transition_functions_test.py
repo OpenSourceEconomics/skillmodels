@@ -42,9 +42,9 @@ def expected_linear():
 # ======================================================================================
 
 
-def test_linear_with_constant(setup_linear, expected_linear):
+def test_linear(setup_linear, expected_linear):
     setup_linear["coeffs"] = [0.5, 1.0, 1.5, 0.5]
-    aaae(tf.linear_with_constant(**setup_linear), expected_linear)
+    aaae(tf.linear(**setup_linear), expected_linear)
 
 
 # ======================================================================================

@@ -47,7 +47,7 @@
                 },
             "trans_eq":
                 {
-                    "name": "linear_with_constant",
+                    "name": "linear",
                     "included_factors": ["fac2"]
                 }
         },

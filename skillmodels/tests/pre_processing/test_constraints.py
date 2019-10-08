@@ -148,7 +148,7 @@ def test_p_constraints():
 def test_stage_constraints():
     factors = ["fac1"]
     stagemap = [0, 0, 0, 0]
-    transition_names = ["linear_with_constant"]
+    transition_names = ["linear"]
     included_factors = [["fac1"]]
 
     expected = [
