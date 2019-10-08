@@ -33,7 +33,6 @@ def constraints(
     constr += _p_constraints(nemf, bounds_distance)
     constr += _stage_constraints(stagemap, factors, transition_names, included_factors)
     constr += _constant_factors_constraints(factors, transition_names, periods)
-    constr += _ar1_contraints(factors, transition_names, included_factors, periods)
     constr += _x_constraints(nemf, factors)
     constr += _trans_coeff_constraints(
         factors, transition_names, included_factors, periods
@@ -263,40 +262,6 @@ def _constant_factors_constraints(factors, transition_names, periods):
                 constraints.append(
                     {"loc": ("q", period, factor, ""), "type": "fixed", "value": 0.0}
                 )
-    return constraints
-
-
-def _ar1_contraints(factors, transition_names, included_factors, periods):
-    """Equality constraints on transition and shock parameters for ar1 factors.
-
-    Args:
-        factors (list): the latent factors of the model
-        transition_names (list): name of the transition equation of each factor
-        included_factors (list): the factors that appear on the right hand side of
-            the transition equations of the latent factors.
-        periods (list): the periods of the model.
-
-    Returns:
-        constraints (list)
-
-    """
-    constraints = []
-    for f, factor in enumerate(factors):
-        if transition_names[f] == "ar1":
-            for period in periods[1:-1]:
-                constraints.append(
-                    {
-                        "loc": [
-                            ("q", period - 1, factor, ""),
-                            ("q", period, factor, ""),
-                        ],
-                        "type": "equality",
-                    }
-                )
-                func = getattr(tf, "index_tuples_ar1")  # noqa
-                ind1 = func(factor, included_factors[f], period - 1)
-                ind2 = func(factor, included_factors[f], period)
-                constraints += _pairwise_equality_constraint(ind1, ind2)
     return constraints
 
 

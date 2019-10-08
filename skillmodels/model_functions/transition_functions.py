@@ -86,19 +86,6 @@ def index_tuples_constant(factor, included_factors, period):
 
 
 # =============================================================================
-# ar1
-# =============================================================================
-
-
-def ar1(sigma_points, coeffs, included_positions):
-    return sigma_points[:, included_positions[0]] * coeffs[0]
-
-
-def index_tuples_ar1(factor, included_factors, period):
-    return [("trans", period, factor, "ar1coeff")]
-
-
-# =============================================================================
 # log_ces function, (KLS-Verion)
 # =============================================================================
 

@@ -135,21 +135,19 @@ def test_p_index_tuples():
 def test_trans_coeffs_index_tuples():
     factors = ["fac1", "fac2", "fac3"]
     periods = [0, 1, 2]
-    transition_names = ["linear_with_constant", "ar1", "log_ces"]
+    transition_names = ["linear_with_constant", "constant", "log_ces"]
     included_factors = [["fac1", "fac2"], ["fac2"], ["fac2", "fac3"]]
 
     expected = [
         ("trans", 0, "fac1", "lincoeff-fac1"),
         ("trans", 0, "fac1", "lincoeff-fac2"),
         ("trans", 0, "fac1", "lincoeff-constant"),
-        ("trans", 0, "fac2", "ar1coeff"),
         ("trans", 0, "fac3", "gamma-fac2"),
         ("trans", 0, "fac3", "gamma-fac3"),
         ("trans", 0, "fac3", "phi"),
         ("trans", 1, "fac1", "lincoeff-fac1"),
         ("trans", 1, "fac1", "lincoeff-fac2"),
         ("trans", 1, "fac1", "lincoeff-constant"),
-        ("trans", 1, "fac2", "ar1coeff"),
         ("trans", 1, "fac3", "gamma-fac2"),
         ("trans", 1, "fac3", "gamma-fac3"),
         ("trans", 1, "fac3", "phi"),

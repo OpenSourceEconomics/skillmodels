@@ -62,38 +62,6 @@ def test_linear_with_constant(setup_linear, expected_linear):
 
 
 # ======================================================================================
-# ar1
-# ======================================================================================
-
-
-@pytest.fixture
-def setup_ar1_transition_equation():
-    # nemf_nind_nsigma is nemf*nind*nsigma
-    nemf_nind_nsigma = 140
-
-    args = {
-        "sigma_points": np.ones((nemf_nind_nsigma, 3)),
-        "coeffs": np.array([3]),
-        "included_positions": [1],
-    }
-    return args
-
-
-@pytest.fixture
-def expected_ar1_transition_equation():
-    nemf_nind_nsigma = 140
-    expected_result = np.ones(nemf_nind_nsigma) * 3
-
-    return expected_result
-
-
-def test_ar1_transition_equation(
-    setup_ar1_transition_equation, expected_ar1_transition_equation
-):
-    aaae(tf.ar1(**setup_ar1_transition_equation), expected_ar1_transition_equation)
-
-
-# ======================================================================================
 # log_ces
 # ======================================================================================
 

@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
 
-from skillmodels.pre_processing.constraints import _ar1_contraints
 from skillmodels.pre_processing.constraints import _constant_factors_constraints
 from skillmodels.pre_processing.constraints import _invariant_meas_system_constraints
 from skillmodels.pre_processing.constraints import _normalization_constraints
@@ -202,28 +201,6 @@ def test_constant_factor_constraints():
     ]
 
     calculated = _constant_factors_constraints(factors, transition_names, periods)
-    assert_list_equal_except_for_order(calculated, expected)
-
-
-def test_ar1_constraints():
-    factors = ["fac1", "fac2"]
-    periods = [0, 1, 2, 3]
-    transition_names = ["bla", "ar1"]
-    included_factors = [["fac1", "fac2"], ["fac2"]]
-
-    expected = [
-        {
-            "loc": [("trans", 0, "fac2", "ar1coeff"), ("trans", 1, "fac2", "ar1coeff")],
-            "type": "equality",
-        },
-        {
-            "loc": [("trans", 1, "fac2", "ar1coeff"), ("trans", 2, "fac2", "ar1coeff")],
-            "type": "equality",
-        },
-        {"loc": [("q", 0, "fac2", ""), ("q", 1, "fac2", "")], "type": "equality"},
-        {"loc": [("q", 1, "fac2", ""), ("q", 2, "fac2", "")], "type": "equality"},
-    ]
-    calculated = _ar1_contraints(factors, transition_names, included_factors, periods)
     assert_list_equal_except_for_order(calculated, expected)
 
 
