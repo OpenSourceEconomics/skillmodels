@@ -111,10 +111,16 @@ def test_not_measured_constraints():
     measurements = {"fac1": [["m1", "m2"], ["m1"]], "fac2": [["m2", "m3"], ["m3"]]}
 
     expected = [
-        {"loc": ("h", 0, "m1", "fac2"), "type": "fixed", "value": 0.0},
-        {"loc": ("h", 0, "m3", "fac1"), "type": "fixed", "value": 0.0},
-        {"loc": ("h", 1, "m1", "fac2"), "type": "fixed", "value": 0.0},
-        {"loc": ("h", 1, "m3", "fac1"), "type": "fixed", "value": 0.0},
+        {
+            "loc": [
+                ("h", 0, "m3", "fac1"),
+                ("h", 0, "m1", "fac2"),
+                ("h", 1, "m3", "fac1"),
+                ("h", 1, "m1", "fac2"),
+            ],
+            "type": "fixed",
+            "value": 0.0,
+        }
     ]
 
     calculated = _not_measured_constraints(uinfo, measurements, [], None)

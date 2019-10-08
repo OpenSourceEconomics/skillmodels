@@ -38,6 +38,9 @@ def constraints(
         factors, transition_names, included_factors, periods
     )
 
+    for i, c in enumerate(constr):
+        c["id"] = i
+
     return constr
 
 
@@ -169,7 +172,7 @@ def _not_measured_constraints(
                 if meas not in used_measurements:
                     locs.append(("h", period, meas, factor))
 
-    constraints = [{"loc": loc, "type": "fixed", "value": 0} for loc in locs]
+    constraints = [{"loc": locs, "type": "fixed", "value": 0}]
 
     return constraints
 
