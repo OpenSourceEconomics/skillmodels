@@ -52,8 +52,11 @@ class TestCleanMesaurementSpecifications:
         self._facinf = inf
         self.factors = tuple(sorted(list(self._facinf.keys())))
         self.transition_names = ("log_ces", "blubb")
+        cols = ["__period__"] + [f"m{i}" for i in range(1, 9)]
+        dat = np.vstack([np.zeros(9), np.ones(9)])
+        self.data = pd.DataFrame(columns=cols, data=dat)
 
-    def test_clean_measuremnt_specifications(self):
+    def test_check_measurements(self):
         res = {}
         res["f1"] = self._facinf["f1"]["measurements"]
         res["f2"] = self._facinf["f2"]["measurements"]
