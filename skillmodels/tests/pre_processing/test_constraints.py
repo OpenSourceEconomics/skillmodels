@@ -47,7 +47,7 @@ def test_invariant_meas_system_constraints():
         },
         {"loc": [("h", 1, "m1", "fac1"), ("h", 0, "m1", "fac1")], "type": "equality"},
         {"loc": [("h", 1, "m1", "fac2"), ("h", 0, "m1", "fac2")], "type": "equality"},
-        {"loc": [("r", 1, "m1", ""), ("r", 0, "m1", "")], "type": "equality"},
+        {"loc": [("r", 1, "m1", "-"), ("r", 0, "m1", "-")], "type": "equality"},
         {
             "loc": [("delta", 2, "m1", "constant"), ("delta", 0, "m1", "constant")],
             "type": "equality",
@@ -58,7 +58,7 @@ def test_invariant_meas_system_constraints():
         },
         {"loc": [("h", 2, "m1", "fac1"), ("h", 0, "m1", "fac1")], "type": "equality"},
         {"loc": [("h", 2, "m1", "fac2"), ("h", 0, "m1", "fac2")], "type": "equality"},
-        {"loc": [("r", 2, "m1", ""), ("r", 0, "m1", "")], "type": "equality"},
+        {"loc": [("r", 2, "m1", "-"), ("r", 0, "m1", "-")], "type": "equality"},
         {
             "loc": [("delta", 2, "m3", "constant"), ("delta", 1, "m3", "constant")],
             "type": "equality",
@@ -69,7 +69,7 @@ def test_invariant_meas_system_constraints():
         },
         {"loc": [("h", 2, "m3", "fac1"), ("h", 1, "m3", "fac1")], "type": "equality"},
         {"loc": [("h", 2, "m3", "fac2"), ("h", 1, "m3", "fac2")], "type": "equality"},
-        {"loc": [("r", 2, "m3", ""), ("r", 1, "m3", "")], "type": "equality"},
+        {"loc": [("r", 2, "m3", "-"), ("r", 1, "m3", "-")], "type": "equality"},
     ]
 
     calculated = _invariant_meas_system_constraints(uinfo, controls, factors)
@@ -96,7 +96,7 @@ def test_normalization_constraints():
         {"loc": ("h", 0, "m2", "fac1"), "type": "fixed", "value": 1.5},
         {"loc": ("h", 1, "m1", "fac1"), "type": "fixed", "value": 3},
         {"loc": ("delta", 0, "m1", "constant"), "type": "fixed", "value": 0.5},
-        {"loc": ("r", 1, "m1", ""), "type": "fixed", "value": 1},
+        {"loc": ("r", 1, "m1", "-"), "type": "fixed", "value": 1},
         {"loc": ("h", 0, "m3", "fac2"), "type": "fixed", "value": 1},
     ]
 
@@ -137,8 +137,8 @@ def test_w_constraints_normal():
 def test_p_constraints():
     nemf = 2
     expected = [
-        {"loc": ("p", 0, 0), "type": "covariance", "bounds_distance": 0.0},
-        {"loc": ("p", 0, 1), "type": "covariance", "bounds_distance": 0.0},
+        {"loc": ("p", 0, "mixture_0"), "type": "covariance", "bounds_distance": 0.0},
+        {"loc": ("p", 0, "mixture_1"), "type": "covariance", "bounds_distance": 0.0},
     ]
 
     calculated = _p_constraints(nemf, 0.0)
@@ -153,35 +153,23 @@ def test_stage_constraints():
 
     expected = [
         {
-            "loc": [
-                ("trans", 0, "fac1", "lincoeff-fac1"),
-                ("trans", 1, "fac1", "lincoeff-fac1"),
-            ],
+            "loc": [("trans", 0, "fac1", "fac1"), ("trans", 1, "fac1", "fac1")],
             "type": "equality",
         },
         {
-            "loc": [
-                ("trans", 0, "fac1", "lincoeff-constant"),
-                ("trans", 1, "fac1", "lincoeff-constant"),
-            ],
+            "loc": [("trans", 0, "fac1", "constant"), ("trans", 1, "fac1", "constant")],
             "type": "equality",
         },
-        {"loc": [("q", 0, "fac1", ""), ("q", 1, "fac1", "")], "type": "equality"},
+        {"loc": [("q", 0, "fac1", "-"), ("q", 1, "fac1", "-")], "type": "equality"},
         {
-            "loc": [
-                ("trans", 1, "fac1", "lincoeff-fac1"),
-                ("trans", 2, "fac1", "lincoeff-fac1"),
-            ],
+            "loc": [("trans", 1, "fac1", "fac1"), ("trans", 2, "fac1", "fac1")],
             "type": "equality",
         },
         {
-            "loc": [
-                ("trans", 1, "fac1", "lincoeff-constant"),
-                ("trans", 2, "fac1", "lincoeff-constant"),
-            ],
+            "loc": [("trans", 1, "fac1", "constant"), ("trans", 2, "fac1", "constant")],
             "type": "equality",
         },
-        {"loc": [("q", 1, "fac1", ""), ("q", 2, "fac1", "")], "type": "equality"},
+        {"loc": [("q", 1, "fac1", "-"), ("q", 2, "fac1", "-")], "type": "equality"},
     ]
 
     calculated = _stage_constraints(
@@ -196,8 +184,8 @@ def test_constant_factor_constraints():
     transition_names = ["bla", "constant"]
 
     expected = [
-        {"loc": ("q", 0, "fac2", ""), "type": "fixed", "value": 0.0},
-        {"loc": ("q", 1, "fac2", ""), "type": "fixed", "value": 0.0},
+        {"loc": ("q", 0, "fac2", "-"), "type": "fixed", "value": 0.0},
+        {"loc": ("q", 1, "fac2", "-"), "type": "fixed", "value": 0.0},
     ]
 
     calculated = _constant_factors_constraints(factors, transition_names, periods)
@@ -207,7 +195,11 @@ def test_constant_factor_constraints():
 def test_x_constraints():
     nemf = 3
     factors = ["fac1", "fac2", "fac3"]
-    ind_tups = [("x", 0, 0, "fac1"), ("x", 0, 1, "fac1"), ("x", 0, 2, "fac1")]
+    ind_tups = [
+        ("x", 0, "mixture_0", "fac1"),
+        ("x", 0, "mixture_1", "fac1"),
+        ("x", 0, "mixture_2", "fac1"),
+    ]
 
     expected = [{"loc": ind_tups, "type": "increasing"}]
 
@@ -224,17 +216,17 @@ def test_trans_coeff_constraints():
     expected = [
         {
             "loc": [
-                ("trans", 0, "fac1", "gamma-fac1"),
-                ("trans", 0, "fac1", "gamma-fac2"),
-                ("trans", 0, "fac1", "gamma-fac3"),
+                ("trans", 0, "fac1", "fac1"),
+                ("trans", 0, "fac1", "fac2"),
+                ("trans", 0, "fac1", "fac3"),
             ],
             "type": "probability",
         },
         {
             "loc": [
-                ("trans", 1, "fac1", "gamma-fac1"),
-                ("trans", 1, "fac1", "gamma-fac2"),
-                ("trans", 1, "fac1", "gamma-fac3"),
+                ("trans", 1, "fac1", "fac1"),
+                ("trans", 1, "fac1", "fac2"),
+                ("trans", 1, "fac1", "fac3"),
             ],
             "type": "probability",
         },

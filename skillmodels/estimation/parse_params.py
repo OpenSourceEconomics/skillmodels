@@ -58,7 +58,9 @@ def _map_params_to_p(params, initial, square_root_filters):
 
     filler = np.zeros((nemf, nfac, nfac))
     for emf in range(nemf):
-        filler[emf] = cov_params_to_matrix(params.loc["p", 0, emf].to_numpy())
+        filler[emf] = cov_params_to_matrix(
+            params.loc["p", 0, f"mixture_{emf}"].to_numpy()
+        )
 
     if square_root_filters is True:
         filler = np.transpose(np.linalg.cholesky(filler), axes=(0, 2, 1))

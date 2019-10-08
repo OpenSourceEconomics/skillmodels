@@ -89,7 +89,7 @@ def _invariant_meas_system_constraints(update_info, controls, factors):
                 locs.append(
                     [("h", period, meas, factor), ("h", int(first), meas, factor)]
                 )
-            locs.append([("r", period, meas, ""), ("r", int(first), meas, "")])
+            locs.append([("r", period, meas, "-"), ("r", int(first), meas, "-")])
 
     constraints = [{"type": "equality", "loc": loc} for loc in locs]
     return constraints
@@ -134,7 +134,7 @@ def _normalization_constraints(normalizations):
             variance_norminfo = normalizations[factor]["variances"][period]
             for meas, normval in variance_norminfo.items():
                 constraints.append(
-                    {"loc": ("r", period, meas, ""), "type": "fixed", "value": normval}
+                    {"loc": ("r", period, meas, "-"), "type": "fixed", "value": normval}
                 )
     return constraints
 
@@ -196,7 +196,7 @@ def _p_constraints(nemf, bounds_distance):
     for emf in range(nemf):
         constraints.append(
             {
-                "loc": ("p", 0, emf),
+                "loc": ("p", 0, f"mixture_{emf}"),
                 "type": "covariance",
                 "bounds_distance": bounds_distance,
             }
@@ -233,8 +233,8 @@ def _stage_constraints(stagemap, factors, transition_names, included_factors):
                 constraints.append(
                     {
                         "loc": [
-                            ("q", period - 1, factor, ""),
-                            ("q", period, factor, ""),
+                            ("q", period - 1, factor, "-"),
+                            ("q", period, factor, "-"),
                         ],
                         "type": "equality",
                     }
@@ -260,7 +260,7 @@ def _constant_factors_constraints(factors, transition_names, periods):
         if transition_names[f] == "constant":
             for period in periods[:-1]:
                 constraints.append(
-                    {"loc": ("q", period, factor, ""), "type": "fixed", "value": 0.0}
+                    {"loc": ("q", period, factor, "-"), "type": "fixed", "value": 0.0}
                 )
     return constraints
 
@@ -278,7 +278,7 @@ def _x_constraints(nemf, factors):
         constraints (list)
 
     """
-    ind_tups = [("x", 0, emf, factors[0]) for emf in range(nemf)]
+    ind_tups = [("x", 0, f"mixture_{emf}", factors[0]) for emf in range(nemf)]
     constr = [{"loc": ind_tups, "type": "increasing"}]
 
     return constr

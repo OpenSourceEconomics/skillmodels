@@ -55,8 +55,8 @@ def linear(sigma_points, coeffs, included_positions):
 def index_tuples_linear(factor, included_factors, period):
     ind_tups = []
     for incl_fac in included_factors:
-        ind_tups.append(("trans", period, factor, f"lincoeff-{incl_fac}"))
-    ind_tups.append(("trans", period, factor, "lincoeff-constant"))
+        ind_tups.append(("trans", period, factor, incl_fac))
+    ind_tups.append(("trans", period, factor, "constant"))
     return ind_tups
 
 
@@ -97,7 +97,7 @@ def log_ces(sigma_points, coeffs, included_positions):
 def index_tuples_log_ces(factor, included_factors, period):
     ind_tups = []
     for incl_fac in included_factors:
-        ind_tups.append(("trans", period, factor, f"gamma-{incl_fac}"))
+        ind_tups.append(("trans", period, factor, incl_fac))
     ind_tups.append(("trans", period, factor, "phi"))
     return ind_tups
 
@@ -143,15 +143,13 @@ def translog(sigma_points, coeffs, included_positions):
 def index_tuples_translog(factor, included_factors, period):
     ind_tups = []
     for i_fac in included_factors:
-        ind_tups.append(("trans", period, factor, f"translog-{i_fac}"))
+        ind_tups.append(("trans", period, factor, i_fac))
 
     for i, i_fac1 in enumerate(included_factors):
         for i_fac2 in included_factors[i:]:
             if i_fac1 == i_fac2:
-                ind_tups.append(("trans", period, factor, f"translog-{i_fac1}-squared"))
+                ind_tups.append(("trans", period, factor, f"{i_fac1} ** 2"))
             else:
-                ind_tups.append(
-                    ("trans", period, factor, f"translog-{i_fac1}-{i_fac2}")
-                )
-    ind_tups.append(("trans", period, factor, "translog-tfp"))
+                ind_tups.append(("trans", period, factor, f"{i_fac1} * {i_fac2}"))
+    ind_tups.append(("trans", period, factor, "constant"))
     return ind_tups
