@@ -31,7 +31,7 @@ for name in model_names:
     start_params.append(params_df)
 
 
-data = pd.read_stata("skillmodels/tests/estimation/chs_test_ex2.dta")
+data = pd.read_stata("skillmodels/tests/regression/chs_test_ex2.dta")
 data.set_index(["id", "period"], inplace=True)
 
 test_cases = []
