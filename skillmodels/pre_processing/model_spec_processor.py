@@ -43,7 +43,7 @@ class ModelSpecProcessor:
 
         # set the general model specifications
         general_settings = {
-            "nemf": 1,
+            "n_mixture_components": 1,
             "sigma_points_scale": 2,
             "square_root_filters": True,
             "bounds_distance": 1e-6,
@@ -55,6 +55,8 @@ class ModelSpecProcessor:
 
         if "general" in model_dict:
             general_settings.update(model_dict["general"])
+
+        self.nmixtures = general_settings.pop("n_mixture_components")
         self.__dict__.update(general_settings)
         self._set_time_specific_attributes()
         self._transition_equation_names()
@@ -470,7 +472,7 @@ class ModelSpecProcessor:
             self.update_info(),
             self.controls,
             self.factors,
-            self.nemf,
+            self.nmixtures,
             self.transition_names,
             self.included_factors,
         )
@@ -482,7 +484,7 @@ class ModelSpecProcessor:
             self.factors,
             self.normalizations,
             self.measurements,
-            self.nemf,
+            self.nmixtures,
             self.stagemap,
             self.transition_names,
             self.included_factors,

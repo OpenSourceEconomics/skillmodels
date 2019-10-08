@@ -6,7 +6,7 @@ def array_qr(arr):
     """Calculate R of a QR decomposition for matrices in an array.
 
     args:
-        arr (np.ndarray): 3d array of [nemf * nind, m, n], where m >= n.
+        arr (np.ndarray): 3d array of [nmixtures * nind, m, n], where m >= n.
             It is overwritten wtih the  R of the QR decomposition.
 
     The algorithm uses Givens Rotations for the triangularization and fully

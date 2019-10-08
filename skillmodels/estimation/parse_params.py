@@ -48,16 +48,16 @@ def _map_params_to_q(params, initial):
 
 
 def _map_params_to_x(params, initial):
-    nobs, nemf, nfac = initial.shape
-    initial[:] = params.loc["x"].to_numpy().reshape(nemf, nfac)
+    nobs, nmixtures, nfac = initial.shape
+    initial[:] = params.loc["x"].to_numpy().reshape(nmixtures, nfac)
 
 
 def _map_params_to_p(params, initial, square_root_filters):
-    nobs, nemf, nfac, _ = initial.shape
+    nobs, nmixtures, nfac, _ = initial.shape
     nfac = nfac - 1 if square_root_filters is True else nfac
 
-    filler = np.zeros((nemf, nfac, nfac))
-    for emf in range(nemf):
+    filler = np.zeros((nmixtures, nfac, nfac))
+    for emf in range(nmixtures):
         filler[emf] = cov_params_to_matrix(
             params.loc["p", 0, f"mixture_{emf}"].to_numpy()
         )

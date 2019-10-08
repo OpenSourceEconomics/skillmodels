@@ -7,8 +7,8 @@ def array_choldate(to_update, update_with, weight):
     """Make a cholesky up- or downdate on all matrices in a numpy array.
 
     args:
-        to_update: [nemf * nind, nfac, nfac]
-        update_with: [nemf * nind, nfac]
+        to_update: [nmixtures * nind, nfac, nfac]
+        update_with: [nmixtures * nind, nfac]
         weight: a scalar
 
     The square matrices in to_update have to be UPPER TRIANGULAR

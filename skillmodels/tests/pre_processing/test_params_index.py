@@ -87,7 +87,7 @@ def test_q_index_tuples():
 
 
 def test_x_index_tuples():
-    nemf = 3
+    nmixtures = 3
     factors = ["fac1", "fac2"]
 
     expected = [
@@ -99,23 +99,23 @@ def test_x_index_tuples():
         ("x", 0, "mixture_2", "fac2"),
     ]
 
-    calculated = _x_index_tuples(nemf, factors)
+    calculated = _x_index_tuples(nmixtures, factors)
     assert calculated == expected
 
 
 def test_w_index_tuples():
-    nemf = 3
+    nmixtures = 3
     expected = [
         ("w", 0, "mixture_0", "-"),
         ("w", 0, "mixture_1", "-"),
         ("w", 0, "mixture_2", "-"),
     ]
-    calculated = _w_index_tuples(nemf)
+    calculated = _w_index_tuples(nmixtures)
     assert calculated == expected
 
 
 def test_p_index_tuples():
-    nemf = 2
+    nmixtures = 2
     factors = ["fac1", "fac2", "fac3"]
     expected = [
         ("p", 0, "mixture_0", "fac1-fac1"),
@@ -132,7 +132,7 @@ def test_p_index_tuples():
         ("p", 0, "mixture_1", "fac3-fac3"),
     ]
 
-    calculated = _p_index_tuples(nemf, factors)
+    calculated = _p_index_tuples(nmixtures, factors)
     assert calculated == expected
 
 

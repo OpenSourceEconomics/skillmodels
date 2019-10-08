@@ -95,23 +95,23 @@ class SkillModel:
 
     def _initial_x(self):
         """Initial X_zero array filled with zeros."""
-        init = np.zeros((self.nobs, self.nemf, self.nfac))
-        flat_init = init.reshape(self.nobs * self.nemf, self.nfac)
+        init = np.zeros((self.nobs, self.nmixtures, self.nfac))
+        flat_init = init.reshape(self.nobs * self.nmixtures, self.nfac)
         return init, flat_init
 
     def _initial_w(self):
-        """Initial W_zero array filled with 1/nemf."""
-        return np.ones((self.nobs, self.nemf)) / self.nemf
+        """Initial W_zero array filled with 1/nmixtures."""
+        return np.ones((self.nobs, self.nmixtures)) / self.nmixtures
 
     def _initial_p(self):
         """Initial P_zero array filled with zeros."""
         if self.square_root_filters is False:
-            init = np.zeros((self.nobs, self.nemf, self.nfac, self.nfac))
-            flat_init = init.reshape(self.nobs * self.nemf, self.nfac, self.nfac)
+            init = np.zeros((self.nobs, self.nmixtures, self.nfac, self.nfac))
+            flat_init = init.reshape(self.nobs * self.nmixtures, self.nfac, self.nfac)
         else:
-            init = np.zeros((self.nobs, self.nemf, self.nfac + 1, self.nfac + 1))
+            init = np.zeros((self.nobs, self.nmixtures, self.nfac + 1, self.nfac + 1))
             flat_init = init.reshape(
-                self.nobs * self.nemf, self.nfac + 1, self.nfac + 1
+                self.nobs * self.nmixtures, self.nfac + 1, self.nfac + 1
             )
         return init, flat_init
 
@@ -166,8 +166,8 @@ class SkillModel:
                 free.loc["r", "value"] = 1.0
                 free.loc["q", "value"] = 1.0
                 free.loc["trans", "value"] = 1 / self.nfac
-                free.loc["w", "value"] = 1 / self.nemf
-                for emf in range(self.nemf):
+                free.loc["w", "value"] = 1 / self.nmixtures
+                for emf in range(self.nmixtures):
                     p_diags = [("p", 0, emf, f"{fac}-{fac}") for fac in self.factors]
                     free.loc[p_diags, "value"] = 1
 
@@ -216,10 +216,10 @@ class SkillModel:
                 init_dict[quant] = normal
                 init_dict[f"flat_{quant}"] = flat
 
-        sp = np.zeros((self.nemf * self.nobs, self.nsigma, self.nfac))
+        sp = np.zeros((self.nmixtures * self.nobs, self.nsigma, self.nfac))
         init_dict["sigma_points"] = sp
         init_dict["flat_sigma_points"] = sp.reshape(
-            self.nemf * self.nobs * self.nsigma, self.nfac
+            self.nmixtures * self.nobs * self.nsigma, self.nfac
         )
 
         init_dict["like_contributions"] = np.zeros((self.nupdates, self.nobs))
@@ -383,7 +383,7 @@ class SkillModel:
         p_zero = initial_quantities["p"]
 
         dist_arg_dict = []
-        for n in range(self.nemf):
+        for n in range(self.nmixtures):
             factor_mean = x_zero[0, n]
             control_mean = np.zeros(len(control_names))
 
@@ -397,7 +397,7 @@ class SkillModel:
             full_cov[:nfac, :nfac] = factor_cov
             d = {"mean": np.hstack([factor_mean, control_mean]), "cov": full_cov}
             dist_arg_dict.append(d)
-        weights = np.ones(self.nemf)
+        weights = np.ones(self.nmixtures)
 
         observed_data, latent_data = simulate_datasets(
             factor_names=factor_names,

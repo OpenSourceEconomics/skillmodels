@@ -173,9 +173,9 @@ The default values for these specifications are hardcoded. If some or all of
 these values are redefined in the "general" section of the model dictionary
 the ones from the model dictionary have precedence. The specifications are:
 
-    * ``nemf``: number of elements in the mixture of normals distribution of the latent
-      factors. Default 1, which corresponds to the assumption that the factors
-      are normally distributed. Only used in CHS estimator.
+    * ``n_mixture_components``: number of elements in the mixture of normals
+      distribution of the latent factors. Default 1, which corresponds to the
+      assumption that the factors are normally distributed.
     * ``sigma_points_scale``: scaling parameter for the sigma_points. Default 2.
     * ``square_root_filters``: takes the values true (default) and false and
       specifies if square-root implementations of the kalman filters are used.

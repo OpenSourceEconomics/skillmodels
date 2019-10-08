@@ -123,25 +123,25 @@ def test_not_measured_constraints():
 
 
 def test_w_constraints_mixture():
-    calculated = _w_constraints(nemf=2)
+    calculated = _w_constraints(nmixtures=2)
     expected = [{"loc": "w", "type": "probability"}]
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_w_constraints_normal():
-    calculated = _w_constraints(nemf=1)
+    calculated = _w_constraints(nmixtures=1)
     expected = [{"loc": "w", "type": "fixed", "value": 1.0}]
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_p_constraints():
-    nemf = 2
+    nmixtures = 2
     expected = [
         {"loc": ("p", 0, "mixture_0"), "type": "covariance", "bounds_distance": 0.0},
         {"loc": ("p", 0, "mixture_1"), "type": "covariance", "bounds_distance": 0.0},
     ]
 
-    calculated = _p_constraints(nemf, 0.0)
+    calculated = _p_constraints(nmixtures, 0.0)
     assert_list_equal_except_for_order(calculated, expected)
 
 
@@ -193,7 +193,7 @@ def test_constant_factor_constraints():
 
 
 def test_x_constraints():
-    nemf = 3
+    nmixtures = 3
     factors = ["fac1", "fac2", "fac3"]
     ind_tups = [
         ("x", 0, "mixture_0", "fac1"),
@@ -203,7 +203,7 @@ def test_x_constraints():
 
     expected = [{"loc": ind_tups, "type": "increasing"}]
 
-    calculated = _x_constraints(nemf, factors)
+    calculated = _x_constraints(nmixtures, factors)
     assert_list_equal_except_for_order(calculated, expected)
 
 

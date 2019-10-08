@@ -4,7 +4,7 @@ import skillmodels.model_functions.transition_functions as tf
 
 
 def params_index(
-    update_info, controls, factors, nemf, transition_names, included_factors
+    update_info, controls, factors, nmixtures, transition_names, included_factors
 ):
     """Generate index for the params_df for estimagic.
 
@@ -19,7 +19,7 @@ def params_index(
         controls (list): List of lists. There is one sublist per period which contains
             the names of the control variables in that period. Constant not included.
         factors (list): The latent factors of the model
-        nemf (int): Number of elements in the mixture distribution of the factors.
+        nmixtures (int): Number of elements in the mixture distribution of the factors.
         transition_names (list): name of the transition equation of each factor
         included_factors (list): the factors that appear on the right hand side of
             the transition equations of the latent factors.
@@ -35,9 +35,9 @@ def params_index(
     ind_tups += _h_index_tuples(factors, update_info)
     ind_tups += _r_index_tuples(update_info)
     ind_tups += _q_index_tuples(periods, factors)
-    ind_tups += _x_index_tuples(nemf, factors)
-    ind_tups += _w_index_tuples(nemf)
-    ind_tups += _p_index_tuples(nemf, factors)
+    ind_tups += _x_index_tuples(nmixtures, factors)
+    ind_tups += _w_index_tuples(nmixtures)
+    ind_tups += _p_index_tuples(nmixtures, factors)
     ind_tups += _trans_coeffs_index_tuples(
         factors, periods, transition_names, included_factors
     )
@@ -119,11 +119,11 @@ def _q_index_tuples(periods, factors):
     return ind_tups
 
 
-def _x_index_tuples(nemf, factors):
+def _x_index_tuples(nmixtures, factors):
     """Index tuples for x.
 
     Args:
-        nemf (int): Number of elements in the mixture distribution of the factors.
+        nmixtures (int): Number of elements in the mixture distribution of the factors.
         factors (list): The latent factors of the model
 
     Returns:
@@ -131,33 +131,33 @@ def _x_index_tuples(nemf, factors):
 
     """
     ind_tups = []
-    for emf in range(nemf):
+    for emf in range(nmixtures):
         for factor in factors:
             ind_tups.append(("x", 0, f"mixture_{emf}", factor))
     return ind_tups
 
 
-def _w_index_tuples(nemf):
+def _w_index_tuples(nmixtures):
     """Index tuples for w.
 
     Args:
-        nemf (int): Number of elements in the mixture distribution of the factors.
+        nmixtures (int): Number of elements in the mixture distribution of the factors.
 
     Returns:
         ind_tups (list)
 
     """
     ind_tups = []
-    for emf in range(nemf):
+    for emf in range(nmixtures):
         ind_tups.append(("w", 0, f"mixture_{emf}", "-"))
     return ind_tups
 
 
-def _p_index_tuples(nemf, factors):
+def _p_index_tuples(nmixtures, factors):
     """Index tuples for p.
 
     Args:
-        nemf (int): Number of elements in the mixture distribution of the factors.
+        nmixtures (int): Number of elements in the mixture distribution of the factors.
         factors (list): The latent factors of the model
 
     Returns:
@@ -165,7 +165,7 @@ def _p_index_tuples(nemf, factors):
 
     """
     ind_tups = []
-    for emf in range(nemf):
+    for emf in range(nmixtures):
         for row, factor1 in enumerate(factors):
             for col, factor2 in enumerate(factors):
                 if col <= row:

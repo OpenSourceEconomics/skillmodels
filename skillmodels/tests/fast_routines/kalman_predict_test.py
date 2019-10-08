@@ -118,7 +118,7 @@ def test_sqrt_predict_root_covs(setup_linear_predict, expected_linear_predict):
 def setup_unscented_predict():
     out = {}
 
-    nemf, nind, nsigma, nfac = 2, 3, 7, 3
+    nmixtures, nind, nsigma, nfac = 2, 3, 7, 3
 
     out["stage"] = 1
 
@@ -128,38 +128,38 @@ def setup_unscented_predict():
     fourth = np.array([2.4, 2.5, 2.6])
 
     # these are sigma_points for the test with focus on columns
-    sps1 = np.zeros((nemf, nind, nsigma, nfac))
+    sps1 = np.zeros((nmixtures, nind, nsigma, nfac))
     sps1[0, 0, :, :] = np.tile(first, nsigma).reshape(nsigma, nfac)
     sps1[0, 1, :, :] = np.tile(second, nsigma).reshape(nsigma, nfac)
     sps1[1, 0, :, :] = np.tile(third, nsigma).reshape(nsigma, nfac)
     sps1[1, 1, :, :] = np.tile(fourth, nsigma).reshape(nsigma, nfac)
-    out["sps1"] = sps1.reshape(nemf * nind, nsigma, nfac)
-    out["flat_sps1"] = sps1.reshape(nemf * nind * nsigma, nfac)
+    out["sps1"] = sps1.reshape(nmixtures * nind, nsigma, nfac)
+    out["flat_sps1"] = sps1.reshape(nmixtures * nind * nsigma, nfac)
 
-    expected_states1 = np.zeros((nemf, nind, nfac))
+    expected_states1 = np.zeros((nmixtures, nind, nfac))
     expected_states1[0, 0, :] = first
     expected_states1[0, 1, :] = second
     expected_states1[1, 0, :] = third
     expected_states1[1, 1, :] = fourth
-    out["expected_states1"] = expected_states1.reshape(nemf * nind, nfac)
+    out["expected_states1"] = expected_states1.reshape(nmixtures * nind, nfac)
 
     # these are sigma_points for the test with focus on weighting
-    sps2 = np.zeros((nemf, nind, nsigma, nfac))
+    sps2 = np.zeros((nmixtures, nind, nsigma, nfac))
     sps2[:, :, :, :] = np.arange(nsigma).repeat(nfac).reshape(nsigma, nfac)
-    out["sps2"] = sps2.reshape(nemf * nind, nsigma, nfac)
-    out["flat_sps2"] = sps2.reshape(nemf * nind * nsigma, nfac)
-    out["expected_states2"] = np.ones((nemf * nind, nfac)) * 3
+    out["sps2"] = sps2.reshape(nmixtures * nind, nsigma, nfac)
+    out["flat_sps2"] = sps2.reshape(nmixtures * nind * nsigma, nfac)
+    out["expected_states2"] = np.ones((nmixtures * nind, nfac)) * 3
 
     # these are sigma_points for the test with focus on the covariances
-    sps3 = np.zeros((nemf, nind, nsigma, nfac))
+    sps3 = np.zeros((nmixtures, nind, nsigma, nfac))
     sps3[:, :, 1, :] += 1
     sps3[:, :, 2, :] += 2
     sps3[:, :, 3, :] += 3
     sps3[:, :, 4, :] -= 1
     sps3[:, :, 5, :] -= 2
     sps3[:, :, 6, :] -= 3
-    out["sps3"] = sps3.reshape(nemf * nind, nsigma, nfac)
-    out["flat_sps3"] = sps3.reshape(nemf * nind * nsigma, nfac)
+    out["sps3"] = sps3.reshape(nmixtures * nind, nsigma, nfac)
+    out["flat_sps3"] = sps3.reshape(nmixtures * nind * nsigma, nfac)
 
     sws_m = np.ones(nsigma) / nsigma
     out["sws_m"] = sws_m
@@ -172,7 +172,7 @@ def setup_unscented_predict():
 
     out["transform_sps_args"] = {}
 
-    exp_covs = np.zeros((nemf * nind, nfac, nfac))
+    exp_covs = np.zeros((nmixtures * nind, nfac, nfac))
     exp_covs[:] = np.array([[4.75, 4.5, 4.5], [4.5, 4.75, 4.5], [4.5, 4.5, 4.75]])
     out["exp_covs"] = exp_covs
 
@@ -186,8 +186,8 @@ def setup_unscented_predict():
     ).T
     out["exp_cholcovs"] = exp_cholcovs
 
-    out["out_states"] = np.zeros((nemf * nind, nfac))
-    out_sqrt_covs = np.zeros((nemf * nind, nfac + 1, nfac + 1))
+    out["out_states"] = np.zeros((nmixtures * nind, nfac))
+    out_sqrt_covs = np.zeros((nmixtures * nind, nfac + 1, nfac + 1))
     out["out_sqrt_covs"] = out_sqrt_covs
     out["out_covs"] = out_sqrt_covs[:, 1:, 1:]
 

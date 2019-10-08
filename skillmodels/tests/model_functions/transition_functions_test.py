@@ -12,11 +12,11 @@ import skillmodels.model_functions.transition_functions as tf
 
 @pytest.fixture
 def setup_linear():
-    nemf, nind, nsigma, nfac = 2, 10, 7, 3
-    sigma_points = np.ones((nemf, nind, nsigma, nfac))
+    nmixtures, nind, nsigma, nfac = 2, 10, 7, 3
+    sigma_points = np.ones((nmixtures, nind, nsigma, nfac))
     sigma_points[1] *= 2
     sigma_points[:, :, 0, :] = 3
-    sigma_points = sigma_points.reshape(nemf * nind * nsigma, nfac)
+    sigma_points = sigma_points.reshape(nmixtures * nind * nsigma, nfac)
 
     args = {
         "sigma_points": sigma_points,
@@ -28,8 +28,8 @@ def setup_linear():
 
 @pytest.fixture
 def expected_linear():
-    nemf, nind, nsigma = 2, 10, 7
-    expected_result = np.ones((nemf, nind, nsigma)) * 3
+    nmixtures, nind, nsigma = 2, 10, 7
+    expected_result = np.ones((nmixtures, nind, nsigma)) * 3
     expected_result[1, :, :] *= 2
     expected_result[:, :, 0] = 9
     expected_result = expected_result.flatten()

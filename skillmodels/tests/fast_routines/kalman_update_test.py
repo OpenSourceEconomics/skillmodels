@@ -60,16 +60,16 @@ def unpack_update_fixture(
 def setup_linear_update():
     out = {}
 
-    nemf, nind, nfac = 2, 6, 3
-    states = np.ones((nind, nemf, nfac))
+    nmixtures, nind, nfac = 2, 6, 3
+    states = np.ones((nind, nmixtures, nfac))
     states[:, 1, 2] *= 2
     out["state"] = states
 
-    covs = np.zeros((nind, nemf, nfac, nfac))
+    covs = np.zeros((nind, nmixtures, nfac, nfac))
     covs[:] = np.ones((nfac, nfac)) * 0.1 + np.eye(nfac) * 0.6
     out["covs"] = covs
 
-    mcovs = np.zeros((nind, nemf, nfac + 1, nfac + 1))
+    mcovs = np.zeros((nind, nmixtures, nfac + 1, nfac + 1))
     out["mcovs"] = mcovs
 
     mcovs[:, :, 1:, 1:] = np.transpose(np.linalg.cholesky(covs), axes=(0, 1, 3, 2))
@@ -94,7 +94,7 @@ def setup_linear_update():
 
     out["kf"] = np.zeros((nind, nfac))
 
-    weights = np.ones((nind, nemf))
+    weights = np.ones((nind, nmixtures))
     weights[:, 0] *= 0.4
     weights[:, 1] *= 0.6
     out["weights"] = weights

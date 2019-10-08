@@ -97,11 +97,11 @@ def simulate_datasets(
         meas_variances (pd.Series): The index is the same as in loadings_df. The data
             are the variances of the measurements errors.
         dist_name (string): the elliptical distribution to use in the mixture
-        dist_arg_dict (list or dict): list of length nemf of dictionaries with the
+        dist_arg_dict (list or dict): list of length nmixtures of dictionaries with the
             relevant arguments of the mixture distributions. Arguments with default
             values should NOT be included in the dictionaries. Lengths of arrays in the
             arguments should be in accordance with nfac + ncont
-        weights (np.ndarray): size (nemf). The weight of each mixture element.
+        weights (np.ndarray): size (nmixtures). The weight of each mixture element.
         policies (list): list of dictionaries. Each dictionary specifies a
             a stochastic shock to a latent factor AT THE END of "period" for "factor"
             with mean "effect_size" and "standard deviation"
@@ -202,11 +202,11 @@ def generate_start_factors_and_control_variables_elliptical(
         nfac (int): number of factor (latent) variables
         ncont (int): number of control variables
         dist_name (string): the elliptical distribution to use in the mixture
-        dist_arg_dict (list or dict): list of length nemf of dictionaries with the
+        dist_arg_dict (list or dict): list of length nmixtures of dictionaries with the
             relevant arguments of the mixture distributions. Arguments with default
             values should NOT be included in the dictionaries. Lengths of arrays in the
             arguments should be in accordance with nfac + ncont
-            weights (np.ndarray): size (nemf). The weight of each mixture element.
+            weights (np.ndarray): size (nmixtures). The weight of each mixture element.
             Default value is equal to 1.
 
     Returns:

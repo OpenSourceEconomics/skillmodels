@@ -94,7 +94,7 @@ def test_next_period_factors(set_up_npfac, expected_npfac):
 
 
 # ===============================
-# test generate datasets, nemf=1
+# test generate datasets, nmixtures=1
 # ===============================
 
 
@@ -201,7 +201,7 @@ def test_simulate_observed_data(set_up_generate_datasets, expected_dataset):
 
 
 # =================
-# test with nemf=2
+# test with nmixtures=2
 # =================
 
 
@@ -415,7 +415,7 @@ def test_simulate_observed_data_with_mock(
 
 
 # =========================
-# generate datasets nemf=2
+# generate datasets nmixtures=2
 # =========================
 
 

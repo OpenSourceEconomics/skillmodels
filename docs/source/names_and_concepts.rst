@@ -16,8 +16,8 @@ Variables related to dimensions
     * **nfac**: number of latent factors
     * **nperiods**: number of periods
     * **nstages**: number of stages
-    * **nemf**: number of elements in the mixture-of-normals distribution of
-      the latent factors
+    * **nmixtures**: number of elements in the mixture-of-normals
+      distribution of the latent factors
     * **nobs**: number of observations
     * **nupdates**: total number of Kalman updates, including those for
       anchoring equations
@@ -39,12 +39,12 @@ follow conventions of Kalman filtering literature where possible):
     * **R**: Vector of length nupdates with the variances of the measurement equations
     * **Q**: List of [nfac x nfac] matrices for each stage with the variances of the
       transition equations on the diagonals.
-    * **X_zero**: Numpy array of [nemf * nind, nfac] with the initial means of the
+    * **X_zero**: Numpy array of [nmixtures * nind, nfac] with the initial means of the
       latent factors
-    * **P_zero**: Numpy array of [nemf * nind, nfac, nfac] with the initial covariances
-      of the latent factors
-    * **W_zero**: array of shape [nemf, nind] with the initial weights of the mixture
-      elements in the factor distribution
+    * **P_zero**: Numpy array of [nmixtures * nind, nfac, nfac] with the initial
+      covariances of the latent factors
+    * **W_zero**: array of shape [nmixtures, nind] with the initial weights of
+      the mixture elements in the factor distribution
     * **trans_coeffs**: list of arrays with transition equation coefficients for
       each latent factor.
 

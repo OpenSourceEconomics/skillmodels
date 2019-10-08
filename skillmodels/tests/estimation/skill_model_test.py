@@ -76,7 +76,7 @@ def test_initial_q(mocker):  # noqa
 
 def test_initial_x(mocker):  # noqa
     mocker.nobs = 10
-    mocker.nemf = 2
+    mocker.nmixtures = 2
     mocker.nfac = 3
 
     exp1 = np.zeros((10, 2, 3))
@@ -93,7 +93,7 @@ def test_initial_x(mocker):  # noqa
 
 def test_initial_w(mocker):  # noqa
     mocker.nobs = 10
-    mocker.nemf = 3
+    mocker.nmixtures = 3
 
     expected = np.ones((10, 3)) / 3
 
@@ -104,7 +104,7 @@ def test_initial_w(mocker):  # noqa
 @pytest.fixture
 def p_mocker(mocker):  # noqa
     mocker.nobs = 10
-    mocker.nemf = 2
+    mocker.nmixtures = 2
     mocker.nfac = 3
     return mocker
 
@@ -159,7 +159,7 @@ def test_initial_trans_coeffs(mocker):  # noqa
 
 class TestSigmaWeightsAndScalingFactor:
     def setup(self):
-        self.nemf = 2
+        self.nmixtures = 2
         self.nobs = 10
         self.nfac = 4
         self.sigma_points_scale = 1.5

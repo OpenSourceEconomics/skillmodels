@@ -10,7 +10,7 @@ def constraints(
     factors,
     normalizations,
     measurements,
-    nemf,
+    nmixtures,
     stagemap,
     transition_names,
     included_factors,
@@ -29,11 +29,11 @@ def constraints(
     constr += _not_measured_constraints(
         update_info, measurements, anchored_factors, anch_outcome
     )
-    constr += _w_constraints(nemf)
-    constr += _p_constraints(nemf, bounds_distance)
+    constr += _w_constraints(nmixtures)
+    constr += _p_constraints(nmixtures, bounds_distance)
     constr += _stage_constraints(stagemap, factors, transition_names, included_factors)
     constr += _constant_factors_constraints(factors, transition_names, periods)
-    constr += _x_constraints(nemf, factors)
+    constr += _x_constraints(nmixtures, factors)
     constr += _trans_coeff_constraints(
         factors, transition_names, included_factors, periods
     )
@@ -174,26 +174,26 @@ def _not_measured_constraints(
     return constraints
 
 
-def _w_constraints(nemf):
+def _w_constraints(nmixtures):
     """Constrain mixture weights to be between 0 and 1 and sum to 1."""
-    if nemf == 1:
+    if nmixtures == 1:
         return [{"loc": "w", "type": "fixed", "value": 1.0}]
     else:
         return [{"loc": "w", "type": "probability"}]
 
 
-def _p_constraints(nemf, bounds_distance):
+def _p_constraints(nmixtures, bounds_distance):
     """Constraint initial covariance matrices to be positive semi-definite.
 
     Args:
-        nemf (int): number of elements in the mixture of normal of the factors.
+        nmixtures (int): number of elements in the mixture of normal of the factors.
 
     Returns:
         constraints (list)
 
     """
     constraints = []
-    for emf in range(nemf):
+    for emf in range(nmixtures):
         constraints.append(
             {
                 "loc": ("p", 0, f"mixture_{emf}"),
@@ -265,20 +265,20 @@ def _constant_factors_constraints(factors, transition_names, periods):
     return constraints
 
 
-def _x_constraints(nemf, factors):
+def _x_constraints(nmixtures, factors):
     """Enforce that the x values of the first factor are increasing.
 
     Otherwise the model would only be identified up to the order of the start factors.
 
     Args:
-        nemf (int): number of elements in the mixture of normal of the factors.
+        nmixtures (int): number of elements in the mixture of normal of the factors.
         factors (list): the latent factors of the model
 
     Returns:
         constraints (list)
 
     """
-    ind_tups = [("x", 0, f"mixture_{emf}", factors[0]) for emf in range(nemf)]
+    ind_tups = [("x", 0, f"mixture_{emf}", factors[0]) for emf in range(nmixtures)]
     constr = [{"loc": ind_tups, "type": "increasing"}]
 
     return constr
