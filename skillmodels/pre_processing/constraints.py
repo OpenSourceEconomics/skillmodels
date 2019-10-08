@@ -219,26 +219,26 @@ def _stage_constraints(stagemap, factors, transition_names, included_factors):
 
     """
     constraints = []
-    periods = range(len(stagemap))
-    for period in periods[1:-1]:
-        stage = stagemap[period]
-        need_equality = stage == stagemap[period - 1]
-        for f, factor in enumerate(factors):
-            if need_equality:
-                func = getattr(tf, "index_tuples_{}".format(transition_names[f]))
-                ind1 = func(factor, included_factors[f], period - 1)
-                ind2 = func(factor, included_factors[f], period)
-                constraints += _pairwise_equality_constraint(ind1, ind2)
 
-                constraints.append(
-                    {
-                        "loc": [
-                            ("q", period - 1, factor, "-"),
-                            ("q", period, factor, "-"),
-                        ],
-                        "type": "equality",
-                    }
-                )
+    stages = sorted(np.unique(stagemap))
+    stages_to_periods = {stage: [] for stage in stages}
+    for stage in stages:
+        for period, stage in enumerate(stagemap[:-1]):
+            stages_to_periods[stage].append(period)
+
+    for f, factor in enumerate(factors):
+        func = getattr(tf, "index_tuples_{}".format(transition_names[f]))
+
+        for stage in stages:
+            if len(stages_to_periods[stage]) >= 2:
+                first = stages_to_periods[stage][0]
+                locs_trans = [func(factor, included_factors[f], first)]
+                locs_q = [("q", first, factor, "-")]
+                for period in stages_to_periods[stage][1:]:
+                    locs_trans.append(func(factor, included_factors[f], period))
+                    locs_q.append(("q", period, factor, "-"))
+                constraints.append({"locs": locs_trans, "type": "pairwise_equality"})
+                constraints.append({"locs": locs_q, "type": "pairwise_equality"})
 
     return constraints
 
@@ -305,14 +305,4 @@ def _trans_coeff_constraints(factors, transition_names, included_factors, period
             if hasattr(tf, funcname):
                 func = getattr(tf, funcname)
                 constraints.append(func(factor, included_factors[f], period))
-    return constraints
-
-
-# in the long run a sophisticated version of this might move to estimagic
-def _pairwise_equality_constraint(index1, index2):
-    assert len(index1) == len(index2), "index1 and index2 must have the same length."
-
-    constraints = []
-    for i1, i2 in zip(index1, index2):
-        constraints.append({"loc": [i1, i2], "type": "equality"})
     return constraints
