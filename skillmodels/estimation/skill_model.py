@@ -105,14 +105,11 @@ class SkillModel:
 
     def _initial_p(self):
         """Initial P_zero array filled with zeros."""
-        if self.square_root_filters is False:
-            init = np.zeros((self.nobs, self.nmixtures, self.nfac, self.nfac))
-            flat_init = init.reshape(self.nobs * self.nmixtures, self.nfac, self.nfac)
-        else:
-            init = np.zeros((self.nobs, self.nmixtures, self.nfac + 1, self.nfac + 1))
-            flat_init = init.reshape(
-                self.nobs * self.nmixtures, self.nfac + 1, self.nfac + 1
-            )
+
+        init = np.zeros((self.nobs, self.nmixtures, self.nfac + 1, self.nfac + 1))
+        flat_init = init.reshape(
+            self.nobs * self.nmixtures, self.nfac + 1, self.nfac + 1
+        )
         return init, flat_init
 
     def _initial_trans_coeffs(self):
@@ -227,11 +224,7 @@ class SkillModel:
         return init_dict
 
     def _parse_params_args_dict(self, initial_quantities):
-        pp = {
-            "initial_quantities": initial_quantities,
-            "factors": self.factors,
-            "square_root_filters": self.square_root_filters,
-        }
+        pp = {"initial_quantities": initial_quantities, "factors": self.factors}
 
         return pp
 
@@ -257,8 +250,6 @@ class SkillModel:
                     np.arange(self.nfac)[position_helper[k]],
                     initial_quantities["w"],
                 ]
-                if self.square_root_filters is False:
-                    u_args.append(np.zeros((self.nobs, self.nfac)))
                 u_args_list.append(u_args)
                 k += 1
         return u_args_list
@@ -303,7 +294,6 @@ class SkillModel:
         sp_args["states"] = initial_quantities["x"]
         sp_args["flat_covs"] = initial_quantities["flat_p"]
         sp_args["out"] = initial_quantities["sigma_points"]
-        sp_args["square_root_filters"] = self.square_root_filters
         sp_args["scaling_factor"] = self.sigma_scaling_factor()
         return sp_args
 
@@ -317,7 +307,6 @@ class SkillModel:
         args["periods"] = self.periods
         args["nmeas_list"] = self.nmeas_list
         args["anchoring"] = self.anchoring
-        args["square_root_filters"] = self.square_root_filters
         args["update_args"] = self._update_args_dict(initial_quantities)
         args["predict_args"] = self._predict_args_dict(initial_quantities)
         args["calculate_sigma_points_args"] = self._calculate_sigma_points_args_dict(
@@ -374,8 +363,7 @@ class SkillModel:
         meas_variances = pd.Series(
             data=initial_quantities["r"], index=self.update_info.index
         )
-        if self.square_root_filters is True:
-            meas_variances **= 2
+        meas_variances **= 2
 
         dist_name = "multivariate_normal"
 
@@ -388,9 +376,8 @@ class SkillModel:
             control_mean = np.zeros(len(control_names))
 
             factor_cov = p_zero[0, n]
-            if self.square_root_filters is True:
-                factor_cov = factor_cov[1:, 1:]
-                factor_cov = np.dot(factor_cov.T, factor_cov)
+            factor_cov = factor_cov[1:, 1:]
+            factor_cov = np.dot(factor_cov.T, factor_cov)
             nfac = len(factor_cov)
             dim = nfac + len(control_names)
             full_cov = np.eye(dim) * 0.9 + np.ones((dim, dim)) * 0.1

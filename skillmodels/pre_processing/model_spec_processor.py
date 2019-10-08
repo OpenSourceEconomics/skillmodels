@@ -45,7 +45,6 @@ class ModelSpecProcessor:
         general_settings = {
             "n_mixture_components": 1,
             "sigma_points_scale": 2,
-            "square_root_filters": True,
             "bounds_distance": 1e-6,
             "ignore_intercept_in_linear_anchoring": True,
             "anchoring_mode": "only_estimate_anchoring_equation",

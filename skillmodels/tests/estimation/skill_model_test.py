@@ -109,22 +109,8 @@ def p_mocker(mocker):  # noqa
     return mocker
 
 
-def test_initial_p_square_root_filters(p_mocker):
-    p_mocker.square_root_filters = True
+def test_initial_p(p_mocker):
     expected = [np.zeros((10, 2, 4, 4)), np.zeros((20, 4, 4))]
-    calculated = SkillModel._initial_p(p_mocker)
-    for calc, exp in zip(calculated, expected):
-        aae(calc, exp)
-
-    # test that the second is pointing to the same data as the first.
-    calc1, calc2 = calculated
-    calc1 += 1
-    aae(calc2, np.ones_like(calc2))
-
-
-def test_initial_p_normal_filters(p_mocker):
-    p_mocker.square_root_filters = False
-    expected = [np.zeros((10, 2, 3, 3)), np.zeros((20, 3, 3))]
     calculated = SkillModel._initial_p(p_mocker)
     for calc, exp in zip(calculated, expected):
         aae(calc, exp)

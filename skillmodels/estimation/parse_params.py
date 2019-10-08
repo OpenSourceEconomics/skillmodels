@@ -6,7 +6,7 @@ import pandas as pd
 from estimagic.optimization.utilities import cov_params_to_matrix
 
 
-def parse_params(params, initial_quantities, factors, square_root_filters):
+def parse_params(params, initial_quantities, factors):
     """Parse params into the quantities that depend on it."""
     if isinstance(params, pd.DataFrame):
         params = params["value"]
@@ -17,11 +17,11 @@ def parse_params(params, initial_quantities, factors, square_root_filters):
         )
         _map_params_to_delta(params, initial_quantities["delta"])
         _map_params_to_h(params, initial_quantities["h"])
-        _map_params_to_r(params, initial_quantities["r"], square_root_filters)
+        _map_params_to_r(params, initial_quantities["r"])
         _map_params_to_q(params, initial_quantities["q"])
         _map_params_to_x(params, initial_quantities["x"])
         _map_params_to_w(params, initial_quantities["w"])
-        _map_params_to_p(params, initial_quantities["p"], square_root_filters)
+        _map_params_to_p(params, initial_quantities["p"])
         _map_params_to_trans_coeffs(params, initial_quantities["trans_coeffs"], factors)
 
 
@@ -35,11 +35,8 @@ def _map_params_to_h(params, initial):
     initial[:] = params.loc["h"].to_numpy().reshape(initial.shape)
 
 
-def _map_params_to_r(params, initial, square_root_filters):
-    if square_root_filters is True:
-        initial[:] = np.sqrt(params.loc["r"].to_numpy())
-    else:
-        initial[:] = params.loc["r"].to_numpy()
+def _map_params_to_r(params, initial):
+    initial[:] = np.sqrt(params.loc["r"].to_numpy())
 
 
 def _map_params_to_q(params, initial):
@@ -52,9 +49,9 @@ def _map_params_to_x(params, initial):
     initial[:] = params.loc["x"].to_numpy().reshape(nmixtures, nfac)
 
 
-def _map_params_to_p(params, initial, square_root_filters):
+def _map_params_to_p(params, initial):
     nobs, nmixtures, nfac, _ = initial.shape
-    nfac = nfac - 1 if square_root_filters is True else nfac
+    nfac = nfac - 1
 
     filler = np.zeros((nmixtures, nfac, nfac))
     for emf in range(nmixtures):
@@ -62,11 +59,8 @@ def _map_params_to_p(params, initial, square_root_filters):
             params.loc["p", 0, f"mixture_{emf}"].to_numpy()
         )
 
-    if square_root_filters is True:
-        filler = np.transpose(np.linalg.cholesky(filler), axes=(0, 2, 1))
-        initial[:, :, 1:, 1:] = filler
-    else:
-        initial[:] = filler
+    filler = np.transpose(np.linalg.cholesky(filler), axes=(0, 2, 1))
+    initial[:, :, 1:, 1:] = filler
 
 
 def _map_params_to_w(params, initial):

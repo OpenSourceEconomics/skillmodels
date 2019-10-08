@@ -1,6 +1,4 @@
 from skillmodels.estimation.parse_params import parse_params
-from skillmodels.fast_routines.kalman_filters import normal_linear_update
-from skillmodels.fast_routines.kalman_filters import normal_unscented_predict
 from skillmodels.fast_routines.kalman_filters import sqrt_linear_update
 from skillmodels.fast_routines.kalman_filters import sqrt_unscented_predict
 from skillmodels.fast_routines.sigma_points import calculate_sigma_points
@@ -13,7 +11,6 @@ def log_likelihood_contributions(
     periods,
     nmeas_list,
     anchoring,
-    square_root_filters,
     update_args,
     predict_args,
     calculate_sigma_points_args,
@@ -55,38 +52,32 @@ def log_likelihood_contributions(
     for t in periods:
         for _j in range(nmeas_list[t]):
             # measurement updates
-            update(square_root_filters, update_args[k])
+            update(update_args[k])
             k += 1
         if t < periods[-1]:
             calculate_sigma_points(**calculate_sigma_points_args)
-            predict(t, square_root_filters, predict_args)
+            predict(t, predict_args)
     if anchoring is True:
-        update(square_root_filters, update_args[k])
+        update(update_args[k])
 
     return like_contributions
 
 
-def update(square_root_filters, update_args):
+def update(update_args):
     """Select and call the correct update function.
 
     The actual update functions are implemented in several modules in
     :ref:`fast_routines`
 
     """
-    if square_root_filters is True:
-        sqrt_linear_update(*update_args)
-    else:
-        normal_linear_update(*update_args)
+    sqrt_linear_update(*update_args)
 
 
-def predict(period, square_root_filters, predict_args):
+def predict(period, predict_args):
     """Select and call the correct predict function.
 
     The actual predict functions are implemented in several modules in
     :ref:`fast_routines`
 
     """
-    if square_root_filters is True:
-        sqrt_unscented_predict(period, **predict_args)
-    else:
-        normal_unscented_predict(period, **predict_args)
+    sqrt_unscented_predict(period, **predict_args)

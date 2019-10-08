@@ -177,13 +177,6 @@ the ones from the model dictionary have precedence. The specifications are:
       distribution of the latent factors. Default 1, which corresponds to the
       assumption that the factors are normally distributed.
     * ``sigma_points_scale``: scaling parameter for the sigma_points. Default 2.
-    * ``square_root_filters``: takes the values true (default) and false and
-      specifies if square-root implementations of the kalman filters are used.
-      I strongly recommend always using square-root filters. As mentioned in
-      section 3.2.2 of CHS' readme file the standard filters often crash unless
-      very good start values for the maximization are available. Using the
-      square-root filters completely avoids this problem. Only used in CHS
-      estimator.
     * ``robust_bounds``: takes the values true or false (default) and refers to the
       bounds on parameters during the maximization of the likelihood function.
       If true the lower bound for estimated variances is not set to zero but to

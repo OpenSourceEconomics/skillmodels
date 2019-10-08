@@ -60,7 +60,6 @@ class TestSigmaPointConstructionAgainstFilterpy:
             flat_covs=self.lcovs_t,
             scaling_factor=2.34520787991,
             out=self.out,
-            square_root_filters=True,
         )
         aaae(self.out, expected_sps)
 
@@ -73,6 +72,5 @@ class TestSigmaPointConstructionAgainstFilterpy:
             flat_covs=self.lcovs_t,
             scaling_factor=0.234520787991,
             out=self.out,
-            square_root_filters=True,
         )
         aaae(self.out, expected_sps)
