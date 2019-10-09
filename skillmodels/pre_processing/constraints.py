@@ -80,6 +80,11 @@ def _invariant_meas_system_constraints(update_info, controls, factors):
         constraints (list)
 
     """
+    msg = (
+        "This constraint was generated because you set 'time_invariante_measurement_"
+        "system' to True in the general section of your model specification."
+    )
+
     locs = []
     for period, meas in update_info.index:
         if update_info.loc[(period, meas), "is_repeated"]:
@@ -94,7 +99,7 @@ def _invariant_meas_system_constraints(update_info, controls, factors):
                 )
             locs.append([("r", period, meas, "-"), ("r", int(first), meas, "-")])
 
-    constraints = [{"type": "equality", "loc": loc} for loc in locs]
+    constraints = [{"type": "equality", "loc": loc, "description": msg} for loc in locs]
     return constraints
 
 
@@ -111,6 +116,7 @@ def _normalization_constraints(normalizations):
         constraints (list)
 
     """
+    msg = "This constraint was generated because of an explicit normalization."
     constraints = []
     factors = sorted(list(normalizations.keys()))
     periods = range(len(normalizations[factors[0]]["loadings"]))
@@ -123,6 +129,7 @@ def _normalization_constraints(normalizations):
                         "loc": ("h", period, meas, factor),
                         "type": "fixed",
                         "value": normval,
+                        "description": msg,
                     }
                 )
             intercept_norminfo = normalizations[factor]["intercepts"][period]
@@ -132,12 +139,18 @@ def _normalization_constraints(normalizations):
                         "loc": ("delta", period, meas, "constant"),
                         "type": "fixed",
                         "value": normval,
+                        "description": msg,
                     }
                 )
             variance_norminfo = normalizations[factor]["variances"][period]
             for meas, normval in variance_norminfo.items():
                 constraints.append(
-                    {"loc": ("r", period, meas, "-"), "type": "fixed", "value": normval}
+                    {
+                        "loc": ("r", period, meas, "-"),
+                        "type": "fixed",
+                        "value": normval,
+                        "description": msg,
+                    }
                 )
     return constraints
 
@@ -158,6 +171,11 @@ def _not_measured_constraints(
         constraints (list)
 
     """
+    msg = (
+        "This constraint sets the loadings of those factors that are not measured by "
+        "a measurement to 0."
+    )
+
     factors = sorted(list(measurements.keys()))
     periods = range(len(measurements[factors[0]]))
 
@@ -172,7 +190,7 @@ def _not_measured_constraints(
                 if meas not in used_measurements:
                     locs.append(("h", period, meas, factor))
 
-    constraints = [{"loc": locs, "type": "fixed", "value": 0}]
+    constraints = [{"loc": locs, "type": "fixed", "value": 0, "description": msg}]
 
     return constraints
 
@@ -180,9 +198,11 @@ def _not_measured_constraints(
 def _w_constraints(nmixtures):
     """Constrain mixture weights to be between 0 and 1 and sum to 1."""
     if nmixtures == 1:
-        return [{"loc": "w", "type": "fixed", "value": 1.0}]
+        msg = "Set the mixture weight to 1 if there is only one mixture element."
+        return [{"loc": "w", "type": "fixed", "value": 1.0, "description": msg}]
     else:
-        return [{"loc": "w", "type": "probability"}]
+        msg = "Ensure that weights are between 0 and 1 and sum to 1."
+        return [{"loc": "w", "type": "probability", "description": msg}]
 
 
 def _p_constraints(nmixtures, bounds_distance):
@@ -195,6 +215,7 @@ def _p_constraints(nmixtures, bounds_distance):
         constraints (list)
 
     """
+    msg = "Make sure that the covariance matrix is valid."
     constraints = []
     for emf in range(nmixtures):
         constraints.append(
@@ -202,6 +223,7 @@ def _p_constraints(nmixtures, bounds_distance):
                 "loc": ("p", 0, f"mixture_{emf}"),
                 "type": "covariance",
                 "bounds_distance": bounds_distance,
+                "description": msg,
             }
         )
     return constraints
@@ -221,6 +243,10 @@ def _stage_constraints(stagemap, factors, transition_names, included_factors):
         constrainst (list)
 
     """
+    msg = (
+        "This constraint was generated because you have a 'stagemap' in your model "
+        "specification."
+    )
     constraints = []
 
     stages = sorted(np.unique(stagemap))
@@ -232,8 +258,12 @@ def _stage_constraints(stagemap, factors, transition_names, included_factors):
     for stage in stages:
         locs_trans = [("trans", p) for p in stages_to_periods[stage]]
         locs_q = [("q", p) for p in stages_to_periods[stage]]
-        constraints.append({"locs": locs_trans, "type": "pairwise_equality"})
-        constraints.append({"locs": locs_q, "type": "pairwise_equality"})
+        constraints.append(
+            {"locs": locs_trans, "type": "pairwise_equality", "description": msg}
+        )
+        constraints.append(
+            {"locs": locs_q, "type": "pairwise_equality", "description": msg}
+        )
 
     return constraints
 
@@ -253,9 +283,15 @@ def _constant_factors_constraints(factors, transition_names, periods):
     constraints = []
     for f, factor in enumerate(factors):
         if transition_names[f] == "constant":
+            msg = f"This constraint was generated because {factor} is constant."
             for period in periods[:-1]:
                 constraints.append(
-                    {"loc": ("q", period, factor, "-"), "type": "fixed", "value": 0.0}
+                    {
+                        "loc": ("q", period, factor, "-"),
+                        "type": "fixed",
+                        "value": 0.0,
+                        "description": msg,
+                    }
                 )
     return constraints
 
@@ -273,8 +309,14 @@ def _x_constraints(nmixtures, factors):
         constraints (list)
 
     """
+    msg = (
+        "This constraint enforces an ordering on the initial means of the states "
+        "across the components of the factor distribution. This is necessary to ensure "
+        "uniqueness of the maximum likelihood estimator."
+    )
+
     ind_tups = [("x", 0, f"mixture_{emf}", factors[0]) for emf in range(nmixtures)]
-    constr = [{"loc": ind_tups, "type": "increasing"}]
+    constr = [{"loc": ind_tups, "type": "increasing", "description": msg}]
 
     return constr
 
@@ -295,9 +337,14 @@ def _trans_coeff_constraints(factors, transition_names, included_factors, period
     """
     constraints = []
     for f, factor in enumerate(factors):
+        tname = transition_names[f]
+        msg = f"This constraint is inherent to the {tname} production function."
         for period in periods[:-1]:
-            funcname = "constraints_{}".format(transition_names[f])
+            funcname = f"constraints_{tname}"
             if hasattr(tf, funcname):
                 func = getattr(tf, funcname)
-                constraints.append(func(factor, included_factors[f], period))
+                constr = func(factor, included_factors[f], period)
+                if "description" not in constr:
+                    constr["description"] = msg
+                constraints.append(constr)
     return constraints

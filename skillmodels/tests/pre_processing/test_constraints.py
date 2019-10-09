@@ -73,6 +73,8 @@ def test_invariant_meas_system_constraints():
     ]
 
     calculated = _invariant_meas_system_constraints(uinfo, controls, factors)
+    for c in calculated:
+        del c["description"]
 
     assert_list_equal_except_for_order(calculated, expected)
 
@@ -101,6 +103,9 @@ def test_normalization_constraints():
     ]
 
     calculated = _normalization_constraints(norm)
+    for c in calculated:
+        del c["description"]
+
     assert_list_equal_except_for_order(calculated, expected)
 
 
@@ -124,18 +129,24 @@ def test_not_measured_constraints():
     ]
 
     calculated = _not_measured_constraints(uinfo, measurements, [], None)
+    for c in calculated:
+        del c["description"]
 
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_w_constraints_mixture():
     calculated = _w_constraints(nmixtures=2)
+    for c in calculated:
+        del c["description"]
     expected = [{"loc": "w", "type": "probability"}]
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_w_constraints_normal():
     calculated = _w_constraints(nmixtures=1)
+    for c in calculated:
+        del c["description"]
     expected = [{"loc": "w", "type": "fixed", "value": 1.0}]
     assert_list_equal_except_for_order(calculated, expected)
 
@@ -148,6 +159,8 @@ def test_p_constraints():
     ]
 
     calculated = _p_constraints(nmixtures, 0.0)
+    for c in calculated:
+        del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
 
 
@@ -168,6 +181,8 @@ def test_stage_constraints():
     calculated = _stage_constraints(
         stagemap, factors, transition_names, included_factors
     )
+    for c in calculated:
+        del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
 
 
@@ -182,6 +197,8 @@ def test_constant_factor_constraints():
     ]
 
     calculated = _constant_factors_constraints(factors, transition_names, periods)
+    for c in calculated:
+        del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
 
 
@@ -197,6 +214,8 @@ def test_x_constraints():
     expected = [{"loc": ind_tups, "type": "increasing"}]
 
     calculated = _x_constraints(nmixtures, factors)
+    for c in calculated:
+        del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
 
 
@@ -227,7 +246,8 @@ def test_trans_coeff_constraints():
     calculated = _trans_coeff_constraints(
         factors, transition_names, included_factors, periods
     )
-
+    for c in calculated:
+        del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
 
 
