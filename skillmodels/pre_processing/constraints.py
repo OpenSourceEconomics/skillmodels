@@ -229,19 +229,11 @@ def _stage_constraints(stagemap, factors, transition_names, included_factors):
         for period, stage in enumerate(stagemap[:-1]):
             stages_to_periods[stage].append(period)
 
-    for f, factor in enumerate(factors):
-        func = getattr(tf, "index_tuples_{}".format(transition_names[f]))
-
-        for stage in stages:
-            if len(stages_to_periods[stage]) >= 2:
-                first = stages_to_periods[stage][0]
-                locs_trans = [func(factor, included_factors[f], first)]
-                locs_q = [("q", first, factor, "-")]
-                for period in stages_to_periods[stage][1:]:
-                    locs_trans.append(func(factor, included_factors[f], period))
-                    locs_q.append(("q", period, factor, "-"))
-                constraints.append({"locs": locs_trans, "type": "pairwise_equality"})
-                constraints.append({"locs": locs_q, "type": "pairwise_equality"})
+    for stage in stages:
+        locs_trans = [("trans", p) for p in stages_to_periods[stage]]
+        locs_q = [("q", p) for p in stages_to_periods[stage]]
+        constraints.append({"locs": locs_trans, "type": "pairwise_equality"})
+        constraints.append({"locs": locs_q, "type": "pairwise_equality"})
 
     return constraints
 

@@ -159,21 +159,10 @@ def test_stage_constraints():
 
     expected = [
         {
-            "locs": [
-                [("trans", 0, "fac1", "fac1"), ("trans", 0, "fac1", "constant")],
-                [("trans", 1, "fac1", "fac1"), ("trans", 1, "fac1", "constant")],
-                [("trans", 2, "fac1", "fac1"), ("trans", 2, "fac1", "constant")],
-            ],
+            "locs": [("trans", 0), ("trans", 1), ("trans", 2)],
             "type": "pairwise_equality",
         },
-        {
-            "locs": [
-                ("q", 0, "fac1", "-"),
-                ("q", 1, "fac1", "-"),
-                ("q", 2, "fac1", "-"),
-            ],
-            "type": "pairwise_equality",
-        },
+        {"locs": [("q", 0), ("q", 1), ("q", 2)], "type": "pairwise_equality"},
     ]
 
     calculated = _stage_constraints(

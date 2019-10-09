@@ -32,10 +32,7 @@ class ModelSpecProcessor:
         self.data = pre_process_data(dataset)
         self.model_name = model_name
         self.dataset_name = dataset_name
-        if "time_specific" in model_dict:
-            self._timeinf = model_dict["time_specific"]
-        else:
-            self._timeinf = {}
+        self._timeinf = model_dict.get("time_specific", {})
         self._facinf = model_dict["factor_specific"]
         self.factors = tuple(sorted(list(self._facinf.keys())))
         self.nfac = len(self.factors)
@@ -52,8 +49,7 @@ class ModelSpecProcessor:
             "base_color": "#035096",
         }
 
-        if "general" in model_dict:
-            general_settings.update(model_dict["general"])
+        general_settings.update(model_dict.get("general", {}))
 
         self.nmixtures = general_settings.pop("n_mixture_components")
         self.__dict__.update(general_settings)
