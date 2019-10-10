@@ -13,6 +13,7 @@ Welcome to the documentation of skillmodels!
     introduction
     model_specs
     basic_usage
+    tutorial.ipynb
     names_and_concepts
     notes_on_factor_scales
     estimation

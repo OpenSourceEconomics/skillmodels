@@ -125,7 +125,11 @@ class SkillModel:
 
     def start_params_helpers(self):
         """DataFrames with the free and fixed parameters of the model."""
-        free, fixed = make_start_params_helpers(self.params_index, self.constraints)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="indexing past lexsort depth may impact performance."
+            )
+            free, fixed = make_start_params_helpers(self.params_index, self.constraints)
         return free, fixed
 
     def generate_full_start_params(self, start_params=None):
@@ -333,6 +337,8 @@ class SkillModel:
         if isinstance(policies, dict):
             policies = [policies]
 
+        params = self.generate_full_start_params(params)
+
         initial_quantities = self._initial_quantities_dict()
         pp_args = self._parse_params_args_dict(initial_quantities)
 
@@ -345,7 +351,7 @@ class SkillModel:
                 self.controls[period] == self.controls[0]
             ), "simulate only works if the same controls are used in each period."
 
-        control_names = self.controls[0]
+        control_names = list(self.controls[0])
 
         loadings_df = pd.DataFrame(
             data=initial_quantities["h"],
