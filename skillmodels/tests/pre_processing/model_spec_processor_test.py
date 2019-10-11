@@ -1,4 +1,3 @@
-from itertools import cycle
 from unittest.mock import Mock
 
 import numpy as np
@@ -44,39 +43,6 @@ class TestTransitionEquationIncludedFactors:
         assert_equal(self.included_positions, ((0, 1), (1,)))
 
 
-class TestVariableCheckMethods:
-    def setup(self):
-        df1 = DataFrame(data=np.zeros((5, 2)), columns=["__period__", "var1"])
-        df1.loc[1, "var1"] = 1
-        df2 = DataFrame(data=np.ones((5, 2)), columns=["__period__", "var2"])
-        df2.loc[1, "var2"] = 5
-        self.data = pd.concat([df1, df2], axis=0, sort=True)
-        self.missing_variables = "drop_variable"
-        self.variables_without_variance = "drop_variable"
-        self.model_name = "model"
-        self.dataset_name = "dataset"
-
-    def test_present_where_true(self):
-        assert_equal(ModelSpecProcessor._present(self, "var1", 0), True)
-
-    def test_present_where_false_no_raise(self):
-        assert_equal(ModelSpecProcessor._present(self, "var1", 1), False)
-
-    def test_present_where_false__raise(self):
-        self.missing_variables = "raise_error"
-        assert_raises(KeyError, ModelSpecProcessor._present, self, "var1", 1)
-
-    def test_has_variance_where_true(self):
-        assert_equal(ModelSpecProcessor._has_variance(self, "var1", 0), True)
-
-    def test_has_variance_where_false_non_missing(self):
-        self.data.loc[1, "var1"] = 0
-        assert_equal(ModelSpecProcessor._has_variance(self, "var1", 0), False)
-
-    def test_has_variance_where_false_missing(self):
-        assert_equal(ModelSpecProcessor._has_variance(self, "var2", 0), False)
-
-
 class TestCleanMesaurementSpecifications:
     def setup(self):
         self.periods = (0, 1)
@@ -86,31 +52,16 @@ class TestCleanMesaurementSpecifications:
         self._facinf = inf
         self.factors = tuple(sorted(list(self._facinf.keys())))
         self.transition_names = ("log_ces", "blubb")
+        cols = ["__period__"] + [f"m{i}" for i in range(1, 9)]
+        dat = np.vstack([np.zeros(9), np.ones(9)])
+        self.data = pd.DataFrame(columns=cols, data=dat)
 
-    def test_clean_measuremnt_specifications_nothing_to_clean(self):
-        self._present = Mock(return_value=True)
-        self._has_variance = Mock(return_value=True)
+    def test_check_measurements(self):
         res = {}
         res["f1"] = self._facinf["f1"]["measurements"]
         res["f2"] = self._facinf["f2"]["measurements"]
-        ModelSpecProcessor._clean_measurement_specifications(self)
+        ModelSpecProcessor._check_measurements(self)
         assert_equal(self.measurements, res)
-
-    def test_clean_measurement_specifications_half_of_variables_missing(self):
-        self._present = Mock(side_effect=cycle([True, False]))
-        self._has_variance = Mock(return_value=True)
-        res = {}
-        res["f1"] = [["m1", "m3"]] * 2
-        res["f2"] = [["m5", "m7"]] * 2
-        ModelSpecProcessor._clean_measurement_specifications(self)
-        assert_equal(self.measurements, res)
-
-    def test_clean_measurement_specs_half_of_variables_without_variance(self):
-        self._present = Mock(return_value=True)
-        self._has_variance = Mock(side_effecet=cycle([False, True]))
-        res = {}
-        res["f1"] = [["m2", "m4"]]
-        res["f2"] = [["m6", "m8"]]
 
 
 class TestCleanControlSpecifications:
@@ -118,9 +69,6 @@ class TestCleanControlSpecifications:
         self._timeinf = {"controls": [["c1", "c2"], ["c1", "c2"]]}
         self.periods = [0, 1]
         self.nperiods = 2
-        self._present = Mock(return_value=True)
-        self._has_variance = Mock(return_value=True)
-        self.controls_with_missings = "drop_variable"
         self.model_name = "model"
         self.dataset_name = "data"
         cols = ["__period__", "c1", "c2", "m1", "m2"]
@@ -134,32 +82,6 @@ class TestCleanControlSpecifications:
         ModelSpecProcessor._clean_controls_specification(self)
         res = (("c1", "c2"), ("c1", "c2"))
         assert_equal(self.controls, res)
-
-    def test_clean_control_specs_missing_variable(self):
-        self._present = Mock(side_effect=[True, False, True, True])
-        ModelSpecProcessor._clean_controls_specification(self)
-        res = (("c1",), ("c1", "c2"))
-        assert_equal(self.controls, res)
-
-    def test_clean_control_specs_missing_observations_drop_variable(self):
-        self.data.loc[2, "c2"] = np.nan
-        ModelSpecProcessor._clean_controls_specification(self)
-        res = (("c1",), ("c1", "c2"))
-        assert_equal(self.controls, res)
-
-    def test_clean_control_specs_missing_observation_drop_observation(self):
-        self.data.loc[2, "c2"] = np.nan
-        self.controls_with_missings = "drop_observations"
-        ModelSpecProcessor._clean_controls_specification(self)
-        res = (("c1", "c2"), ("c1", "c2"))
-        assert_equal(self.controls, res)
-
-    def test_clean_control_specs_missing_observations_error(self):
-        self.data.loc[2, "c2"] = np.nan
-        self.controls_with_missings = "raise_error"
-        assert_raises(
-            ValueError, ModelSpecProcessor._clean_controls_specification, self
-        )
 
 
 class TestCheckAndCleanNormalizations:
@@ -187,17 +109,6 @@ class TestCheckAndCleanNormalizations:
             self,
             "f1",
             f1_norm_list,
-            "loadings",
-        )
-
-    def test_check_normalizations_dropped_error(self):
-        self.measurements = {"f1": [["m2", "m3", "m4"]] * 2}
-        assert_raises(
-            KeyError,
-            ModelSpecProcessor._check_and_clean_normalizations_list,
-            self,
-            "f1",
-            self.f1_norm_list,
             "loadings",
         )
 

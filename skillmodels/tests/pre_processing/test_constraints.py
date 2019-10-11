@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
 
-from skillmodels.pre_processing.constraints import _ar1_contraints
 from skillmodels.pre_processing.constraints import _constant_factors_constraints
 from skillmodels.pre_processing.constraints import _invariant_meas_system_constraints
 from skillmodels.pre_processing.constraints import _normalization_constraints
@@ -48,7 +47,7 @@ def test_invariant_meas_system_constraints():
         },
         {"loc": [("h", 1, "m1", "fac1"), ("h", 0, "m1", "fac1")], "type": "equality"},
         {"loc": [("h", 1, "m1", "fac2"), ("h", 0, "m1", "fac2")], "type": "equality"},
-        {"loc": [("r", 1, "m1", ""), ("r", 0, "m1", "")], "type": "equality"},
+        {"loc": [("r", 1, "m1", "-"), ("r", 0, "m1", "-")], "type": "equality"},
         {
             "loc": [("delta", 2, "m1", "constant"), ("delta", 0, "m1", "constant")],
             "type": "equality",
@@ -59,7 +58,7 @@ def test_invariant_meas_system_constraints():
         },
         {"loc": [("h", 2, "m1", "fac1"), ("h", 0, "m1", "fac1")], "type": "equality"},
         {"loc": [("h", 2, "m1", "fac2"), ("h", 0, "m1", "fac2")], "type": "equality"},
-        {"loc": [("r", 2, "m1", ""), ("r", 0, "m1", "")], "type": "equality"},
+        {"loc": [("r", 2, "m1", "-"), ("r", 0, "m1", "-")], "type": "equality"},
         {
             "loc": [("delta", 2, "m3", "constant"), ("delta", 1, "m3", "constant")],
             "type": "equality",
@@ -70,10 +69,12 @@ def test_invariant_meas_system_constraints():
         },
         {"loc": [("h", 2, "m3", "fac1"), ("h", 1, "m3", "fac1")], "type": "equality"},
         {"loc": [("h", 2, "m3", "fac2"), ("h", 1, "m3", "fac2")], "type": "equality"},
-        {"loc": [("r", 2, "m3", ""), ("r", 1, "m3", "")], "type": "equality"},
+        {"loc": [("r", 2, "m3", "-"), ("r", 1, "m3", "-")], "type": "equality"},
     ]
 
     calculated = _invariant_meas_system_constraints(uinfo, controls, factors)
+    for c in calculated:
+        del c["description"]
 
     assert_list_equal_except_for_order(calculated, expected)
 
@@ -97,11 +98,14 @@ def test_normalization_constraints():
         {"loc": ("h", 0, "m2", "fac1"), "type": "fixed", "value": 1.5},
         {"loc": ("h", 1, "m1", "fac1"), "type": "fixed", "value": 3},
         {"loc": ("delta", 0, "m1", "constant"), "type": "fixed", "value": 0.5},
-        {"loc": ("r", 1, "m1", ""), "type": "fixed", "value": 1},
+        {"loc": ("r", 1, "m1", "-"), "type": "fixed", "value": 1},
         {"loc": ("h", 0, "m3", "fac2"), "type": "fixed", "value": 1},
     ]
 
     calculated = _normalization_constraints(norm)
+    for c in calculated:
+        del c["description"]
+
     assert_list_equal_except_for_order(calculated, expected)
 
 
@@ -112,82 +116,73 @@ def test_not_measured_constraints():
     measurements = {"fac1": [["m1", "m2"], ["m1"]], "fac2": [["m2", "m3"], ["m3"]]}
 
     expected = [
-        {"loc": ("h", 0, "m1", "fac2"), "type": "fixed", "value": 0.0},
-        {"loc": ("h", 0, "m3", "fac1"), "type": "fixed", "value": 0.0},
-        {"loc": ("h", 1, "m1", "fac2"), "type": "fixed", "value": 0.0},
-        {"loc": ("h", 1, "m3", "fac1"), "type": "fixed", "value": 0.0},
+        {
+            "loc": [
+                ("h", 0, "m3", "fac1"),
+                ("h", 0, "m1", "fac2"),
+                ("h", 1, "m3", "fac1"),
+                ("h", 1, "m1", "fac2"),
+            ],
+            "type": "fixed",
+            "value": 0.0,
+        }
     ]
 
     calculated = _not_measured_constraints(uinfo, measurements, [], None)
+    for c in calculated:
+        del c["description"]
 
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_w_constraints_mixture():
-    calculated = _w_constraints(nemf=2)
+    calculated = _w_constraints(nmixtures=2)
+    for c in calculated:
+        del c["description"]
     expected = [{"loc": "w", "type": "probability"}]
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_w_constraints_normal():
-    calculated = _w_constraints(nemf=1)
+    calculated = _w_constraints(nmixtures=1)
+    for c in calculated:
+        del c["description"]
     expected = [{"loc": "w", "type": "fixed", "value": 1.0}]
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_p_constraints():
-    nemf = 2
+    nmixtures = 2
     expected = [
-        {"loc": ("p", 0, 0), "type": "covariance", "bounds_distance": 0.0},
-        {"loc": ("p", 0, 1), "type": "covariance", "bounds_distance": 0.0},
+        {"loc": ("p", 0, "mixture_0"), "type": "covariance", "bounds_distance": 0.0},
+        {"loc": ("p", 0, "mixture_1"), "type": "covariance", "bounds_distance": 0.0},
     ]
 
-    calculated = _p_constraints(nemf, 0.0)
+    calculated = _p_constraints(nmixtures, 0.0)
+    for c in calculated:
+        del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_stage_constraints():
     factors = ["fac1"]
     stagemap = [0, 0, 0, 0]
-    transition_names = ["linear_with_constant"]
+    transition_names = ["linear"]
     included_factors = [["fac1"]]
 
     expected = [
         {
-            "loc": [
-                ("trans", 0, "fac1", "lincoeff-fac1"),
-                ("trans", 1, "fac1", "lincoeff-fac1"),
-            ],
-            "type": "equality",
+            "locs": [("trans", 0), ("trans", 1), ("trans", 2)],
+            "type": "pairwise_equality",
         },
-        {
-            "loc": [
-                ("trans", 0, "fac1", "lincoeff-constant"),
-                ("trans", 1, "fac1", "lincoeff-constant"),
-            ],
-            "type": "equality",
-        },
-        {"loc": [("q", 0, "fac1", ""), ("q", 1, "fac1", "")], "type": "equality"},
-        {
-            "loc": [
-                ("trans", 1, "fac1", "lincoeff-fac1"),
-                ("trans", 2, "fac1", "lincoeff-fac1"),
-            ],
-            "type": "equality",
-        },
-        {
-            "loc": [
-                ("trans", 1, "fac1", "lincoeff-constant"),
-                ("trans", 2, "fac1", "lincoeff-constant"),
-            ],
-            "type": "equality",
-        },
-        {"loc": [("q", 1, "fac1", ""), ("q", 2, "fac1", "")], "type": "equality"},
+        {"locs": [("q", 0), ("q", 1), ("q", 2)], "type": "pairwise_equality"},
     ]
 
     calculated = _stage_constraints(
         stagemap, factors, transition_names, included_factors
     )
+    for c in calculated:
+        del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
 
 
@@ -197,44 +192,30 @@ def test_constant_factor_constraints():
     transition_names = ["bla", "constant"]
 
     expected = [
-        {"loc": ("q", 0, "fac2", ""), "type": "fixed", "value": 0.0},
-        {"loc": ("q", 1, "fac2", ""), "type": "fixed", "value": 0.0},
+        {"loc": ("q", 0, "fac2", "-"), "type": "fixed", "value": 0.0},
+        {"loc": ("q", 1, "fac2", "-"), "type": "fixed", "value": 0.0},
     ]
 
     calculated = _constant_factors_constraints(factors, transition_names, periods)
-    assert_list_equal_except_for_order(calculated, expected)
-
-
-def test_ar1_constraints():
-    factors = ["fac1", "fac2"]
-    periods = [0, 1, 2, 3]
-    transition_names = ["bla", "ar1"]
-    included_factors = [["fac1", "fac2"], ["fac2"]]
-
-    expected = [
-        {
-            "loc": [("trans", 0, "fac2", "ar1coeff"), ("trans", 1, "fac2", "ar1coeff")],
-            "type": "equality",
-        },
-        {
-            "loc": [("trans", 1, "fac2", "ar1coeff"), ("trans", 2, "fac2", "ar1coeff")],
-            "type": "equality",
-        },
-        {"loc": [("q", 0, "fac2", ""), ("q", 1, "fac2", "")], "type": "equality"},
-        {"loc": [("q", 1, "fac2", ""), ("q", 2, "fac2", "")], "type": "equality"},
-    ]
-    calculated = _ar1_contraints(factors, transition_names, included_factors, periods)
+    for c in calculated:
+        del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_x_constraints():
-    nemf = 3
+    nmixtures = 3
     factors = ["fac1", "fac2", "fac3"]
-    ind_tups = [("x", 0, 0, "fac1"), ("x", 0, 1, "fac1"), ("x", 0, 2, "fac1")]
+    ind_tups = [
+        ("x", 0, "mixture_0", "fac1"),
+        ("x", 0, "mixture_1", "fac1"),
+        ("x", 0, "mixture_2", "fac1"),
+    ]
 
     expected = [{"loc": ind_tups, "type": "increasing"}]
 
-    calculated = _x_constraints(nemf, factors, True)
+    calculated = _x_constraints(nmixtures, factors)
+    for c in calculated:
+        del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
 
 
@@ -247,17 +228,17 @@ def test_trans_coeff_constraints():
     expected = [
         {
             "loc": [
-                ("trans", 0, "fac1", "gamma-fac1"),
-                ("trans", 0, "fac1", "gamma-fac2"),
-                ("trans", 0, "fac1", "gamma-fac3"),
+                ("trans", 0, "fac1", "fac1"),
+                ("trans", 0, "fac1", "fac2"),
+                ("trans", 0, "fac1", "fac3"),
             ],
             "type": "probability",
         },
         {
             "loc": [
-                ("trans", 1, "fac1", "gamma-fac1"),
-                ("trans", 1, "fac1", "gamma-fac2"),
-                ("trans", 1, "fac1", "gamma-fac3"),
+                ("trans", 1, "fac1", "fac1"),
+                ("trans", 1, "fac1", "fac2"),
+                ("trans", 1, "fac1", "fac3"),
             ],
             "type": "probability",
         },
@@ -265,7 +246,8 @@ def test_trans_coeff_constraints():
     calculated = _trans_coeff_constraints(
         factors, transition_names, included_factors, periods
     )
-
+    for c in calculated:
+        del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
 
 

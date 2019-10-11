@@ -60,16 +60,16 @@ def unpack_update_fixture(
 def setup_linear_update():
     out = {}
 
-    nemf, nind, nfac = 2, 6, 3
-    states = np.ones((nind, nemf, nfac))
+    nmixtures, nind, nfac = 2, 6, 3
+    states = np.ones((nind, nmixtures, nfac))
     states[:, 1, 2] *= 2
     out["state"] = states
 
-    covs = np.zeros((nind, nemf, nfac, nfac))
+    covs = np.zeros((nind, nmixtures, nfac, nfac))
     covs[:] = np.ones((nfac, nfac)) * 0.1 + np.eye(nfac) * 0.6
     out["covs"] = covs
 
-    mcovs = np.zeros((nind, nemf, nfac + 1, nfac + 1))
+    mcovs = np.zeros((nind, nmixtures, nfac + 1, nfac + 1))
     out["mcovs"] = mcovs
 
     mcovs[:, :, 1:, 1:] = np.transpose(np.linalg.cholesky(covs), axes=(0, 1, 3, 2))
@@ -94,7 +94,7 @@ def setup_linear_update():
 
     out["kf"] = np.zeros((nind, nfac))
 
-    weights = np.ones((nind, nemf))
+    weights = np.ones((nind, nmixtures))
     weights[:, 0] *= 0.4
     weights[:, 1] *= 0.6
     out["weights"] = weights
@@ -290,78 +290,6 @@ def test_sqrt_weight_update_with_nans(setup_linear_update, expected_linear_updat
     aaae(d["weights"], expected_linear_update["expected_weights"])
 
 
-def test_normal_state_update_with_nans(setup_linear_update, expected_linear_update):
-    d = setup_linear_update
-    kf.normal_linear_update(
-        d["state"],
-        d["covs"],
-        d["like_vector"],
-        d["y"],
-        d["c"],
-        d["delta"],
-        d["h"],
-        d["r"],
-        d["positions"],
-        d["weights"],
-        d["kf"],
-    )
-    aaae(d["state"], expected_linear_update["expected_states"])
-
-
-def test_normal_cov_update_with_nans(setup_linear_update, expected_linear_update):
-    d = setup_linear_update
-    kf.normal_linear_update(
-        d["state"],
-        d["covs"],
-        d["like_vector"],
-        d["y"],
-        d["c"],
-        d["delta"],
-        d["h"],
-        d["r"],
-        d["positions"],
-        d["weights"],
-        d["kf"],
-    )
-    aaae(d["covs"], expected_linear_update["expected_covs"])
-
-
-def test_normal_like_vec_update_with_nans(setup_linear_update, expected_linear_update):
-    d = setup_linear_update
-    kf.normal_linear_update(
-        d["state"],
-        d["covs"],
-        d["like_vector"],
-        d["y"],
-        d["c"],
-        d["delta"],
-        d["h"],
-        d["r"],
-        d["positions"],
-        d["weights"],
-        d["kf"],
-    )
-    aaae(d["like_vector"], expected_linear_update["expected_like_vector"])
-
-
-def test_normal_weight_update_with_nans(setup_linear_update, expected_linear_update):
-    d = setup_linear_update
-    kf.normal_linear_update(
-        d["state"],
-        d["covs"],
-        d["like_vector"],
-        d["y"],
-        d["c"],
-        d["delta"],
-        d["h"],
-        d["r"],
-        d["positions"],
-        d["weights"],
-        d["kf"],
-    )
-    aaae(d["weights"], expected_linear_update["expected_weights"])
-
-
 @pytest.fixture
 def setup_linear_update_2():
     # to conform with the jsons that contain setup and result of filterpy
@@ -436,25 +364,6 @@ def setup_linear_update_2():
     }
 
 
-def test_normal_state_and_cov_update_without_nan(setup_linear_update_2):
-    d, exp_states, exp_cov = unpack_update_fixture(**setup_linear_update_2)
-    kf.normal_linear_update(
-        d["state"],
-        d["covs"],
-        d["like_vec"],
-        d["y"],
-        d["c"],
-        d["delta"],
-        d["h"],
-        d["r"],
-        d["positions"],
-        d["weights"],
-        d["kf"],
-    )
-    aaae(d["state"], exp_states)
-    aaae(d["covs"], exp_cov)
-
-
 # =============================================================================
 # tests from filterpy
 # =============================================================================
@@ -468,18 +377,23 @@ ids, fixtures = zip(*id_to_fix.items())
 @pytest.mark.parametrize("fixture", fixtures, ids=ids)
 def test_normal_state_and_cov_against_filterpy(fixture):
     d, exp_states, exp_cov = unpack_update_fixture(**fixture)
-    kf.normal_linear_update(
+    num_covs, dim, _ = d["covs"].shape
+    cholcovs = np.zeros((num_covs, dim + 1, dim + 1))
+    cholcovs[:, 1:, 1:] = np.transpose(np.linalg.cholesky(d["covs"]), axes=(0, 2, 1))
+
+    kf.sqrt_linear_update(
         d["state"],
-        d["covs"],
+        cholcovs,
         d["like_vec"],
         d["y"],
         d["c"],
         d["delta"],
         d["h"],
-        d["r"],
+        np.sqrt(d["r"]),
         d["positions"],
         d["weights"],
-        d["kf"],
     )
     aaae(d["state"], exp_states)
-    aaae(d["covs"], exp_cov)
+    reduced_cholcovs = cholcovs[:, 1:, 1:]
+    covs = np.matmul(np.transpose(reduced_cholcovs, axes=(0, 2, 1)), reduced_cholcovs)
+    aaae(covs, exp_cov)

@@ -48,27 +48,15 @@ def linear(sigma_points, coeffs, included_positions):
     coeff_vec = np.zeros(nfac)
     for p, pos in enumerate(included_positions):
         coeff_vec[pos] = coeffs[p]
-    return np.dot(sigma_points, coeff_vec)
+    without_constant = np.dot(sigma_points, coeff_vec)
+    return coeffs[-1] + without_constant
 
 
 def index_tuples_linear(factor, included_factors, period):
     ind_tups = []
     for incl_fac in included_factors:
-        ind_tups.append(("trans", period, factor, f"lincoeff-{incl_fac}"))
-    return ind_tups
-
-
-# =============================================================================
-# linear with constant
-# =============================================================================
-def linear_with_constant(sigma_points, coeffs, included_positions):
-    without_constant = linear(sigma_points, coeffs[:-1], included_positions)
-    return coeffs[-1] + without_constant
-
-
-def index_tuples_linear_with_constant(factor, included_factors, period):
-    ind_tups = index_tuples_linear(factor, included_factors, period)
-    ind_tups.append(("trans", period, factor, "lincoeff-constant"))
+        ind_tups.append(("trans", period, factor, incl_fac))
+    ind_tups.append(("trans", period, factor, "constant"))
     return ind_tups
 
 
@@ -83,19 +71,6 @@ def constant(sigma_points, coeffs, included_positions):
 
 def index_tuples_constant(factor, included_factors, period):
     return []
-
-
-# =============================================================================
-# ar1
-# =============================================================================
-
-
-def ar1(sigma_points, coeffs, included_positions):
-    return sigma_points[:, included_positions[0]] * coeffs[0]
-
-
-def index_tuples_ar1(factor, included_factors, period):
-    return [("trans", period, factor, "ar1coeff")]
 
 
 # =============================================================================
@@ -122,7 +97,7 @@ def log_ces(sigma_points, coeffs, included_positions):
 def index_tuples_log_ces(factor, included_factors, period):
     ind_tups = []
     for incl_fac in included_factors:
-        ind_tups.append(("trans", period, factor, f"gamma-{incl_fac}"))
+        ind_tups.append(("trans", period, factor, incl_fac))
     ind_tups.append(("trans", period, factor, "phi"))
     return ind_tups
 
@@ -168,59 +143,13 @@ def translog(sigma_points, coeffs, included_positions):
 def index_tuples_translog(factor, included_factors, period):
     ind_tups = []
     for i_fac in included_factors:
-        ind_tups.append(("trans", period, factor, f"translog-{i_fac}"))
+        ind_tups.append(("trans", period, factor, i_fac))
 
     for i, i_fac1 in enumerate(included_factors):
         for i_fac2 in included_factors[i:]:
             if i_fac1 == i_fac2:
-                ind_tups.append(("trans", period, factor, f"translog-{i_fac1}-squared"))
+                ind_tups.append(("trans", period, factor, f"{i_fac1} ** 2"))
             else:
-                ind_tups.append(
-                    ("trans", period, factor, f"translog-{i_fac1}-{i_fac2}")
-                )
-    ind_tups.append(("trans", period, factor, "translog-tfp"))
-    return ind_tups
-
-
-# =============================================================================
-# translog without square terms
-# =============================================================================
-
-
-@jit
-def no_squares_translog(sigma_points, coeffs, included_positions):
-    # the coeffs will be parsed as follows:
-    # last entry = TFP term
-    # first len(included_position) entries = coefficients for the factors
-    # rest = coefficients for interaction terms (excluding squared terms)
-    long_side, nfac = sigma_points.shape
-    result_array = np.zeros(long_side)
-    nr_included = len(included_positions)
-    for i in range(long_side):
-        # TFP term is additive in logs
-        res = coeffs[-1]
-        next_coeff = nr_included
-        for p, pos1 in enumerate(included_positions):
-            # counter for coefficients
-            # the factor held fix during the inner loop
-            fac = sigma_points[i, pos1]
-            # add the factor term
-            res += coeffs[p] * fac
-            # add the interaction terms
-            for pos2 in included_positions[p + 1 :]:
-                res += coeffs[next_coeff] * fac * sigma_points[i, pos2]
-                next_coeff += 1
-        result_array[i] = res
-    return result_array
-
-
-def index_tuples_no_squares_translog(factor, included_factors, period):
-    ind_tups = []
-    for i_fac in included_factors:
-        ind_tups.append(("trans", period, factor, f"translog-{i_fac}"))
-
-    for i, i_fac1 in enumerate(included_factors):
-        for i_fac2 in included_factors[i + 1 :]:
-            ind_tups.append(("trans", period, factor, f"translog-{i_fac1}-{i_fac2}"))
-    ind_tups.append(("trans", period, factor, "translog-tfp"))
+                ind_tups.append(("trans", period, factor, f"{i_fac1} * {i_fac2}"))
+    ind_tups.append(("trans", period, factor, "constant"))
     return ind_tups

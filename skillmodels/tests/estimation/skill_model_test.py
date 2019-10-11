@@ -76,7 +76,7 @@ def test_initial_q(mocker):  # noqa
 
 def test_initial_x(mocker):  # noqa
     mocker.nobs = 10
-    mocker.nemf = 2
+    mocker.nmixtures = 2
     mocker.nfac = 3
 
     exp1 = np.zeros((10, 2, 3))
@@ -93,7 +93,7 @@ def test_initial_x(mocker):  # noqa
 
 def test_initial_w(mocker):  # noqa
     mocker.nobs = 10
-    mocker.nemf = 3
+    mocker.nmixtures = 3
 
     expected = np.ones((10, 3)) / 3
 
@@ -104,27 +104,13 @@ def test_initial_w(mocker):  # noqa
 @pytest.fixture
 def p_mocker(mocker):  # noqa
     mocker.nobs = 10
-    mocker.nemf = 2
+    mocker.nmixtures = 2
     mocker.nfac = 3
     return mocker
 
 
-def test_initial_p_square_root_filters(p_mocker):
-    p_mocker.square_root_filters = True
+def test_initial_p(p_mocker):
     expected = [np.zeros((10, 2, 4, 4)), np.zeros((20, 4, 4))]
-    calculated = SkillModel._initial_p(p_mocker)
-    for calc, exp in zip(calculated, expected):
-        aae(calc, exp)
-
-    # test that the second is pointing to the same data as the first.
-    calc1, calc2 = calculated
-    calc1 += 1
-    aae(calc2, np.ones_like(calc2))
-
-
-def test_initial_p_normal_filters(p_mocker):
-    p_mocker.square_root_filters = False
-    expected = [np.zeros((10, 2, 3, 3)), np.zeros((20, 3, 3))]
     calculated = SkillModel._initial_p(p_mocker)
     for calc, exp in zip(calculated, expected):
         aae(calc, exp)
@@ -159,10 +145,10 @@ def test_initial_trans_coeffs(mocker):  # noqa
 
 class TestSigmaWeightsAndScalingFactor:
     def setup(self):
-        self.nemf = 2
+        self.nmixtures = 2
         self.nobs = 10
         self.nfac = 4
-        self.kappa = 1.5
+        self.sigma_points_scale = 1.5
 
         # these test results have been calculated with the sigma_point
         # function of the filterpy library

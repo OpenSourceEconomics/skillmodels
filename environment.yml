@@ -7,13 +7,12 @@ dependencies:
   - pip
   - conda-build
   - doc8
-  - estimagic>=0.0.12
+  - estimagic>=0.0.18
   - jupyter
   - matplotlib
   - mkl-service
   - nose
   - numba>=0.42
-  - numpy
   - pandas>=0.24
   - pytest
   - pytest-mock
@@ -26,5 +25,6 @@ dependencies:
   - sphinx_rtd_theme
   - statsmodels>=0.9.0
   - anaconda-client
+  - nbsphinx
   - pip:
     - pre-commit

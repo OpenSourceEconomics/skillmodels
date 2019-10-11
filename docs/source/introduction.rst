@@ -10,11 +10,6 @@ formation models. The econometrics of skill formation models is a very active
 field and several estimators were proposed. None of them is implemented in
 standard econometrics packages.
 
-The aims of this package are as follows:
-    - Implement several estimators for nonlinear skill formation models
-    - Use the same model specification for all
-    - Use the same result processing for all
-
 I start implementing the Kalman filter based maximum likelihood estimator
 proposed by Cunha, Heckman and Schennach (CHS), (`Econometrica 2010`_)
 

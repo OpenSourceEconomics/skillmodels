@@ -1,3 +1,4 @@
+import warnings
 from itertools import product
 from os.path import join
 
@@ -57,11 +58,7 @@ class SkillModel:
         self.__dict__.update(specs_dict)
 
         # create a list of all quantities that depend from params vector
-        self.params_quants = ["delta", "h", "r", "q", "p", "trans_coeffs"]
-        if self.estimate_X_zeros is True:
-            self.params_quants.append("x")
-        if self.restrict_W_zeros is False:
-            self.params_quants.append("w")
+        self.params_quants = ["delta", "h", "r", "q", "p", "trans_coeffs", "x", "w"]
 
     def _initial_delta(self):
         """List of initial arrays for control variable params in each period.
@@ -98,24 +95,21 @@ class SkillModel:
 
     def _initial_x(self):
         """Initial X_zero array filled with zeros."""
-        init = np.zeros((self.nobs, self.nemf, self.nfac))
-        flat_init = init.reshape(self.nobs * self.nemf, self.nfac)
+        init = np.zeros((self.nobs, self.nmixtures, self.nfac))
+        flat_init = init.reshape(self.nobs * self.nmixtures, self.nfac)
         return init, flat_init
 
     def _initial_w(self):
-        """Initial W_zero array filled with 1/nemf."""
-        return np.ones((self.nobs, self.nemf)) / self.nemf
+        """Initial W_zero array filled with 1/nmixtures."""
+        return np.ones((self.nobs, self.nmixtures)) / self.nmixtures
 
     def _initial_p(self):
         """Initial P_zero array filled with zeros."""
-        if self.square_root_filters is False:
-            init = np.zeros((self.nobs, self.nemf, self.nfac, self.nfac))
-            flat_init = init.reshape(self.nobs * self.nemf, self.nfac, self.nfac)
-        else:
-            init = np.zeros((self.nobs, self.nemf, self.nfac + 1, self.nfac + 1))
-            flat_init = init.reshape(
-                self.nobs * self.nemf, self.nfac + 1, self.nfac + 1
-            )
+
+        init = np.zeros((self.nobs, self.nmixtures, self.nfac + 1, self.nfac + 1))
+        flat_init = init.reshape(
+            self.nobs * self.nmixtures, self.nfac + 1, self.nfac + 1
+        )
         return init, flat_init
 
     def _initial_trans_coeffs(self):
@@ -131,85 +125,91 @@ class SkillModel:
 
     def start_params_helpers(self):
         """DataFrames with the free and fixed parameters of the model."""
-        free, fixed = make_start_params_helpers(self.params_index, self.constraints)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="indexing past lexsort depth may impact performance."
+            )
+            free, fixed = make_start_params_helpers(self.params_index, self.constraints)
         return free, fixed
 
-    def generate_full_start_params(self, start_params):
+    def generate_full_start_params(self, start_params=None):
         """Vector with start values for the optimization.
 
         If valid start_params are provided in the model dictionary, these will
         be used. Else, naive start_params are generated.
 
         """
-        free, fixed = self.start_params_helpers()
-        if start_params is not None:
-            sp = start_params
-            assert isinstance(sp, pd.DataFrame)
-            if len(sp.index.intersection(self.params_index)) == len(self.params_index):
-                full_sp = sp
-
-            elif len(sp.index.intersection(free.index)) == len(free.index):
-                full_sp = get_start_params_from_free_params(
-                    sp, self.constraints, self.params_index
-                )
-            else:
-                raise ValueError(
-                    "Index of start parameters has to be either self.params_index or "
-                    "the index of free parameters from start_params_helpers."
-                )
-        else:
-            free["value"] = 0.0
-            free.loc["h", "value"] = 1.0
-            free.loc["r", "value"] = 1.0
-            free.loc["q", "value"] = 1.0
-            free.loc["trans", "value"] = 1 / self.nfac
-            free.loc["w", "value"] = 1 / self.nemf
-            for emf in range(self.nemf):
-                p_diags = [("p", 0, emf, f"{fac}-{fac}") for fac in self.factors]
-                free.loc[p_diags, "value"] = 1
-
-            full_sp = get_start_params_from_free_params(
-                free, self.constraints, self.params_index
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="indexing past lexsort depth may impact performance."
             )
+            free, fixed = self.start_params_helpers()
+            if start_params is not None:
+                sp = start_params
+                assert isinstance(sp, pd.DataFrame)
+                if len(sp.index.intersection(self.params_index)) == len(
+                    self.params_index
+                ):
+                    full_sp = sp
 
-        full_sp["group"] = None
+                elif len(sp.index.intersection(free.index)) == len(free.index):
+                    full_sp = get_start_params_from_free_params(
+                        sp, self.constraints, self.params_index
+                    )
+                else:
+                    raise ValueError(
+                        "Index of start parameters has to be either self.params_index "
+                        "or the index of free parameters from start_params_helpers."
+                    )
+            else:
+                free["value"] = 0.0
+                free.loc["h", "value"] = 1.0
+                free.loc["r", "value"] = 1.0
+                free.loc["q", "value"] = 1.0
+                free.loc["trans", "value"] = 1 / self.nfac
+                free.loc["w", "value"] = 1 / self.nmixtures
+                for emf in range(self.nmixtures):
+                    p_diags = [("p", 0, emf, f"{fac}-{fac}") for fac in self.factors]
+                    free.loc[p_diags, "value"] = 1
 
-        for period in self.periods:
-            full_sp.loc[("h", period), "group"] = f"Loadings in Period {period}"
-            full_sp.loc[("r", period), "group"] = f"Meas-Variances in Period {period}"
+                full_sp = get_start_params_from_free_params(
+                    free, self.constraints, self.params_index
+                )
 
-        for period in self.periods[:-1]:
-            full_sp.loc[
-                ("trans", period), "group"
-            ] = f"Transition Parameters in Period {period}"
-        full_sp.loc["p", "group"] = "Factor Covariance Matrix"
-        full_sp.loc[fixed.index, "group"] = None
-        full_sp = add_bounds(full_sp, bounds_distance=self.bounds_distance)
-        return full_sp
+            full_sp["group"] = None
+
+            for period in self.periods:
+                full_sp.loc[("h", period), "group"] = f"Loadings in Period {period}"
+                full_sp.loc[
+                    ("r", period), "group"
+                ] = f"Meas-Variances in Period {period}"
+
+            for period in self.periods[:-1]:
+                full_sp.loc[
+                    ("trans", period), "group"
+                ] = f"Transition Parameters in Period {period}"
+            full_sp.loc["p", "group"] = "Factor Covariance Matrix"
+            full_sp.loc[fixed.index, "group"] = None
+            full_sp = add_bounds(full_sp, bounds_distance=self.bounds_distance)
+            return full_sp
 
     def sigma_weights(self):
         """Calculate the sigma weight according to the julier algorithm."""
         nsigma = 2 * self.nfac + 1
-        s_weights_m = np.ones(nsigma) / (2 * (self.nfac + self.kappa))
-        s_weights_m[0] = self.kappa / (self.nfac + self.kappa)
+        s_weights_m = np.ones(nsigma) / (2 * (self.nfac + self.sigma_points_scale))
+        s_weights_m[0] = self.sigma_points_scale / (self.nfac + self.sigma_points_scale)
         s_weights_c = s_weights_m
         return s_weights_m, s_weights_c
 
     def sigma_scaling_factor(self):
         """Calculate invariant part of sigma points according to the julier."""
-        scaling_factor = np.sqrt(self.kappa + self.nfac)
+        scaling_factor = np.sqrt(self.sigma_points_scale + self.nfac)
         return scaling_factor
 
     def _initial_quantities_dict(self):
         init_dict = {}
-        needed_quantities = self.params_quants.copy()
 
-        if "x" not in needed_quantities:
-            needed_quantities.append("x")
-        if "w" not in needed_quantities:
-            needed_quantities.append("w")
-
-        for quant in needed_quantities:
+        for quant in self.params_quants:
             if quant not in ["x", "p"]:
                 init_dict[quant] = getattr(self, f"_initial_{quant}")()
             else:
@@ -217,10 +217,10 @@ class SkillModel:
                 init_dict[quant] = normal
                 init_dict[f"flat_{quant}"] = flat
 
-        sp = np.zeros((self.nemf * self.nobs, self.nsigma, self.nfac))
+        sp = np.zeros((self.nmixtures * self.nobs, self.nsigma, self.nfac))
         init_dict["sigma_points"] = sp
         init_dict["flat_sigma_points"] = sp.reshape(
-            self.nemf * self.nobs * self.nsigma, self.nfac
+            self.nmixtures * self.nobs * self.nsigma, self.nfac
         )
 
         init_dict["like_contributions"] = np.zeros((self.nupdates, self.nobs))
@@ -228,24 +228,9 @@ class SkillModel:
         return init_dict
 
     def _parse_params_args_dict(self, initial_quantities):
-        pp = {
-            "initial_quantities": initial_quantities,
-            "factors": self.factors,
-            "square_root_filters": self.square_root_filters,
-        }
+        pp = {"initial_quantities": initial_quantities, "factors": self.factors}
 
         return pp
-
-    def _restore_unestimated_quantities_args_dict(self, initial_quantities):
-        r_args = {}
-        if "x" not in self.params_quants:
-            r_args["x"] = initial_quantities["x"]
-            # this could be vectors
-            r_args["x_value"] = 0.0
-        if "w" not in self.params_quants:
-            r_args["w"] = initial_quantities["w"]
-            r_args["w_value"] = 1 / self.nemf
-        return r_args
 
     def _update_args_dict(self, initial_quantities):
         position_helper = self.update_info[list(self.factors)].to_numpy().astype(bool)
@@ -269,8 +254,6 @@ class SkillModel:
                     np.arange(self.nfac)[position_helper[k]],
                     initial_quantities["w"],
                 ]
-                if self.square_root_filters is False:
-                    u_args.append(np.zeros((self.nobs, self.nfac)))
                 u_args_list.append(u_args)
                 k += 1
         return u_args_list
@@ -315,7 +298,6 @@ class SkillModel:
         sp_args["states"] = initial_quantities["x"]
         sp_args["flat_covs"] = initial_quantities["flat_p"]
         sp_args["out"] = initial_quantities["sigma_points"]
-        sp_args["square_root_filters"] = self.square_root_filters
         sp_args["scaling_factor"] = self.sigma_scaling_factor()
         return sp_args
 
@@ -329,13 +311,9 @@ class SkillModel:
         args["periods"] = self.periods
         args["nmeas_list"] = self.nmeas_list
         args["anchoring"] = self.anchoring
-        args["square_root_filters"] = self.square_root_filters
         args["update_args"] = self._update_args_dict(initial_quantities)
         args["predict_args"] = self._predict_args_dict(initial_quantities)
         args["calculate_sigma_points_args"] = self._calculate_sigma_points_args_dict(
-            initial_quantities
-        )
-        args["restore_args"] = self._restore_unestimated_quantities_args_dict(
             initial_quantities
         )
         return args
@@ -359,6 +337,8 @@ class SkillModel:
         if isinstance(policies, dict):
             policies = [policies]
 
+        params = self.generate_full_start_params(params)
+
         initial_quantities = self._initial_quantities_dict()
         pp_args = self._parse_params_args_dict(initial_quantities)
 
@@ -371,7 +351,7 @@ class SkillModel:
                 self.controls[period] == self.controls[0]
             ), "simulate only works if the same controls are used in each period."
 
-        control_names = self.controls[0]
+        control_names = list(self.controls[0])
 
         loadings_df = pd.DataFrame(
             data=initial_quantities["h"],
@@ -389,8 +369,7 @@ class SkillModel:
         meas_variances = pd.Series(
             data=initial_quantities["r"], index=self.update_info.index
         )
-        if self.square_root_filters is True:
-            meas_variances **= 2
+        meas_variances **= 2
 
         dist_name = "multivariate_normal"
 
@@ -398,21 +377,20 @@ class SkillModel:
         p_zero = initial_quantities["p"]
 
         dist_arg_dict = []
-        for n in range(self.nemf):
+        for n in range(self.nmixtures):
             factor_mean = x_zero[0, n]
             control_mean = np.zeros(len(control_names))
 
             factor_cov = p_zero[0, n]
-            if self.square_root_filters is True:
-                factor_cov = factor_cov[1:, 1:]
-                factor_cov = np.dot(factor_cov.T, factor_cov)
+            factor_cov = factor_cov[1:, 1:]
+            factor_cov = np.dot(factor_cov.T, factor_cov)
             nfac = len(factor_cov)
             dim = nfac + len(control_names)
             full_cov = np.eye(dim) * 0.9 + np.ones((dim, dim)) * 0.1
             full_cov[:nfac, :nfac] = factor_cov
             d = {"mean": np.hstack([factor_mean, control_mean]), "cov": full_cov}
             dist_arg_dict.append(d)
-        weights = np.ones(self.nemf)
+        weights = np.ones(self.nmixtures)
 
         observed_data, latent_data = simulate_datasets(
             factor_names=factor_names,
@@ -433,10 +411,39 @@ class SkillModel:
 
         return observed_data, latent_data
 
-    def fit(self, start_params=None, dashboard=False, db_options=None):
-        """Fit the model and return an instance of SkillModelResults."""
+    def fit(
+        self,
+        start_params=None,
+        algorithm="scipy_L-BFGS-B",
+        user_constraints=None,
+        algo_options=None,
+        dashboard=False,
+        db_options=None,
+    ):
+        """Fit the model and return the estimated parameters.
 
+        Args:
+            start_params (pd.DataFrame): Start values for the maximization.
+            algorithm (str): The optimization algorithm.
+            user_constraints (list): List with additional constraints and/or constraint
+                killers that will be combined with the constraints that are generated
+                automatically by skillmodels.
+            algo_options (dict): Additonal keyword arguments for the optimizer.
+            dashboard (bool): Run an estimagic dashboard to monitor the optimization
+            db_options (dict): Arguments to configure the dashboard.
+
+        Returns
+            res (optimization result)
+
+        For a more detailed description of the arguments, check the
+        `estimagic documentation <https://tinyurl.com/y3hbgmam>`_
+
+        """
+        user_constraints = user_constraints if user_constraints is not None else []
         db_options = {} if db_options is None else db_options
+        combined_algo_options = {"maxfun": 1000000, "maxiter": 1000000}
+        if algo_options is not None:
+            combined_algo_options.update(algo_options)
 
         args = self.likelihood_arguments_dict()
         start_params = self.generate_full_start_params(start_params)
@@ -446,17 +453,15 @@ class SkillModel:
             log_like_contributions[log_like_contributions < -1e300] = -1e300
             return np.mean(log_like_contributions)
 
-        algo_options = {"maxfun": 1000000, "maxiter": 1000000}
-
         res = maximize(
             criterion,
             start_params,
-            constraints=self.constraints,
-            algorithm="scipy_L-BFGS-B",
+            constraints=self.constraints + user_constraints,
+            algorithm=algorithm,
             criterion_args=(args,),
             dashboard=dashboard,
             db_options=db_options,
-            algo_options=algo_options,
+            algo_options=combined_algo_options,
         )
         return res
 

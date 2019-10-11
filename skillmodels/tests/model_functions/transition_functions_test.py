@@ -12,11 +12,11 @@ import skillmodels.model_functions.transition_functions as tf
 
 @pytest.fixture
 def setup_linear():
-    nemf, nind, nsigma, nfac = 2, 10, 7, 3
-    sigma_points = np.ones((nemf, nind, nsigma, nfac))
+    nmixtures, nind, nsigma, nfac = 2, 10, 7, 3
+    sigma_points = np.ones((nmixtures, nind, nsigma, nfac))
     sigma_points[1] *= 2
     sigma_points[:, :, 0, :] = 3
-    sigma_points = sigma_points.reshape(nemf * nind * nsigma, nfac)
+    sigma_points = sigma_points.reshape(nmixtures * nind * nsigma, nfac)
 
     args = {
         "sigma_points": sigma_points,
@@ -28,69 +28,23 @@ def setup_linear():
 
 @pytest.fixture
 def expected_linear():
-    nemf, nind, nsigma = 2, 10, 7
-    expected_result = np.ones((nemf, nind, nsigma)) * 3
+    nmixtures, nind, nsigma = 2, 10, 7
+    expected_result = np.ones((nmixtures, nind, nsigma)) * 3
     expected_result[1, :, :] *= 2
     expected_result[:, :, 0] = 9
     expected_result = expected_result.flatten()
+    expected_result += 0.5
     return expected_result
-
-
-def test_linear(setup_linear, expected_linear):
-    aaae(tf.linear(**setup_linear), expected_linear)
 
 
 # ======================================================================================
 # linear with constant
 # ======================================================================================
-@pytest.fixture
-def expected_linear_with_constant():
-    nemf, nind, nsigma = 2, 10, 7
-    coeffs = [0.5, 1.0, 1.5, 0.5]
-    expected_result = np.ones((nemf, nind, nsigma)) * 3
-    expected_result[1, :, :] *= 2
-    expected_result[:, :, 0] = 9
-    expected_result = expected_result.flatten()
-
-    return coeffs[-1] + expected_result
 
 
-def test_linear_with_constant(setup_linear, expected_linear):
+def test_linear(setup_linear, expected_linear):
     setup_linear["coeffs"] = [0.5, 1.0, 1.5, 0.5]
-    expected_linear_with_constant = expected_linear + 0.5
-    aaae(tf.linear_with_constant(**setup_linear), expected_linear_with_constant)
-
-
-# ======================================================================================
-# ar1
-# ======================================================================================
-
-
-@pytest.fixture
-def setup_ar1_transition_equation():
-    # nemf_nind_nsigma is nemf*nind*nsigma
-    nemf_nind_nsigma = 140
-
-    args = {
-        "sigma_points": np.ones((nemf_nind_nsigma, 3)),
-        "coeffs": np.array([3]),
-        "included_positions": [1],
-    }
-    return args
-
-
-@pytest.fixture
-def expected_ar1_transition_equation():
-    nemf_nind_nsigma = 140
-    expected_result = np.ones(nemf_nind_nsigma) * 3
-
-    return expected_result
-
-
-def test_ar1_transition_equation(
-    setup_ar1_transition_equation, expected_ar1_transition_equation
-):
-    aaae(tf.ar1(**setup_ar1_transition_equation), expected_ar1_transition_equation)
+    aaae(tf.linear(**setup_linear), expected_linear)
 
 
 # ======================================================================================

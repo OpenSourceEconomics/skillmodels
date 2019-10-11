@@ -32,10 +32,7 @@ class ModelSpecProcessor:
         self.data = pre_process_data(dataset)
         self.model_name = model_name
         self.dataset_name = dataset_name
-        if "time_specific" in model_dict:
-            self._timeinf = model_dict["time_specific"]
-        else:
-            self._timeinf = {}
+        self._timeinf = model_dict.get("time_specific", {})
         self._facinf = model_dict["factor_specific"]
         self.factors = tuple(sorted(list(self._facinf.keys())))
         self.nfac = len(self.factors)
@@ -43,31 +40,24 @@ class ModelSpecProcessor:
 
         # set the general model specifications
         general_settings = {
-            "nemf": 1,
-            "kappa": 2,
-            "square_root_filters": True,
-            "missing_variables": "raise_error",
-            "controls_with_missings": "raise_error",
-            "variables_without_variance": "raise_error",
-            "bounds_distance": 1e-20,
-            "estimate_X_zeros": False,
-            "restrict_W_zeros": True,
-            "restrict_P_zeros": True,
+            "n_mixture_components": 1,
+            "sigma_points_scale": 2,
+            "bounds_distance": 1e-6,
             "ignore_intercept_in_linear_anchoring": True,
             "anchoring_mode": "only_estimate_anchoring_equation",
             "time_invariant_measurement_system": False,
             "base_color": "#035096",
         }
 
-        if "general" in model_dict:
-            general_settings.update(model_dict["general"])
+        general_settings.update(model_dict.get("general", {}))
+
+        self.nmixtures = general_settings.pop("n_mixture_components")
         self.__dict__.update(general_settings)
         self._set_time_specific_attributes()
-        self._check_general_specifications()
         self._transition_equation_names()
         self._transition_equation_included_factors()
         self._set_anchoring_attributes()
-        self._clean_measurement_specifications()
+        self._check_measurements()
         self._clean_controls_specification()
         self.nobs = int(len(self.data) / self.nperiods)
         self._check_and_fill_normalization_specification()
@@ -118,15 +108,6 @@ class ModelSpecProcessor:
                 "you have one list with length {} and another with length "
                 "{}."
             ).format(self.model_name, self.nperiods, length)
-
-    def _check_general_specifications(self):
-        """Check consistency of the "general" model specifications."""
-        if self.estimate_X_zeros is False:
-            assert self.nemf == 1, (
-                "If start states (X_zero) are not estimated it is not "
-                "possible to have more than one element in the mixture "
-                "distribution of the latent factors. Check model {}"
-            ).format(self.model_name)
 
     def _transition_equation_names(self):
         """Construct a list with the transition equation name for each factor.
@@ -190,107 +171,11 @@ class ModelSpecProcessor:
             self.anchor_in_predict = False
             self.anch_outcome = None
 
-    def _present(self, variable, period):
-        """Check if **variable** is present in **period**.
-
-        **variable** is considered present if it is in self.data and not all
-        observations in **period** are NaN.
-
-        args:
-            variable (str): name of the variable whose presence is checked.
-            period (int): period in which the presence of variable is checked.
-
-        Returns:
-            bool: True if **variable** is present and False otherwise.
-
-        Raises:
-            KeyError: if **variable** is not present and self.missing_variables
-                is equal to 'raise_error'
-
-        """
-        message = (
-            "In model {} you use variable {} which is not in dataset {}. "
-            "in period {}. You can either delete the variable in the "
-            'model_specs or set "missing_variables" to "drop_variable" '
-            "to automatically drop missing variables."
-        ).format(self.model_name, variable, self.dataset_name, period)
-
-        columns = set(self.data.columns)
-        df = self.data.query(f"__period__ == {period}")
-        if variable in columns and df[variable].notnull().any():
-            return True
-        elif self.missing_variables == "raise_error":
-            raise KeyError(message)
-        else:
-            return False
-
-    def _has_variance(self, variable, period):
-        """Check if **variable** has variance in **period**.
-
-        **variable** is considered to have variance if it takes at least 2
-        different values in **period**.
-
-        args:
-            variable (str): name of the variable being checked.
-            period (int): period in which the variable is checked
-        Returns:
-            bool: True if **variable** has variance in **period**, else False
-
-        Raises:
-            ValueError: if **variable** is not present and
-                ``self.variables_without_variance == 'raise_error'``
-
-        """
-        message = (
-            "Variables have to take at least two different values as variables"
-            " without variance cannot help to identify the model. In model {} "
-            "you use variable {} which only takes the value {} in dataset {} "
-            "in period {}. You can eiter drop the variable in the model_specs "
-            'or set the "variables_without_variance" key in general settings '
-            'to "drop_variable".'
-        )
-
-        series = self.data.query(f"__period__ == {period}")[variable]
-        unique_non_missing_values = list(series[pd.notnull(series)].unique())
-        nr_unique = len(unique_non_missing_values)
-
-        if nr_unique <= 1:
-            if self.variables_without_variance == "raise_error":
-                raise ValueError(
-                    message.format(
-                        self.model_name,
-                        variable,
-                        unique_non_missing_values,
-                        self.dataset_name,
-                        period,
-                    )
-                )
-            else:
-                return False
-        else:
-            return True
-
-    def _clean_measurement_specifications(self):
-        """Drop missing measurement variables or raise errors.
-
-        Check for each measurement variable of the model if it is present and
-        has variance in all periods where it is used. If not drop it or
-        raise an error according to ``self.missing_variables`` and
-        ``self.variables_without_variance``.
-
-        Set a dictionnary with the cleaned measurement specifications as class
-        attribute ``measurements``.
-
-        """
-        measurements = {factor: [] for factor in self.factors}
-        for factor, t in product(self.factors, self.periods):
-            possible_meas = self._facinf[factor]["measurements"][t]
-            present = [
-                m
-                for m in possible_meas
-                if (self._present(m, t) and self._has_variance(m, t))
-            ]
-            measurements[factor].append(present)
+    def _check_measurements(self):
+        """Set a dictionary with the cleaned measurement specifications as attribute."""
+        measurements = {}
+        for factor in self.factors:
+            measurements[factor] = self._facinf[factor]["measurements"]
 
         for f, factor in enumerate(self.factors):
             if self.transition_names[f] == "constant":
@@ -302,54 +187,25 @@ class ModelSpecProcessor:
                         "ments in period {}.".format(self.model_name, factor, t)
                     )
 
+        for factor in self.factors:
+            for t, meas_list in enumerate(measurements[factor]):
+                df = self.data.query(f"__period__ == {t}")
+                for meas in meas_list:
+                    assert (
+                        df[meas].notnull().any()
+                    ), f"{meas} is has no observations in period {t}."
+
         self.measurements = measurements
 
     def _clean_controls_specification(self):
-        message = (
-            "In model {} you use variable {} which has missing observations "
-            "in period {} as control variable. You can either delete the "
-            'variable in the model_specs or set the "controls_with_missings" '
-            'key to "drop_variable" or "drop_observations" to automatically '
-            "drop the variable (in period {}) or the missing observations "
-            "(in all periods!), respectively"
-        )
+        controls = self._timeinf.get("controls", [[]] * self.nperiods)
 
-        raw_controls = self._timeinf.get("controls", [[]] * self.nperiods)
-        controls = []
-        bad_missings_list = []
+        missings_list = []
         for t in self.periods:
-            all_measurements = []
-            for factor in self.factors:
-                all_measurements += self.measurements[factor][t]
             df = self.data.query(f"__period__ == {t}")
-            bad_missings = pd.Series(data=False, index=df.index)
-            meas_df = df[all_measurements]
-            controls_t = []
-            for control in raw_controls[t]:
-                new_bad_missings = df[control].isnull() & ~meas_df.isnull().all(axis=1)
-
-                if self._present(control, t) and self._has_variance(control, t):
-                    if not new_bad_missings.any():
-                        controls_t.append(control)
-                    elif self.controls_with_missings == "raise_error":
-                        raise ValueError(message.format(self.model_name, control, t, t))
-                    elif self.controls_with_missings == "drop_variable":
-                        pass
-                    elif self.controls_with_missings == "drop_observations":
-                        controls_t.append(control)
-                    else:
-                        raise ValueError(
-                            "controls_with_missings has to be raise_error, "
-                            "drop_variable or drop_observation."
-                        )
-
-                bad_missings = bad_missings | new_bad_missings
-
-            bad_missings_list.append(bad_missings)
-            controls.append(tuple(controls_t))
-
-        self.bad_missings = tuple(bad_missings_list)
-        self.controls = tuple(controls)
+            missings_list.append(df[controls[t]].isnull().any(axis=1))
+        self.missing_controls = tuple(missings_list)
+        self.controls = tuple(tuple(con) for con in controls)
 
     def _check_anchoring_specification(self):
         """Consistency checks for the model specs related to anchoring."""
@@ -373,28 +229,14 @@ class ModelSpecProcessor:
         For the correct specification of a normalizations list refer to
         :ref:`model_specs`
 
-        Four forms of invalid specification are checked and custom error
+        3 forms of invalid specification are checked and custom error
         messages are raised in each case:
         * Invalid length of the specification list
         * Invalid length of the entries in the specification list
         * Normalized variables that were not specified as measurement variables
           in the period where they were used
-        * Normalized variables that have been dropped because they were
-          not present in the dataset in the period where they were used.
-
-        Errors are raised even if ``self.missing_variables == 'drop_variable'``
-        . This is because in some cases the correct normalization is extremely
-        important for the interpretation of the results. Therefore, if
-        normalizations are specified manually they are not changed.
 
         """
-        has_been_dropped_message = (
-            "Normalized measurements must be present. In model {} you have "
-            "specified {} as normalized variable for factor {} but it was "
-            "dropped because it is not present in dataset {} in period {}"
-            'and missing_variables == "drop_variable"'
-        )
-
         was_not_specified_message = (
             "Normalized measurements must be included in the measurement list "
             "of the factor they normalize in the period where they are used. "
@@ -438,22 +280,11 @@ class ModelSpecProcessor:
             normed_measurements = list(norminfo.keys())
             for normed_meas in normed_measurements:
                 if normed_meas not in self.measurements[factor][t]:
-                    if normed_meas in self._facinf[factor]["measurements"][t]:
-                        raise KeyError(
-                            has_been_dropped_message.format(
-                                self.model_name,
-                                normed_meas,
-                                factor,
-                                self.dataset_name,
-                                t,
-                            )
+                    raise KeyError(
+                        was_not_specified_message.format(
+                            self.model_name, normed_meas, factor, t
                         )
-                    else:
-                        raise KeyError(
-                            was_not_specified_message.format(
-                                self.model_name, normed_meas, factor, t
-                            )
-                        )
+                    )
 
         # check validity of values
         for norminfo in norm_list:  #
@@ -636,7 +467,7 @@ class ModelSpecProcessor:
             self.update_info(),
             self.controls,
             self.factors,
-            self.nemf,
+            self.nmixtures,
             self.transition_names,
             self.included_factors,
         )
@@ -648,7 +479,7 @@ class ModelSpecProcessor:
             self.factors,
             self.normalizations,
             self.measurements,
-            self.nemf,
+            self.nmixtures,
             self.stagemap,
             self.transition_names,
             self.included_factors,
@@ -656,7 +487,6 @@ class ModelSpecProcessor:
             self.anchored_factors,
             self.anch_outcome,
             self.bounds_distance,
-            self.estimate_X_zeros,
         )
 
     def public_attribute_dict(self):

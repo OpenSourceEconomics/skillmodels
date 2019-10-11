@@ -25,13 +25,11 @@ for name in model_names:
 start_params = []
 for name in model_names:
     params_df = pd.read_csv(f"skillmodels/tests/regression/{name}.csv")
-    params_df["name2"].fillna("", inplace=True)
-    params_df["name1"].replace("0", 0, inplace=True)
     params_df.set_index(["category", "period", "name1", "name2"], inplace=True)
     start_params.append(params_df)
 
 
-data = pd.read_stata("skillmodels/tests/estimation/chs_test_ex2.dta")
+data = pd.read_stata("skillmodels/tests/regression/chs_test_ex2.dta")
 data.set_index(["id", "period"], inplace=True)
 
 test_cases = []

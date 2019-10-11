@@ -47,21 +47,21 @@ def set_up_npfac():
         "translog",
         "linear",
         "log_ces",
-        "ar1",
+        "linear",
         "constant",
-        "linear_with_constant",
+        "linear",
     ]
     out["transition_argument_dicts"] = [
         {"coeffs": np.array([0.02] * 28), "included_positions": [0, 1, 2, 3, 5]},
         {
-            "coeffs": np.array([0.2, 0.3, 0.2, 0.3, 0.2, 0.2]),
+            "coeffs": np.array([0.2, 0.3, 0.2, 0.3, 0.2, 0.2, 0.0]),
             "included_positions": [0, 1, 2, 3, 4, 5],
         },
         {
             "coeffs": np.array([0.1, 0.1, 0.4, 0.4, 0.5, 0.5, 0.6]),
             "included_positions": [0, 1, 2, 3, 4, 5],
         },
-        {"coeffs": np.array([2]), "included_positions": [1]},
+        {"coeffs": np.array([2, 0.0]), "included_positions": [1]},
         {"coeffs": np.array([1]), "included_positions": [1]},
         {
             "coeffs": np.array([0.2, 0.3, 0.2, 0.3, 0.2, 0.2, 0.05]),
@@ -94,7 +94,7 @@ def test_next_period_factors(set_up_npfac, expected_npfac):
 
 
 # ===============================
-# test generate datasets, nemf=1
+# test generate datasets, nmixtures=1
 # ===============================
 
 
@@ -110,10 +110,10 @@ def set_up_generate_datasets():
     out["dist_name"] = "_mv_student_t"
     out["dist_arg_dict"] = [{"mean": means, "cov": covs, "d_f": 3}]
     out["weights"] = 1
-    out["transition_names"] = ["linear", "linear_with_constant"]
+    out["transition_names"] = ["linear", "linear"]
     out["transition_argument_dicts"] = [
         [
-            {"coeffs": np.array([0.2, 0.2]), "included_positions": [0, 1]},
+            {"coeffs": np.array([0.2, 0.2, 0.0]), "included_positions": [0, 1]},
             {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
         ]
     ] * out["nper"]
@@ -201,7 +201,7 @@ def test_simulate_observed_data(set_up_generate_datasets, expected_dataset):
 
 
 # =================
-# test with nemf=2
+# test with nmixtures=2
 # =================
 
 
@@ -220,10 +220,10 @@ def set_up_generate_datasets_2_mix():
         {"mean": means[1], "cov": covs[1]},
     ]
     out["weights"] = np.array([0.5, 0.5])
-    out["transition_names"] = ["linear", "linear_with_constant"]
+    out["transition_names"] = ["linear", "linear"]
     out["transition_argument_dicts"] = [
         [
-            {"coeffs": np.array([0.2, 0.2]), "included_positions": [0, 1]},
+            {"coeffs": np.array([0.2, 0.2, 0.0]), "included_positions": [0, 1]},
             {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
         ]
     ] * (out["nper"] - 1)
@@ -309,10 +309,10 @@ def set_up_generate_datasets_mock():
     out["dist_name"] = "multivariate_normal"
     out["dist_arg_dict"] = {"mean": means, "cov": covs}
     out["weights"] = 1
-    out["transition_names"] = ["linear", "linear_with_constant"]
+    out["transition_names"] = ["linear", "linear"]
     out["transition_argument_dicts"] = [
         [
-            {"coeffs": np.array([0.2, 0.2]), "included_positions": [0, 1]},
+            {"coeffs": np.array([0.2, 0.2, 0.0]), "included_positions": [0, 1]},
             {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
         ]
     ] * out["nper"]
@@ -415,7 +415,7 @@ def test_simulate_observed_data_with_mock(
 
 
 # =========================
-# generate datasets nemf=2
+# generate datasets nmixtures=2
 # =========================
 
 
@@ -434,10 +434,10 @@ def set_up_generate_datasets_mock_mix_2():
         {"mean": means[1], "cov": covs[1]},
     ]
     out["weights"] = np.array([0.5, 0.5])
-    out["transition_names"] = ["linear", "linear_with_constant"]
+    out["transition_names"] = ["linear", "linear"]
     out["transition_argument_dicts"] = [
         [
-            {"coeffs": np.array([0.2, 0.2]), "included_positions": [0, 1]},
+            {"coeffs": np.array([0.2, 0.2, 0.0]), "included_positions": [0, 1]},
             {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
         ]
     ] * (out["nper"] - 1)

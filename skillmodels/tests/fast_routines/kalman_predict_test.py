@@ -79,22 +79,6 @@ def expected_linear_predict():
     return out
 
 
-def test_normal_linear_predict_states(setup_linear_predict, expected_linear_predict):
-    d = setup_linear_predict
-    calc_pred_state, calc_pred_cov = kf.normal_linear_predict(
-        d["state"], d["cov"], d["shocks_sds"], d["transition_matrix"]
-    )
-    aaae(calc_pred_state, expected_linear_predict["predicted_states"])
-
-
-def test_normal_linear_predict_covs(setup_linear_predict, expected_linear_predict):
-    d = setup_linear_predict
-    calc_pred_state, calc_pred_cov = kf.normal_linear_predict(
-        d["state"], d["cov"], d["shocks_sds"], d["transition_matrix"]
-    )
-    aaae(calc_pred_cov, expected_linear_predict["predicted_covs"])
-
-
 def test_sqrt_predict_states(setup_linear_predict, expected_linear_predict):
     d = setup_linear_predict
     calc_pred_state, calc_pred_cov = kf.sqrt_linear_predict(
@@ -118,7 +102,7 @@ def test_sqrt_predict_root_covs(setup_linear_predict, expected_linear_predict):
 def setup_unscented_predict():
     out = {}
 
-    nemf, nind, nsigma, nfac = 2, 3, 7, 3
+    nmixtures, nind, nsigma, nfac = 2, 3, 7, 3
 
     out["stage"] = 1
 
@@ -128,38 +112,38 @@ def setup_unscented_predict():
     fourth = np.array([2.4, 2.5, 2.6])
 
     # these are sigma_points for the test with focus on columns
-    sps1 = np.zeros((nemf, nind, nsigma, nfac))
+    sps1 = np.zeros((nmixtures, nind, nsigma, nfac))
     sps1[0, 0, :, :] = np.tile(first, nsigma).reshape(nsigma, nfac)
     sps1[0, 1, :, :] = np.tile(second, nsigma).reshape(nsigma, nfac)
     sps1[1, 0, :, :] = np.tile(third, nsigma).reshape(nsigma, nfac)
     sps1[1, 1, :, :] = np.tile(fourth, nsigma).reshape(nsigma, nfac)
-    out["sps1"] = sps1.reshape(nemf * nind, nsigma, nfac)
-    out["flat_sps1"] = sps1.reshape(nemf * nind * nsigma, nfac)
+    out["sps1"] = sps1.reshape(nmixtures * nind, nsigma, nfac)
+    out["flat_sps1"] = sps1.reshape(nmixtures * nind * nsigma, nfac)
 
-    expected_states1 = np.zeros((nemf, nind, nfac))
+    expected_states1 = np.zeros((nmixtures, nind, nfac))
     expected_states1[0, 0, :] = first
     expected_states1[0, 1, :] = second
     expected_states1[1, 0, :] = third
     expected_states1[1, 1, :] = fourth
-    out["expected_states1"] = expected_states1.reshape(nemf * nind, nfac)
+    out["expected_states1"] = expected_states1.reshape(nmixtures * nind, nfac)
 
     # these are sigma_points for the test with focus on weighting
-    sps2 = np.zeros((nemf, nind, nsigma, nfac))
+    sps2 = np.zeros((nmixtures, nind, nsigma, nfac))
     sps2[:, :, :, :] = np.arange(nsigma).repeat(nfac).reshape(nsigma, nfac)
-    out["sps2"] = sps2.reshape(nemf * nind, nsigma, nfac)
-    out["flat_sps2"] = sps2.reshape(nemf * nind * nsigma, nfac)
-    out["expected_states2"] = np.ones((nemf * nind, nfac)) * 3
+    out["sps2"] = sps2.reshape(nmixtures * nind, nsigma, nfac)
+    out["flat_sps2"] = sps2.reshape(nmixtures * nind * nsigma, nfac)
+    out["expected_states2"] = np.ones((nmixtures * nind, nfac)) * 3
 
     # these are sigma_points for the test with focus on the covariances
-    sps3 = np.zeros((nemf, nind, nsigma, nfac))
+    sps3 = np.zeros((nmixtures, nind, nsigma, nfac))
     sps3[:, :, 1, :] += 1
     sps3[:, :, 2, :] += 2
     sps3[:, :, 3, :] += 3
     sps3[:, :, 4, :] -= 1
     sps3[:, :, 5, :] -= 2
     sps3[:, :, 6, :] -= 3
-    out["sps3"] = sps3.reshape(nemf * nind, nsigma, nfac)
-    out["flat_sps3"] = sps3.reshape(nemf * nind * nsigma, nfac)
+    out["sps3"] = sps3.reshape(nmixtures * nind, nsigma, nfac)
+    out["flat_sps3"] = sps3.reshape(nmixtures * nind * nsigma, nfac)
 
     sws_m = np.ones(nsigma) / nsigma
     out["sws_m"] = sws_m
@@ -172,7 +156,7 @@ def setup_unscented_predict():
 
     out["transform_sps_args"] = {}
 
-    exp_covs = np.zeros((nemf * nind, nfac, nfac))
+    exp_covs = np.zeros((nmixtures * nind, nfac, nfac))
     exp_covs[:] = np.array([[4.75, 4.5, 4.5], [4.5, 4.75, 4.5], [4.5, 4.5, 4.75]])
     out["exp_covs"] = exp_covs
 
@@ -186,77 +170,12 @@ def setup_unscented_predict():
     ).T
     out["exp_cholcovs"] = exp_cholcovs
 
-    out["out_states"] = np.zeros((nemf * nind, nfac))
-    out_sqrt_covs = np.zeros((nemf * nind, nfac + 1, nfac + 1))
+    out["out_states"] = np.zeros((nmixtures * nind, nfac))
+    out_sqrt_covs = np.zeros((nmixtures * nind, nfac + 1, nfac + 1))
     out["out_sqrt_covs"] = out_sqrt_covs
     out["out_covs"] = out_sqrt_covs[:, 1:, 1:]
 
     return out
-
-
-def test_normal_unscented_predict_focus_on_colums(setup_unscented_predict, mocker):
-    d = setup_unscented_predict
-    mock_transform = mocker.patch(
-        "skillmodels.fast_routines.kalman_filters.transform_sigma_points"
-    )
-    mock_transform.return_value = d["sps1"]
-    kf.normal_unscented_predict(
-        d["stage"],
-        d["sps1"],
-        d["flat_sps1"],
-        d["sws_m"],
-        d["sws_c"],
-        d["q"],
-        d["transform_sps_args"],
-        d["out_states"],
-        d["out_covs"],
-    )
-
-    aaae(d["out_states"], d["expected_states1"])
-
-
-def test_normal_unscented_predict_focus_on_weighting(setup_unscented_predict, mocker):
-    d = setup_unscented_predict
-    mock_transform = mocker.patch(
-        "skillmodels.fast_routines.kalman_filters.transform_sigma_points"
-    )
-    mock_transform.return_value = d["sps2"]
-    kf.normal_unscented_predict(
-        d["stage"],
-        d["sps2"],
-        d["flat_sps2"],
-        d["sws_m"],
-        d["sws_c"],
-        d["q"],
-        d["transform_sps_args"],
-        d["out_states"],
-        d["out_covs"],
-    )
-
-    aaae(d["out_states"], d["expected_states2"])
-
-
-def test_normal_unscented_predict_focus_on_covs(setup_unscented_predict, mocker):
-    d = setup_unscented_predict
-    mock_transform = mocker.patch(
-        "skillmodels.fast_routines.kalman_filters.transform_sigma_points"
-    )
-    mock_transform.return_value = d["sps3"]
-
-    d["q"][:] = np.eye(3) * 0.25 + np.ones((3, 3)) * 0.5
-    kf.normal_unscented_predict(
-        d["stage"],
-        d["sps3"],
-        d["flat_sps3"],
-        d["sws_m"],
-        d["sws_c"],
-        d["q"],
-        d["transform_sps_args"],
-        d["out_states"],
-        d["out_covs"],
-    )
-
-    aaae(d["out_covs"], d["exp_covs"])
 
 
 def test_sqrt_unscented_predict_focus_on_colums(setup_unscented_predict, mocker):
@@ -375,24 +294,6 @@ fix_path = "skillmodels/tests/fast_routines/generated_fixtures_predict.json"
 with open(fix_path, "r") as f:
     id_to_fix = json.load(f)
 ids, fixtures = zip(*id_to_fix.items())
-
-
-@pytest.mark.parametrize("fixture", fixtures, ids=ids)
-def test_normal_linear_predicted_state_against_filterpy(fixture):
-    args, exp_state, exp_cov = unpack_predict_fixture(fixture)
-    after_state, after_covs = kf.normal_linear_predict(*args)
-    aaae(after_state.flatten(), exp_state)
-
-
-@pytest.mark.parametrize("fixture", fixtures, ids=ids)
-def test_normal_linear_predicted_cov_against_filterpy(fixture):
-    args, exp_state, exp_cov = unpack_predict_fixture(fixture)
-    after_state, after_covs = kf.normal_linear_predict(*args)
-    aaae(after_covs.reshape(exp_cov.shape), exp_cov)
-
-
-# for the square root linear predict
-# -----------------------------------
 
 
 @pytest.mark.parametrize("fixture", fixtures, ids=ids)
