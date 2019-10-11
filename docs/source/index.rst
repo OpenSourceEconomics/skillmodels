@@ -8,7 +8,7 @@ Welcome to the documentation of skillmodels!
 ============================================
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
 
     introduction
     model_specs
