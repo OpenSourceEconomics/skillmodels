@@ -1,4 +1,4 @@
-category,period,name1,name2,value,lowemeas_sd,upper
+category,period,name1,name2,value,lower,upper
 delta,0,y1,constant,1.00545482,-inf,inf
 delta,0,y1,x1,1.00161847,-inf,inf
 delta,0,y2,constant,0.97599155,-inf,inf
