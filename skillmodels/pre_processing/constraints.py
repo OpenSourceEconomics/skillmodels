@@ -29,11 +29,11 @@ def constraints(
     constr += _not_measured_constraints(
         update_info, measurements, anchored_factors, anch_outcome
     )
-    constr += _w_constraints(nmixtures)
-    constr += _p_constraints(nmixtures, bounds_distance)
+    constr += _mixture_weight_constraints(nmixtures)
+    constr += _initial_cov_constraints(nmixtures, bounds_distance)
     constr += _stage_constraints(stagemap, factors, transition_names, included_factors)
     constr += _constant_factors_constraints(factors, transition_names, periods)
-    constr += _x_constraints(nmixtures, factors)
+    constr += _initial_mean_constraints(nmixtures, factors)
     constr += _trans_coeff_constraints(
         factors, transition_names, included_factors, periods
     )
@@ -58,8 +58,8 @@ def add_bounds(params_df, bounds_distance=0.0):
     df = params_df.copy()
     if "lower" not in df.columns:
         df["lower"] = -np.inf
-    df.loc["r", "lower"] = bounds_distance
-    df.loc["q", "lower"] = bounds_distance
+    df.loc["meas_sd", "lower"] = bounds_distance
+    df.loc["shock_variance", "lower"] = bounds_distance
     return df
 
 
@@ -95,9 +95,14 @@ def _invariant_meas_system_constraints(update_info, controls, factors):
                 )
             for factor in factors:
                 locs.append(
-                    [("h", period, meas, factor), ("h", int(first), meas, factor)]
+                    [
+                        ("loading", period, meas, factor),
+                        ("loading", int(first), meas, factor),
+                    ]
                 )
-            locs.append([("r", period, meas, "-"), ("r", int(first), meas, "-")])
+            locs.append(
+                [("meas_sd", period, meas, "-"), ("meas_sd", int(first), meas, "-")]
+            )
 
     constraints = [{"type": "equality", "loc": loc, "description": msg} for loc in locs]
     return constraints
@@ -126,7 +131,7 @@ def _normalization_constraints(normalizations):
             for meas, normval in loading_norminfo.items():
                 constraints.append(
                     {
-                        "loc": ("h", period, meas, factor),
+                        "loc": ("loading", period, meas, factor),
                         "type": "fixed",
                         "value": normval,
                         "description": msg,
@@ -146,7 +151,7 @@ def _normalization_constraints(normalizations):
             for meas, normval in variance_norminfo.items():
                 constraints.append(
                     {
-                        "loc": ("r", period, meas, "-"),
+                        "loc": ("meas_sd", period, meas, "-"),
                         "type": "fixed",
                         "value": normval,
                         "description": msg,
@@ -188,24 +193,26 @@ def _not_measured_constraints(
                 used_measurements = used_measurements + [anch_outcome]
             for meas in all_measurements:
                 if meas not in used_measurements:
-                    locs.append(("h", period, meas, factor))
+                    locs.append(("loading", period, meas, factor))
 
     constraints = [{"loc": locs, "type": "fixed", "value": 0, "description": msg}]
 
     return constraints
 
 
-def _w_constraints(nmixtures):
+def _mixture_weight_constraints(nmixtures):
     """Constrain mixture weights to be between 0 and 1 and sum to 1."""
     if nmixtures == 1:
         msg = "Set the mixture weight to 1 if there is only one mixture element."
-        return [{"loc": "w", "type": "fixed", "value": 1.0, "description": msg}]
+        return [
+            {"loc": "mixture_weight", "type": "fixed", "value": 1.0, "description": msg}
+        ]
     else:
         msg = "Ensure that weights are between 0 and 1 and sum to 1."
-        return [{"loc": "w", "type": "probability", "description": msg}]
+        return [{"loc": "mixture_weight", "type": "probability", "description": msg}]
 
 
-def _p_constraints(nmixtures, bounds_distance):
+def _initial_cov_constraints(nmixtures, bounds_distance):
     """Constraint initial covariance matrices to be positive semi-definite.
 
     Args:
@@ -220,7 +227,7 @@ def _p_constraints(nmixtures, bounds_distance):
     for emf in range(nmixtures):
         constraints.append(
             {
-                "loc": ("p", 0, f"mixture_{emf}"),
+                "loc": ("initial_cov", 0, f"mixture_{emf}"),
                 "type": "covariance",
                 "bounds_distance": bounds_distance,
                 "description": msg,
@@ -257,7 +264,7 @@ def _stage_constraints(stagemap, factors, transition_names, included_factors):
 
     for stage in stages:
         locs_trans = [("trans", p) for p in stages_to_periods[stage]]
-        locs_q = [("q", p) for p in stages_to_periods[stage]]
+        locs_q = [("shock_variance", p) for p in stages_to_periods[stage]]
         constraints.append(
             {"locs": locs_trans, "type": "pairwise_equality", "description": msg}
         )
@@ -287,7 +294,7 @@ def _constant_factors_constraints(factors, transition_names, periods):
             for period in periods[:-1]:
                 constraints.append(
                     {
-                        "loc": ("q", period, factor, "-"),
+                        "loc": ("shock_variance", period, factor, "-"),
                         "type": "fixed",
                         "value": 0.0,
                         "description": msg,
@@ -296,7 +303,7 @@ def _constant_factors_constraints(factors, transition_names, periods):
     return constraints
 
 
-def _x_constraints(nmixtures, factors):
+def _initial_mean_constraints(nmixtures, factors):
     """Enforce that the x values of the first factor are increasing.
 
     Otherwise the model would only be identified up to the order of the start factors.
@@ -315,7 +322,9 @@ def _x_constraints(nmixtures, factors):
         "uniqueness of the maximum likelihood estimator."
     )
 
-    ind_tups = [("x", 0, f"mixture_{emf}", factors[0]) for emf in range(nmixtures)]
+    ind_tups = [
+        ("initial_mean", 0, f"mixture_{emf}", factors[0]) for emf in range(nmixtures)
+    ]
     constr = [{"loc": ind_tups, "type": "increasing", "description": msg}]
 
     return constr

@@ -16,12 +16,12 @@ def parse_params(params, initial_quantities, factors):
             "ignore", message="indexing past lexsort depth may impact performance."
         )
         _map_params_to_delta(params, initial_quantities["delta"])
-        _map_params_to_h(params, initial_quantities["h"])
-        _map_params_to_r(params, initial_quantities["r"])
-        _map_params_to_q(params, initial_quantities["q"])
-        _map_params_to_x(params, initial_quantities["x"])
-        _map_params_to_w(params, initial_quantities["w"])
-        _map_params_to_p(params, initial_quantities["p"])
+        _map_params_to_loading(params, initial_quantities["loading"])
+        _map_params_to_meas_sd(params, initial_quantities["meas_sd"])
+        _map_params_to_shock_variance(params, initial_quantities["shock_variance"])
+        _map_params_to_initial_mean(params, initial_quantities["initial_mean"])
+        _map_params_to_mixture_weight(params, initial_quantities["mixture_weight"])
+        _map_params_to_initial_cov(params, initial_quantities["initial_cov"])
         _map_params_to_trans_coeffs(params, initial_quantities["trans_coeffs"], factors)
 
 
@@ -31,40 +31,40 @@ def _map_params_to_delta(params, initial):
     return initial
 
 
-def _map_params_to_h(params, initial):
-    initial[:] = params.loc["h"].to_numpy().reshape(initial.shape)
+def _map_params_to_loading(params, initial):
+    initial[:] = params.loc["loading"].to_numpy().reshape(initial.shape)
 
 
-def _map_params_to_r(params, initial):
-    initial[:] = np.sqrt(params.loc["r"].to_numpy())
+def _map_params_to_meas_sd(params, initial):
+    initial[:] = np.sqrt(params.loc["meas_sd"].to_numpy())
 
 
-def _map_params_to_q(params, initial):
+def _map_params_to_shock_variance(params, initial):
     for period in range(len(initial)):
-        initial[period] = np.diag(params.loc["q", period].to_numpy())
+        initial[period] = np.diag(params.loc["shock_variance", period].to_numpy())
 
 
-def _map_params_to_x(params, initial):
+def _map_params_to_initial_mean(params, initial):
     nobs, nmixtures, nfac = initial.shape
-    initial[:] = params.loc["x"].to_numpy().reshape(nmixtures, nfac)
+    initial[:] = params.loc["initial_mean"].to_numpy().reshape(nmixtures, nfac)
 
 
-def _map_params_to_p(params, initial):
+def _map_params_to_initial_cov(params, initial):
     nobs, nmixtures, nfac, _ = initial.shape
     nfac = nfac - 1
 
     filler = np.zeros((nmixtures, nfac, nfac))
     for emf in range(nmixtures):
         filler[emf] = cov_params_to_matrix(
-            params.loc["p", 0, f"mixture_{emf}"].to_numpy()
+            params.loc["initial_cov", 0, f"mixture_{emf}"].to_numpy()
         )
 
     filler = np.transpose(np.linalg.cholesky(filler), axes=(0, 2, 1))
     initial[:, :, 1:, 1:] = filler
 
 
-def _map_params_to_w(params, initial):
-    initial[:] = params.loc["w"].to_numpy()
+def _map_params_to_mixture_weight(params, initial):
+    initial[:] = params.loc["mixture_weight"].to_numpy()
 
 
 def _map_params_to_trans_coeffs(params, initial, factors):

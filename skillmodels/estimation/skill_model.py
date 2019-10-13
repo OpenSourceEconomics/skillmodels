@@ -58,9 +58,18 @@ class SkillModel:
         self.__dict__.update(specs_dict)
 
         # create a list of all quantities that depend from params vector
-        self.params_quants = ["delta", "h", "r", "q", "p", "trans_coeffs", "x", "w"]
+        self.params_quants = [
+            "delta",
+            "loading",
+            "meas_sd",
+            "shock_variance",
+            "initial_cov",
+            "trans_coeffs",
+            "initial_mean",
+            "mixture_weight",
+        ]
 
-    def _initial_delta(self):
+    def _container_for_delta(self):
         """List of initial arrays for control variable params in each period.
 
         The arrays have the shape [nupdates, nr_of_control_variables + 1]
@@ -75,7 +84,7 @@ class SkillModel:
             delta.append(init)
         return delta
 
-    def _initial_h(self):
+    def _container_for_loading(self):
         """Initial h array filled with zeros.
 
         The array has the form [nupdates, nfac]. Most entries
@@ -85,25 +94,25 @@ class SkillModel:
         """
         return np.zeros((self.nupdates, self.nfac))
 
-    def _initial_r(self):
+    def _container_for_meas_sd(self):
         """1d numpy array of length nupdates filled with zeros."""
         return np.zeros(self.nupdates)
 
-    def _initial_q(self):
+    def _container_for_shock_variance(self):
         """Initial Q array filled with zeros."""
         return np.zeros((self.nperiods - 1, self.nfac, self.nfac))
 
-    def _initial_x(self):
+    def _container_for_initial_mean(self):
         """Initial X_zero array filled with zeros."""
         init = np.zeros((self.nobs, self.nmixtures, self.nfac))
         flat_init = init.reshape(self.nobs * self.nmixtures, self.nfac)
         return init, flat_init
 
-    def _initial_w(self):
+    def _container_for_mixture_weight(self):
         """Initial W_zero array filled with 1/nmixtures."""
         return np.ones((self.nobs, self.nmixtures)) / self.nmixtures
 
-    def _initial_p(self):
+    def _container_for_initial_cov(self):
         """Initial P_zero array filled with zeros."""
 
         init = np.zeros((self.nobs, self.nmixtures, self.nfac + 1, self.nfac + 1))
@@ -112,7 +121,7 @@ class SkillModel:
         )
         return init, flat_init
 
-    def _initial_trans_coeffs(self):
+    def _container_for_trans_coeffs(self):
         """List of initial trans_coeffs arrays, each filled with zeros."""
         initial = []
         for f, factor in enumerate(self.factors):
@@ -163,13 +172,15 @@ class SkillModel:
                     )
             else:
                 free["value"] = 0.0
-                free.loc["h", "value"] = 1.0
-                free.loc["r", "value"] = 1.0
-                free.loc["q", "value"] = 1.0
+                free.loc["loading", "value"] = 1.0
+                free.loc["meas_sd", "value"] = 1.0
+                free.loc["shock_variance", "value"] = 1.0
                 free.loc["trans", "value"] = 1 / self.nfac
-                free.loc["w", "value"] = 1 / self.nmixtures
+                free.loc["mixture_weight", "value"] = 1 / self.nmixtures
                 for emf in range(self.nmixtures):
-                    p_diags = [("p", 0, emf, f"{fac}-{fac}") for fac in self.factors]
+                    p_diags = [
+                        ("initial_cov", 0, emf, f"{fac}-{fac}") for fac in self.factors
+                    ]
                     free.loc[p_diags, "value"] = 1
 
                 full_sp = get_start_params_from_free_params(
@@ -179,16 +190,18 @@ class SkillModel:
             full_sp["group"] = None
 
             for period in self.periods:
-                full_sp.loc[("h", period), "group"] = f"Loadings in Period {period}"
                 full_sp.loc[
-                    ("r", period), "group"
+                    ("loading", period), "group"
+                ] = f"Loadings in Period {period}"
+                full_sp.loc[
+                    ("meas_sd", period), "group"
                 ] = f"Meas-Variances in Period {period}"
 
             for period in self.periods[:-1]:
                 full_sp.loc[
                     ("trans", period), "group"
                 ] = f"Transition Parameters in Period {period}"
-            full_sp.loc["p", "group"] = "Factor Covariance Matrix"
+            full_sp.loc["initial_cov", "group"] = "Factor Covariance Matrix"
             full_sp.loc[fixed.index, "group"] = None
             full_sp = add_bounds(full_sp, bounds_distance=self.bounds_distance)
             return full_sp
@@ -210,10 +223,10 @@ class SkillModel:
         init_dict = {}
 
         for quant in self.params_quants:
-            if quant not in ["x", "p"]:
-                init_dict[quant] = getattr(self, f"_initial_{quant}")()
+            if quant not in ["initial_mean", "initial_cov"]:
+                init_dict[quant] = getattr(self, f"_container_for_{quant}")()
             else:
-                normal, flat = getattr(self, f"_initial_{quant}")()
+                normal, flat = getattr(self, f"_container_for_{quant}")()
                 init_dict[quant] = normal
                 init_dict[f"flat_{quant}"] = flat
 
@@ -243,16 +256,16 @@ class SkillModel:
                 nmeas += 1
             for j in range(nmeas):
                 u_args = [
-                    initial_quantities["x"],
-                    initial_quantities["p"],
+                    initial_quantities["initial_mean"],
+                    initial_quantities["initial_cov"],
                     initial_quantities["like_contributions"][k],
                     self.y_data[k],
                     self.c_data[t],
                     initial_quantities["delta"][t][j],
-                    initial_quantities["h"][k],
-                    initial_quantities["r"][k : k + 1],
+                    initial_quantities["loading"][k],
+                    initial_quantities["meas_sd"][k : k + 1],
                     np.arange(self.nfac)[position_helper[k]],
-                    initial_quantities["w"],
+                    initial_quantities["mixture_weight"],
                 ]
                 u_args_list.append(u_args)
                 k += 1
@@ -271,7 +284,7 @@ class SkillModel:
         tsp_args["transition_function_names"] = self.transition_names
         if self.anchor_in_predict is True:
             tsp_args["anchoring_positions"] = self.anch_positions
-            tsp_args["anch_params"] = initial_quantities["h"][-1, :]
+            tsp_args["anch_params"] = initial_quantities["loading"][-1, :]
             if self.ignore_intercept_in_linear_anchoring is False:
                 tsp_args["intercept"] = initial_quantities["delta"][-1][-1, 0:1]
 
@@ -285,18 +298,18 @@ class SkillModel:
         p_args["sigma_points"] = initial_quantities["sigma_points"]
         p_args["flat_sigma_points"] = initial_quantities["flat_sigma_points"]
         p_args["s_weights_m"], p_args["s_weights_c"] = self.sigma_weights()
-        p_args["q"] = initial_quantities["q"]
+        p_args["shock_variance"] = initial_quantities["shock_variance"]
         p_args["transform_sigma_points_args"] = self._transform_sigma_points_args_dict(
             initial_quantities
         )
-        p_args["out_flat_states"] = initial_quantities["flat_x"]
-        p_args["out_flat_covs"] = initial_quantities["flat_p"]
+        p_args["out_flat_states"] = initial_quantities["flat_initial_mean"]
+        p_args["out_flat_covs"] = initial_quantities["flat_initial_cov"]
         return p_args
 
     def _calculate_sigma_points_args_dict(self, initial_quantities):
         sp_args = {}
-        sp_args["states"] = initial_quantities["x"]
-        sp_args["flat_covs"] = initial_quantities["flat_p"]
+        sp_args["states"] = initial_quantities["initial_mean"]
+        sp_args["flat_covs"] = initial_quantities["flat_initial_cov"]
         sp_args["out"] = initial_quantities["sigma_points"]
         sp_args["scaling_factor"] = self.sigma_scaling_factor()
         return sp_args
@@ -354,7 +367,7 @@ class SkillModel:
         control_names = list(self.controls[0])
 
         loadings_df = pd.DataFrame(
-            data=initial_quantities["h"],
+            data=initial_quantities["loading"],
             columns=self.factors,
             index=self.update_info.index,
         )
@@ -364,17 +377,19 @@ class SkillModel:
             initial_quantities
         )
 
-        shock_variances = np.diagonal(initial_quantities["q"], axis1=1, axis2=2)
+        shock_variances = np.diagonal(
+            initial_quantities["shock_variance"], axis1=1, axis2=2
+        )
 
         meas_variances = pd.Series(
-            data=initial_quantities["r"], index=self.update_info.index
+            data=initial_quantities["meas_sd"], index=self.update_info.index
         )
         meas_variances **= 2
 
         dist_name = "multivariate_normal"
 
-        x_zero = initial_quantities["x"]
-        p_zero = initial_quantities["p"]
+        x_zero = initial_quantities["initial_mean"]
+        p_zero = initial_quantities["initial_cov"]
 
         dist_arg_dict = []
         for n in range(self.nmixtures):
@@ -1001,7 +1016,7 @@ class SkillModel:
         title = title_text(base_title, periods=periods, stages=stages, factors="all")
 
         if write_tex is True:
-            with open(save_path, "w") as t:
+            with open(save_path, "mixture_weight") as t:
                 t.write(df_to_tex_table(df, title))
 
         return df
@@ -1163,7 +1178,7 @@ class SkillModel:
 
         base_name = f"visualization_of_{self.model_name}.tex"
 
-        with open(join(save_path, base_name), "w") as t:
+        with open(join(save_path, base_name), "mixture_weight") as t:
             t.write(preamble + "\n\n\n")
             t.write(title)
             t.write(maketitle)

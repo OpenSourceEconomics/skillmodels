@@ -35,46 +35,46 @@ class TestDeltaRelatedMethods:
 
         self.update_info = DataFrame(index=pd.MultiIndex.from_tuples(ind_tups))
 
-    def test_initial_delta_without_controls_besides_constant(self):
+    def test_container_for_delta_without_controls_besides_constant(self):
         self.controls = [[], [], []]
         expected = [np.zeros((6, 1)), np.zeros((3, 1)), np.zeros((4, 1))]
-        calculated = SkillModel._initial_delta(self)
+        calculated = SkillModel._container_for_delta(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
-    def test_initial_delta_with_controls_and_constants(self):
+    def test_container_for_delta_with_controls_and_constants(self):
 
         expected = [np.zeros((6, 3)), np.zeros((3, 4)), np.zeros((4, 3))]
 
-        calculated = SkillModel._initial_delta(self)
+        calculated = SkillModel._container_for_delta(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
 
-def test_initial_h(mocker):  # noqa
+def test_container_for_loading(mocker):  # noqa
     mocker.nfac = 5
     mocker.nupdates = 10
-    calculated = SkillModel._initial_h(mocker)
+    calculated = SkillModel._container_for_loading(mocker)
     expected = np.zeros((10, 5))
     aae(calculated, expected)
 
 
-def test_initial_r(mocker):  # noqa
+def test_container_for_meas_sd(mocker):  # noqa
     mocker.nupdates = 8
-    calculated = SkillModel._initial_r(mocker)
+    calculated = SkillModel._container_for_meas_sd(mocker)
     expected = np.zeros(8)
     aae(calculated, expected)
 
 
-def test_initial_q(mocker):  # noqa
+def test_container_for_shock_variance(mocker):  # noqa
     mocker.nperiods = 5
     mocker.nfac = 3
     expected = np.zeros((4, 3, 3))
-    calculated = SkillModel._initial_q(mocker)
+    calculated = SkillModel._container_for_shock_variance(mocker)
     aae(calculated, expected)
 
 
-def test_initial_x(mocker):  # noqa
+def test_container_for_initial_mean(mocker):  # noqa
     mocker.nobs = 10
     mocker.nmixtures = 2
     mocker.nfac = 3
@@ -82,7 +82,7 @@ def test_initial_x(mocker):  # noqa
     exp1 = np.zeros((10, 2, 3))
     exp2 = np.zeros((20, 3))
 
-    calc1, calc2 = SkillModel._initial_x(mocker)
+    calc1, calc2 = SkillModel._container_for_initial_mean(mocker)
 
     aae(calc1, exp1)
     aae(calc2, exp2)
@@ -91,13 +91,13 @@ def test_initial_x(mocker):  # noqa
     aae(calc2, np.ones((20, 3)))
 
 
-def test_initial_w(mocker):  # noqa
+def test_container_for_mixture_weight(mocker):  # noqa
     mocker.nobs = 10
     mocker.nmixtures = 3
 
     expected = np.ones((10, 3)) / 3
 
-    calculated = SkillModel._initial_w(mocker)
+    calculated = SkillModel._container_for_mixture_weight(mocker)
     aae(calculated, expected)
 
 
@@ -109,9 +109,9 @@ def p_mocker(mocker):  # noqa
     return mocker
 
 
-def test_initial_p(p_mocker):
+def test_container_for_initial_cov(p_mocker):
     expected = [np.zeros((10, 2, 4, 4)), np.zeros((20, 4, 4))]
-    calculated = SkillModel._initial_p(p_mocker)
+    calculated = SkillModel._container_for_initial_cov(p_mocker)
     for calc, exp in zip(calculated, expected):
         aae(calc, exp)
 
@@ -121,7 +121,7 @@ def test_initial_p(p_mocker):
     aae(calc2, np.ones_like(calc2))
 
 
-def test_initial_trans_coeffs(mocker):  # noqa
+def test_container_for_trans_coeffs(mocker):  # noqa
     mocker.factors = ["fac1", "fac2", "fac3"]
     mocker.transition_names = ["linear", "linear", "log_ces"]
     mocker.included_factors = [["fac1", "fac2"], ["fac2"], ["fac2", "fac3"]]
@@ -138,7 +138,7 @@ def test_initial_trans_coeffs(mocker):  # noqa
 
     expected = [np.zeros((4, 4)), np.zeros((4, 4)), np.zeros((4, 3))]
 
-    calculated = SkillModel._initial_trans_coeffs(mocker)
+    calculated = SkillModel._container_for_trans_coeffs(mocker)
     for calc, exp in zip(calculated, expected):
         aae(calc, exp)
 

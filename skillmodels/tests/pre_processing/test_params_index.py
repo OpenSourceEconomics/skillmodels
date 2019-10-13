@@ -1,13 +1,13 @@
 import pandas as pd
 
 from skillmodels.pre_processing.params_index import _delta_index_tuples
-from skillmodels.pre_processing.params_index import _h_index_tuples
-from skillmodels.pre_processing.params_index import _p_index_tuples
-from skillmodels.pre_processing.params_index import _q_index_tuples
-from skillmodels.pre_processing.params_index import _r_index_tuples
+from skillmodels.pre_processing.params_index import _initial_cov_index_tuples
+from skillmodels.pre_processing.params_index import _initial_mean_index_tuples
+from skillmodels.pre_processing.params_index import _loading_index_tuples
+from skillmodels.pre_processing.params_index import _meas_sd_index_tuples
+from skillmodels.pre_processing.params_index import _mixture_weight_index_tuples
+from skillmodels.pre_processing.params_index import _shock_variance_index_tuples
 from skillmodels.pre_processing.params_index import _trans_coeffs_index_tuples
-from skillmodels.pre_processing.params_index import _w_index_tuples
-from skillmodels.pre_processing.params_index import _x_index_tuples
 
 
 def test_delta_index_tuples():
@@ -34,105 +34,105 @@ def test_delta_index_tuples():
     assert calculated == expected
 
 
-def test_h_index_tuples():
+def test_loading_index_tuples():
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
     uinfo = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_tups))
     factors = ["fac1", "fac2"]
     expected = [
-        ("h", 0, "m1", "fac1"),
-        ("h", 0, "m1", "fac2"),
-        ("h", 0, "m2", "fac1"),
-        ("h", 0, "m2", "fac2"),
-        ("h", 0, "bla", "fac1"),
-        ("h", 0, "bla", "fac2"),
-        ("h", 1, "m1", "fac1"),
-        ("h", 1, "m1", "fac2"),
-        ("h", 1, "m2", "fac1"),
-        ("h", 1, "m2", "fac2"),
+        ("loading", 0, "m1", "fac1"),
+        ("loading", 0, "m1", "fac2"),
+        ("loading", 0, "m2", "fac1"),
+        ("loading", 0, "m2", "fac2"),
+        ("loading", 0, "bla", "fac1"),
+        ("loading", 0, "bla", "fac2"),
+        ("loading", 1, "m1", "fac1"),
+        ("loading", 1, "m1", "fac2"),
+        ("loading", 1, "m2", "fac1"),
+        ("loading", 1, "m2", "fac2"),
     ]
 
-    calculated = _h_index_tuples(factors, uinfo)
+    calculated = _loading_index_tuples(factors, uinfo)
     assert calculated == expected
 
 
-def test_r_index_tuples():
+def test_meas_sd_index_tuples():
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
     uinfo = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_tups))
 
     expected = [
-        ("r", 0, "m1", "-"),
-        ("r", 0, "m2", "-"),
-        ("r", 0, "bla", "-"),
-        ("r", 1, "m1", "-"),
-        ("r", 1, "m2", "-"),
+        ("meas_sd", 0, "m1", "-"),
+        ("meas_sd", 0, "m2", "-"),
+        ("meas_sd", 0, "bla", "-"),
+        ("meas_sd", 1, "m1", "-"),
+        ("meas_sd", 1, "m2", "-"),
     ]
 
-    calculated = _r_index_tuples(uinfo)
+    calculated = _meas_sd_index_tuples(uinfo)
     assert calculated == expected
 
 
-def test_q_index_tuples():
+def test_shock_variance_index_tuples():
     periods = [0, 1, 2]
     factors = ["fac1", "fac2"]
 
     expected = [
-        ("q", 0, "fac1", "-"),
-        ("q", 0, "fac2", "-"),
-        ("q", 1, "fac1", "-"),
-        ("q", 1, "fac2", "-"),
+        ("shock_variance", 0, "fac1", "-"),
+        ("shock_variance", 0, "fac2", "-"),
+        ("shock_variance", 1, "fac1", "-"),
+        ("shock_variance", 1, "fac2", "-"),
     ]
 
-    calculated = _q_index_tuples(periods, factors)
+    calculated = _shock_variance_index_tuples(periods, factors)
     assert calculated == expected
 
 
-def test_x_index_tuples():
+def test_initial_mean_index_tuples():
     nmixtures = 3
     factors = ["fac1", "fac2"]
 
     expected = [
-        ("x", 0, "mixture_0", "fac1"),
-        ("x", 0, "mixture_0", "fac2"),
-        ("x", 0, "mixture_1", "fac1"),
-        ("x", 0, "mixture_1", "fac2"),
-        ("x", 0, "mixture_2", "fac1"),
-        ("x", 0, "mixture_2", "fac2"),
+        ("initial_mean", 0, "mixture_0", "fac1"),
+        ("initial_mean", 0, "mixture_0", "fac2"),
+        ("initial_mean", 0, "mixture_1", "fac1"),
+        ("initial_mean", 0, "mixture_1", "fac2"),
+        ("initial_mean", 0, "mixture_2", "fac1"),
+        ("initial_mean", 0, "mixture_2", "fac2"),
     ]
 
-    calculated = _x_index_tuples(nmixtures, factors)
+    calculated = _initial_mean_index_tuples(nmixtures, factors)
     assert calculated == expected
 
 
-def test_w_index_tuples():
+def test_mixture_weight_index_tuples():
     nmixtures = 3
     expected = [
-        ("w", 0, "mixture_0", "-"),
-        ("w", 0, "mixture_1", "-"),
-        ("w", 0, "mixture_2", "-"),
+        ("mixture_weight", 0, "mixture_0", "-"),
+        ("mixture_weight", 0, "mixture_1", "-"),
+        ("mixture_weight", 0, "mixture_2", "-"),
     ]
-    calculated = _w_index_tuples(nmixtures)
+    calculated = _mixture_weight_index_tuples(nmixtures)
     assert calculated == expected
 
 
-def test_p_index_tuples():
+def test_initial_cov_index_tuples():
     nmixtures = 2
     factors = ["fac1", "fac2", "fac3"]
     expected = [
-        ("p", 0, "mixture_0", "fac1-fac1"),
-        ("p", 0, "mixture_0", "fac2-fac1"),
-        ("p", 0, "mixture_0", "fac2-fac2"),
-        ("p", 0, "mixture_0", "fac3-fac1"),
-        ("p", 0, "mixture_0", "fac3-fac2"),
-        ("p", 0, "mixture_0", "fac3-fac3"),
-        ("p", 0, "mixture_1", "fac1-fac1"),
-        ("p", 0, "mixture_1", "fac2-fac1"),
-        ("p", 0, "mixture_1", "fac2-fac2"),
-        ("p", 0, "mixture_1", "fac3-fac1"),
-        ("p", 0, "mixture_1", "fac3-fac2"),
-        ("p", 0, "mixture_1", "fac3-fac3"),
+        ("initial_cov", 0, "mixture_0", "fac1-fac1"),
+        ("initial_cov", 0, "mixture_0", "fac2-fac1"),
+        ("initial_cov", 0, "mixture_0", "fac2-fac2"),
+        ("initial_cov", 0, "mixture_0", "fac3-fac1"),
+        ("initial_cov", 0, "mixture_0", "fac3-fac2"),
+        ("initial_cov", 0, "mixture_0", "fac3-fac3"),
+        ("initial_cov", 0, "mixture_1", "fac1-fac1"),
+        ("initial_cov", 0, "mixture_1", "fac2-fac1"),
+        ("initial_cov", 0, "mixture_1", "fac2-fac2"),
+        ("initial_cov", 0, "mixture_1", "fac3-fac1"),
+        ("initial_cov", 0, "mixture_1", "fac3-fac2"),
+        ("initial_cov", 0, "mixture_1", "fac3-fac3"),
     ]
 
-    calculated = _p_index_tuples(nmixtures, factors)
+    calculated = _initial_cov_index_tuples(nmixtures, factors)
     assert calculated == expected
 
 

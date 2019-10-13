@@ -32,12 +32,12 @@ def params_index(
     periods = list(range(len(controls)))
 
     ind_tups = _delta_index_tuples(controls, update_info)
-    ind_tups += _h_index_tuples(factors, update_info)
-    ind_tups += _r_index_tuples(update_info)
-    ind_tups += _q_index_tuples(periods, factors)
-    ind_tups += _x_index_tuples(nmixtures, factors)
-    ind_tups += _w_index_tuples(nmixtures)
-    ind_tups += _p_index_tuples(nmixtures, factors)
+    ind_tups += _loading_index_tuples(factors, update_info)
+    ind_tups += _meas_sd_index_tuples(update_info)
+    ind_tups += _shock_variance_index_tuples(periods, factors)
+    ind_tups += _initial_mean_index_tuples(nmixtures, factors)
+    ind_tups += _mixture_weight_index_tuples(nmixtures)
+    ind_tups += _initial_cov_index_tuples(nmixtures, factors)
     ind_tups += _trans_coeffs_index_tuples(
         factors, periods, transition_names, included_factors
     )
@@ -65,8 +65,8 @@ def _delta_index_tuples(controls, update_info):
     return ind_tups
 
 
-def _h_index_tuples(factors, update_info):
-    """Index tuples for h.
+def _loading_index_tuples(factors, update_info):
+    """Index tuples for loading.
 
     Args:
         factors (list): The latent factors of the model
@@ -80,12 +80,12 @@ def _h_index_tuples(factors, update_info):
     ind_tups = []
     for period, meas in update_info.index:
         for factor in factors:
-            ind_tups.append(("h", period, meas, factor))
+            ind_tups.append(("loading", period, meas, factor))
     return ind_tups
 
 
-def _r_index_tuples(update_info):
-    """Index tuples for r.
+def _meas_sd_index_tuples(update_info):
+    """Index tuples for meas_sd.
 
     Args:
         update_info (DataFrame): DataFrame with one row per update. It has aMultiIndex
@@ -97,12 +97,12 @@ def _r_index_tuples(update_info):
     """
     ind_tups = []
     for period, meas in update_info.index:
-        ind_tups.append(("r", period, meas, "-"))
+        ind_tups.append(("meas_sd", period, meas, "-"))
     return ind_tups
 
 
-def _q_index_tuples(periods, factors):
-    """Index tuples for q.
+def _shock_variance_index_tuples(periods, factors):
+    """Index tuples for shock_variance.
 
     Args:
         periods (list): The periods of the model.
@@ -115,12 +115,12 @@ def _q_index_tuples(periods, factors):
     ind_tups = []
     for period in periods[:-1]:
         for factor in factors:
-            ind_tups.append(("q", period, factor, "-"))
+            ind_tups.append(("shock_variance", period, factor, "-"))
     return ind_tups
 
 
-def _x_index_tuples(nmixtures, factors):
-    """Index tuples for x.
+def _initial_mean_index_tuples(nmixtures, factors):
+    """Index tuples for initial_mean.
 
     Args:
         nmixtures (int): Number of elements in the mixture distribution of the factors.
@@ -133,12 +133,12 @@ def _x_index_tuples(nmixtures, factors):
     ind_tups = []
     for emf in range(nmixtures):
         for factor in factors:
-            ind_tups.append(("x", 0, f"mixture_{emf}", factor))
+            ind_tups.append(("initial_mean", 0, f"mixture_{emf}", factor))
     return ind_tups
 
 
-def _w_index_tuples(nmixtures):
-    """Index tuples for w.
+def _mixture_weight_index_tuples(nmixtures):
+    """Index tuples for mixture_weight.
 
     Args:
         nmixtures (int): Number of elements in the mixture distribution of the factors.
@@ -149,12 +149,12 @@ def _w_index_tuples(nmixtures):
     """
     ind_tups = []
     for emf in range(nmixtures):
-        ind_tups.append(("w", 0, f"mixture_{emf}", "-"))
+        ind_tups.append(("mixture_weight", 0, f"mixture_{emf}", "-"))
     return ind_tups
 
 
-def _p_index_tuples(nmixtures, factors):
-    """Index tuples for p.
+def _initial_cov_index_tuples(nmixtures, factors):
+    """Index tuples for initial_cov.
 
     Args:
         nmixtures (int): Number of elements in the mixture distribution of the factors.
@@ -169,7 +169,9 @@ def _p_index_tuples(nmixtures, factors):
         for row, factor1 in enumerate(factors):
             for col, factor2 in enumerate(factors):
                 if col <= row:
-                    ind_tups.append(("p", 0, f"mixture_{emf}", f"{factor1}-{factor2}"))
+                    ind_tups.append(
+                        ("initial_cov", 0, f"mixture_{emf}", f"{factor1}-{factor2}")
+                    )
     return ind_tups
 
 
