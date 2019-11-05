@@ -113,7 +113,7 @@ def constraints_log_ces(factor, included_factors, period):
 # =============================================================================
 
 
-@jit
+@jit(nopython=True)
 def translog(sigma_points, coeffs, included_positions):
     # the coeffs will be parsed as follows:
     # last entry = TFP term

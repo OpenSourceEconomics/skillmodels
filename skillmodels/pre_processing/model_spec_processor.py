@@ -138,7 +138,7 @@ class ModelSpecProcessor:
             args_f = sorted(trans_inf["included_factors"])
             pos_f = list(np.arange(self.nfac)[np.in1d(self.factors, args_f)])
             included_factors.append(tuple(args_f))
-            included_positions.append(tuple(pos_f))
+            included_positions.append(np.array(pos_f, dtype=int))
             assert len(included_factors) >= 1, (
                 "Each latent factor needs at least one included factor. This is "
                 "violated for {}".format(factor)

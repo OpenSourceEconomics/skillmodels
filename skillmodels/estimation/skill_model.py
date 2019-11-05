@@ -8,8 +8,7 @@ import pandas as pd
 import seaborn as sns
 import statsmodels.formula.api as smf
 from estimagic.optimization.optimize import maximize
-from estimagic.optimization.start_helpers import get_start_params_from_free_params
-from estimagic.optimization.start_helpers import make_start_params_helpers
+from estimagic.optimization.optimize import process_constraints
 
 import skillmodels.model_functions.transition_functions as tf
 from skillmodels.estimation.likelihood_function import log_likelihood_contributions
@@ -134,12 +133,39 @@ class SkillModel:
 
     def start_params_helpers(self):
         """DataFrames with the free and fixed parameters of the model."""
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore", message="indexing past lexsort depth may impact performance."
-            )
-            free, fixed = make_start_params_helpers(self.params_index, self.constraints)
+
+        params = pd.DataFrame(index=self.params_index)
+        params["value"] = np.nan
+        params["lower"] = -np.inf
+        params["upper"] = np.inf
+
+        pc, pp = process_constraints(self.constraints, params)
+
+        is_fixed = pp["_is_fixed_to_value"] | pp["_is_fixed_to_other"]
+
+        free = params[~is_fixed]
+        fixed = params[is_fixed]
+
         return free, fixed
+
+    def get_start_params_from_free_params(self, free):
+        empty_free, empty_fixed = self.start_params_helpers()
+        empty_params = pd.concat([empty_free, empty_fixed], sort=False).reindex(
+            self.params_index
+        )
+        pc, pp = process_constraints(self.constraints, empty_params)
+
+        params = pd.concat([free, empty_fixed], sort=False).reindex(self.params_index)
+        params["value"].update(pp["_fixed_value"])
+
+        container = params["value"].to_numpy()
+        for i, pos in enumerate(pp["_post_replacements"].to_numpy()):
+            if pos >= 0:
+                container[i] = container[pos]
+
+        params["value"] = container
+
+        return params
 
     def generate_full_start_params(self, start_params=None):
         """Vector with start values for the optimization.
@@ -162,9 +188,7 @@ class SkillModel:
                     full_sp = sp
 
                 elif len(sp.index.intersection(free.index)) == len(free.index):
-                    full_sp = get_start_params_from_free_params(
-                        sp, self.constraints, self.params_index
-                    )
+                    full_sp = self.get_start_params_from_free_params(sp)
                 else:
                     raise ValueError(
                         "Index of start parameters has to be either self.params_index "
@@ -183,9 +207,7 @@ class SkillModel:
                     ]
                     free.loc[p_diags, "value"] = 1
 
-                full_sp = get_start_params_from_free_params(
-                    free, self.constraints, self.params_index
-                )
+                full_sp = self.get_start_params_from_free_params(free)
 
             full_sp["group"] = None
 
