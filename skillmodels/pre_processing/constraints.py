@@ -89,7 +89,7 @@ def _invariant_meas_system_constraints(update_info, controls, factors):
     for period, meas in update_info.index:
         if update_info.loc[(period, meas), "is_repeated"]:
             first = update_info.loc[(period, meas), "first_occurence"]
-            for cont in ["constant"] + controls[period]:
+            for cont in ["constant"] + list(controls[period]):
                 locs.append(
                     [("delta", period, meas, cont), ("delta", int(first), meas, cont)]
                 )

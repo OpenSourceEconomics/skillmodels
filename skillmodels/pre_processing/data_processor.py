@@ -111,13 +111,19 @@ class DataProcessor:
             periods = self.periods
 
         if factors == "all":
-            factors = self.factors
+            factors = list(self.factors)
+
+        if isinstance(factors, tuple):
+            factors = list(factors)
 
         if isinstance(periods, int) or isinstance(periods, float):
             periods = [periods]
 
         if isinstance(factors, str):
             factors = [factors]
+
+        if isinstance(periods, tuple):
+            periods = list(periods)
 
         if len(other_vars) == 0 or isinstance(other_vars[0], str):
             other_vars = [other_vars] * len(periods)
@@ -162,10 +168,16 @@ class DataProcessor:
             periods = self.periods
 
         if factors == "all":
-            factors = self.factors
+            factors = list(self.factors)
+
+        if isinstance(factors, tuple):
+            factors = list(factors)
 
         if isinstance(periods, int) or isinstance(periods, float):
             periods = [periods]
+
+        if isinstance(periods, tuple):
+            periods = list(periods)
 
         if isinstance(factors, str):
             factors = [factors]
@@ -236,7 +248,7 @@ class DataProcessor:
         return score_df
 
     def reg_df(self, factor, period=None, stage=None, controls=None, agg_method="mean"):
-        controls = [] if controls is None else controls
+        controls = [] if controls is None else list(controls)
         assert (
             period is None or stage is None
         ), "You cannot specify a period and a stage for a score regression."
