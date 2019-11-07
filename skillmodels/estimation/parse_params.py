@@ -4,6 +4,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from estimagic.optimization.utilities import cov_params_to_matrix
+from estimagic.optimization.utilities import robust_cholesky
 
 
 def parse_params(params, initial_quantities, factors, parsing_info):
@@ -70,9 +71,10 @@ def _map_params_to_initial_cov(params_vec, initial, parsing_info):
 
     filler = np.zeros((nmixtures, nfac, nfac))
     for emf in range(nmixtures):
-        filler[emf] = cov_params_to_matrix(params_vec[info[emf]])
+        cov = cov_params_to_matrix(params_vec[info[emf]])
+        chol = robust_cholesky(cov)
+        filler[emf] = chol.T
 
-    filler = np.transpose(np.linalg.cholesky(filler), axes=(0, 2, 1))
     initial[:, :, 1:, 1:] = filler
 
 
