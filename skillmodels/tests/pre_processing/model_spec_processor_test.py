@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from nose.tools import assert_equal
 from nose.tools import assert_raises
+from numpy.testing import assert_array_equal
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 
@@ -40,7 +41,9 @@ class TestTransitionEquationIncludedFactors:
 
     def test_transition_equation_included_factor_positions(self):
         ModelSpecProcessor._transition_equation_included_factors(self)
-        assert_equal(self.included_positions, ((0, 1), (1,)))
+        exp_positions = [np.array([0, 1]), np.array([1])]
+        for pos, exp_pos in zip(self.included_positions, exp_positions):
+            assert_array_equal(pos, exp_pos)
 
 
 class TestCleanMesaurementSpecifications:

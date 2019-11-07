@@ -52,20 +52,23 @@ def set_up_npfac():
         "linear",
     ]
     out["transition_argument_dicts"] = [
-        {"coeffs": np.array([0.02] * 28), "included_positions": [0, 1, 2, 3, 5]},
+        {
+            "coeffs": np.array([0.02] * 28),
+            "included_positions": np.array([0, 1, 2, 3, 5]),
+        },
         {
             "coeffs": np.array([0.2, 0.3, 0.2, 0.3, 0.2, 0.2, 0.0]),
-            "included_positions": [0, 1, 2, 3, 4, 5],
+            "included_positions": np.array([0, 1, 2, 3, 4, 5]),
         },
         {
             "coeffs": np.array([0.1, 0.1, 0.4, 0.4, 0.5, 0.5, 0.6]),
             "included_positions": [0, 1, 2, 3, 4, 5],
         },
-        {"coeffs": np.array([2, 0.0]), "included_positions": [1]},
-        {"coeffs": np.array([1]), "included_positions": [1]},
+        {"coeffs": np.array([2, 0.0]), "included_positions": np.array([1])},
+        {"coeffs": np.array([1]), "included_positions": np.array([1])},
         {
             "coeffs": np.array([0.2, 0.3, 0.2, 0.3, 0.2, 0.2, 0.05]),
-            "included_positions": [0, 1, 2, 3, 4, 5],
+            "included_positions": np.array([0, 1, 2, 3, 4, 5]),
         },
     ]
     out["shock_variances"] = np.array([0, 0, 0, 0, 0, 0])

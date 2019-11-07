@@ -69,3 +69,5 @@ ___*
 .env/installed_spec.json
 *.ipynb
 mixed_documents/
+
+skillmodels.egg-info/

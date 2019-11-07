@@ -8,8 +8,7 @@ import pandas as pd
 import seaborn as sns
 import statsmodels.formula.api as smf
 from estimagic.optimization.optimize import maximize
-from estimagic.optimization.start_helpers import get_start_params_from_free_params
-from estimagic.optimization.start_helpers import make_start_params_helpers
+from estimagic.optimization.optimize import process_constraints
 
 import skillmodels.model_functions.transition_functions as tf
 from skillmodels.estimation.likelihood_function import log_likelihood_contributions
@@ -69,6 +68,18 @@ class SkillModel:
             "mixture_weight",
         ]
 
+    def _get_slice_from_loc(self, loc):
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="indexing past lexsort depth may impact performance."
+            )
+            sr = pd.Series(index=self.params_index, data=range(len(self.params_index)))
+            iloc = list(sr.loc[loc])
+            assert iloc == list(
+                range(iloc[0], iloc[-1] + 1)
+            ), "Loc must select consecutive elements of the params index."
+        return slice(iloc[0], iloc[-1] + 1)
+
     def _container_for_delta(self):
         """List of initial arrays for control variable params in each period.
 
@@ -84,6 +95,9 @@ class SkillModel:
             delta.append(init)
         return delta
 
+    def _slice_for_delta(self):
+        return [self._get_slice_from_loc(("delta", t)) for t in self.periods]
+
     def _container_for_loading(self):
         """Initial h array filled with zeros.
 
@@ -94,13 +108,24 @@ class SkillModel:
         """
         return np.zeros((self.nupdates, self.nfac))
 
+    def _slice_for_loading(self):
+        return self._get_slice_from_loc("loading")
+
     def _container_for_meas_sd(self):
         """1d numpy array of length nupdates filled with zeros."""
         return np.zeros(self.nupdates)
 
+    def _slice_for_meas_sd(self):
+        return self._get_slice_from_loc("meas_sd")
+
     def _container_for_shock_variance(self):
         """Initial Q array filled with zeros."""
         return np.zeros((self.nperiods - 1, self.nfac, self.nfac))
+
+    def _slice_for_shock_variance(self):
+        return [
+            self._get_slice_from_loc(("shock_variance", t)) for t in self.periods[:-1]
+        ]
 
     def _container_for_initial_mean(self):
         """Initial X_zero array filled with zeros."""
@@ -108,9 +133,15 @@ class SkillModel:
         flat_init = init.reshape(self.nobs * self.nmixtures, self.nfac)
         return init, flat_init
 
+    def _slice_for_initial_mean(self):
+        return self._get_slice_from_loc("initial_mean")
+
     def _container_for_mixture_weight(self):
         """Initial W_zero array filled with 1/nmixtures."""
         return np.ones((self.nobs, self.nmixtures)) / self.nmixtures
+
+    def _slice_for_mixture_weight(self):
+        return self._get_slice_from_loc("mixture_weight")
 
     def _container_for_initial_cov(self):
         """Initial P_zero array filled with zeros."""
@@ -120,6 +151,11 @@ class SkillModel:
             self.nobs * self.nmixtures, self.nfac + 1, self.nfac + 1
         )
         return init, flat_init
+
+    def _slice_for_initial_cov(self):
+        return [
+            self._get_slice_from_loc(("initial_cov", m)) for m in range(self.nmixtures)
+        ]
 
     def _container_for_trans_coeffs(self):
         """List of initial trans_coeffs arrays, each filled with zeros."""
@@ -132,14 +168,53 @@ class SkillModel:
             initial.append(np.zeros((self.nperiods - 1, nparams)))
         return initial
 
+    def _slice_for_trans_coeffs(self):
+        slices = []
+        for period in self.periods[:-1]:
+            slices_t = []
+            for f, factor in enumerate(self.factors):
+                if self.transition_names[f] == "constant":
+                    slices_t.append(slice(0, 0))
+                else:
+                    slices_t.append(self._get_slice_from_loc(("trans", period, factor)))
+            slices.append(slices_t)
+        return slices
+
     def start_params_helpers(self):
         """DataFrames with the free and fixed parameters of the model."""
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore", message="indexing past lexsort depth may impact performance."
-            )
-            free, fixed = make_start_params_helpers(self.params_index, self.constraints)
+
+        params = pd.DataFrame(index=self.params_index)
+        params["value"] = np.nan
+        params["lower"] = -np.inf
+        params["upper"] = np.inf
+
+        pc, pp = process_constraints(self.constraints, params)
+
+        is_fixed = pp["_is_fixed_to_value"] | pp["_is_fixed_to_other"]
+
+        free = params[~is_fixed]
+        fixed = params[is_fixed]
+
         return free, fixed
+
+    def get_start_params_from_free_params(self, free):
+        empty_free, empty_fixed = self.start_params_helpers()
+        empty_params = pd.concat([empty_free, empty_fixed], sort=False).reindex(
+            self.params_index
+        )
+        pc, pp = process_constraints(self.constraints, empty_params)
+
+        params = pd.concat([free, empty_fixed], sort=False).reindex(self.params_index)
+        params["value"].update(pp["_fixed_value"])
+
+        container = params["value"].to_numpy()
+        for i, pos in enumerate(pp["_post_replacements"].to_numpy()):
+            if pos >= 0:
+                container[i] = container[pos]
+
+        params["value"] = container
+
+        return params
 
     def generate_full_start_params(self, start_params=None):
         """Vector with start values for the optimization.
@@ -162,9 +237,7 @@ class SkillModel:
                     full_sp = sp
 
                 elif len(sp.index.intersection(free.index)) == len(free.index):
-                    full_sp = get_start_params_from_free_params(
-                        sp, self.constraints, self.params_index
-                    )
+                    full_sp = self.get_start_params_from_free_params(sp)
                 else:
                     raise ValueError(
                         "Index of start parameters has to be either self.params_index "
@@ -183,9 +256,7 @@ class SkillModel:
                     ]
                     free.loc[p_diags, "value"] = 1
 
-                full_sp = get_start_params_from_free_params(
-                    free, self.constraints, self.params_index
-                )
+                full_sp = self.get_start_params_from_free_params(free)
 
             full_sp["group"] = None
 
@@ -240,9 +311,18 @@ class SkillModel:
 
         return init_dict
 
-    def _parse_params_args_dict(self, initial_quantities):
-        pp = {"initial_quantities": initial_quantities, "factors": self.factors}
+    def _parsing_info(self):
+        parsing_info = {}
+        for quant in self.params_quants:
+            parsing_info[quant] = getattr(self, f"_slice_for_{quant}")()
+        return parsing_info
 
+    def _parse_params_args_dict(self, initial_quantities):
+        pp = {
+            "initial_quantities": initial_quantities,
+            "factors": self.factors,
+            "parsing_info": self._parsing_info(),
+        }
         return pp
 
     def _update_args_dict(self, initial_quantities):

@@ -4,74 +4,91 @@ import warnings
 import numpy as np
 import pandas as pd
 from estimagic.optimization.utilities import cov_params_to_matrix
+from estimagic.optimization.utilities import robust_cholesky
 
 
-def parse_params(params, initial_quantities, factors):
+def parse_params(params, initial_quantities, factors, parsing_info):
     """Parse params into the quantities that depend on it."""
     if isinstance(params, pd.DataFrame):
         params = params["value"]
+
+    params_vec = params.to_numpy()
 
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore", message="indexing past lexsort depth may impact performance."
         )
-        _map_params_to_delta(params, initial_quantities["delta"])
-        _map_params_to_loading(params, initial_quantities["loading"])
-        _map_params_to_meas_sd(params, initial_quantities["meas_sd"])
-        _map_params_to_shock_variance(params, initial_quantities["shock_variance"])
-        _map_params_to_initial_mean(params, initial_quantities["initial_mean"])
-        _map_params_to_mixture_weight(params, initial_quantities["mixture_weight"])
-        _map_params_to_initial_cov(params, initial_quantities["initial_cov"])
-        _map_params_to_trans_coeffs(params, initial_quantities["trans_coeffs"], factors)
+        _map_params_to_delta(params_vec, initial_quantities["delta"], parsing_info)
+        _map_params_to_loading(params_vec, initial_quantities["loading"], parsing_info)
+        _map_params_to_meas_sd(params_vec, initial_quantities["meas_sd"], parsing_info)
+        _map_params_to_shock_variance(
+            params_vec, initial_quantities["shock_variance"], parsing_info
+        )
+        _map_params_to_initial_mean(
+            params_vec, initial_quantities["initial_mean"], parsing_info
+        )
+        _map_params_to_mixture_weight(
+            params_vec, initial_quantities["mixture_weight"], parsing_info
+        )
+        _map_params_to_initial_cov(
+            params_vec, initial_quantities["initial_cov"], parsing_info
+        )
+        _map_params_to_trans_coeffs(
+            params_vec, initial_quantities["trans_coeffs"], factors, parsing_info
+        )
 
 
-def _map_params_to_delta(params, initial):
+def _map_params_to_delta(params_vec, initial, parsing_info):
+    info = parsing_info["delta"]
     for period, delta in enumerate(initial):
-        delta[:] = params.loc["delta", period].to_numpy().reshape(delta.shape)
+        delta[:] = params_vec[info[period]].reshape(delta.shape)
     return initial
 
 
-def _map_params_to_loading(params, initial):
-    initial[:] = params.loc["loading"].to_numpy().reshape(initial.shape)
+def _map_params_to_loading(params_vec, initial, parsing_info):
+    initial[:] = params_vec[parsing_info["loading"]].reshape(initial.shape)
 
 
-def _map_params_to_meas_sd(params, initial):
-    initial[:] = np.sqrt(params.loc["meas_sd"].to_numpy())
+def _map_params_to_meas_sd(params_vec, initial, parsing_info):
+    initial[:] = np.sqrt(params_vec[parsing_info["meas_sd"]])
 
 
-def _map_params_to_shock_variance(params, initial):
+def _map_params_to_shock_variance(params_vec, initial, parsing_info):
+    info = parsing_info["shock_variance"]
     for period in range(len(initial)):
-        initial[period] = np.diag(params.loc["shock_variance", period].to_numpy())
+        initial[period] = np.diag(params_vec[info[period]])
 
 
-def _map_params_to_initial_mean(params, initial):
+def _map_params_to_initial_mean(params_vec, initial, parsing_info):
     nobs, nmixtures, nfac = initial.shape
-    initial[:] = params.loc["initial_mean"].to_numpy().reshape(nmixtures, nfac)
+    initial[:] = params_vec[parsing_info["initial_mean"]].reshape(nmixtures, nfac)
 
 
-def _map_params_to_initial_cov(params, initial):
+def _map_params_to_initial_cov(params_vec, initial, parsing_info):
+    info = parsing_info["initial_cov"]
     nobs, nmixtures, nfac, _ = initial.shape
     nfac = nfac - 1
 
     filler = np.zeros((nmixtures, nfac, nfac))
     for emf in range(nmixtures):
-        filler[emf] = cov_params_to_matrix(
-            params.loc["initial_cov", 0, f"mixture_{emf}"].to_numpy()
-        )
+        cov = cov_params_to_matrix(params_vec[info[emf]])
+        chol = robust_cholesky(cov)
+        filler[emf] = chol.T
 
-    filler = np.transpose(np.linalg.cholesky(filler), axes=(0, 2, 1))
     initial[:, :, 1:, 1:] = filler
 
 
-def _map_params_to_mixture_weight(params, initial):
-    initial[:] = params.loc["mixture_weight"].to_numpy()
+def _map_params_to_mixture_weight(params_vec, initial, parsing_info):
+    initial[:] = params_vec[parsing_info["mixture_weight"]]
 
 
-def _map_params_to_trans_coeffs(params, initial, factors):
+def _map_params_to_trans_coeffs(params_vec, initial, factors, parsing_info):
     """Map parameters from params to trans_coeffs."""
     relevant_periods = range(len(initial[0]))
+    info = parsing_info["trans_coeffs"]
 
-    for factor, init in zip(factors, initial):
+    for f, init in zip(range(len(factors)), initial):
         for period in relevant_periods:
-            if factor in params.loc["trans", period]:
-                init[period] = params.loc["trans", period, factor].to_numpy()
+            sl = info[period][f]
+            if sl.start != sl.stop:
+                init[period] = params_vec[sl]
