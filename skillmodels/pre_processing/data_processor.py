@@ -59,6 +59,8 @@ class DataProcessor:
 
     def __init__(self, specs_processor_attribute_dict):
         self.__dict__.update(specs_processor_attribute_dict)
+        self._check_measurements_validity()
+        self._check_controls_validity()
 
     def c_data(self):
         """A List of 2d arrays with control variables for each period.
@@ -275,3 +277,73 @@ class DataProcessor:
 
         reg_df = pd.concat(period_dfs, axis=0)
         return reg_df
+
+    def _check_measurements_validity(self):
+        m_index = pd.MultiIndex(levels=[[], []], codes=[[], []])
+        report_issues = pd.DataFrame(
+            columns=["factor", "period", "measurement", "issue"], index=m_index
+        )
+        for factor in self.factors:
+            for t, meas_list in enumerate(self.measurements[factor]):
+                df = self.data.query(f"__period__ == {t}")
+                for ind, meas in enumerate(meas_list):
+                    len_val = len(df[meas].value_counts())
+                    if len_val == 0:
+                        report_issues.loc[(t, ind), :] = [
+                            factor,
+                            t,
+                            meas,
+                            "All values are missing",
+                        ]
+                    elif len_val == 1:
+                        if df[meas].notnull().all():
+                            report_issues.loc[(t, ind), :] = [
+                                factor,
+                                t,
+                                meas,
+                                "All values are equal to {}".format(
+                                    df[meas].unique()[0]
+                                ),
+                            ]
+                        else:
+                            report_issues.loc[(t, ind), :] = [
+                                factor,
+                                t,
+                                meas,
+                                "Some values missing, others all equal to {}".format(
+                                    sorted(df[meas].unique())[1]
+                                ),
+                            ]
+        if len(report_issues) != 0:
+            self._report_measurements = report_issues
+            raise ValueError(f"Invalid measurements dataset:\n{report_issues}")
+
+    def _check_controls_validity(self):
+        controls = self.controls
+        m_index = pd.MultiIndex(levels=[[], []], codes=[[], []])
+        report_issues = pd.DataFrame(
+            columns=["period", "control", "issue"], index=m_index
+        )
+        for t in self.periods:
+            df = self.data.query(f"__period__ == {t}")  # id level data for period t
+            for ind, cont in enumerate(controls[t]):
+                len_val = len(df[cont].value_counts())
+                if len_val == 0:
+                    report_issues.loc[(t, ind), :] = [t, cont, "All values are missing"]
+                elif len_val == 1:
+                    if df[cont].notnull().all():
+                        report_issues.loc[(t, ind), :] = [
+                            t,
+                            cont,
+                            "All values are equal to {}".format(df[cont].unique()[0]),
+                        ]
+                    else:
+                        report_issues.loc[(t, ind), :] = [
+                            t,
+                            cont,
+                            "Some values missing, others all equal to {}".format(
+                                sorted(df[cont].unique())[1]
+                            ),
+                        ]
+        if len(report_issues) != 0:
+            raise ValueError(f"Invalid controls dataset:\n{report_issues}")
