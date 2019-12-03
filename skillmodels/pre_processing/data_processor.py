@@ -304,10 +304,10 @@ class DataProcessor:
             for fac in self.factors:
                 meas_t.append(self.measurements[fac][t])
             # flatten
-            meas_t = {item for sublist in meas_t for item in sublist}
+            meas_t = sorted({item for sublist in meas_t for item in sublist})
             varlist = list(self.controls[t]) + list(meas_t)
             to_concat = check_value_errors(varlist, df)
             report_issues = pd.concat([report_issues, to_concat])
-        report_issues=report_issues.reset_index(drop=True)
+        report_issues = report_issues.reset_index(drop=True)
         if len(report_issues) != 0:
             raise ValueError(f"Invalid dataset:\n{report_issues}")

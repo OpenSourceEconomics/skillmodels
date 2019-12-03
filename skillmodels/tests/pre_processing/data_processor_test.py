@@ -163,8 +163,8 @@ class TestObsValidty:
 
     def test_obs_validity(self):
         res = DataFrame(columns=["period", "variable", "issue"])
-        res["period"] = [0.0, 0.0, 1.0,1.0,1.0,1.0]
-        res["variable"] = ["c1","m1","c2","c3","m2","m3"]
+        res["period"] = [0.0, 0.0, 1.0, 1.0, 1.0, 1.0]
+        res["variable"] = ["c1", "m1", "c2", "c3", "m2", "m3"]
         res["issue"] = [
             "All values are missing",
             "All values are missing",
