@@ -136,69 +136,44 @@ class TestYData:
         aae(DataProcessor.y_data(self), res)
 
 
-class TestMeasValidty:
+class TestObsValidty:
     def setup(self):
         self.periods = (0, 1)
         self.factors = ["f1", "f2"]
         self.measurements = {"f1": [["m1", "m2"]] * 2, "f2": [["m3", "m4"]] * 2}
-        cols = ["__period__"] + [f"m{i}" for i in range(1, 5)]
+        self.controls = (("c1", "c2", "c3", "c4"), ("c1", "c2", "c3", "c4"))
+        cols = (
+            ["__period__"]
+            + [f"m{i}" for i in range(1, 5)]
+            + [f"c{i}" for i in range(1, 5)]
+        )
         periods = np.arange(2).repeat(3).reshape(6, 1)
         meas_1 = np.hstack([[np.nan] * 3, np.arange(3)]).reshape(6, 1)
         meas_2 = np.hstack([np.arange(3), np.ones(3)]).reshape(6, 1)
         meas_3 = np.hstack([np.arange(3), np.nan, np.ones(2)]).reshape(6, 1)
         meas_4 = np.tile(np.arange(3), 2).reshape(6, 1)
-        data = np.hstack([periods, meas_1, meas_2, meas_3, meas_4])
-        self.data = DataFrame(data=data, columns=cols)
-
-    def test_check_meas_validity(self):
-        arrays = [[0, 1, 1], [0, 1, 0]]
-        tuples = list(zip(*arrays))
-        m_index = pd.MultiIndex.from_tuples(tuples)
-        res = DataFrame(
-            columns=["factor", "period", "measurement", "issue"], index=m_index
-        )
-        res.loc[:, "factor"] = ["f1", "f1", "f2"]
-        res.loc[:, "period"] = [0.0, 1.0, 1.0]
-        res.loc[:, "measurement"] = [f"m{i}" for i in range(1, 4)]
-        res.loc[:, "issue"] = [
-            "All values are missing",
-            "All values are equal to {}".format(1.0),
-            "Some values missing, others all equal to {}".format(1.0),
-        ]
-
-        with raises(ValueError) as errinfo:
-            DataProcessor._check_measurements_validity(self)
-        assert f"Invalid measurements dataset:\n{res}" == str(errinfo.value)
-
-
-class TestContValidty:
-    def setup(self):
-
-        self.controls = (("c1", "c2", "c3", "c4"), ("c1", "c2", "c3", "c4"))
-        self.periods = (0, 1)
-        self.nperiods = 2
-        cols = ["__period__"] + [f"c{i}" for i in range(1, 5)]
         cont_1 = np.hstack([[np.nan] * 3, np.arange(3)]).reshape(6, 1)
         cont_2 = np.hstack([np.arange(3), np.ones(3)]).reshape(6, 1)
         cont_3 = np.hstack([np.arange(3), np.nan, np.ones(2)]).reshape(6, 1)
         cont_4 = np.tile(np.arange(3), 2).reshape(6, 1)
-        periods = np.arange(2).repeat(3).reshape(6, 1)
-        data = np.hstack([periods, cont_1, cont_2, cont_3, cont_4])
+        data = np.hstack(
+            [periods, meas_1, meas_2, meas_3, meas_4, cont_1, cont_2, cont_3, cont_4]
+        )
         self.data = DataFrame(data=data, columns=cols)
 
-    def test_check_control_validity(self):
-        arrays = [[0, 1, 1], [0, 1, 2]]
-        tuples = list(zip(*arrays))
-        m_index = pd.MultiIndex.from_tuples(tuples)
-        res = DataFrame(columns=["period", "control", "issue"], index=m_index)
-        res.loc[:, "period"] = [0.0, 1.0, 1.0]
-        res.loc[:, "control"] = [f"c{i}" for i in range(1, 4)]
-        res.loc[:, "issue"] = [
+    def test_obs_validity(self):
+        res = DataFrame(columns=["period", "variable", "issue"])
+        res["period"] = [0.0, 0.0, 1.0,1.0,1.0,1.0] 
+        res["variable"] = ["c1","m1","c2","c3","m2","m3"]
+        res["issue"] = [
             "All values are missing",
-            "All values are equal to {}".format(1.0),
-            "Some values missing, others all equal to {}".format(1.0),
+            "All values are missing",
+            "All non missing values are equal to {}".format(1.0),
+            "All non missing values are equal to {}".format(1.0),
+            "All non missing values are equal to {}".format(1.0),
+            "All non missing values are equal to {}".format(1.0),
         ]
 
         with raises(ValueError) as errinfo:
-            DataProcessor._check_controls_validity(self)
-        assert f"Invalid controls dataset:\n{res}" == str(errinfo.value)
+            DataProcessor._check_observable_data(self)
+        assert f"Invalid dataset:\n{res}" == str(errinfo.value)
