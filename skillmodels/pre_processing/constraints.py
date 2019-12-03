@@ -123,7 +123,7 @@ def _normalization_constraints(normalizations):
     """
     msg = "This constraint was generated because of an explicit normalization."
     constraints = []
-    factors = sorted(list(normalizations.keys()))
+    factors = sorted(normalizations.keys())
     periods = range(len(normalizations[factors[0]]["loadings"]))
     for factor in factors:
         for period in periods:
@@ -181,7 +181,7 @@ def _not_measured_constraints(
         "a measurement to 0."
     )
 
-    factors = sorted(list(measurements.keys()))
+    factors = sorted(measurements.keys())
     periods = range(len(measurements[factors[0]]))
 
     locs = []

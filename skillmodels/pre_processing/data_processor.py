@@ -10,17 +10,18 @@ def prepend_index_level(df, to_prepend):
     return df
 
 
-def check_value_errors(varlist, data):
-    report_df = pd.DataFrame(columns=["period", "variable", "issue"])
+def check_variable_list(vartype, varlist, data):
+    report_df = pd.DataFrame(columns=["period", "variable", "variable type", "issue"])
     t = data["__period__"].unique()[0]
     for ind, var in enumerate(varlist):
         len_val = len(data[var].value_counts())
         if len_val == 0:
-            report_df.loc[ind] = [t, var, "All values are missing"]
+            report_df.loc[ind] = [t, var, vartype, "All values are missing"]
         elif len_val == 1:
             report_df.loc[ind] = [
                 t,
                 var,
+                vartype,
                 "All non missing values are equal to {}".format(
                     data[var].unique()[~np.isnan(data[var].unique())][0]
                 ),
@@ -302,12 +303,10 @@ class DataProcessor:
             # create time relevant measurements list
             meas_t = []
             for fac in self.factors:
-                meas_t.append(self.measurements[fac][t])
-            # flatten
-            meas_t = sorted({item for sublist in meas_t for item in sublist})
-            varlist = list(self.controls[t]) + list(meas_t)
-            to_concat = check_value_errors(varlist, df)
-            report_issues = pd.concat([report_issues, to_concat])
+                meas_t += self.measurements[fac][t]
+            concat_cont = check_variable_list("control", self.controls[t], df)
+            concat_meas = check_variable_list("measurement", sorted(meas_t), df)
+            report_issues = pd.concat([report_issues, concat_cont, concat_meas])
         report_issues = report_issues.reset_index(drop=True)
         if len(report_issues) != 0:
             raise ValueError(f"Invalid dataset:\n{report_issues}")

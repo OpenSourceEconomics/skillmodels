@@ -162,7 +162,7 @@ class TestObsValidty:
         self.data = DataFrame(data=data, columns=cols)
 
     def test_obs_validity(self):
-        res = DataFrame(columns=["period", "variable", "issue"])
+        res = DataFrame(columns=["period", "variable", "variable type", "issue"])
         res["period"] = [0.0, 0.0, 1.0, 1.0, 1.0, 1.0]
         res["variable"] = ["c1", "m1", "c2", "c3", "m2", "m3"]
         res["issue"] = [
@@ -173,7 +173,14 @@ class TestObsValidty:
             "All non missing values are equal to {}".format(1.0),
             "All non missing values are equal to {}".format(1.0),
         ]
-
+        res["variable type"] = [
+            "control",
+            "measurement",
+            "control",
+            "control",
+            "measurement",
+            "measurement",
+        ]
         with raises(ValueError) as errinfo:
             DataProcessor._check_observable_data(self)
         assert f"Invalid dataset:\n{res}" == str(errinfo.value)

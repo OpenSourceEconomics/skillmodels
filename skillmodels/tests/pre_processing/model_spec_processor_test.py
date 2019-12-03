@@ -53,7 +53,7 @@ class TestCleanMesaurementSpecifications:
         inf["f1"]["measurements"] = [["m1", "m2", "m3", "m4"]] * 2
         inf["f2"]["measurements"] = [["m5", "m6", "m7", "m8"]] * 2
         self._facinf = inf
-        self.factors = tuple(sorted(list(self._facinf.keys())))
+        self.factors = tuple(sorted(self._facinf.keys()))
         self.transition_names = ("log_ces", "blubb")
         cols = ["__period__"] + [f"m{i}" for i in range(1, 9)]
         dat = np.vstack([np.zeros(9), np.ones(9)])
@@ -92,7 +92,7 @@ class TestCheckAndCleanNormalizations:
         self.periods = [0, 1]
         self._facinf = {"f1": {"measurements": [["m1", "m2", "m3", "m4"]] * 2}}
         self.f1_norm_list = [{"m1": 1}, {"m1": 1}]
-        self.factors = sorted(list(self._facinf.keys()))
+        self.factors = sorted(self._facinf.keys())
         self.measurements = {"f1": [["m1", "m2", "m3", "m4"]] * 2}
         self.model_name = "model"
         self.dataset_name = "data"
@@ -152,7 +152,7 @@ class TestCheckAndFillNormalizationSpecifications:
 
         self.nperiods = 3
 
-        self.factors = sorted(list(self._facinf.keys()))
+        self.factors = sorted(self._facinf.keys())
         self._check_and_clean_normalizations_list = Mock(
             return_value=[{"a": 1}, {"a": 1}, {"a": 1}]
         )
