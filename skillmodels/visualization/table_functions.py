@@ -53,7 +53,7 @@ def statsmodels_results_to_df(
     res_list, decimals=2, period_name="Period", report_se=True
 ):
     sr_list = []
-    periods = sorted(list({res.period for res in res_list}))
+    periods = sorted({res.period for res in res_list})
 
     for res in res_list:
         sr = statsmodels_result_to_string_series(res, decimals=decimals)

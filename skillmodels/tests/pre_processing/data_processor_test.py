@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from numpy.testing import assert_array_equal as aae
 from pandas import DataFrame
+from pytest import raises
 
 from skillmodels.pre_processing.data_processor import DataProcessor
 from skillmodels.pre_processing.data_processor import pre_process_data
@@ -133,3 +134,53 @@ class TestYData:
         )
 
         aae(DataProcessor.y_data(self), res)
+
+
+class TestObsValidty:
+    def setup(self):
+        self.periods = (0, 1)
+        self.factors = ["f1", "f2"]
+        self.measurements = {"f1": [["m1", "m2"]] * 2, "f2": [["m3", "m4"]] * 2}
+        self.controls = (("c1", "c2", "c3", "c4"), ("c1", "c2", "c3", "c4"))
+        cols = (
+            ["__period__"]
+            + [f"m{i}" for i in range(1, 5)]
+            + [f"c{i}" for i in range(1, 5)]
+        )
+        periods = np.arange(2).repeat(3).reshape(6, 1)
+        meas_1 = np.hstack([[np.nan] * 3, np.arange(3)]).reshape(6, 1)
+        meas_2 = np.hstack([np.arange(3), np.ones(3)]).reshape(6, 1)
+        meas_3 = np.hstack([np.arange(3), np.nan, np.ones(2)]).reshape(6, 1)
+        meas_4 = np.tile(np.arange(3), 2).reshape(6, 1)
+        cont_1 = np.hstack([[np.nan] * 3, np.arange(3)]).reshape(6, 1)
+        cont_2 = np.hstack([np.arange(3), np.ones(3)]).reshape(6, 1)
+        cont_3 = np.hstack([np.arange(3), np.nan, np.ones(2)]).reshape(6, 1)
+        cont_4 = np.tile(np.arange(3), 2).reshape(6, 1)
+        data = np.hstack(
+            [periods, meas_1, meas_2, meas_3, meas_4, cont_1, cont_2, cont_3, cont_4]
+        )
+        self.data = DataFrame(data=data, columns=cols)
+
+    def test_obs_validity(self):
+        res = DataFrame(columns=["period", "variable", "variable type", "issue"])
+        res["period"] = [0.0, 0.0, 1.0, 1.0, 1.0, 1.0]
+        res["variable"] = ["c1", "m1", "c2", "c3", "m2", "m3"]
+        res["issue"] = [
+            "All values are missing",
+            "All values are missing",
+            "All non missing values are equal to {}".format(1.0),
+            "All non missing values are equal to {}".format(1.0),
+            "All non missing values are equal to {}".format(1.0),
+            "All non missing values are equal to {}".format(1.0),
+        ]
+        res["variable type"] = [
+            "control",
+            "measurement",
+            "control",
+            "control",
+            "measurement",
+            "measurement",
+        ]
+        with raises(ValueError) as errinfo:
+            DataProcessor._check_observable_data(self)
+        assert f"Invalid dataset:\n{res}" == str(errinfo.value)
