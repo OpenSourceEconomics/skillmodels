@@ -34,7 +34,7 @@ class ModelSpecProcessor:
         self.dataset_name = dataset_name
         self._timeinf = model_dict.get("time_specific", {})
         self._facinf = model_dict["factor_specific"]
-        self.factors = tuple(sorted(list(self._facinf.keys())))
+        self.factors = tuple(sorted(self._facinf.keys()))
         self.nfac = len(self.factors)
         self.nsigma = 2 * self.nfac + 1
 

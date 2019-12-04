@@ -10,6 +10,25 @@ def prepend_index_level(df, to_prepend):
     return df
 
 
+def check_variable_list(vartype, varlist, data):
+    report_df = pd.DataFrame(columns=["period", "variable", "variable type", "issue"])
+    t = data["__period__"].unique()[0]
+    for ind, var in enumerate(varlist):
+        len_val = len(data[var].value_counts())
+        if len_val == 0:
+            report_df.loc[ind] = [t, var, vartype, "All values are missing"]
+        elif len_val == 1:
+            report_df.loc[ind] = [
+                t,
+                var,
+                vartype,
+                "All non missing values are equal to {}".format(
+                    data[var].unique()[~np.isnan(data[var].unique())][0]
+                ),
+            ]
+    return report_df
+
+
 def pre_process_data(df):
     """Transform an unbalanced and unsorted dataset.
 
@@ -59,6 +78,7 @@ class DataProcessor:
 
     def __init__(self, specs_processor_attribute_dict):
         self.__dict__.update(specs_processor_attribute_dict)
+        self._check_observable_data()
 
     def c_data(self):
         """A List of 2d arrays with control variables for each period.
@@ -287,3 +307,18 @@ class DataProcessor:
 
         reg_df = pd.concat(period_dfs, axis=0)
         return reg_df
+
+    def _check_observable_data(self):
+        report_issues = pd.DataFrame()
+        for t in self.periods:
+            df = self.data.query(f"__period__ == {t}")
+            # create time relevant measurements list
+            meas_t = []
+            for fac in self.factors:
+                meas_t += self.measurements[fac][t]
+            concat_cont = check_variable_list("control", self.controls[t], df)
+            concat_meas = check_variable_list("measurement", sorted(meas_t), df)
+            report_issues = pd.concat([report_issues, concat_cont, concat_meas])
+        report_issues = report_issues.reset_index(drop=True)
+        if len(report_issues) != 0:
+            raise ValueError(f"Invalid dataset:\n{report_issues}")
