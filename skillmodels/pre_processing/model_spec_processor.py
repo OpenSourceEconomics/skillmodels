@@ -63,7 +63,6 @@ class ModelSpecProcessor:
         self._check_and_fill_normalization_specification()
         self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
-        self._nmeas_list()
         self._set_params_index()
         self._set_constraints()
 
@@ -316,17 +315,6 @@ class ModelSpecProcessor:
                     norm[factor] = {nt: [{}] * self.nperiods for nt in norm_types}
 
         self.normalizations = norm
-
-    def _nmeas_list(self):
-        info = self.update_info()
-        nmeas_list = []
-        last_period = self.periods[-1]
-        for t in self.periods:
-            if t != last_period or self.anchoring is False:
-                nmeas_list.append(len(info.loc[t]))
-            else:
-                nmeas_list.append(len(info.loc[t]) - 1)
-        self.nmeas_list = tuple(nmeas_list)
 
     def update_info(self):
         """A DataFrame with all relevant information on Kalman updates.

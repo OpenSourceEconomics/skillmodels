@@ -331,9 +331,7 @@ class SkillModel:
         u_args_list = []
         k = 0
         for t in self.periods:
-            nmeas = self.nmeas_list[t]
-            if t == self.periods[-1] and self.anchoring is True:
-                nmeas += 1
+            nmeas = len(self.update_info.loc[t].index)
             for j in range(nmeas):
                 u_args = [
                     initial_quantities["initial_mean"],
@@ -402,7 +400,7 @@ class SkillModel:
         args["like_contributions"] = initial_quantities["like_contributions"]
         args["parse_params_args"] = self._parse_params_args_dict(initial_quantities)
         args["periods"] = self.periods
-        args["nmeas_list"] = self.nmeas_list
+        args["update_info"] = self.update_info
         args["anchoring"] = self.anchoring
         args["update_args"] = self._update_args_dict(initial_quantities)
         args["predict_args"] = self._predict_args_dict(initial_quantities)

@@ -10,7 +10,7 @@ def log_likelihood_contributions(
     like_contributions,
     parse_params_args,
     periods,
-    nmeas_list,
+    update_info,
     anchoring,
     update_args,
     predict_args,
@@ -51,15 +51,14 @@ def log_likelihood_contributions(
 
     k = 0
     for t in periods:
-        for _j in range(nmeas_list[t]):
-            # measurement updates
-            update("measurement", update_args[k])
+        nmeas = len(update_info.loc[t])
+        for _j in range(nmeas):
+            purpose = update_info.iloc[k]["purpose"]
+            update(purpose, update_args[k])
             k += 1
         if t < periods[-1]:
             calculate_sigma_points(**calculate_sigma_points_args)
             predict(t, predict_args)
-    if anchoring is True:
-        update("anchoring", update_args[k])
 
     return like_contributions
 
