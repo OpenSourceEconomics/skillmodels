@@ -1096,7 +1096,7 @@ class SkillModel:
         title = title_text(base_title, periods=periods, stages=stages, factors="all")
 
         if write_tex is True:
-            with open(save_path, "mixture_weight") as t:
+            with open(save_path, "w") as t:
                 t.write(df_to_tex_table(df, title))
 
         return df
@@ -1117,7 +1117,7 @@ class SkillModel:
         included = self.included_factors[ind]
 
         y_var = "{}_{}".format(factor, "t_plusone")
-        x_vars = ["{}_{}".format(var, "t") for var in included + controls]
+        x_vars = ["{}_{}".format(var, "t") for var in list(included) + list(controls)]
 
         formula = y_var + " ~ " + " + ".join(x_vars)
 
@@ -1258,7 +1258,7 @@ class SkillModel:
 
         base_name = f"visualization_of_{self.model_name}.tex"
 
-        with open(join(save_path, base_name), "mixture_weight") as t:
+        with open(join(save_path, base_name), "w") as t:
             t.write(preamble + "\n\n\n")
             t.write(title)
             t.write(maketitle)
