@@ -187,14 +187,6 @@ class ModelSpecProcessor:
                         "ments in period {}.".format(self.model_name, factor, t)
                     )
 
-        for factor in self.factors:
-            for t, meas_list in enumerate(measurements[factor]):
-                df = self.data.query(f"__period__ == {t}")
-                for meas in meas_list:
-                    assert (
-                        df[meas].notnull().any()
-                    ), f"{meas} is has no observations in period {t}."
-
         self.measurements = measurements
 
     def _clean_controls_specification(self):

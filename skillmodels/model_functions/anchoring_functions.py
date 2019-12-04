@@ -39,27 +39,3 @@ def unanchor_flat_sigma_points_linear(
         flat_sigma_points[:, positions] /= anch_params[positions]
     else:
         flat_sigma_points[:, positions] -= intercept
-
-
-def anchor_flat_sigma_points_probability(
-    flat_sigma_points, positions, cov, anch_params=None, intercept=None
-):
-    raise NotImplementedError("currently only linear anchoring is implemented")
-
-
-def unanchor_flat_sigma_points_probability(
-    flat_sigma_points, positions, cov, anch_params=None, intercept=None
-):
-    raise NotImplementedError("currently only linear anchoring is implemented")
-
-
-def anchor_flat_sigma_points_odds_ratio(
-    flat_sigma_points, positions, cov, anch_params=None, intercept=None
-):
-    raise NotImplementedError("currently only linear anchoring is implemented")
-
-
-def unanchor_flat_sigma_points_odds_ratio(
-    flat_sigma_points, positions, cov, anch_params=None, intercept=None
-):
-    raise NotImplementedError("currently only linear anchoring is implemented")
