@@ -91,6 +91,13 @@
             ],
         "stagemap": [0, 1, 2, 3, 4, 5, 6, 6]
     },
-    "anchoring": {"outcome": "Q1", "factors": ["fac1"], "center": false}
+    "anchoring": {
+        "outcome": "Q1",
+        "factors": ["fac1"],
+        "center": false,
+        "use_controls": true,
+        "use_constant": true,
+        "free_loadings": true
+    }
 
 }

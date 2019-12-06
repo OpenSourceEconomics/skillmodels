@@ -154,17 +154,25 @@ class ModelSpecProcessor:
             self.anch_positions = np.array(
                 [self.factors.index(fac) for fac in self.anchored_factors]
             )
+            self.use_anchoring_controls = anch_info.get("use_controls", False)
+            self.use_anchoring_constant = anch_info.get("use_constant", False)
+            self.free_anchoring_loadings = anch_info.get("free_loadings", False)
+
+            assert isinstance(self.anchoring, bool)
+            assert isinstance(self.anch_outcome, (str, int, tuple))
+            assert isinstance(self.anchored_factors, list)
+            assert isinstance(self.centered_anchoring, bool)
+            assert isinstance(self.use_anchoring_controls, bool)
+            assert isinstance(self.use_anchoring_constant, bool)
+            assert isinstance(self.free_anchoring_loadings, bool)
         else:
             self.anchoring = False
-            self.anch_outcome = None
             self.anchored_factors = []
+            self.use_anchoring_controls = False
+            self.use_anchoring_constant = False
+            self.free_anchoring_loadings = False
+            self.anch_outcome = None
             self.centered_anchoring = False
-
-        assert isinstance(self.anchoring, bool)
-        if self.anch_outcome is not None:
-            assert isinstance(self.anch_outcome, (str, int, tuple))
-        assert isinstance(self.anchored_factors, list)
-        assert isinstance(self.centered_anchoring, bool)
 
     def _check_measurements(self):
         """Set a dictionary with the cleaned measurement specifications as attribute."""
@@ -445,6 +453,9 @@ class ModelSpecProcessor:
             self.anchored_factors,
             self.anch_outcome,
             self.bounds_distance,
+            self.use_anchoring_controls,
+            self.use_anchoring_constant,
+            self.free_anchoring_loadings,
         )
 
     def public_attribute_dict(self):
