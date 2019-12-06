@@ -87,6 +87,7 @@ class TestYData:
     def setup(self):
         self.periods = [0, 1, 2, 3]
         self.different_meas = ["m1", "m2", "m3", "m4", "m5", "m6"]
+        self.anchored_factors = []
 
         ind_tuples = []
         for t in self.periods:

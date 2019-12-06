@@ -180,6 +180,9 @@ class SkillModel:
             slices.append(slices_t)
         return slices
 
+    def _container_for_anchoring_loadings(self):
+        return np.zeros((self.nperiods, len(self.anchored_factors), self.nfac))
+
     def start_params_helpers(self):
         """DataFrames with the free and fixed parameters of the model."""
 
@@ -308,6 +311,8 @@ class SkillModel:
         )
 
         init_dict["like_contributions"] = np.zeros((self.nupdates, self.nobs))
+        if self.anchoring:
+            init_dict["anchoring_loading"] = self._container_for_anchoring_loadings()
 
         return init_dict
 
@@ -315,6 +320,8 @@ class SkillModel:
         parsing_info = {}
         for quant in self.params_quants:
             parsing_info[quant] = getattr(self, f"_slice_for_{quant}")()
+
+        parsing_info["anchoring_mask"] = self.update_info["purpose"] == "anchoring"
         return parsing_info
 
     def _parse_params_args_dict(self, initial_quantities):
@@ -360,11 +367,19 @@ class SkillModel:
     def _transform_sigma_points_args_dict(self, initial_quantities):
         tsp_args = {}
         tsp_args["transition_function_names"] = self.transition_names
-        if self.anchor_in_predict is True:
+
+        if self.anchoring:
+            mask = self.update_info["purpose"] == "anchoring"
+            anch_params_shape = (self.nperiods, len(self.anchored_factors), -1)
+            tsp_args["anchoring_loadings"] = initial_quantities["anchoring_loading"]
             tsp_args["anchoring_positions"] = self.anch_positions
-            tsp_args["anch_params"] = initial_quantities["loading"][-1, :]
-            if self.ignore_intercept_in_linear_anchoring is False:
-                tsp_args["intercept"] = initial_quantities["delta"][-1][-1, 0:1]
+
+            if self.centered_anchoring:
+                tsp_args["anchoring_variables"] = self.y_data[mask].reshape(
+                    anch_params_shape
+                )
+            else:
+                tsp_args["anchoring_variables"] = [None] * self.nperiods
 
         tsp_args["transition_argument_dicts"] = self._transition_equation_args_dicts(
             initial_quantities

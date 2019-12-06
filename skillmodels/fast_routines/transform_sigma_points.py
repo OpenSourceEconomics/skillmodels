@@ -1,6 +1,5 @@
 import numpy as np
 
-import skillmodels.model_functions.anchoring_functions as anch
 import skillmodels.model_functions.transition_functions as trans
 
 
@@ -9,9 +8,9 @@ def transform_sigma_points(
     flat_sigma_points,
     transition_argument_dicts,
     transition_function_names,
+    anchoring_loadings=None,
     anchoring_positions=None,
-    anch_params=None,
-    intercept=None,
+    anchoring_variables=None,
 ):
     """Transform an array of sigma_points for the unscented predict.
 
@@ -19,14 +18,19 @@ def transform_sigma_points(
     results if the necessary arguments are provided.
 
     """
-    nfac = flat_sigma_points.shape[1]
-    intermediate_array = np.empty_like(flat_sigma_points)
+    nsigma_times_nind, nfac = flat_sigma_points.shape
+    nsigma = int(2 * nfac + 1)
+    nind = int(nsigma_times_nind / nsigma)
 
-    # anchor the flat_sigma_points
-    if anch_params is not None:
-        anch_func = "anchor_flat_sigma_points_linear"
-        getattr(anch, anch_func)(
-            flat_sigma_points, anchoring_positions, anch_params, intercept
+    intermediate_array = np.empty_like(flat_sigma_points)
+    sigma_points = flat_sigma_points.reshape(nind, nsigma, nfac)
+
+    if anchoring_loadings is not None:
+        anchor_sigma_points(
+            sigma_points,
+            anchoring_loadings[period],
+            anchoring_positions,
+            anchoring_variables[period],
         )
 
     for f in range(nfac):
@@ -37,8 +41,24 @@ def transform_sigma_points(
     # copy them into the sigma_point array
     flat_sigma_points[:] = intermediate_array[:]
 
-    if anch_params is not None:
-        unanch_func = "unanchor_flat_sigma_points_linear"
-        getattr(anch, unanch_func)(
-            flat_sigma_points, anchoring_positions, anch_params, intercept
+    if anchoring_loadings is not None:
+        unanchor_sigma_points(
+            sigma_points,
+            anchoring_loadings[period + 1],
+            anchoring_positions,
+            anchoring_variables[period + 1],
         )
+
+
+def anchor_sigma_points(sigma_points, loadings, positions, variables):
+    for p, pos in enumerate(positions):
+        sigma_points[:, :, pos] *= loadings[p, pos]
+        if variables is not None:
+            sigma_points[:, :, pos] -= variables[p]
+
+
+def unanchor_sigma_points(sigma_points, loadings, positions, variables):
+    for p, pos in enumerate(positions):
+        sigma_points[:, :, pos] /= loadings[p, pos]
+        if variables is not None:
+            sigma_points[:, :, pos] += variables[p]

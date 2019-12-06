@@ -189,8 +189,8 @@ def _not_measured_constraints(
         all_measurements = update_info.loc[period].index
         for factor in factors:
             used_measurements = measurements[factor][period]
-            if period == periods[-1] and factor in anchored_factors:
-                used_measurements = used_measurements + [anch_outcome]
+            if factor in anchored_factors:
+                used_measurements = used_measurements + [f"{anch_outcome}_{factor}"]
             for meas in all_measurements:
                 if meas not in used_measurements:
                     locs.append(("loading", period, meas, factor))

@@ -91,10 +91,6 @@
             ],
         "stagemap": [0, 0, 0, 0, 0, 0, 0, 0]
     },
-    "anchoring": {"Q1": ["fac1"]},
-    "general":
-    {
-        "anchoring_mode": "truly_anchor_latent_factors"
-    }
+    "anchoring": {"outcome": "Q1", "factors": ["fac1"], "center": false}
 
 }

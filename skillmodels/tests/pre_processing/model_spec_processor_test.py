@@ -184,36 +184,33 @@ def factor_uinfo():
         [0, "m4", 0, 1, 0],
         [0, "m5", 0, 1, 1],
         [0, "m6", 0, 0, 1],
+        [0, "a_f1", 1, 0, 0],
         [1, "m1", 1, 0, 0],
         [1, "m2", 1, 0, 0],
         [1, "m3", 0, 1, 0],
         [1, "m4", 0, 1, 0],
         [1, "m5", 0, 1, 1],
         [1, "m6", 0, 0, 1],
+        [1, "a_f1", 1, 0, 0],
         [2, "m1", 1, 0, 0],
         [2, "m2", 1, 0, 0],
         [2, "m3", 0, 1, 0],
         [2, "m4", 0, 1, 0],
         [2, "m5", 0, 1, 1],
         [2, "m6", 0, 0, 1],
+        [2, "a_f1", 1, 0, 0],
         [3, "m1", 1, 0, 0],
         [3, "m2", 1, 0, 0],
         [3, "m3", 0, 1, 0],
         [3, "m4", 0, 1, 0],
         [3, "m5", 0, 1, 1],
         [3, "m6", 0, 0, 1],
-        [3, "a", 1, 0, 1],
+        [3, "a_f1", 1, 0, 0],
     ]
     cols = ["period", "variable", "f1", "f2", "f3"]
     df = DataFrame(data=dat, columns=cols)
     df.set_index(["period", "variable"], inplace=True)
     return df
-
-
-def purpose_uinfo():
-    ind = factor_uinfo().index
-    dat = ["measurement"] * 24 + ["anchoring"]
-    return pd.Series(index=ind, data=dat, name="purpose")
 
 
 class TestFactorUpdateInfo:
@@ -228,7 +225,7 @@ class TestFactorUpdateInfo:
             "f3": [["m5", "m6"]] * 4,
         }
         self.anch_outcome = "a"
-        self.anchored_factors = ["f1", "f3"]
+        self.anchored_factors = ["f1"]
         self.anchoring = True
 
     def test_factor_update_info(self):
@@ -236,18 +233,21 @@ class TestFactorUpdateInfo:
         exp = factor_uinfo()
         assert_frame_equal(calc, exp, check_dtype=False)
 
-    def test_that_anchoring_comes_last(self):
-        calc = ModelSpecProcessor._factor_update_info(self)
-        meas = list(calc.index.get_level_values("variable"))
-        assert meas[-1] == self.anch_outcome
+
+def purpose_uinfo():
+    ind = factor_uinfo().index
+    dat = (["measurement"] * 6 + ["anchoring"]) * 4
+    return pd.Series(index=ind, data=dat, name="purpose")
 
 
 class TestPurposeUpdateInfo:
     def setup(self):
         self.anchoring = True
+        self.anchored_factors = ["f1"]
         self.anch_outcome = "a"
         self.nperiods = 4
         self._factor_update_info = Mock(return_value=factor_uinfo())
+        self.periods = (0, 1, 2, 3)
 
     def test_update_info_purpose(self):
         calc = ModelSpecProcessor._purpose_update_info(self)

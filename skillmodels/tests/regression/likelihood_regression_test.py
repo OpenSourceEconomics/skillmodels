@@ -30,6 +30,9 @@ for name in model_names:
 
 
 data = pd.read_stata("skillmodels/tests/regression/chs_test_ex2.dta")
+data["period"] = data["period"].astype(int)
+data["id"] = data["id"].astype(int)
+data.loc[data["period"] != 7, "Q1"] = np.nan
 data.set_index(["id", "period"], inplace=True)
 
 test_cases = []

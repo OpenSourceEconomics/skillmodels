@@ -105,6 +105,10 @@ class DataProcessor:
         dims = (self.nupdates, self.nobs)
         y_data = np.zeros(dims)
 
+        # make copies of anch_outcome. Then it can be handled like all other variables.
+        for factor in self.anchored_factors:
+            self.data[f"{self.anch_outcome}_{factor}"] = self.data[self.anch_outcome]
+
         counter = 0
         for t in self.periods:
             measurements = list(self.update_info.loc[t].index)
