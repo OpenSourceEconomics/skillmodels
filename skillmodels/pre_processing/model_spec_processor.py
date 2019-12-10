@@ -43,8 +43,6 @@ class ModelSpecProcessor:
             "n_mixture_components": 1,
             "sigma_points_scale": 2,
             "bounds_distance": 1e-6,
-            "ignore_intercept_in_linear_anchoring": True,
-            "anchoring_mode": "only_estimate_anchoring_equation",
             "time_invariant_measurement_system": False,
             "base_color": "#035096",
         }
@@ -61,9 +59,7 @@ class ModelSpecProcessor:
         self._clean_controls_specification()
         self.nobs = int(len(self.data) / self.nperiods)
         self._check_and_fill_normalization_specification()
-        self._check_anchoring_specification()
         self.nupdates = len(self.update_info())
-        self._nmeas_list()
         self._set_params_index()
         self._set_constraints()
 
@@ -150,26 +146,33 @@ class ModelSpecProcessor:
     def _set_anchoring_attributes(self):
         """Set attributes related to anchoring and make some checks."""
         if "anchoring" in self.model_dict:
-            assert len(self.model_dict["anchoring"]) <= 1, (
-                "At most one anchoring equation can be estimated. You "
-                "specify {} in model {}"
-            ).format(len(self.model_dict["anchoring"]), self.model_name)
-            (self.anch_outcome, self.anchored_factors), = self.model_dict[
-                "anchoring"
-            ].items()
+            anch_info = self.model_dict["anchoring"]
             self.anchoring = True
-            self.anch_positions = tuple(
-                f for f in range(self.nfac) if self.factors[f] in self.anchored_factors
+            self.anch_outcome = anch_info["outcome"]
+            self.anchored_factors = sorted(anch_info["factors"])
+            self.centered_anchoring = anch_info.get("center", False)
+            self.anch_positions = np.array(
+                [self.factors.index(fac) for fac in self.anchored_factors]
             )
-            if self.anchoring_mode == "truly_anchor_latent_factors":
-                self.anchor_in_predict = True
-            else:
-                self.anchor_in_predict = False
+            self.use_anchoring_controls = anch_info.get("use_controls", False)
+            self.use_anchoring_constant = anch_info.get("use_constant", False)
+            self.free_anchoring_loadings = anch_info.get("free_loadings", False)
+
+            assert isinstance(self.anchoring, bool)
+            assert isinstance(self.anch_outcome, (str, int, tuple))
+            assert isinstance(self.anchored_factors, list)
+            assert isinstance(self.centered_anchoring, bool)
+            assert isinstance(self.use_anchoring_controls, bool)
+            assert isinstance(self.use_anchoring_constant, bool)
+            assert isinstance(self.free_anchoring_loadings, bool)
         else:
             self.anchoring = False
-            self.anchored_factors = ()
-            self.anchor_in_predict = False
+            self.anchored_factors = []
+            self.use_anchoring_controls = False
+            self.use_anchoring_constant = False
+            self.free_anchoring_loadings = False
             self.anch_outcome = None
+            self.centered_anchoring = False
 
     def _check_measurements(self):
         """Set a dictionary with the cleaned measurement specifications as attribute."""
@@ -187,14 +190,6 @@ class ModelSpecProcessor:
                         "ments in period {}.".format(self.model_name, factor, t)
                     )
 
-        for factor in self.factors:
-            for t, meas_list in enumerate(measurements[factor]):
-                df = self.data.query(f"__period__ == {t}")
-                for meas in meas_list:
-                    assert (
-                        df[meas].notnull().any()
-                    ), f"{meas} is has no observations in period {t}."
-
         self.measurements = measurements
 
     def _clean_controls_specification(self):
@@ -206,17 +201,6 @@ class ModelSpecProcessor:
             missings_list.append(df[controls[t]].isnull().any(axis=1))
         self.missing_controls = tuple(missings_list)
         self.controls = tuple(tuple(con) for con in controls)
-
-    def _check_anchoring_specification(self):
-        """Consistency checks for the model specs related to anchoring."""
-        if hasattr(self, "anch_outcome"):
-            for factor in self.factors:
-                last_measurements = self.measurements[factor][self.nperiods - 1]
-                assert self.anch_outcome not in last_measurements, (
-                    "The anchoring outcome cannot be used as measurement "
-                    "in the last period. In model {} you use the anchoring "
-                    "outcome {} as measurement for factor {}"
-                ).format(self.model_name, self.anch_outcome, factor)
 
     def _check_and_clean_normalizations_list(self, factor, norm_list, norm_type):
         """Check and clean a list with normalization specifications.
@@ -325,17 +309,6 @@ class ModelSpecProcessor:
 
         self.normalizations = norm
 
-    def _nmeas_list(self):
-        info = self.update_info()
-        nmeas_list = []
-        last_period = self.periods[-1]
-        for t in self.periods:
-            if t != last_period or self.anchoring is False:
-                nmeas_list.append(len(info.loc[t]))
-            else:
-                nmeas_list.append(len(info.loc[t]) - 1)
-        self.nmeas_list = tuple(nmeas_list)
-
     def update_info(self):
         """A DataFrame with all relevant information on Kalman updates.
 
@@ -362,10 +335,6 @@ class ModelSpecProcessor:
             measurement for fac1 in period t, else it is 0.
         * purpose: takes one of the values in ['measurement', 'anchoring']
 
-        The row order within one period is arbitrary except for the last
-        period, where the row that corresponds to the anchoring update comes
-        last (if anchoring is used).
-
         Returns:
             DataFrame
 
@@ -386,45 +355,51 @@ class ModelSpecProcessor:
         df = DataFrame(data=None, index=index)
 
         # append rows for each update that has to be performed
-        for t, (_f, factor) in product(self.periods, enumerate(self.factors)):
-            measurements = self.measurements[factor][t].copy()
-            if self.anchoring is True:
-                if t == self.nperiods - 1 and factor in self.anchored_factors:
-                    measurements.append(self.anch_outcome)
+        for t in self.periods:
+            for factor in self.factors:
+                for meas in self.measurements[factor][t]:
+                    if t in df.index and meas in df.loc[t].index:
+                        # change corresponding row of the DataFrame
+                        df.loc[(t, meas), factor] = 1
+                    else:
+                        # add a new row to the DataFrame
+                        ind = pd.MultiIndex.from_tuples(
+                            [(t, meas)], names=["period", "variable"]
+                        )
+                        df2 = DataFrame(data=0, columns=self.factors, index=ind)
+                        df2[factor] = 1
+                        df = df.append(df2)
 
-            for _m, meas in enumerate(measurements):
-                # if meas is not the first measurement in period t
-                # and the measurement has already been used in period t
-                if t in df.index and meas in df.loc[t].index:
-                    # change corresponding row of the DataFrame
-                    df.loc[(t, meas), factor] = 1
-
-                else:
-                    # add a new row to the DataFrame
+            if self.anchoring:
+                for factor in self.anchored_factors:
+                    name = f"{self.anch_outcome}_{factor}"
                     ind = pd.MultiIndex.from_tuples(
-                        [(t, meas)], names=["period", "variable"]
+                        [(t, name)], names=["period", "variable"]
                     )
-                    dat = np.zeros((1, self.nfac))
-                    df2 = DataFrame(data=dat, columns=self.factors, index=ind)
+                    df2 = DataFrame(data=0, columns=self.factors, index=ind)
                     df2[factor] = 1
                     df = df.append(df2)
-
-        # move anchoring update to last position
-        if self.anchoring is True:
-            anch_index = (self.nperiods - 1, self.anch_outcome)
-            anch_row = df.loc[anch_index]
-            df.drop(anch_index, axis=0, inplace=True)
-            df = df.append(anch_row)
         return df
+
+    def _purpose_update_info(self):
+        factor_uinfo = self._factor_update_info()
+        sr = pd.Series(index=factor_uinfo.index, name="purpose", data="measurement")
+
+        if self.anchoring is True:
+            for t, factor in product(self.periods, self.anchored_factors):
+                sr.loc[t, f"{self.anch_outcome}_{factor}"] = "anchoring"
+        return sr
 
     def _invariance_update_info(self):
         """Update information relevant for time invariant measurement systems.
+
         Measurement equations are uniquely identified by their period and the
         name of their measurement.
+
         Two measurement equations count as equal if and only if:
         * their measurements have the same name
         * the same latent factors are measured
-        * they occur in a periods that use the same control variables.
+        * they occur in periods that use the same control variables.
         """
         factor_uinfo = self._factor_update_info()
         ind = factor_uinfo.index
@@ -434,33 +409,24 @@ class ModelSpecProcessor:
             data=[[False, np.nan]] * len(ind),
         )
 
+        purpose_uinfo = self._purpose_update_info()
+
         for t, meas in ind:
-            # find first occurrence
-            for t2, meas2 in ind:
-                if meas == meas2 and t2 <= t:
-                    if self.controls[t] == self.controls[t2]:
-                        info1 = factor_uinfo.loc[(t, meas)].to_numpy()
-                        info2 = factor_uinfo.loc[(t2, meas2)].to_numpy()
-                        if (info1 == info2).all():
-                            first = t2
-                            break
+            if purpose_uinfo[t, meas] == "measurement":
+                # find first occurrence
+                for t2, meas2 in ind:
+                    if meas == meas2 and t2 <= t:
+                        if self.controls[t] == self.controls[t2]:
+                            info1 = factor_uinfo.loc[(t, meas)].to_numpy()
+                            info2 = factor_uinfo.loc[(t2, meas2)].to_numpy()
+                            if (info1 == info2).all():
+                                first = t2
+                                break
 
-            if t != first:
-                df.loc[(t, meas), "is_repeated"] = True
-                df.loc[(t, meas), "first_occurence"] = first
+                if t != first:
+                    df.loc[(t, meas), "is_repeated"] = True
+                    df.loc[(t, meas), "first_occurence"] = first
         return df
-
-    def _purpose_update_info(self):
-        factor_uinfo = self._factor_update_info()
-        sr = pd.Series(
-            index=factor_uinfo.index,
-            name="purpose",
-            data=["measurement"] * len(factor_uinfo),
-        )
-        if self.anchoring is True:
-            anch_index = (self.nperiods - 1, self.anch_outcome)
-            sr[anch_index] = "anchoring"
-        return sr
 
     def _set_params_index(self):
         self.params_index = params_index(
@@ -487,6 +453,9 @@ class ModelSpecProcessor:
             self.anchored_factors,
             self.anch_outcome,
             self.bounds_distance,
+            self.use_anchoring_controls,
+            self.use_anchoring_constant,
+            self.free_anchoring_loadings,
         )
 
     def public_attribute_dict(self):

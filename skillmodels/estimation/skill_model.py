@@ -180,6 +180,9 @@ class SkillModel:
             slices.append(slices_t)
         return slices
 
+    def _container_for_anchoring_loadings(self):
+        return np.zeros((self.nperiods, len(self.anchored_factors), self.nfac))
+
     def start_params_helpers(self):
         """DataFrames with the free and fixed parameters of the model."""
 
@@ -308,6 +311,8 @@ class SkillModel:
         )
 
         init_dict["like_contributions"] = np.zeros((self.nupdates, self.nobs))
+        if self.anchoring:
+            init_dict["anchoring_loading"] = self._container_for_anchoring_loadings()
 
         return init_dict
 
@@ -315,6 +320,8 @@ class SkillModel:
         parsing_info = {}
         for quant in self.params_quants:
             parsing_info[quant] = getattr(self, f"_slice_for_{quant}")()
+
+        parsing_info["anchoring_mask"] = self.update_info["purpose"] == "anchoring"
         return parsing_info
 
     def _parse_params_args_dict(self, initial_quantities):
@@ -331,9 +338,7 @@ class SkillModel:
         u_args_list = []
         k = 0
         for t in self.periods:
-            nmeas = self.nmeas_list[t]
-            if t == self.periods[-1] and self.anchoring is True:
-                nmeas += 1
+            nmeas = len(self.update_info.loc[t].index)
             for j in range(nmeas):
                 u_args = [
                     initial_quantities["initial_mean"],
@@ -362,11 +367,19 @@ class SkillModel:
     def _transform_sigma_points_args_dict(self, initial_quantities):
         tsp_args = {}
         tsp_args["transition_function_names"] = self.transition_names
-        if self.anchor_in_predict is True:
+
+        if self.anchoring:
+            mask = self.update_info["purpose"] == "anchoring"
+            anch_params_shape = (self.nperiods, len(self.anchored_factors), -1)
+            tsp_args["anchoring_loadings"] = initial_quantities["anchoring_loading"]
             tsp_args["anchoring_positions"] = self.anch_positions
-            tsp_args["anch_params"] = initial_quantities["loading"][-1, :]
-            if self.ignore_intercept_in_linear_anchoring is False:
-                tsp_args["intercept"] = initial_quantities["delta"][-1][-1, 0:1]
+
+            if self.centered_anchoring:
+                tsp_args["anchoring_variables"] = self.y_data[mask].reshape(
+                    anch_params_shape
+                )
+            else:
+                tsp_args["anchoring_variables"] = [None] * self.nperiods
 
         tsp_args["transition_argument_dicts"] = self._transition_equation_args_dicts(
             initial_quantities
@@ -402,7 +415,7 @@ class SkillModel:
         args["like_contributions"] = initial_quantities["like_contributions"]
         args["parse_params_args"] = self._parse_params_args_dict(initial_quantities)
         args["periods"] = self.periods
-        args["nmeas_list"] = self.nmeas_list
+        args["update_info"] = self.update_info
         args["anchoring"] = self.anchoring
         args["update_args"] = self._update_args_dict(initial_quantities)
         args["predict_args"] = self._predict_args_dict(initial_quantities)
@@ -514,6 +527,8 @@ class SkillModel:
         algo_options=None,
         dashboard=False,
         db_options=None,
+        logging=None,
+        log_options=None,
     ):
         """Fit the model and return the estimated parameters.
 
@@ -526,6 +541,8 @@ class SkillModel:
             algo_options (dict): Additonal keyword arguments for the optimizer.
             dashboard (bool): Run an estimagic dashboard to monitor the optimization
             db_options (dict): Arguments to configure the dashboard.
+            logging (Path): Path to .db file.
+            log_options (dict)
 
         Returns
             res (optimization result)
@@ -546,17 +563,21 @@ class SkillModel:
         def criterion(params, args):
             log_like_contributions = log_likelihood_contributions(params, **args)
             log_like_contributions[log_like_contributions < -1e300] = -1e300
-            return np.mean(log_like_contributions)
+            res = np.mean(log_like_contributions)
+            return res
 
         res = maximize(
             criterion,
             start_params,
             constraints=self.constraints + user_constraints,
             algorithm=algorithm,
-            criterion_args=(args,),
+            criterion_kwargs={"args": args},
             dashboard=dashboard,
             db_options=db_options,
             algo_options=combined_algo_options,
+            logging=logging,
+            log_options=log_options,
+            general_options={"criterion_exception_raise": True},
         )
         return res
 

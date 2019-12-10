@@ -124,6 +124,20 @@ def sqrt_linear_update(
                 weights[emf] /= sum_wprob
 
 
+def sqrt_linear_anchoring_update(
+    state, cov, like_vec, y, c, delta, h, sqrt_r, positions, weights
+):
+    """Make a linear Kalman update in square root form and evaluate likelihood.
+
+    Everything is as in sqrt_linear_update, but only the like_vec is modified. The state
+    and covariance matrix are not changed.
+
+    """
+    state = state.copy()
+    cov = cov.copy()
+    sqrt_linear_update(state, cov, like_vec, y, c, delta, h, sqrt_r, positions, weights)
+
+
 def sqrt_linear_predict(state, root_cov, shocks_sds, transition_matrix):
     """Make a linear kalman predict step in linear form.
 

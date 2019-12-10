@@ -18,9 +18,3 @@ The transition_functions module
 .. automodule:: skillmodels.model_functions.transition_functions
     :members:
 
-The anchoring_functions module
-******************************
-
-.. automodule:: skillmodels.model_functions.anchoring_functions
-    :members:
-

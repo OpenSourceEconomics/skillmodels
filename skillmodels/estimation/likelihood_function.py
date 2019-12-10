@@ -1,4 +1,5 @@
 from skillmodels.estimation.parse_params import parse_params
+from skillmodels.fast_routines.kalman_filters import sqrt_linear_anchoring_update
 from skillmodels.fast_routines.kalman_filters import sqrt_linear_update
 from skillmodels.fast_routines.kalman_filters import sqrt_unscented_predict
 from skillmodels.fast_routines.sigma_points import calculate_sigma_points
@@ -9,7 +10,7 @@ def log_likelihood_contributions(
     like_contributions,
     parse_params_args,
     periods,
-    nmeas_list,
+    update_info,
     anchoring,
     update_args,
     predict_args,
@@ -50,27 +51,31 @@ def log_likelihood_contributions(
 
     k = 0
     for t in periods:
-        for _j in range(nmeas_list[t]):
-            # measurement updates
-            update(update_args[k])
+        nmeas = len(update_info.loc[t])
+        for _j in range(nmeas):
+            purpose = update_info.iloc[k]["purpose"]
+            update(purpose, update_args[k])
             k += 1
         if t < periods[-1]:
             calculate_sigma_points(**calculate_sigma_points_args)
             predict(t, predict_args)
-    if anchoring is True:
-        update(update_args[k])
 
     return like_contributions
 
 
-def update(update_args):
+def update(purpose, update_args):
     """Select and call the correct update function.
 
     The actual update functions are implemented in several modules in
     :ref:`fast_routines`
 
     """
-    sqrt_linear_update(*update_args)
+    if purpose == "measurement":
+        sqrt_linear_update(*update_args)
+    elif purpose == "anchoring":
+        sqrt_linear_anchoring_update(*update_args)
+    else:
+        raise ValueError("purpose must be measurement or anchoring.")
 
 
 def predict(period, predict_args):

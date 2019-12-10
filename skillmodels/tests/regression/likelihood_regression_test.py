@@ -10,10 +10,10 @@ from skillmodels import SkillModel
 from skillmodels.estimation.likelihood_function import log_likelihood_contributions
 
 model_names = [
-    "test_model_no_stages_anchoring",
+    # "test_model_no_stages_anchoring",
     "test_model_one_stage",
-    "test_model_one_stage_anchoring",
-    "test_model_two_stages_anchoring",
+    # "test_model_one_stage_anchoring",
+    # "test_model_two_stages_anchoring",
 ]
 
 model_dicts = []
@@ -30,6 +30,9 @@ for name in model_names:
 
 
 data = pd.read_stata("skillmodels/tests/regression/chs_test_ex2.dta")
+data["period"] = data["period"].astype(int)
+data["id"] = data["id"].astype(int)
+data.loc[data["period"] != 7, "Q1"] = np.nan
 data.set_index(["id", "period"], inplace=True)
 
 test_cases = []

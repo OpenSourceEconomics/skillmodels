@@ -18,6 +18,9 @@ def constraints(
     anchored_factors,
     anch_outcome,
     bounds_distance,
+    use_anchoring_controls,
+    use_anchoring_constant,
+    free_anchoring_loadings,
 ):
 
     periods = list(range(len(stagemap)))
@@ -36,6 +39,16 @@ def constraints(
     constr += _initial_mean_constraints(nmixtures, factors)
     constr += _trans_coeff_constraints(
         factors, transition_names, included_factors, periods
+    )
+    constr += _anchoring_constraints(
+        update_info,
+        controls,
+        anch_outcome,
+        anchored_factors,
+        use_anchoring_controls,
+        use_anchoring_constant,
+        free_anchoring_loadings,
+        periods,
     )
 
     for i, c in enumerate(constr):
@@ -189,8 +202,8 @@ def _not_measured_constraints(
         all_measurements = update_info.loc[period].index
         for factor in factors:
             used_measurements = measurements[factor][period]
-            if period == periods[-1] and factor in anchored_factors:
-                used_measurements = used_measurements + [anch_outcome]
+            if factor in anchored_factors:
+                used_measurements = used_measurements + [f"{anch_outcome}_{factor}"]
             for meas in all_measurements:
                 if meas not in used_measurements:
                     locs.append(("loading", period, meas, factor))
@@ -356,4 +369,42 @@ def _trans_coeff_constraints(factors, transition_names, included_factors, period
                 if "description" not in constr:
                     constr["description"] = msg
                 constraints.append(constr)
+    return constraints
+
+
+def _anchoring_constraints(
+    update_info,
+    controls,
+    anch_outcome,
+    anchored_factors,
+    use_anchoring_controls,
+    use_anchoring_constant,
+    free_anchoring_loadings,
+    periods,
+):
+
+    anchoring_updates = update_info[update_info["purpose"] == "anchoring"].index
+
+    constraints = []
+    if not use_anchoring_constant:
+        for period, meas in anchoring_updates:
+            ind_tup = ("delta", period, meas, "constant")
+            constraints.append({"loc": ind_tup, "type": "fixed", "value": 0})
+
+    if not use_anchoring_controls:
+        for period, meas in anchoring_updates:
+            ind_tups = []
+            for cont in controls:
+                ind_tups.append(("delta", period, meas, cont))
+            constraints.append({"loc": ind_tups, "type": "fixed", "value": 0})
+
+    if not free_anchoring_loadings:
+        for period in periods:
+            ind_tups = []
+            for factor in anchored_factors:
+                meas = f"{anch_outcome}_{factor}"
+                ind_tups.append(("loading", period, meas, factor))
+
+            constraints.append({"loc": ind_tups, "type": "fixed", "value": 1})
+
     return constraints
