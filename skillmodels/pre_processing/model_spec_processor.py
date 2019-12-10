@@ -150,7 +150,7 @@ class ModelSpecProcessor:
             self.anchoring = True
             self.anch_outcome = anch_info["outcome"]
             self.anchored_factors = sorted(anch_info["factors"])
-            self.centered_anchoring = anch_info.get("center", True)
+            self.centered_anchoring = anch_info.get("center", False)
             self.anch_positions = np.array(
                 [self.factors.index(fac) for fac in self.anchored_factors]
             )

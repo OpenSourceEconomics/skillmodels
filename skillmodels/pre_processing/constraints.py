@@ -391,7 +391,7 @@ def _anchoring_constraints(
             ind_tup = ("delta", period, meas, "constant")
             constraints.append({"loc": ind_tup, "type": "fixed", "value": 0})
 
-    if not use_anchoring_constant:
+    if not use_anchoring_controls:
         for period, meas in anchoring_updates:
             ind_tups = []
             for cont in controls:

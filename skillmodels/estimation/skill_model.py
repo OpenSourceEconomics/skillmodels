@@ -527,6 +527,8 @@ class SkillModel:
         algo_options=None,
         dashboard=False,
         db_options=None,
+        logging=None,
+        log_options=None,
     ):
         """Fit the model and return the estimated parameters.
 
@@ -539,6 +541,8 @@ class SkillModel:
             algo_options (dict): Additonal keyword arguments for the optimizer.
             dashboard (bool): Run an estimagic dashboard to monitor the optimization
             db_options (dict): Arguments to configure the dashboard.
+            logging (Path): Path to .db file.
+            log_options (dict)
 
         Returns
             res (optimization result)
@@ -559,17 +563,21 @@ class SkillModel:
         def criterion(params, args):
             log_like_contributions = log_likelihood_contributions(params, **args)
             log_like_contributions[log_like_contributions < -1e300] = -1e300
-            return np.mean(log_like_contributions)
+            res = np.mean(log_like_contributions)
+            return res
 
         res = maximize(
             criterion,
             start_params,
             constraints=self.constraints + user_constraints,
             algorithm=algorithm,
-            criterion_args=(args,),
+            criterion_kwargs={"args": args},
             dashboard=dashboard,
             db_options=db_options,
             algo_options=combined_algo_options,
+            logging=logging,
+            log_options=log_options,
+            general_options={"criterion_exception_raise": True},
         )
         return res
 

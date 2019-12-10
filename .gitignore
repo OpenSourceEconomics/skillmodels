@@ -71,3 +71,7 @@ ___*
 mixed_documents/
 
 skillmodels.egg-info/
+
+*.db
+
+*.pickle

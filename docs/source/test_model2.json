@@ -91,6 +91,13 @@
             ],
         "stagemap": [0, 0, 0, 0, 0, 0, 0, 0]
     },
-    "anchoring": {"Q1": ["fac1"]},
+    "anchoring": {
+        "outcome": "Q1",
+        "factors": ["fac1"],
+        "center": false,
+        "use_controls": true,
+        "use_constant": true,
+        "free_loadings": true
+    },
     "general": {"robust_bounds": true, "bounds_distance": 1e-6}
 }

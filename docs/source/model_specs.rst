@@ -158,11 +158,27 @@ incrementing in steps of one.)
 The anchoring equation is specified as follows:
 
 .. literalinclude:: test_model2.json
-    :lines: 94
+    :lines: 94-101
 
 Q1 is the anchoring outcome and the list contains all anchored factors. In the
-example this is just fac1. If you don't want to anchor the latent factors,
-simply omit the anchoring part in the model dictionary.
+example this is just fac1. If you don't want to anchor the latent factors, simply
+omit the anchoring part in the model dictionary. The other options are as follows:
+
+- ``"center``: Default False. If True, the observed anchoring outcome is subtracted
+  from the anchored factors. This only make sense, if the anchoring loading was
+  normalized to 0 and the anchoring intercept was normalized to zero. The main reason
+  for using this option is age-anchoring, where you want the factors to have the scale
+  of mental age, but want to get rid of the age-trend.
+- ``"use_controls"``: Whether the control variables used in the measurement equations
+  should also be used in the anchoring equations. Default False. This is mainly there
+  to support the CHS example model and will probably not be set to True in any real
+  application.
+- ``"use_constant"``: Whether the anchoring equation should have a constant. Default
+  False. This is mainly there to support the CHS example model and will probably not
+  be set to True in any real application.
+- ``"free_loadings"``: If true, the loadings are estimated, otherwise they are fixed to
+  one. In general, fixing the loading of an anchoring equation means, that no further
+  normalizations of scale are needed for that factor in that period. Default False.
 
 The "general" section of the model dictionary:
 **********************************************

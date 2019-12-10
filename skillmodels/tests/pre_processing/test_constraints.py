@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
+import pytest
 from pandas.testing import assert_frame_equal
 
+from skillmodels.pre_processing.constraints import _anchoring_constraints
 from skillmodels.pre_processing.constraints import _constant_factors_constraints
 from skillmodels.pre_processing.constraints import _initial_cov_constraints
 from skillmodels.pre_processing.constraints import _initial_mean_constraints
@@ -295,6 +297,100 @@ def test_trans_coeff_constraints():
     for c in calculated:
         del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
+
+
+@pytest.fixture
+def anch_uinfo():
+    ind_tups = [
+        (0, "outcome_f1"),
+        (0, "outcome_f2"),
+        (0, "m1"),
+        (1, "outcome_f1"),
+        (1, "outcome_f2"),
+        (1, "m1"),
+    ]
+    uinfo = pd.DataFrame(index=pd.MultiIndex.from_tuples(ind_tups))
+    uinfo["purpose"] = ["anchoring", "anchoring", "measurement"] * 2
+    return uinfo
+
+
+def test_anchoring_constraints_no_constraint_needed(anch_uinfo):
+    calculated = _anchoring_constraints(
+        anch_uinfo, [], "outcome", ["f1", "f2"], True, True, True, (0, 1)
+    )
+    assert calculated == []
+
+
+def test_anchoring_constraints_for_constants(anch_uinfo):
+    calculated = _anchoring_constraints(
+        anch_uinfo, [], "outcome", ["f1", "f2"], True, False, True, (0, 1)
+    )
+
+    expected = [
+        {"loc": ("delta", 0, "outcome_f1", "constant"), "type": "fixed", "value": 0},
+        {"loc": ("delta", 0, "outcome_f2", "constant"), "type": "fixed", "value": 0},
+        {"loc": ("delta", 1, "outcome_f1", "constant"), "type": "fixed", "value": 0},
+        {"loc": ("delta", 1, "outcome_f2", "constant"), "type": "fixed", "value": 0},
+    ]
+
+    assert calculated == expected
+
+
+def test_anchoring_constraints_for_controls(anch_uinfo):
+    calculated = _anchoring_constraints(
+        anch_uinfo, ["c1", "c2"], "outcome", ["f1", "f2"], False, True, True, (0, 1)
+    )
+    expected = [
+        {
+            "loc": [("delta", 0, "outcome_f1", "c1"), ("delta", 0, "outcome_f1", "c2")],
+            "type": "fixed",
+            "value": 0,
+        },
+        {
+            "loc": [("delta", 0, "outcome_f2", "c1"), ("delta", 0, "outcome_f2", "c2")],
+            "type": "fixed",
+            "value": 0,
+        },
+        {
+            "loc": [("delta", 1, "outcome_f1", "c1"), ("delta", 1, "outcome_f1", "c2")],
+            "type": "fixed",
+            "value": 0,
+        },
+        {
+            "loc": [("delta", 1, "outcome_f2", "c1"), ("delta", 1, "outcome_f2", "c2")],
+            "type": "fixed",
+            "value": 0,
+        },
+    ]
+
+    assert calculated == expected
+
+
+def test_anchoring_constraints_for_loadings(anch_uinfo):
+    calculated = _anchoring_constraints(
+        anch_uinfo, [], "outcome", ["f1", "f2"], True, True, False, (0, 1)
+    )
+
+    expected = [
+        {
+            "loc": [
+                ("loading", 0, "outcome_f1", "f1"),
+                ("loading", 0, "outcome_f2", "f2"),
+            ],
+            "type": "fixed",
+            "value": 1,
+        },
+        {
+            "loc": [
+                ("loading", 1, "outcome_f1", "f1"),
+                ("loading", 1, "outcome_f2", "f2"),
+            ],
+            "type": "fixed",
+            "value": 1,
+        },
+    ]
+
+    assert calculated == expected
 
 
 # ======================================================================================
