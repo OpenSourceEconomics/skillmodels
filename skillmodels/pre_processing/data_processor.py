@@ -29,6 +29,16 @@ def check_variable_list(vartype, varlist, data):
     return report_df
 
 
+def check_anchoring_variable(centered_anchoring, anch_outcome, data):
+    report_df = pd.DataFrame(columns=["period", "variable", "variable type", "issue"])
+    if centered_anchoring:
+        t = data["__period__"].unique()[0]
+        if data[anch_outcome].isnull().any() and not data[anch_outcome].isnull().all():
+            msg = "With centered anchoring all or no values must be missing."
+            report_df.loc[0] = [t, anch_outcome, "anchoring", msg]
+    return report_df
+
+
 def pre_process_data(df):
     """Transform an unbalanced and unsorted dataset.
 
@@ -320,9 +330,15 @@ class DataProcessor:
             meas_t = []
             for fac in self.factors:
                 meas_t += self.measurements[fac][t]
+
             concat_cont = check_variable_list("control", self.controls[t], df)
             concat_meas = check_variable_list("measurement", sorted(meas_t), df)
             report_issues = pd.concat([report_issues, concat_cont, concat_meas])
+            if self.anchoring:
+                concat_anch = check_anchoring_variable(
+                    self.centered_anchoring, self.anch_outcome, df
+                )
+                report_issues = pd.concat([report_issues, concat_anch])
         report_issues = report_issues.reset_index(drop=True)
         if len(report_issues) != 0:
             raise ValueError(f"Invalid dataset:\n{report_issues}")

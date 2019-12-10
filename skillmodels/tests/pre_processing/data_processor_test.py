@@ -143,6 +143,7 @@ class TestObsValidty:
         self.factors = ["f1", "f2"]
         self.measurements = {"f1": [["m1", "m2"]] * 2, "f2": [["m3", "m4"]] * 2}
         self.controls = (("c1", "c2", "c3", "c4"), ("c1", "c2", "c3", "c4"))
+        self.anchoring = False
         cols = (
             ["__period__"]
             + [f"m{i}" for i in range(1, 5)]
