@@ -90,7 +90,7 @@ def write_figure_tex_snippet(figure_path, title, width=None, height=None):
     tex_path = join(directory, file + ".tex")
 
     newline = "\n"
-    begin_figure = r"\begin{figure}[loading!]\centering" + newline
+    begin_figure = r"\begin{figure}[h!]\centering" + newline
     end_figure = r"\end{figure}" + newline
 
     include = (

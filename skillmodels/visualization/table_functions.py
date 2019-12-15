@@ -9,7 +9,7 @@ from skillmodels.pre_processing.data_processor import prepend_index_level
 
 
 def df_to_tex_table(df, title):
-    start = r"\begin{table}[loading!]\centering" + "\n"
+    start = r"\begin{table}[h!]\centering" + "\n"
     caption = r"\caption{{{}}}" + "\n"
     old_max_width = pd.get_option("display.max_colwidth")
     pd.set_option("display.max_colwidth", -1)
