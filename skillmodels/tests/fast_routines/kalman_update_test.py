@@ -37,8 +37,8 @@ def unpack_update_fixture(
         "like_vec": np.array([0]).astype(float),
         "y": np.array([measurement]).astype(float),
         "c": np.array(range(0)),
-        "delta": np.array(range(0)),
-        "h": np.array(loadings).astype(float),
+        "control_coeffs": np.array(range(0)),
+        "loading": np.array(loadings).astype(float),
         "r": np.array([meas_var]).astype(float),
         "positions": np.array([i for i, x in enumerate(loadings) if x != 0]).astype(
             int
@@ -82,11 +82,11 @@ def setup_linear_update():
 
     out["c"] = np.ones((nind, 2))
 
-    out["delta"] = np.ones(2) / 2
+    out["control_coeffs"] = np.ones(2) / 2
 
-    out["h"] = np.array([1, 1, 0.5])
+    out["loading"] = np.array([1, 1, 0.5])
 
-    out["sqrt_r"] = np.sqrt(np.array([0.3]))
+    out["meas_sd"] = np.sqrt(np.array([0.3]))
 
     out["positions"] = np.array([0, 1, 2])
 
@@ -227,9 +227,9 @@ def test_sqrt_state_update_with_nans(setup_linear_update, expected_linear_update
         d["like_vector"],
         d["y"],
         d["c"],
-        d["delta"],
-        d["h"],
-        d["sqrt_r"],
+        d["control_coeffs"],
+        d["loading"],
+        d["meas_sd"],
         d["positions"],
         d["weights"],
     )
@@ -245,9 +245,9 @@ def test_sqrt_cov_update_with_nans(setup_linear_update, expected_linear_update):
         d["like_vector"],
         d["y"],
         d["c"],
-        d["delta"],
-        d["h"],
-        d["sqrt_r"],
+        d["control_coeffs"],
+        d["loading"],
+        d["meas_sd"],
         d["positions"],
         d["weights"],
     )
@@ -264,9 +264,9 @@ def test_sqrt_like_vec_update_with_nans(setup_linear_update, expected_linear_upd
         d["like_vector"],
         d["y"],
         d["c"],
-        d["delta"],
-        d["h"],
-        d["sqrt_r"],
+        d["control_coeffs"],
+        d["loading"],
+        d["meas_sd"],
         d["positions"],
         d["weights"],
     )
@@ -281,9 +281,9 @@ def test_sqrt_weight_update_with_nans(setup_linear_update, expected_linear_updat
         d["like_vector"],
         d["y"],
         d["c"],
-        d["delta"],
-        d["h"],
-        d["sqrt_r"],
+        d["control_coeffs"],
+        d["loading"],
+        d["meas_sd"],
         d["positions"],
         d["weights"],
     )
@@ -387,8 +387,8 @@ def test_normal_state_and_cov_against_filterpy(fixture):
         d["like_vec"],
         d["y"],
         d["c"],
-        d["delta"],
-        d["h"],
+        d["control_coeffs"],
+        d["loading"],
         np.sqrt(d["r"]),
         d["positions"],
         d["weights"],

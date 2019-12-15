@@ -11,7 +11,7 @@ from pytest_mock import mocker  # noqa
 from skillmodels import SkillModel
 
 
-class TestDeltaRelatedMethods:
+class TestControlCoeffRelatedMethods:
     def setup(self):
         self.periods = [0, 1, 2]
         self.controls = [["c1", "c2"], ["c1", "c2", "c3"], ["c3", "c4"]]
@@ -35,18 +35,18 @@ class TestDeltaRelatedMethods:
 
         self.update_info = DataFrame(index=pd.MultiIndex.from_tuples(ind_tups))
 
-    def test_container_for_delta_without_controls_besides_constant(self):
+    def test_container_for_control_coeffs_without_controls_besides_constant(self):
         self.controls = [[], [], []]
         expected = [np.zeros((6, 1)), np.zeros((3, 1)), np.zeros((4, 1))]
-        calculated = SkillModel._container_for_delta(self)
+        calculated = SkillModel._container_for_control_coeffs(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
-    def test_container_for_delta_with_controls_and_constants(self):
+    def test_container_for_control_coeffs_with_controls_and_constants(self):
 
         expected = [np.zeros((6, 3)), np.zeros((3, 4)), np.zeros((4, 3))]
 
-        calculated = SkillModel._container_for_delta(self)
+        calculated = SkillModel._container_for_control_coeffs(self)
         for calc, ex in zip(calculated, expected):
             aae(calc, ex)
 
@@ -66,11 +66,11 @@ def test_container_for_meas_sd(mocker):  # noqa
     aae(calculated, expected)
 
 
-def test_container_for_shock_variance(mocker):  # noqa
+def test_container_for_shock_sd(mocker):  # noqa
     mocker.nperiods = 5
     mocker.nfac = 3
     expected = np.zeros((4, 3, 3))
-    calculated = SkillModel._container_for_shock_variance(mocker)
+    calculated = SkillModel._container_for_shock_sd(mocker)
     aae(calculated, expected)
 
 

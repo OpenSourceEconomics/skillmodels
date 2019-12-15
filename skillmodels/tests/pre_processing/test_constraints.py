@@ -17,7 +17,7 @@ from skillmodels.pre_processing.constraints import add_bounds
 
 
 def test_add_bounds():
-    ind_tups = [("shock_variance", i) for i in range(5)] + [
+    ind_tups = [("shock_sd", i) for i in range(5)] + [
         ("meas_sd", 4),
         ("bla", "blubb"),
         ("meas_sd", "foo"),
@@ -44,11 +44,17 @@ def test_invariant_meas_system_constraints():
 
     expected = [
         {
-            "loc": [("delta", 1, "m1", "constant"), ("delta", 0, "m1", "constant")],
+            "loc": [
+                ("control_coeffs", 1, "m1", "constant"),
+                ("control_coeffs", 0, "m1", "constant"),
+            ],
             "type": "equality",
         },
         {
-            "loc": [("delta", 1, "m1", "cont"), ("delta", 0, "m1", "cont")],
+            "loc": [
+                ("control_coeffs", 1, "m1", "cont"),
+                ("control_coeffs", 0, "m1", "cont"),
+            ],
             "type": "equality",
         },
         {
@@ -64,11 +70,17 @@ def test_invariant_meas_system_constraints():
             "type": "equality",
         },
         {
-            "loc": [("delta", 2, "m1", "constant"), ("delta", 0, "m1", "constant")],
+            "loc": [
+                ("control_coeffs", 2, "m1", "constant"),
+                ("control_coeffs", 0, "m1", "constant"),
+            ],
             "type": "equality",
         },
         {
-            "loc": [("delta", 2, "m1", "cont"), ("delta", 0, "m1", "cont")],
+            "loc": [
+                ("control_coeffs", 2, "m1", "cont"),
+                ("control_coeffs", 0, "m1", "cont"),
+            ],
             "type": "equality",
         },
         {
@@ -84,11 +96,17 @@ def test_invariant_meas_system_constraints():
             "type": "equality",
         },
         {
-            "loc": [("delta", 2, "m3", "constant"), ("delta", 1, "m3", "constant")],
+            "loc": [
+                ("control_coeffs", 2, "m3", "constant"),
+                ("control_coeffs", 1, "m3", "constant"),
+            ],
             "type": "equality",
         },
         {
-            "loc": [("delta", 2, "m3", "cont"), ("delta", 1, "m3", "cont")],
+            "loc": [
+                ("control_coeffs", 2, "m3", "cont"),
+                ("control_coeffs", 1, "m3", "cont"),
+            ],
             "type": "equality",
         },
         {
@@ -117,21 +135,15 @@ def test_normalization_constraints():
         "fac1": {
             "loadings": [{"m1": 2, "m2": 1.5}, {"m1": 3}],
             "intercepts": [{"m1": 0.5}, {}],
-            "variances": [{}, {"m1": 1}],
         },
-        "fac2": {
-            "loadings": [{"m3": 1}, {}],
-            "intercepts": [{}, {}],
-            "variances": [{}, {}],
-        },
+        "fac2": {"loadings": [{"m3": 1}, {}], "intercepts": [{}, {}]},
     }
 
     expected = [
         {"loc": ("loading", 0, "m1", "fac1"), "type": "fixed", "value": 2},
         {"loc": ("loading", 0, "m2", "fac1"), "type": "fixed", "value": 1.5},
         {"loc": ("loading", 1, "m1", "fac1"), "type": "fixed", "value": 3},
-        {"loc": ("delta", 0, "m1", "constant"), "type": "fixed", "value": 0.5},
-        {"loc": ("meas_sd", 1, "m1", "-"), "type": "fixed", "value": 1},
+        {"loc": ("control_coeffs", 0, "m1", "constant"), "type": "fixed", "value": 0.5},
         {"loc": ("loading", 0, "m3", "fac2"), "type": "fixed", "value": 1},
     ]
 
@@ -217,11 +229,7 @@ def test_stage_constraints():
             "type": "pairwise_equality",
         },
         {
-            "locs": [
-                ("shock_variance", 0),
-                ("shock_variance", 1),
-                ("shock_variance", 2),
-            ],
+            "locs": [("shock_sd", 0), ("shock_sd", 1), ("shock_sd", 2)],
             "type": "pairwise_equality",
         },
     ]
@@ -240,8 +248,8 @@ def test_constant_factor_constraints():
     transition_names = ["bla", "constant"]
 
     expected = [
-        {"loc": ("shock_variance", 0, "fac2", "-"), "type": "fixed", "value": 0.0},
-        {"loc": ("shock_variance", 1, "fac2", "-"), "type": "fixed", "value": 0.0},
+        {"loc": ("shock_sd", 0, "fac2", "-"), "type": "fixed", "value": 0.0},
+        {"loc": ("shock_sd", 1, "fac2", "-"), "type": "fixed", "value": 0.0},
     ]
 
     calculated = _constant_factors_constraints(factors, transition_names, periods)
@@ -327,10 +335,26 @@ def test_anchoring_constraints_for_constants(anch_uinfo):
     )
 
     expected = [
-        {"loc": ("delta", 0, "outcome_f1", "constant"), "type": "fixed", "value": 0},
-        {"loc": ("delta", 0, "outcome_f2", "constant"), "type": "fixed", "value": 0},
-        {"loc": ("delta", 1, "outcome_f1", "constant"), "type": "fixed", "value": 0},
-        {"loc": ("delta", 1, "outcome_f2", "constant"), "type": "fixed", "value": 0},
+        {
+            "loc": ("control_coeffs", 0, "outcome_f1", "constant"),
+            "type": "fixed",
+            "value": 0,
+        },
+        {
+            "loc": ("control_coeffs", 0, "outcome_f2", "constant"),
+            "type": "fixed",
+            "value": 0,
+        },
+        {
+            "loc": ("control_coeffs", 1, "outcome_f1", "constant"),
+            "type": "fixed",
+            "value": 0,
+        },
+        {
+            "loc": ("control_coeffs", 1, "outcome_f2", "constant"),
+            "type": "fixed",
+            "value": 0,
+        },
     ]
 
     assert calculated == expected
@@ -342,22 +366,34 @@ def test_anchoring_constraints_for_controls(anch_uinfo):
     )
     expected = [
         {
-            "loc": [("delta", 0, "outcome_f1", "c1"), ("delta", 0, "outcome_f1", "c2")],
+            "loc": [
+                ("control_coeffs", 0, "outcome_f1", "c1"),
+                ("control_coeffs", 0, "outcome_f1", "c2"),
+            ],
             "type": "fixed",
             "value": 0,
         },
         {
-            "loc": [("delta", 0, "outcome_f2", "c1"), ("delta", 0, "outcome_f2", "c2")],
+            "loc": [
+                ("control_coeffs", 0, "outcome_f2", "c1"),
+                ("control_coeffs", 0, "outcome_f2", "c2"),
+            ],
             "type": "fixed",
             "value": 0,
         },
         {
-            "loc": [("delta", 1, "outcome_f1", "c1"), ("delta", 1, "outcome_f1", "c2")],
+            "loc": [
+                ("control_coeffs", 1, "outcome_f1", "c1"),
+                ("control_coeffs", 1, "outcome_f1", "c2"),
+            ],
             "type": "fixed",
             "value": 0,
         },
         {
-            "loc": [("delta", 1, "outcome_f2", "c1"), ("delta", 1, "outcome_f2", "c2")],
+            "loc": [
+                ("control_coeffs", 1, "outcome_f2", "c1"),
+                ("control_coeffs", 1, "outcome_f2", "c2"),
+            ],
             "type": "fixed",
             "value": 0,
         },

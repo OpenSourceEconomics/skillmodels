@@ -31,15 +31,15 @@ params is a vector with all estimated parameters of the model. To evaluate the
 likelihood function, params has to be parsed into several quantities (Names
 follow conventions of Kalman filtering literature where possible):
 
-    * **delta**: list with one matrix per period with the estimated parameters
-      related to control variables in the measurement and anchoring
+    * **control_coeffs**: list with one matrix per period with the estimated
+      parameters related to control variables in the measurement and anchoring
       equations, including constants
     * **loading**: Matrix with factor loadings for the measurement and anchoring
       equations, i.e. for all Kalman updates. It has the shape [nupdates, nfac].
-    * **meas_sd**: Vector of length nupdates with the variances of the measurement
-      equations
-    * **shock_variance**: List of [nfac x nfac] matrices for each stage with the
-      variances of the transition equations on the diagonals.
+    * **meas_sd**: Vector of length nupdates with the standard deviations of the
+      measurement equations
+    * **shock_sd**: List of [nfac x nfac] matrices for each stage with the
+      standard deviations of the transition equations on the diagonals.
     * **initial_mean**: Numpy array of [nmixtures * nind, nfac] with the initial
       means of the latent factors
     * **initial_cov**: Numpy array of [nmixtures * nind, nfac, nfac] with the initial

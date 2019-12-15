@@ -227,7 +227,8 @@ class ModelSpecProcessor:
             "In model {} you use the variable {} to normalize factor {} in "
             "period {} but it is not included as measurement."
         )
-
+        if norm_type == "variances":
+            raise ValueError("Normalization for variances cannot be provided")
         assert len(norm_list) == self.nperiods, (
             "Normalizations lists must have one entry per period. In model {} "
             "you specify a normalizations list of length {} for factor {} "
@@ -273,8 +274,6 @@ class ModelSpecProcessor:
         # check validity of values
         for norminfo in norm_list:  #
             for n_val in norminfo.values():
-                if norm_type == "variances":
-                    assert n_val > 0, "Variances can only be normalized to a value > 0."
                 if norm_type == "loadings":
                     assert n_val != 0, "Loadings cannot be normalized to 0."
 
@@ -287,7 +286,7 @@ class ModelSpecProcessor:
 
         """
         norm = {}
-        norm_types = ["loadings", "intercepts", "variances"]
+        norm_types = ["loadings", "intercepts"]
 
         for factor in self.factors:
             norm[factor] = {}

@@ -144,7 +144,6 @@ class TestCheckAndFillNormalizationSpecifications:
                 "normalizations": {
                     "loadings": [{"a": 1}, {"a": 1}, {"a": 1}],
                     "intercepts": [{"a": 1}, {"a": 1}, {"a": 1}],
-                    "variances": [{"a": 1}, {"a": 1}, {"a": 1}],
                 }
             },
             "f2": {},
@@ -162,13 +161,8 @@ class TestCheckAndFillNormalizationSpecifications:
             "f1": {
                 "loadings": [{"a": 1}, {"a": 1}, {"a": 1}],
                 "intercepts": [{"a": 1}, {"a": 1}, {"a": 1}],
-                "variances": [{"a": 1}, {"a": 1}, {"a": 1}],
             },
-            "f2": {
-                "loadings": [{}, {}, {}],
-                "intercepts": [{}, {}, {}],
-                "variances": [{}, {}, {}],
-            },
+            "f2": {"loadings": [{}, {}, {}], "intercepts": [{}, {}, {}]},
         }
 
         ModelSpecProcessor._check_and_fill_normalization_specification(self)

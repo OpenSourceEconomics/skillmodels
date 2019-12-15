@@ -16,7 +16,7 @@ from skillmodels.fast_routines.transform_sigma_points import transform_sigma_poi
     nopython=True,
 )
 def sqrt_linear_update(
-    state, cov, like_vec, y, c, delta, h, sqrt_r, positions, weights
+    state, cov, like_vec, y, c, control_coeffs, loading, meas_sd, positions, weights
 ):
     """Make a linear Kalman update in square root form and evaluate likelihood.
 
@@ -40,11 +40,11 @@ def sqrt_linear_update(
 
         c (np.ndarray): numpy array of (..., ncontrols) with control variables.
 
-        delta (np.ndarray): estimated parameters of the control variables.
+        control_coeffs (np.ndarray): estimated parameters of the control variables.
 
-        h (np.ndarray): numpy array of length nfac with factor loadings.
+        loading (np.ndarray): numpy array of length nfac with factor loadings.
 
-        sqrt_r (np.ndarray): a scalar in form of a length one numpy array
+        meas_sd (np.ndarray): a scalar in form of a length one numpy array
             with the standard deviations of the error terms in the measurement
             equations.
 
@@ -59,28 +59,28 @@ def sqrt_linear_update(
     """
     nmixtures, nfac = state.shape
     m = nfac + 1
-    ncontrol = delta.shape[0]
+    ncontrol = control_coeffs.shape[0]
     invariant = np.log(1 / (2 * np.pi) ** 0.5)
     invar_diff = y[0]
     if np.isfinite(invar_diff):
         # same for all factor distributions
         for cont in range(ncontrol):
-            invar_diff -= c[cont] * delta[cont]
+            invar_diff -= c[cont] * control_coeffs[cont]
 
         # per distribution stuff
         for emf in range(nmixtures):
             diff = invar_diff
             for pos in positions:
-                diff -= state[emf, pos] * h[pos]
+                diff -= state[emf, pos] * loading[pos]
 
-            cov[emf, 0, 0] = sqrt_r[0]
+            cov[emf, 0, 0] = meas_sd[0]
 
             for f in range(1, m):
                 cov[emf, 0, f] = 0.0
 
             for f in range(1, m):
                 for pos in positions:
-                    cov[emf, f, 0] += cov[emf, f, pos + 1] * h[pos]
+                    cov[emf, f, 0] += cov[emf, f, pos + 1] * loading[pos]
 
             for f in range(m):
                 for g in range(m - 1, f, -1):
@@ -125,7 +125,7 @@ def sqrt_linear_update(
 
 
 def sqrt_linear_anchoring_update(
-    state, cov, like_vec, y, c, delta, h, sqrt_r, positions, weights
+    state, cov, like_vec, y, c, control_coeffs, loading, meas_sd, positions, weights
 ):
     """Make a linear Kalman update in square root form and evaluate likelihood.
 
@@ -135,17 +135,19 @@ def sqrt_linear_anchoring_update(
     """
     state = state.copy()
     cov = cov.copy()
-    sqrt_linear_update(state, cov, like_vec, y, c, delta, h, sqrt_r, positions, weights)
+    sqrt_linear_update(
+        state, cov, like_vec, y, c, control_coeffs, loading, meas_sd, positions, weights
+    )
 
 
-def sqrt_linear_predict(state, root_cov, shocks_sds, transition_matrix):
+def sqrt_linear_predict(state, root_cov, shock_sd, transition_matrix):
     """Make a linear kalman predict step in linear form.
 
     Args:
         state (np.ndarray): numpy array of (nmixtures * nobs, nfac).
         root_cov (np.ndarray): upper triangular cholesky factor of the covariance
         matrix of (nmixtures * nobs, nfac, nfac).
-        shocks_sds (np.ndarray): numpy array of (nfac).
+        shock_sd (np.ndarray): numpy array of (nfac).
         transition_matrix (np.ndarray): state transition matrix of (nfac, nfac),
             the same for all obs.
 
@@ -157,7 +159,7 @@ def sqrt_linear_predict(state, root_cov, shocks_sds, transition_matrix):
     """
     nstates, nfac = state.shape
     predicted_states = np.dot(transition_matrix, state.T).T
-    root_q = np.diag(shocks_sds)
+    root_q = np.diag(shock_sd)
 
     m = np.empty([nstates, 2 * nfac, nfac])
     m[:, :nfac] = np.matmul(root_cov, transition_matrix.T)
@@ -174,7 +176,7 @@ def sqrt_unscented_predict(
     flat_sigma_points,
     s_weights_m,
     s_weights_c,
-    shock_variance,
+    shock_sd,
     transform_sigma_points_args,
     out_flat_states,
     out_flat_covs,
@@ -193,19 +195,19 @@ def sqrt_unscented_predict(
             weights for the means.
         s_weights_c (np.ndarray): numpy array of length nsigma with sigma
             weights for the covariances.
-        shock_variance (np.ndarray): numpy array of (nperiods - 1, nfac, nfac) with
-            vaiances of the transition equation shocks.
+        shock_sd (np.ndarray): numpy array of (nperiods - 1, nfac, nfac) with
+            standard deviation of the transition equation shocks.
         transform_sigma_points_args (dict): (see transform_sigma_points).
         out_flat_states (np.ndarray): output array of (nind * nmixtures, nfac).
         out_flat_covs (np.ndarray): output array of (nind * nmixtures, nfac, nfac).
 
     References:
-        Van Der Merwe, R. and Wan, E.A. The Square-Root Unscented Kalman
+        Van Der Merwe, R. and Wan, E.A. The Square-Root Unscented
         Filter for State and Parameter-Estimation. 2001.
 
     """
     nmixtures_times_nind, nsigma, nfac = sigma_points.shape
-    shock_variance = shock_variance[period]
+    shock_sd = shock_sd[period]
     transform_sigma_points(period, flat_sigma_points, **transform_sigma_points_args)
 
     # get them back into states
@@ -215,5 +217,5 @@ def sqrt_unscented_predict(
     qr_weights = np.sqrt(s_weights_c).reshape(nsigma, 1)
     qr_points = np.zeros((nmixtures_times_nind, 3 * nfac + 1, nfac))
     qr_points[:, 0:nsigma, :] = devs * qr_weights
-    qr_points[:, nsigma:, :] = np.sqrt(shock_variance)
+    qr_points[:, nsigma:, :] = shock_sd
     out_flat_covs[:, 1:, 1:] = array_qr(qr_points)[:, :nfac, :]

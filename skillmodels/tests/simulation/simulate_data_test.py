@@ -19,7 +19,7 @@ def set_up_meas():
     out["factors"] = np.array([[0, 0, 0], [1, 1, 1]])
     out["controls"] = np.array([[1, 1], [1, 1]])
     out["loadings"] = np.array([[0.3, 0.3, 0.3], [0.3, 0.3, 0.3], [0.3, 0.3, 0.3]])
-    out["deltas"] = np.array([[0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
+    out["control_coeffs"] = np.array([[0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
     out["variances"] = np.zeros(3)
     return out
 
@@ -71,7 +71,7 @@ def set_up_npfac():
             "included_positions": np.array([0, 1, 2, 3, 4, 5]),
         },
     ]
-    out["shock_variances"] = np.array([0, 0, 0, 0, 0, 0])
+    out["shock_sd"] = np.array([0, 0, 0, 0, 0, 0])
     return out
 
 
@@ -120,7 +120,7 @@ def set_up_generate_datasets():
             {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
         ]
     ] * out["nper"]
-    out["shock_variances"] = [np.zeros(2)] * out["nper"]
+    out["shock_sd"] = [np.zeros(2)] * out["nper"]
 
     loadings_df = pd.DataFrame(
         data=[[0.5, 0.4], [0.2, 0.7]] * out["nper"], columns=out["factor_names"]
@@ -129,7 +129,7 @@ def set_up_generate_datasets():
     loadings_df["variable"] = ["m1", "m2"] * out["nper"]
     loadings_df.set_index(["period", "variable"], inplace=True)
     out["loadings_df"] = loadings_df
-    out["deltas"] = [np.array([[0, 0.5, 0.3], [0, 0.5, 0.6]])] * out["nper"]
+    out["control_coeffs"] = [np.array([[0, 0.5, 0.3], [0, 0.5, 0.6]])] * out["nper"]
     out["meas_variances"] = pd.Series(
         data=np.zeros(len(loadings_df)), index=loadings_df.index
     )
@@ -230,7 +230,7 @@ def set_up_generate_datasets_2_mix():
             {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
         ]
     ] * (out["nper"] - 1)
-    out["shock_variances"] = [np.zeros(2)] * (out["nper"] - 1)
+    out["shock_sd"] = [np.zeros(2)] * (out["nper"] - 1)
     loadings_df = pd.DataFrame(
         data=[[0.5, 0.5], [0.6, 0.6]] * out["nper"], columns=out["factor_names"]
     )
@@ -238,7 +238,7 @@ def set_up_generate_datasets_2_mix():
     loadings_df["variable"] = ["m1", "m2"] * out["nper"]
     loadings_df.set_index(["period", "variable"], inplace=True)
     out["loadings_df"] = loadings_df
-    out["deltas"] = [np.array([[0, 0.5, 0.5], [0, 0.6, 0.6]])] * out["nper"]
+    out["control_coeffs"] = [np.array([[0, 0.5, 0.5], [0, 0.6, 0.6]])] * out["nper"]
     out["meas_variances"] = pd.Series(
         data=np.zeros(len(loadings_df)), index=loadings_df.index
     )
@@ -319,7 +319,7 @@ def set_up_generate_datasets_mock():
             {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
         ]
     ] * out["nper"]
-    out["shock_variances"] = [np.zeros(2)] * out["nper"]
+    out["shock_sd"] = [np.zeros(2)] * out["nper"]
     loadings_df = pd.DataFrame(
         data=[[0.5, 0.5], [0.5, 0.5]] * out["nper"], columns=out["factor_names"]
     )
@@ -327,7 +327,7 @@ def set_up_generate_datasets_mock():
     loadings_df["variable"] = ["m1", "m2"] * out["nper"]
     loadings_df.set_index(["period", "variable"], inplace=True)
     out["loadings_df"] = loadings_df
-    out["deltas"] = [np.array([[0, 0.5, 0.5], [0, 0.5, 0.5]])] * out["nper"]
+    out["control_coeffs"] = [np.array([[0, 0.5, 0.5], [0, 0.5, 0.5]])] * out["nper"]
     out["meas_variances"] = pd.Series(
         data=np.zeros(len(loadings_df)), index=loadings_df.index
     )
@@ -444,7 +444,7 @@ def set_up_generate_datasets_mock_mix_2():
             {"coeffs": np.array([0.2, 0.2, 0.3]), "included_positions": [0, 1]},
         ]
     ] * (out["nper"] - 1)
-    out["shock_variances"] = [np.zeros(2)] * (out["nper"] - 1)
+    out["shock_sd"] = [np.zeros(2)] * (out["nper"] - 1)
     loadings_df = pd.DataFrame(
         data=[[0.5, 0.5], [0.5, 0.5]] * out["nper"], columns=out["factor_names"]
     )
@@ -452,7 +452,7 @@ def set_up_generate_datasets_mock_mix_2():
     loadings_df["variable"] = ["m1", "m2"] * out["nper"]
     loadings_df.set_index(["period", "variable"], inplace=True)
     out["loadings_df"] = loadings_df
-    out["deltas"] = [np.array([[0, 0.5, 0.5], [0, 0.5, 0.5]])] * out["nper"]
+    out["control_coeffs"] = [np.array([[0, 0.5, 0.5], [0, 0.5, 0.5]])] * out["nper"]
     out["meas_variances"] = pd.Series(
         data=np.zeros(len(loadings_df)), index=loadings_df.index
     )
