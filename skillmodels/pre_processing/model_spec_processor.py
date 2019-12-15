@@ -227,8 +227,10 @@ class ModelSpecProcessor:
             "In model {} you use the variable {} to normalize factor {} in "
             "period {} but it is not included as measurement."
         )
-        if norm_type == "variances":
-            raise ValueError("Normalization for variances cannot be provided")
+        if norm_type not in ["loadings", "intercepts"]:
+            raise ValueError(
+                "Normalization can be provided only for loadings and intercepts"
+            )
         assert len(norm_list) == self.nperiods, (
             "Normalizations lists must have one entry per period. In model {} "
             "you specify a normalizations list of length {} for factor {} "
