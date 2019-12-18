@@ -294,8 +294,8 @@ class ModelSpecProcessor:
                     norminfo = self._facinf[factor]["normalizations"]
                     if not set(norminfo.keys()).issubset(set(norm_types)):
                         raise ValueError(
-                            """Normalization can be provided only for loadings
-                             and intercepts"""
+                            "Normalization can be provided only "
+                            "for loadings  and intercepts"
                         )
                     if norm_type in norminfo:
                         norm_list = norminfo[norm_type]
