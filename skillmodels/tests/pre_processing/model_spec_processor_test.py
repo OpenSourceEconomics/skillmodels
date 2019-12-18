@@ -169,6 +169,29 @@ class TestCheckAndFillNormalizationSpecifications:
         assert_equal(self.normalizations, res)
 
 
+class TestCheckAndFillNormalizationSpecificationsException:
+    def setup(self):
+        self._facinf = {
+            "f1": {
+                "normalizations": {
+                    "h": [{"a": 1}, {"a": 1}, {"a": 1}],
+                    "intercepts": [{"a": 1}, {"a": 1}, {"a": 1}],
+                }
+            }
+        }
+
+        self.nperiods = 3
+
+        self.factors = sorted(self._facinf.keys())
+
+    def test_check_and_fill_normalization_specifications_raise_exception(self):
+        assert_raises(
+            ValueError,
+            ModelSpecProcessor._check_and_fill_normalization_specification,
+            self,
+        )
+
+
 def factor_uinfo():
 
     dat = [
