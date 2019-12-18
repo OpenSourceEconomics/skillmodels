@@ -227,10 +227,6 @@ class ModelSpecProcessor:
             "In model {} you use the variable {} to normalize factor {} in "
             "period {} but it is not included as measurement."
         )
-        if norm_type not in ["loadings", "intercepts"]:
-            raise ValueError(
-                "Normalization can be provided only for loadings and intercepts"
-            )
         assert len(norm_list) == self.nperiods, (
             "Normalizations lists must have one entry per period. In model {} "
             "you specify a normalizations list of length {} for factor {} "
@@ -296,6 +292,11 @@ class ModelSpecProcessor:
             for norm_type in norm_types:
                 if "normalizations" in self._facinf[factor]:
                     norminfo = self._facinf[factor]["normalizations"]
+                    if not set(norminfo).issubset(set(norm_types)):
+                        raise ValueError(
+                            """Normalization can be provided only for loadings
+                             and intercepts"""
+                        )
                     if norm_type in norminfo:
                         norm_list = norminfo[norm_type]
                         norm[factor][
