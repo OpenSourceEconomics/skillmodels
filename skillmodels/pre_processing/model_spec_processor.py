@@ -1,4 +1,3 @@
-"""Construct a dictionary of model specifications."""
 import warnings
 from itertools import product
 
@@ -14,6 +13,27 @@ from skillmodels.pre_processing.params_index import params_index
 def process_model(
     model_dict, dataset, model_name="some_model", dataset_name="some_dataset"
 ):
+    """Check, clean, extend and transform the model specs.
+
+    Check the completeness, consistency and validity of the general and model
+    specific specifications.
+
+    Clean the model specs by handling variables that were specified but are
+    not in the dataset or have no variance. Raise errors if specified.
+
+    Transform the cleaned model specs into forms that are more practical for
+    the construction of the quantities that are needed in the likelihood
+    function.
+
+    Args:
+        model_dict (dict): dictionary of model specifications.
+        dataset (DataFrame): panel dataset in long format.
+        model_name (string)
+        dataset_name (string)
+
+    Returns:
+        model_specs (dict): cleaned (nested) dictionary of model specs
+    """
     model_specs = {}
     model_specs["model_dict"] = model_dict
     model_specs["data"] = pre_process_data(dataset)
@@ -23,6 +43,8 @@ def process_model(
     model_specs["factors"] = tuple(sorted(model_specs["_facinf"].keys()))
     model_specs["nfac"] = len(model_specs["factors"])
     model_specs["nsigma"] = 2 * model_specs["nfac"] + 1
+
+    # set the general model specifications
     general_settings = {
         "n_mixture_components": 1,
         "sigma_points_scale": 2,
@@ -99,7 +121,7 @@ def _set_time_specific_attributes(model_specs):
 def _transition_equation_names(model_specs):
     """Construct a list with the transition equation name for each factor.
 
-    The result is set as class attribute ``transition_names``.
+    The result is set as dictionary element ``transition_names``.
 
     """
     trans_eq_dict = {}
