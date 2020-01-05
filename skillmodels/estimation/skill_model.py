@@ -15,7 +15,8 @@ from skillmodels.estimation.likelihood_function import log_likelihood_contributi
 from skillmodels.estimation.parse_params import parse_params
 from skillmodels.pre_processing.constraints import add_bounds
 from skillmodels.pre_processing.data_processor import DataProcessor
-from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
+from skillmodels.pre_processing.model_spec_processor import process_model
+from skillmodels.pre_processing.model_spec_processor import public_attribute_dict
 from skillmodels.simulation.simulate_data import simulate_datasets
 from skillmodels.visualization.table_functions import df_to_tex_table
 from skillmodels.visualization.table_functions import statsmodels_results_to_df
@@ -43,13 +44,13 @@ class SkillModel:
     def __init__(
         self, model_dict, dataset, model_name="some_model", dataset_name="some_dataset"
     ):
-        specs = ModelSpecProcessor(
+        specs = process_model(
             model_dict=model_dict,
             dataset=dataset,
             model_name=model_name,
             dataset_name=dataset_name,
         )
-        specs_dict = specs.public_attribute_dict()
+        specs_dict = public_attribute_dict(specs)
         data_proc = DataProcessor(specs_dict)
         self.data_proc = data_proc
         self.c_data = data_proc.c_data()
