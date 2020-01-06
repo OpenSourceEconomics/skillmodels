@@ -135,11 +135,11 @@ def _transition_equation_included_factors(model_specs):
     """Included factors and their position for each transition equation.
 
     Construct a list with included factors for each transition equation
-    and set the results as class attribute ``included_factors``.
+    and set the results as dictionary element ``included_factors``.
 
     Construct a list with the positions of included factors in the
-    alphabetically ordered factor list and set the result as class
-    attribute ``included_positions``.
+    alphabetically ordered factor list and set the result as dictionary
+    element ``included_positions``.
 
     """
     trans_eq_incl_fac = {}
