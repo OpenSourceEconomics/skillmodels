@@ -54,19 +54,17 @@ def process_model(
     }
 
     general_settings.update(model_dict.get("general", {}))
-    model_specs.update({"nmixtures": general_settings.pop("n_mixture_components")})
+    model_specs["nmixtures"] = general_settings.pop("n_mixture_components")
     model_specs.update(general_settings)
     model_specs.update(_set_time_specific_attributes(model_specs))
     model_specs.update(_transition_equation_names(model_specs))
     model_specs.update(_transition_equation_included_factors(model_specs))
     model_specs.update(_set_anchoring_attributes(model_specs))
-    model_specs.update(_check_measurements(model_specs))
+    model_specs.update(_check_and_process_measurements(model_specs))
     model_specs.update(_clean_controls_specification(model_specs))
-    model_specs.update(
-        {"nobs": int(len(model_specs["data"]) / model_specs["nperiods"])}
-    )
+    model_specs["nobs"] = int(len(model_specs["data"]) / model_specs["nperiods"])
     model_specs.update(_check_and_fill_normalization_specification(model_specs))
-    model_specs.update({"nupdates": len(update_info(model_specs))})
+    model_specs["nupdates"] = len(update_info(model_specs))
     model_specs.update(_set_params_index(model_specs))
     model_specs.update(_set_constraints(model_specs))
     return model_specs
@@ -93,7 +91,7 @@ def _set_time_specific_attributes(model_specs):
     )
 
     assert len(time_spec_dict["stagemap"]) == time_spec_dict["nperiods"], (
-        "You have to specify a list of length nperiods " "as stagemap. Check model {}"
+        "You have to specify a list of length nperiods as stagemap. Check model {}"
     ).format(model_specs["model_name"])
 
     assert time_spec_dict["stagemap"][-1] == time_spec_dict["stagemap"][-2], (
@@ -203,7 +201,7 @@ def _set_anchoring_attributes(model_specs):
     return anchoring_dict
 
 
-def _check_measurements(model_specs):
+def _check_and_process_measurements(model_specs):
     """Set a dictionary with the cleaned measurement specifications as attribute."""
     measurements = {}
     measurements_dict = {}
@@ -323,18 +321,15 @@ def _check_and_fill_normalization_specification(model_specs):
     norm_dict = {}
     norm = {}
     norm_types = ["loadings", "intercepts"]
-
     for factor in model_specs["factors"]:
         norm[factor] = {}
-
-        for norm_type in norm_types:
-            if "normalizations" in model_specs["_facinf"][factor]:
-                norminfo = model_specs["_facinf"][factor]["normalizations"]
-                if not set(norminfo.keys()).issubset(set(norm_types)):
-                    raise ValueError(
-                        "Normalization can be provided only "
-                        "for loadings  and intercepts"
-                    )
+        if "normalizations" in model_specs["_facinf"][factor]:
+            norminfo = model_specs["_facinf"][factor]["normalizations"]
+            if not set(norminfo).issubset(norm_types):
+                raise ValueError(
+                    "Normalization can be provided only " "for loadings  and intercepts"
+                )
+            for norm_type in norm_types:
                 if norm_type in norminfo:
                     norm_list = norminfo[norm_type]
                     norm[factor][norm_type] = _check_and_clean_normalizations_list(
@@ -342,8 +337,8 @@ def _check_and_fill_normalization_specification(model_specs):
                     )
                 else:
                     norm[factor][norm_type] = [{}] * model_specs["nperiods"]
-            else:
-                norm[factor] = {nt: [{}] * model_specs["nperiods"] for nt in norm_types}
+        else:
+            norm[factor] = {nt: [{}] * model_specs["nperiods"] for nt in norm_types}
 
     norm_dict["normalizations"] = norm
     return norm_dict

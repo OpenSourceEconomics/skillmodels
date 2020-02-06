@@ -15,7 +15,9 @@ from skillmodels.pre_processing.model_spec_processor import (
 from skillmodels.pre_processing.model_spec_processor import (
     _check_and_fill_normalization_specification,
 )
-from skillmodels.pre_processing.model_spec_processor import _check_measurements
+from skillmodels.pre_processing.model_spec_processor import (
+    _check_and_process_measurements,
+)
 from skillmodels.pre_processing.model_spec_processor import (
     _clean_controls_specification,
 )
@@ -64,7 +66,7 @@ def test_transition_equation_included_factor_positions(transeq_setup):
         assert_array_equal(pos, exp_pos)
 
 
-def test_check_measurements():
+def test_check_and_process_measurements():
     model_specs = {}
     model_specs["periods"] = (0, 1)
     inf = {"f1": {}, "f2": {}}
@@ -79,7 +81,7 @@ def test_check_measurements():
     res = {}
     res["f1"] = model_specs["_facinf"]["f1"]["measurements"]
     res["f2"] = model_specs["_facinf"]["f2"]["measurements"]
-    checked_meas = _check_measurements(model_specs)["measurements"]
+    checked_meas = _check_and_process_measurements(model_specs)["measurements"]
     assert_equal(checked_meas, res)
 
 
