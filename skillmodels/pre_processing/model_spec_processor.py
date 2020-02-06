@@ -205,10 +205,8 @@ def _check_and_process_measurements(model_specs):
     """Set a dictionary with the cleaned measurement specifications as attribute."""
     measurements = {}
     measurements_dict = {}
-    for factor in model_specs["factors"]:
-        measurements[factor] = model_specs["_facinf"][factor]["measurements"]
-
     for f, factor in enumerate(model_specs["factors"]):
+        measurements[factor] = model_specs["_facinf"][factor]["measurements"]
         if model_specs["transition_names"][f] == "constant":
             for t in model_specs["periods"][1:]:
                 assert len(measurements[factor][t]) == 0, (
