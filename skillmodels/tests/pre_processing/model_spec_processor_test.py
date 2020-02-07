@@ -7,7 +7,6 @@ from nose.tools import assert_equal
 from nose.tools import assert_raises
 from numpy.testing import assert_array_equal
 from pandas import DataFrame
-from pandas.testing import assert_frame_equal
 
 from skillmodels.pre_processing.model_spec_processor import (
     _check_and_clean_normalizations_list,
@@ -21,8 +20,6 @@ from skillmodels.pre_processing.model_spec_processor import (
 from skillmodels.pre_processing.model_spec_processor import (
     _clean_controls_specification,
 )
-from skillmodels.pre_processing.model_spec_processor import _factor_update_info
-from skillmodels.pre_processing.model_spec_processor import _purpose_update_info
 from skillmodels.pre_processing.model_spec_processor import (
     _transition_equation_included_factors,
 )
@@ -203,84 +200,3 @@ def test_check_and_fill_normalization_specifications_raise_exception():
     model_spec["nperiods"] = 3
     model_spec["factors"] = sorted(model_spec["_facinf"].keys())
     assert_raises(ValueError, _check_and_fill_normalization_specification, model_spec)
-
-
-def factor_uinfo():
-
-    dat = [
-        [0, "m1", 1, 0, 0],
-        [0, "m2", 1, 0, 0],
-        [0, "m3", 0, 1, 0],
-        [0, "m4", 0, 1, 0],
-        [0, "m5", 0, 1, 1],
-        [0, "m6", 0, 0, 1],
-        [0, "a_f1", 1, 0, 0],
-        [1, "m1", 1, 0, 0],
-        [1, "m2", 1, 0, 0],
-        [1, "m3", 0, 1, 0],
-        [1, "m4", 0, 1, 0],
-        [1, "m5", 0, 1, 1],
-        [1, "m6", 0, 0, 1],
-        [1, "a_f1", 1, 0, 0],
-        [2, "m1", 1, 0, 0],
-        [2, "m2", 1, 0, 0],
-        [2, "m3", 0, 1, 0],
-        [2, "m4", 0, 1, 0],
-        [2, "m5", 0, 1, 1],
-        [2, "m6", 0, 0, 1],
-        [2, "a_f1", 1, 0, 0],
-        [3, "m1", 1, 0, 0],
-        [3, "m2", 1, 0, 0],
-        [3, "m3", 0, 1, 0],
-        [3, "m4", 0, 1, 0],
-        [3, "m5", 0, 1, 1],
-        [3, "m6", 0, 0, 1],
-        [3, "a_f1", 1, 0, 0],
-    ]
-    cols = ["period", "variable", "f1", "f2", "f3"]
-    df = DataFrame(data=dat, columns=cols)
-    df.set_index(["period", "variable"], inplace=True)
-    return df
-
-
-def test_factor_update_info():
-    model_spec = {}
-    model_spec["periods"] = [0, 1, 2, 3]
-    model_spec["nperiods"] = len(model_spec["periods"])
-    model_spec["factors"] = ["f1", "f2", "f3"]
-    model_spec["nfac"] = len(model_spec["factors"])
-    model_spec["measurements"] = {
-        "f1": [["m1", "m2"]] * 4,
-        "f2": [["m3", "m4", "m5"]] * 4,
-        "f3": [["m5", "m6"]] * 4,
-    }
-    model_spec["anch_outcome"] = "a"
-    model_spec["anchored_factors"] = ["f1"]
-    model_spec["anchoring"] = True
-
-    calc = _factor_update_info(model_spec)
-    exp = factor_uinfo()
-    assert_frame_equal(calc, exp, check_dtype=False)
-
-
-def purpose_uinfo():
-    ind = factor_uinfo().index
-    dat = (["measurement"] * 6 + ["anchoring"]) * 4
-    return pd.Series(index=ind, data=dat, name="purpose")
-
-
-@patch(
-    "skillmodels.pre_processing.model_spec_processor._factor_update_info",
-    return_value=factor_uinfo(),
-    autospec=True,
-)
-def test_update_info_purpose(mock_factor_update_info):
-    model_specs = {}
-    model_specs["anchoring"] = True
-    model_specs["anchored_factors"] = ["f1"]
-    model_specs["anch_outcome"] = "a"
-    model_specs["nperiods"] = 4
-    model_specs["periods"] = (0, 1, 2, 3)
-    calc = _purpose_update_info(model_specs)
-    exp = purpose_uinfo()
-    assert calc.equals(exp)

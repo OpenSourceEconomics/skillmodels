@@ -343,7 +343,17 @@ def _check_and_fill_normalization_specification(model_specs):
 
 
 def update_info(model_specs):
-    """A DataFrame with all relevant information on Kalman updates.
+    """Update information relevant for time invariant measurement systems.
+
+    Measurement equations are uniquely identified by their period and the
+    name of their measurement.
+
+    Two measurement equations count as equal if and only if:
+    * their measurements have the same name
+    * the same latent factors are measured
+    * they occur in periods that use the same control variables.
+
+    Create a DataFrame with all relevant information on Kalman updates.
 
     Construct a DataFrame that contains all relevant information on the
     numbers of updates, variables used and factors involved. Moreover it
@@ -372,27 +382,16 @@ def update_info(model_specs):
         DataFrame
 
     """
-    to_concat = [
-        _factor_update_info(model_specs),
-        _purpose_update_info(model_specs),
-        _invariance_update_info(model_specs),
-    ]
-
-    df = pd.concat(to_concat, axis=1)
-    return df
-
-
-def _factor_update_info(model_specs):
     index = pd.MultiIndex(levels=[[], []], codes=[[], []], names=["period", "name"])
-    df = DataFrame(data=None, index=index)
+    factor_uinfo = DataFrame(data=None, index=index)
 
     # append rows for each update that has to be performed
     for t in model_specs["periods"]:
         for factor in model_specs["factors"]:
             for meas in model_specs["measurements"][factor][t]:
-                if t in df.index and meas in df.loc[t].index:
+                if t in factor_uinfo.index and meas in factor_uinfo.loc[t].index:
                     # change corresponding row of the DataFrame
-                    df.loc[(t, meas), factor] = 1
+                    factor_uinfo.loc[(t, meas), factor] = 1
                 else:
                     # add a new row to the DataFrame
                     ind = pd.MultiIndex.from_tuples(
@@ -400,7 +399,7 @@ def _factor_update_info(model_specs):
                     )
                     df2 = DataFrame(data=0, columns=model_specs["factors"], index=ind)
                     df2[factor] = 1
-                    df = df.append(df2)
+                    factor_uinfo = factor_uinfo.append(df2)
 
         if model_specs["anchoring"]:
             for factor in model_specs["anchored_factors"]:
@@ -410,42 +409,25 @@ def _factor_update_info(model_specs):
                 )
                 df2 = DataFrame(data=0, columns=model_specs["factors"], index=ind)
                 df2[factor] = 1
-                df = df.append(df2)
-    return df
+                factor_uinfo = factor_uinfo.append(df2)
 
-
-def _purpose_update_info(model_specs):
-    factor_uinfo = _factor_update_info(model_specs)
-    sr = pd.Series(index=factor_uinfo.index, name="purpose", data="measurement")
-
+    purpose_uinfo = pd.Series(
+        index=factor_uinfo.index, name="purpose", data="measurement"
+    )
     if model_specs["anchoring"] is True:
         for t, factor in product(
             model_specs["periods"], model_specs["anchored_factors"]
         ):
-            sr.loc[t, f"{model_specs['anch_outcome']}_{factor}"] = "anchoring"
-    return sr
+            purpose_uinfo.loc[
+                t, f"{model_specs['anch_outcome']}_{factor}"
+            ] = "anchoring"
 
-
-def _invariance_update_info(model_specs):
-    """Update information relevant for time invariant measurement systems.
-
-    Measurement equations are uniquely identified by their period and the
-    name of their measurement.
-
-    Two measurement equations count as equal if and only if:
-    * their measurements have the same name
-    * the same latent factors are measured
-    * they occur in periods that use the same control variables.
-    """
-    factor_uinfo = _factor_update_info(model_specs)
     ind = factor_uinfo.index
-    df = pd.DataFrame(
+    inv_uinfo = pd.DataFrame(
         columns=["is_repeated", "first_occurence"],
         index=ind,
         data=[[False, np.nan]] * len(ind),
     )
-
-    purpose_uinfo = _purpose_update_info(model_specs)
 
     for t, meas in ind:
         if purpose_uinfo[t, meas] == "measurement":
@@ -460,9 +442,11 @@ def _invariance_update_info(model_specs):
                             break
 
             if t != first:
-                df.loc[(t, meas), "is_repeated"] = True
-                df.loc[(t, meas), "first_occurence"] = first
-    return df
+                inv_uinfo.loc[(t, meas), "is_repeated"] = True
+                inv_uinfo.loc[(t, meas), "first_occurence"] = first
+
+    df_uinfo = pd.concat([factor_uinfo, purpose_uinfo, inv_uinfo], axis=1)
+    return df_uinfo
 
 
 def _set_params_index(model_specs):
