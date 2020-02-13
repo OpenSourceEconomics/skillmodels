@@ -17,7 +17,7 @@ jobs:
   - bash: echo "##vso[task.prependpath]$CONDA/bin"
     displayName: Add conda to PATH.
 
-  - bash: conda create --yes --quiet --name skillmodels python=$PYTHON_VERSION tox-conda -c conda-forge
+  - bash: conda create --yes --quiet --name skillmodels -c conda-forge python=$PYTHON_VERSION tox-conda
     displayName: Create Anaconda environment.
 
   - bash: |
@@ -33,8 +33,8 @@ jobs:
     matrix:
       Python36:
         python.version: "3.6"
-      # Python37:
-      #   python.version: "3.7"
+      Python37:
+        python.version: "3.7"
 
   steps:
   - powershell: Write-Host "##vso[task.prependpath]$env:CONDA\Scripts"
@@ -43,7 +43,7 @@ jobs:
   - powershell: conda update conda --yes --quiet
     displayName: Update conda.
 
-  - powershell: conda create --yes --quiet --name skillmodels python=$env:PYTHON_VERSION python-libarchive-c>=2.8 tox-conda numpy pillow pygmo>=2.1 scipy>=1.2.1 -c conda-forge
+  - powershell: conda create --yes --quiet --name skillmodels -c conda-forge python=$env:PYTHON_VERSION bokeh>=1.3 python-libarchive-c>=2.8 tox-conda numpy=1.16 pygmo=2.10 scipy=1.2.1
     displayName: Create Anaconda environment.
 
   - script: |
@@ -80,7 +80,7 @@ jobs:
       conda clean --all --yes
     displayName: Reset index-cache and clean conda.
 
-  - bash: conda create --yes --quiet --name skillmodels python=$PYTHON_VERSION tox-conda -c conda-forge
+  - bash: conda create --yes --quiet --name skillmodels -c conda-forge python=$PYTHON_VERSION tox-conda
     displayName: Create Anaconda environment
 
   - bash: |
