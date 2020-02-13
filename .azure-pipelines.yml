@@ -43,7 +43,7 @@ jobs:
   - powershell: conda update conda --yes --quiet
     displayName: Update conda.
 
-  - powershell: conda create --yes --quiet --name skillmodels -c conda-forge python=$env:PYTHON_VERSION bokeh>=1.3 python-libarchive-c>=2.8 tox-conda numpy=1.16 pygmo=2.10 scipy=1.2.1
+  - powershell: conda create --yes --quiet --name skillmodels -c conda-forge python=$env:PYTHON_VERSION python-libarchive-c>=2.8 tox-conda numpy estimagic>=0.0.25 scipy>=1.2
     displayName: Create Anaconda environment.
 
   - script: |
