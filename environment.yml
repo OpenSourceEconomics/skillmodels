@@ -1,7 +1,7 @@
 name: skillmodels
 channels:
   - conda-forge
-  - opensourceeconomics
+  - janosg
 dependencies:
   - python=3.7
   - pip
