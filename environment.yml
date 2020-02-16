@@ -15,6 +15,7 @@ dependencies:
   - nose
   - numba>=0.45
   - pandas>=0.24
+  - click
   - pytest
   - pytest-mock
   - pytest-xdist
