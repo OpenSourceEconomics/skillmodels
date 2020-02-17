@@ -20,7 +20,7 @@ dependencies:
   - pytest-xdist
   - restructuredtext_lint
   - tox-conda
-  - scipy>=1
+  - scipy=1
   - seaborn
   - sphinxcontrib-bibtex
   - sphinx_rtd_theme
