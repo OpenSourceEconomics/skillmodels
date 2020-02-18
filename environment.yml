@@ -20,11 +20,11 @@ dependencies:
   - pytest-xdist
   - restructuredtext_lint
   - tox-conda
-  - scipy=1.2
+  - scipy
   - seaborn
   - sphinxcontrib-bibtex
   - sphinx_rtd_theme
-  - statsmodels>=0.9.0
+  - statsmodels>=0.9
   - anaconda-client
   - nbsphinx
   - pdbpp
