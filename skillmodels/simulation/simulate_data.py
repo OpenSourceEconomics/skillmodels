@@ -64,9 +64,9 @@ def simulate_datasets(
     nper,
     transition_names,
     transition_argument_dicts,
-    shock_variances,
+    shock_sd,
     loadings_df,
-    deltas,
+    control_coeffs,
     meas_variances,
     dist_name,
     dist_arg_dict,
@@ -85,15 +85,15 @@ def simulate_datasets(
         loadings_df (pd.DataFrame): The factor loadings. It has a multi
             index where the first level indicates the period and the second one
             the variable. The columns are the names of the factors.
-        deltas (list): list of numpy array of size (nmeas, ncontrols). The list has
-            length nper.
+        conotrol_coeffs (list): list of numpy array of size (nmeas, ncontrols).
+            The list has length nper.
         transition_names (list): list of strings with the names of the transition
            function of each factor.
         transition_argument_dicts (list): list lists of dictionaries. Each sublsit has
             length nfac with and contanis the arguments for the transition function of
             each factor. There is one sublist for each period.
-        shock_variances (np.ndarra): numpy array of size (nper, nfac) with the shock
-            variances in each period.
+        shock_sd (np.ndarra): numpy array of size (nper, nfac) with the shock
+            standard deviations in each period.
         meas_variances (pd.Series): The index is the same as in loadings_df. The data
             are the variances of the measurements errors.
         dist_name (string): the elliptical distribution to use in the mixture
@@ -137,7 +137,7 @@ def simulate_datasets(
             )
 
         fac[t + 1] = next_period_factors(
-            fac[t], transition_names, transition_argument_dicts[t], shock_variances[t]
+            fac[t], transition_names, transition_argument_dicts[t], shock_sd[t]
         )
 
     observed_data_by_period = []
@@ -147,7 +147,7 @@ def simulate_datasets(
                 fac[t],
                 cont.to_numpy(),
                 loadings_df.loc[t].to_numpy(),
-                deltas[t],
+                control_coeffs[t],
                 meas_variances.loc[t].to_numpy(),
             ),
             columns=loadings_df.loc[t].index,
@@ -228,9 +228,7 @@ def generate_start_factors_and_control_variables_elliptical(
     return start_factors, controls
 
 
-def next_period_factors(
-    factors, transition_names, transition_argument_dicts, shock_variances
-):
+def next_period_factors(factors, transition_names, transition_argument_dicts, shock_sd):
     """Apply transition function to factors and add shocks.
 
     Args:
@@ -241,7 +239,7 @@ def next_period_factors(
             the arguments for the transition function of each factor. A detailed
             description of the arguments of transition functions can be found in the
             module docstring of skillmodels.model_functions.transition_functions.
-        shock_variances (np.ndarray): numpy array of length nfac.
+        shock_sd (np.ndarray): numpy array of length nfac.
 
     Returns:
         next_factors (np.ndarray): shape(nobs,nfac)
@@ -254,7 +252,7 @@ def next_period_factors(
             factors, **transition_argument_dicts[i]
         )
     # Assumption: In general err_{Obs_j,Fac_i}!=err{Obs_k,Fac_i}, where j!=k
-    errors = multivariate_normal([0] * nfac, np.diag(shock_variances), nobs).reshape(
+    errors = multivariate_normal([0] * nfac, np.diag(shock_sd ** 2), nobs).reshape(
         nobs, nfac
     )
     next_factors = factors_tp1 + errors
@@ -262,7 +260,7 @@ def next_period_factors(
     return next_factors
 
 
-def measurements_from_factors(factors, controls, loadings, deltas, variances):
+def measurements_from_factors(factors, controls, loadings, control_coeffs, variances):
     """Generate the variables that would be observed in practice.
 
     This generates the data for only one period. Let nmeas be the number
@@ -272,7 +270,7 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances):
         factors (pd.DataFrame or np.ndarray): DataFrame of shape (nobs, nfac)
         controls (pd.DataFrame or np.ndarray): DataFrame of shape (nobs, ncontrols)
         loadings (np.ndarray): numpy array of size (nmeas, nfac)
-        deltas (np.ndarray): numpy array of size (nmeas, ncontrols)
+        control_coeffs (np.ndarray): numpy array of size (nmeas, ncontrols)
         variances (np.ndarray): numpy array of size (nmeas) with the variances of the
             measurements. Measurement error is assumed to be independent across
             measurements
@@ -287,6 +285,6 @@ def measurements_from_factors(factors, controls, loadings, deltas, variances):
     states = factors
     conts = controls
     states_part = np.dot(states, loadings.T)
-    control_part = np.dot(conts, deltas.T)
+    control_part = np.dot(conts, control_coeffs.T)
     meas = states_part + control_part + epsilon
     return meas

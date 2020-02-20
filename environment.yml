@@ -2,7 +2,6 @@ name: skillmodels
 channels:
   - conda-forge
   - opensourceeconomics
-  # - janosg
 dependencies:
   - python=3.7
   - pip
@@ -14,17 +13,19 @@ dependencies:
   - mkl-service
   - nose
   - numba>=0.45
+  - numpy<1.18
   - pandas>=0.24
+  - click
   - pytest
   - pytest-mock
   - pytest-xdist
   - restructuredtext_lint
   - tox-conda
-  - scipy>=1.2
+  - scipy
   - seaborn
   - sphinxcontrib-bibtex
   - sphinx_rtd_theme
-  - statsmodels>=0.9.0
+  - statsmodels>=0.9
   - anaconda-client
   - nbsphinx
   - pdbpp

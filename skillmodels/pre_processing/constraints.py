@@ -72,7 +72,7 @@ def add_bounds(params_df, bounds_distance=0.0):
     if "lower" not in df.columns:
         df["lower"] = -np.inf
     df.loc["meas_sd", "lower"] = bounds_distance
-    df.loc["shock_variance", "lower"] = bounds_distance
+    df.loc["shock_sd", "lower"] = bounds_distance
     return df
 
 
@@ -104,7 +104,10 @@ def _invariant_meas_system_constraints(update_info, controls, factors):
             first = update_info.loc[(period, meas), "first_occurence"]
             for cont in ["constant"] + list(controls[period]):
                 locs.append(
-                    [("delta", period, meas, cont), ("delta", int(first), meas, cont)]
+                    [
+                        ("control_coeffs", period, meas, cont),
+                        ("control_coeffs", int(first), meas, cont),
+                    ]
                 )
             for factor in factors:
                 locs.append(
@@ -128,7 +131,7 @@ def _normalization_constraints(normalizations):
         normalizations (dict): Nested dictionary with the normalization info.
             normalizations[factor][norm_type][period] is a dictionary where the keys
             are measurements and the values are the normalized value. norm_type can
-            take the values ['loadings', 'intercepts', 'variances']
+            take the values ['loadings', 'intercepts']
 
     Returns:
         constraints (list)
@@ -139,6 +142,8 @@ def _normalization_constraints(normalizations):
     factors = sorted(normalizations.keys())
     periods = range(len(normalizations[factors[0]]["loadings"]))
     for factor in factors:
+        if "variances" in normalizations[factor].keys():
+            raise ValueError("normalization for variances cannot be provided")
         for period in periods:
             loading_norminfo = normalizations[factor]["loadings"][period]
             for meas, normval in loading_norminfo.items():
@@ -154,22 +159,13 @@ def _normalization_constraints(normalizations):
             for meas, normval in intercept_norminfo.items():
                 constraints.append(
                     {
-                        "loc": ("delta", period, meas, "constant"),
+                        "loc": ("control_coeffs", period, meas, "constant"),
                         "type": "fixed",
                         "value": normval,
                         "description": msg,
                     }
                 )
-            variance_norminfo = normalizations[factor]["variances"][period]
-            for meas, normval in variance_norminfo.items():
-                constraints.append(
-                    {
-                        "loc": ("meas_sd", period, meas, "-"),
-                        "type": "fixed",
-                        "value": normval,
-                        "description": msg,
-                    }
-                )
+
     return constraints
 
 
@@ -277,7 +273,7 @@ def _stage_constraints(stagemap, factors, transition_names, included_factors):
 
     for stage in stages:
         locs_trans = [("trans", p) for p in stages_to_periods[stage]]
-        locs_q = [("shock_variance", p) for p in stages_to_periods[stage]]
+        locs_q = [("shock_sd", p) for p in stages_to_periods[stage]]
         constraints.append(
             {"locs": locs_trans, "type": "pairwise_equality", "description": msg}
         )
@@ -307,7 +303,7 @@ def _constant_factors_constraints(factors, transition_names, periods):
             for period in periods[:-1]:
                 constraints.append(
                     {
-                        "loc": ("shock_variance", period, factor, "-"),
+                        "loc": ("shock_sd", period, factor, "-"),
                         "type": "fixed",
                         "value": 0.0,
                         "description": msg,
@@ -388,14 +384,14 @@ def _anchoring_constraints(
     constraints = []
     if not use_anchoring_constant:
         for period, meas in anchoring_updates:
-            ind_tup = ("delta", period, meas, "constant")
+            ind_tup = ("control_coeffs", period, meas, "constant")
             constraints.append({"loc": ind_tup, "type": "fixed", "value": 0})
 
     if not use_anchoring_controls:
         for period, meas in anchoring_updates:
             ind_tups = []
             for cont in controls:
-                ind_tups.append(("delta", period, meas, cont))
+                ind_tups.append(("control_coeffs", period, meas, cont))
             constraints.append({"loc": ind_tups, "type": "fixed", "value": 0})
 
     if not free_anchoring_loadings:

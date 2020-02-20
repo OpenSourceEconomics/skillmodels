@@ -15,7 +15,8 @@ from skillmodels.estimation.likelihood_function import log_likelihood_contributi
 from skillmodels.estimation.parse_params import parse_params
 from skillmodels.pre_processing.constraints import add_bounds
 from skillmodels.pre_processing.data_processor import DataProcessor
-from skillmodels.pre_processing.model_spec_processor import ModelSpecProcessor
+from skillmodels.pre_processing.model_spec_processor import process_model
+from skillmodels.pre_processing.model_spec_processor import public_attribute_dict
 from skillmodels.simulation.simulate_data import simulate_datasets
 from skillmodels.visualization.table_functions import df_to_tex_table
 from skillmodels.visualization.table_functions import statsmodels_results_to_df
@@ -43,13 +44,13 @@ class SkillModel:
     def __init__(
         self, model_dict, dataset, model_name="some_model", dataset_name="some_dataset"
     ):
-        specs = ModelSpecProcessor(
+        specs = process_model(
             model_dict=model_dict,
             dataset=dataset,
             model_name=model_name,
             dataset_name=dataset_name,
         )
-        specs_dict = specs.public_attribute_dict()
+        specs_dict = public_attribute_dict(specs)
         data_proc = DataProcessor(specs_dict)
         self.data_proc = data_proc
         self.c_data = data_proc.c_data()
@@ -58,10 +59,10 @@ class SkillModel:
 
         # create a list of all quantities that depend from params vector
         self.params_quants = [
-            "delta",
+            "control_coeffs",
             "loading",
             "meas_sd",
-            "shock_variance",
+            "shock_sd",
             "initial_cov",
             "trans_coeffs",
             "initial_mean",
@@ -80,26 +81,26 @@ class SkillModel:
             ), "Loc must select consecutive elements of the params index."
         return slice(iloc[0], iloc[-1] + 1)
 
-    def _container_for_delta(self):
+    def _container_for_control_coeffs(self):
         """List of initial arrays for control variable params in each period.
 
         The arrays have the shape [nupdates, nr_of_control_variables + 1]
         which is potentially different in each period. They are filled with zeros.
 
         """
-        delta = []
+        coeff = []
         for t in self.periods:
             length = len(self.update_info.loc[t])
             width = len(self.controls[t]) + 1
             init = np.zeros((length, width))
-            delta.append(init)
-        return delta
+            coeff.append(init)
+        return coeff
 
-    def _slice_for_delta(self):
-        return [self._get_slice_from_loc(("delta", t)) for t in self.periods]
+    def _slice_for_control_coeffs(self):
+        return [self._get_slice_from_loc(("control_coeffs", t)) for t in self.periods]
 
     def _container_for_loading(self):
-        """Initial h array filled with zeros.
+        """Initial loading array filled with zeros.
 
         The array has the form [nupdates, nfac]. Most entries
         are zero, but if the factor loading of factor f in update equation
@@ -118,14 +119,12 @@ class SkillModel:
     def _slice_for_meas_sd(self):
         return self._get_slice_from_loc("meas_sd")
 
-    def _container_for_shock_variance(self):
+    def _container_for_shock_sd(self):
         """Initial Q array filled with zeros."""
         return np.zeros((self.nperiods - 1, self.nfac, self.nfac))
 
-    def _slice_for_shock_variance(self):
-        return [
-            self._get_slice_from_loc(("shock_variance", t)) for t in self.periods[:-1]
-        ]
+    def _slice_for_shock_sd(self):
+        return [self._get_slice_from_loc(("shock_sd", t)) for t in self.periods[:-1]]
 
     def _container_for_initial_mean(self):
         """Initial X_zero array filled with zeros."""
@@ -250,7 +249,7 @@ class SkillModel:
                 free["value"] = 0.0
                 free.loc["loading", "value"] = 1.0
                 free.loc["meas_sd", "value"] = 1.0
-                free.loc["shock_variance", "value"] = 1.0
+                free.loc["shock_sd", "value"] = 1.0
                 free.loc["trans", "value"] = 1 / self.nfac
                 free.loc["mixture_weight", "value"] = 1 / self.nmixtures
                 for emf in range(self.nmixtures):
@@ -346,7 +345,7 @@ class SkillModel:
                     initial_quantities["like_contributions"][k],
                     self.y_data[k],
                     self.c_data[t],
-                    initial_quantities["delta"][t][j],
+                    initial_quantities["control_coeffs"][t][j],
                     initial_quantities["loading"][k],
                     initial_quantities["meas_sd"][k : k + 1],
                     np.arange(self.nfac)[position_helper[k]],
@@ -391,7 +390,7 @@ class SkillModel:
         p_args["sigma_points"] = initial_quantities["sigma_points"]
         p_args["flat_sigma_points"] = initial_quantities["flat_sigma_points"]
         p_args["s_weights_m"], p_args["s_weights_c"] = self.sigma_weights()
-        p_args["shock_variance"] = initial_quantities["shock_variance"]
+        p_args["shock_sd"] = initial_quantities["shock_sd"]
         p_args["transform_sigma_points_args"] = self._transform_sigma_points_args_dict(
             initial_quantities
         )
@@ -464,15 +463,13 @@ class SkillModel:
             columns=self.factors,
             index=self.update_info.index,
         )
-        deltas = initial_quantities["delta"]
+        control_coeffs = initial_quantities["control_coeffs"]
         transition_names = self.transition_names
         transition_argument_dicts = self._transition_equation_args_dicts(
             initial_quantities
         )
 
-        shock_variances = np.diagonal(
-            initial_quantities["shock_variance"], axis1=1, axis2=2
-        )
+        shock_sd = np.diagonal(initial_quantities["shock_sd"], axis1=1, axis2=2)
 
         meas_variances = pd.Series(
             data=initial_quantities["meas_sd"], index=self.update_info.index
@@ -507,9 +504,9 @@ class SkillModel:
             nper=self.nperiods,
             transition_names=transition_names,
             transition_argument_dicts=transition_argument_dicts,
-            shock_variances=shock_variances,
+            shock_sd=shock_sd,
             loadings_df=loadings_df,
-            deltas=deltas,
+            control_coeffs=control_coeffs,
             meas_variances=meas_variances,
             dist_name=dist_name,
             dist_arg_dict=dist_arg_dict,

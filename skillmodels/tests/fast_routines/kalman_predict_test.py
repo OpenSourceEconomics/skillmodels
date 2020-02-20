@@ -41,7 +41,7 @@ def setup_linear_predict():
         ]
     )
 
-    out["shocks_sds"] = np.array([1.2, 0.3, 0.2])
+    out["shock_sd"] = np.array([1.2, 0.3, 0.2])
 
     out["transition_matrix"] = np.array([[0.2, 1, 2], [0.5, 0.9, 0.7], [0.2, 0.4, 0.4]])
 
@@ -82,7 +82,7 @@ def expected_linear_predict():
 def test_sqrt_predict_states(setup_linear_predict, expected_linear_predict):
     d = setup_linear_predict
     calc_pred_state, calc_pred_cov = kf.sqrt_linear_predict(
-        d["state"], d["root_cov"], d["shocks_sds"], d["transition_matrix"]
+        d["state"], d["root_cov"], d["shock_sd"], d["transition_matrix"]
     )
     aaae(calc_pred_state, expected_linear_predict["predicted_states"])
 
@@ -90,7 +90,7 @@ def test_sqrt_predict_states(setup_linear_predict, expected_linear_predict):
 def test_sqrt_predict_root_covs(setup_linear_predict, expected_linear_predict):
     d = setup_linear_predict
     calc_pred_state, calc_pred_root_cov = kf.sqrt_linear_predict(
-        d["state"], d["root_cov"], d["shocks_sds"], d["transition_matrix"]
+        d["state"], d["root_cov"], d["shock_sd"], d["transition_matrix"]
     )
     calc_cov = np.matmul(
         calc_pred_root_cov, np.transpose(calc_pred_root_cov, axes=(0, 2, 1))
@@ -242,7 +242,7 @@ def test_sqrt_unscented_predict_focus_on_covs(setup_unscented_predict, mocker):
     aaae(d["out_covs"], d["exp_cholcovs"])
 
 
-shocks_sd = np.array(
+shock_sd = np.array(
     [
         [[1.2, 0.3, 0.2]],
         [[0.1, 0.9, 0.2]],
@@ -264,7 +264,7 @@ def unpack_predict_fixture(fixture):
     args = (
         np.array(fixture["state"]).reshape(1, nfac),
         np.array(fixture["state_cov"]).reshape(1, nfac, nfac),
-        np.array(fixture["shock_sds"]),
+        np.array(fixture["shock_sd"]),
         np.array(fixture["transition_matrix"]),
     )
     exp_state = np.array(fixture["expected_post_means"])

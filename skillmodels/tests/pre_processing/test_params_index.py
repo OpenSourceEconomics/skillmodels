@@ -1,36 +1,36 @@
 import pandas as pd
 
-from skillmodels.pre_processing.params_index import _delta_index_tuples
+from skillmodels.pre_processing.params_index import _control_coeffs_index_tuples
 from skillmodels.pre_processing.params_index import _initial_cov_index_tuples
 from skillmodels.pre_processing.params_index import _initial_mean_index_tuples
 from skillmodels.pre_processing.params_index import _loading_index_tuples
 from skillmodels.pre_processing.params_index import _meas_sd_index_tuples
 from skillmodels.pre_processing.params_index import _mixture_weight_index_tuples
-from skillmodels.pre_processing.params_index import _shock_variance_index_tuples
+from skillmodels.pre_processing.params_index import _shock_sd_index_tuples
 from skillmodels.pre_processing.params_index import _trans_coeffs_index_tuples
 
 
-def test_delta_index_tuples():
+def test_control_coeffs_index_tuples():
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
     uinfo = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_tups))
     controls = [["c1"], ["c1", "c2"]]
 
     expected = [
-        ("delta", 0, "m1", "constant"),
-        ("delta", 0, "m1", "c1"),
-        ("delta", 0, "m2", "constant"),
-        ("delta", 0, "m2", "c1"),
-        ("delta", 0, "bla", "constant"),
-        ("delta", 0, "bla", "c1"),
-        ("delta", 1, "m1", "constant"),
-        ("delta", 1, "m1", "c1"),
-        ("delta", 1, "m1", "c2"),
-        ("delta", 1, "m2", "constant"),
-        ("delta", 1, "m2", "c1"),
-        ("delta", 1, "m2", "c2"),
+        ("control_coeffs", 0, "m1", "constant"),
+        ("control_coeffs", 0, "m1", "c1"),
+        ("control_coeffs", 0, "m2", "constant"),
+        ("control_coeffs", 0, "m2", "c1"),
+        ("control_coeffs", 0, "bla", "constant"),
+        ("control_coeffs", 0, "bla", "c1"),
+        ("control_coeffs", 1, "m1", "constant"),
+        ("control_coeffs", 1, "m1", "c1"),
+        ("control_coeffs", 1, "m1", "c2"),
+        ("control_coeffs", 1, "m2", "constant"),
+        ("control_coeffs", 1, "m2", "c1"),
+        ("control_coeffs", 1, "m2", "c2"),
     ]
 
-    calculated = _delta_index_tuples(controls, uinfo)
+    calculated = _control_coeffs_index_tuples(controls, uinfo)
     assert calculated == expected
 
 
@@ -71,18 +71,18 @@ def test_meas_sd_index_tuples():
     assert calculated == expected
 
 
-def test_shock_variance_index_tuples():
+def test_shock_sd_index_tuples():
     periods = [0, 1, 2]
     factors = ["fac1", "fac2"]
 
     expected = [
-        ("shock_variance", 0, "fac1", "-"),
-        ("shock_variance", 0, "fac2", "-"),
-        ("shock_variance", 1, "fac1", "-"),
-        ("shock_variance", 1, "fac2", "-"),
+        ("shock_sd", 0, "fac1", "-"),
+        ("shock_sd", 0, "fac2", "-"),
+        ("shock_sd", 1, "fac1", "-"),
+        ("shock_sd", 1, "fac2", "-"),
     ]
 
-    calculated = _shock_variance_index_tuples(periods, factors)
+    calculated = _shock_sd_index_tuples(periods, factors)
     assert calculated == expected
 
 

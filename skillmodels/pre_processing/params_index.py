@@ -31,10 +31,10 @@ def params_index(
 
     periods = list(range(len(controls)))
 
-    ind_tups = _delta_index_tuples(controls, update_info)
+    ind_tups = _control_coeffs_index_tuples(controls, update_info)
     ind_tups += _loading_index_tuples(factors, update_info)
     ind_tups += _meas_sd_index_tuples(update_info)
-    ind_tups += _shock_variance_index_tuples(periods, factors)
+    ind_tups += _shock_sd_index_tuples(periods, factors)
     ind_tups += _initial_mean_index_tuples(nmixtures, factors)
     ind_tups += _mixture_weight_index_tuples(nmixtures)
     ind_tups += _initial_cov_index_tuples(nmixtures, factors)
@@ -48,8 +48,8 @@ def params_index(
     return index
 
 
-def _delta_index_tuples(controls, update_info):
-    """Index tuples for delta.
+def _control_coeffs_index_tuples(controls, update_info):
+    """Index tuples for control coeffs.
 
     Args:
         update_info (DataFrame): DataFrame with one row per update. It has aMultiIndex
@@ -61,7 +61,7 @@ def _delta_index_tuples(controls, update_info):
     ind_tups = []
     for period, meas in update_info.index:
         for cont in ["constant"] + list(controls[period]):
-            ind_tups.append(("delta", period, meas, cont))
+            ind_tups.append(("control_coeffs", period, meas, cont))
     return ind_tups
 
 
@@ -101,8 +101,8 @@ def _meas_sd_index_tuples(update_info):
     return ind_tups
 
 
-def _shock_variance_index_tuples(periods, factors):
-    """Index tuples for shock_variance.
+def _shock_sd_index_tuples(periods, factors):
+    """Index tuples for shock_sd.
 
     Args:
         periods (list): The periods of the model.
@@ -115,7 +115,7 @@ def _shock_variance_index_tuples(periods, factors):
     ind_tups = []
     for period in periods[:-1]:
         for factor in factors:
-            ind_tups.append(("shock_variance", period, factor, "-"))
+            ind_tups.append(("shock_sd", period, factor, "-"))
     return ind_tups
 
 

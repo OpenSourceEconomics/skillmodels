@@ -65,7 +65,7 @@ general latent factor model:
        (transition equations)
     #. What are the measurement variables of each factor in each period and how are
        measurements and factors related? (measurement equations)
-    #. What are the normalizations of scale (normalized factor loadings or variances)
+    #. What are the normalizations of scale (normalized factor loadings)
        and location (normalized intercepts or means)?
     #. What are the control variables in each period?
     #. If development stages are used: Which periods belong to which stage?
@@ -97,19 +97,17 @@ but have currently no plans to support arbitrary nonlinear measurement
 systems.
 
 The value that corresponds to the ``normalizations`` key is a dictionary in
-which the normalizations for factor loadings, intercepts and measurement
-variances are specified. Its values (for each type of normalization) are lists
-of dictionaries. There is one dictionary for each period. Its keys are the
-names of the measurements whose factor loading are normalized. The values are
-the number the loading is normalized to. For loadings it is typical to
-normalize to one, but any non-zero value is ok. Intercepts are typically
-normalized to zero, but any value is ok. Variances have to be normalized to a
-positive number.
+which the normalizations for factor loadings and intercepts are specified.
+Its values (for each type of normalization) are lists of dictionaries. There
+is one dictionary for each period. Its keys are the names of the measurements
+whose factor loading are normalized. The values are the number the loading is
+normalized to. For loadings it is typical to normalize to one, but any non-zero
+value is ok. Intercepts are typically normalized to zero, but any value is ok.
 
 The example model has no normalizations on intercepts and this is ok due to
 the known location and scale of the CES production function. The same result
 would have obtained if one had simply omitted 'intercepts' in the
-normalization dictionary (as was the case for normalized variances).
+normalization dictionary.
 
 The model shown below deliberately uses too many normalizations in order to
 make the results comparable with the parameters from the CHS replication
@@ -195,8 +193,8 @@ the ones from the model dictionary have precedence. The specifications are:
     * ``sigma_points_scale``: scaling parameter for the sigma_points. Default 2.
     * ``robust_bounds``: takes the values true or false (default) and refers to the
       bounds on parameters during the maximization of the likelihood function.
-      If true the lower bound for estimated variances is not set to zero but to
-      ``bounds_distance``. This improves the stability of the estimator.
+      If true the lower bound for estimated standard deviations is not set to
+      zero but to ``bounds_distance``. This improves the stability of the estimator.
     * ``bounds_distance``: a small number. Default 1e-6
     * ``ignore_intercept_in_linear_anchoring``: takes the values true (default) and
       false. Often the results remain interpretable if the intercept of the
@@ -278,4 +276,3 @@ could be used with both estimators. See section 6.1.2 of their `paper`_.
 
 .. _replication files:
     https://tinyurl.com/yyuq2sa4
-
