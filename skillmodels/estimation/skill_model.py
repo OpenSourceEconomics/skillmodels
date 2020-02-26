@@ -758,7 +758,9 @@ class SkillModel:
         variables = [col for col in df.columns if col != group]
         try:
             grid = sns.pairplot(data=df, vars=variables, hue=group, **kwargs)
-        except RuntimeError:
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception:
             warnings.warn(
                 f"""The kde plots could not be generated for
                 factor {factors} in period {periods}"""
@@ -814,7 +816,9 @@ class SkillModel:
         variables = [col for col in df.columns if col != group]
         try:
             grid = sns.pairplot(data=df, hue=group, vars=variables, **kwargs)
-        except RuntimeError:
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception:
             warnings.warn(
                 f"The score kde plots could not be generated for preiod {periods}"
             )
