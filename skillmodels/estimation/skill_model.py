@@ -759,7 +759,11 @@ class SkillModel:
         try:
             grid = sns.pairplot(data=df, vars=variables, hue=group, **kwargs)
         except RuntimeError:
-            warnings.warn("The kde plots could not be generated")
+            warnings.warn(
+                f"""The kde plots could not be generated for
+                factor {factors} in period {periods}"""
+            )
+            grid = plt.figure()
         base_title = "Joint Distribution of Measurements"
         title = title_text(base_title, periods=periods, factors=factors)
 
@@ -811,7 +815,10 @@ class SkillModel:
         try:
             grid = sns.pairplot(data=df, hue=group, vars=variables, **kwargs)
         except RuntimeError:
-            warnings.warn("The kde plots could not be generated")
+            warnings.warn(
+                f"The score kde plots could not be generated for preiod {periods}"
+            )
+            grid = plt.figure()
         base_title = "Joint Distribution of Factor Scores"
         title = title_text(base_title, periods=periods, factors=factors)
 

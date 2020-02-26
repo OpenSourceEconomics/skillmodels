@@ -325,7 +325,7 @@ def _check_and_fill_normalization_specification(model_specs):
             norminfo = model_specs["_facinf"][factor]["normalizations"]
             if not set(norminfo).issubset(norm_types):
                 raise ValueError(
-                    "Normalization can be provided only " "for loadings  and intercepts"
+                    "Normalization can be provided only for loadings  and intercepts"
                 )
             for norm_type in norm_types:
                 if norm_type in norminfo:
