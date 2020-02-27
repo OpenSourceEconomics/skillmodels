@@ -762,7 +762,7 @@ class SkillModel:
             raise
         except Exception:
             warnings.warn(
-                f"""The kde plots could not be generated for
+                f"""The measurement kde plots could not be generated for
                 factor {factors} in period {periods}"""
             )
             grid = plt.figure()
