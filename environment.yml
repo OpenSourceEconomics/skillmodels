@@ -21,7 +21,7 @@ dependencies:
   - pytest-xdist
   - restructuredtext_lint
   - tox-conda
-  - scipy
+  - scipy <= 1.2.1
   - seaborn
   - sphinxcontrib-bibtex
   - sphinx_rtd_theme
