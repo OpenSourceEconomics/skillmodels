@@ -756,9 +756,16 @@ class SkillModel:
         kwargs.update(pair_kws)
 
         variables = [col for col in df.columns if col != group]
-
-        grid = sns.pairplot(data=df, vars=variables, hue=group, **kwargs)
-
+        try:
+            grid = sns.pairplot(data=df, vars=variables, hue=group, **kwargs)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception:
+            warnings.warn(
+                f"""The measurement kde plots could not be generated for
+                factor {factors} in period {periods}"""
+            )
+            grid = plt.figure()
         base_title = "Joint Distribution of Measurements"
         title = title_text(base_title, periods=periods, factors=factors)
 
@@ -807,9 +814,15 @@ class SkillModel:
         kwargs.update(pair_kws)
 
         variables = [col for col in df.columns if col != group]
-
-        grid = sns.pairplot(data=df, hue=group, vars=variables, **kwargs)
-
+        try:
+            grid = sns.pairplot(data=df, hue=group, vars=variables, **kwargs)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception:
+            warnings.warn(
+                f"The score kde plots could not be generated for preiod {periods}"
+            )
+            grid = plt.figure()
         base_title = "Joint Distribution of Factor Scores"
         title = title_text(base_title, periods=periods, factors=factors)
 
