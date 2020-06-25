@@ -264,7 +264,7 @@ def _transform_sigma_points(
         0
     ].reshape(n_obs, 1, 1, n_states)
 
-    transformed_anchored = anchored.copy()
+    transformed_anchored = anchored
     for i, ((name, func), coeffs) in enumerate(zip(transition_functions, trans_coeffs)):
         if name != "constant":
             output = func(anchored, coeffs)
