@@ -11,8 +11,8 @@ from skillmodels.estimation.likelihood_function import log_likelihood_contributi
 
 model_names = [
     # "test_model_no_stages_anchoring",
-    "test_model_one_stage",
-    # "test_model_one_stage_anchoring",
+    # "test_model_one_stage",
+    "test_model_one_stage_anchoring",
     # "test_model_two_stages_anchoring",
 ]
 

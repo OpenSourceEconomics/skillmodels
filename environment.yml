@@ -4,6 +4,7 @@ channels:
   - opensourceeconomics
 dependencies:
   - python=3.7
+  - jax
   - pip
   - conda-build
   - doc8
@@ -29,5 +30,7 @@ dependencies:
   - anaconda-client
   - nbsphinx
   - pdbpp
+  - filterpy
   - pip:
     - pre-commit
+    - black
