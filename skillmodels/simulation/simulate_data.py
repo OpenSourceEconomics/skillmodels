@@ -89,8 +89,8 @@ def simulate_datasets(
             The list has length nper.
         transition_names (list): list of strings with the names of the transition
            function of each factor.
-        transition_argument_dicts (list): list lists of dictionaries. Each sublsit has
-            length nfac with and contanis the arguments for the transition function of
+        transition_argument_dicts (list): list of lists of dictionaries. Each sublsit has
+            length nfac with and contains the arguments for the transition function of
             each factor. There is one sublist for each period.
         shock_sd (np.ndarra): numpy array of size (nper, nfac) with the shock
             standard deviations in each period.

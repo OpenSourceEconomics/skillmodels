@@ -79,7 +79,7 @@ def set_up_npfac():
 def expected_npfac():
     # The values have been computed by using the functions from the module transition_
     # functions.py since the main calculations are made through those functions,
-    # what the test actualy tests is whether the loops of getatr in #
+    # what the test actually tests is whether the loops of getatr in #
     # simlated_next_period_factors work correctly
     d = {}
     d["tl"] = np.array([[0.145, 0.42]])
