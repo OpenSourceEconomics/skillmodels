@@ -6,6 +6,7 @@ from numpy.random import choice
 from numpy.random import multivariate_normal
 
 import skillmodels.transition_functions_jax as tf
+from skillmodels import elliptical_functions_jax
 from skillmodels.parse_params_jax import parse_params
 
 
@@ -146,17 +147,15 @@ def _simulate_datasets(
         data=pardict["controls"], index=update_info.index, columns=labels["controls"]
     )
     meas_sds = pd.DataFrame(
-        data=pardict["meas_sds"].reshape(-1, 1), index=update_info.index,
+        data=pardict["meas_sds"].reshape(-1, 1), index=update_info.index
     )
     transition_names = labels["transition_names"]
     transition_params = pardict["transition"]
     shock_sds = pardict["shock_sds"]
 
     states_means = states[0]
-    initial_means = np.concat(
-        states_means,
-        control_means.reshape(np.shape(states_means)[0], n_controls),
-        axis=1,
+    initial_means = np.column_stack(
+        [states_means, control_means.reshape(-1, n_controls - 1)]
     )
 
     if dist_name in ["_mv_student_t", "multivariate_normal"]:
@@ -178,17 +177,18 @@ def _simulate_datasets(
             )
 
         stat[t + 1] = next_period_states(
-            stat[t], transition_names, transition_params[t], shock_sds[t],
+            stat[t], transition_names, transition_params[t], shock_sds[t]
         )
     observed_data_by_period = []
+
     for t in range(n_periods):
         meas = pd.DataFrame(
-            data=measurements_from_factors(
+            data=measurements_from_states(
                 stat[t],
                 cont.to_numpy(),
                 loadings_df.loc[t].to_numpy(),
                 control_params_df.loc[t].to_numpy(),
-                meas_sds.loc[t].to_numpy(),
+                meas_sds.loc[t].to_numpy().flatten(),
             ),
             columns=loadings_df.loc[t].index,
         )
@@ -257,13 +257,17 @@ def generate_start_state_and_control_variables_elliptical(
     n_states = dims["n_states"]
     n_controls = dims["n_controls"]
     if np.size(weights) == 1:
-        out = getattr(ef, dist_name)(size=n_obs, **dist_arg_dict[0])
+        out = getattr(elliptical_functions_jax, dist_name)(
+            size=n_obs, **dist_arg_dict[0]
+        )
     else:
         helper_array = choice(np.arange(len(weights)), p=weights, size=n_obs)
         out = np.zeros((n_obs, n_states + n_controls - 1))
         for i in range(n_obs):
-            out[i] = getattr(ef, dist_name)(**dist_arg_dict[helper_array[i]])
-    intial_states = out[:, 0:n_states]
+            out[i] = getattr(elliptical_functions_jax, dist_name)(
+                **dist_arg_dict[helper_array[i]]
+            )
+    initial_states = out[:, 0:n_states]
     controls = out[:, n_states:]
     controls = np.hstack([np.ones((n_obs, 1)), controls])
 
@@ -310,7 +314,8 @@ def measurements_from_states(states, controls, loadings, control_params, sds):
 
     Args:
         states (pd.DataFrame or np.ndarray): DataFrame of shape (n_obs, n_states)
-        controls (pd.DataFrame or np.ndarray): DataFrame of shape (n_obs, n_controlsrols)
+        controls (pd.DataFrame or np.ndarray): DataFrame of shape
+            (n_obs, n_controlsrols)
         loadings (np.ndarray): numpy array of size (n_meas, n_states)
         control_coeffs (np.ndarray): numpy array of size (n_meas, n_states)
         sds (np.ndarray): numpy array of size (n_meas) with the standard deviations
