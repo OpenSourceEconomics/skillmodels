@@ -95,7 +95,7 @@ def test_generate_anchoring_variables_array():
     df["q1"] = [5, 6]
 
     labels = {"periods": [0], "factors": ["fac1", "fac2"]}
-    anchoring_info = {"factors": ["fac1"], "outcome": "q1"}
+    anchoring_info = {"factors": ["fac1"], "outcome": "q1", "center": True}
 
     expected = jnp.array([[[5, 0], [6, 0]]])
     calculated = _generate_anchoring_variables_array(df, labels, anchoring_info, 2)
