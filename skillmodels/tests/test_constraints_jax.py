@@ -15,10 +15,10 @@ from skillmodels.constraints_jax import add_bounds
 
 
 def test_add_bounds():
-    ind_tups = [("shock_sd", i) for i in range(5)] + [
-        ("meas_sd", 4),
+    ind_tups = [("shock_sds", i) for i in range(5)] + [
+        ("meas_sds", 4),
         ("bla", "blubb"),
-        ("meas_sd", "foo"),
+        ("meas_sds", "foo"),
     ]
     df = pd.DataFrame(
         index=pd.MultiIndex.from_tuples(ind_tups),
@@ -47,11 +47,11 @@ def test_normalization_constraints():
     }
 
     expected = [
-        {"loc": ("loading", 0, "m1", "fac1"), "type": "fixed", "value": 2},
-        {"loc": ("loading", 0, "m2", "fac1"), "type": "fixed", "value": 1.5},
-        {"loc": ("loading", 1, "m1", "fac1"), "type": "fixed", "value": 3},
-        {"loc": ("control_coeffs", 0, "m1", "constant"), "type": "fixed", "value": 0.5},
-        {"loc": ("loading", 0, "m3", "fac2"), "type": "fixed", "value": 1},
+        {"loc": ("loadings", 0, "m1", "fac1"), "type": "fixed", "value": 2},
+        {"loc": ("loadings", 0, "m2", "fac1"), "type": "fixed", "value": 1.5},
+        {"loc": ("loadings", 1, "m1", "fac1"), "type": "fixed", "value": 3},
+        {"loc": ("controls", 0, "m1", "constant"), "type": "fixed", "value": 0.5},
+        {"loc": ("loadings", 0, "m3", "fac2"), "type": "fixed", "value": 1},
     ]
 
     calculated = _normalization_constraints(norm)
@@ -78,10 +78,10 @@ def test_not_measured_constraints():
     expected = [
         {
             "loc": [
-                ("loading", 0, "m1", "fac2"),
-                ("loading", 0, "m3", "fac1"),
-                ("loading", 1, "m1", "fac2"),
-                ("loading", 1, "m3", "fac1"),
+                ("loadings", 0, "m1", "fac2"),
+                ("loadings", 0, "m3", "fac1"),
+                ("loadings", 1, "m1", "fac2"),
+                ("loadings", 1, "m3", "fac1"),
             ],
             "type": "fixed",
             "value": 0.0,
@@ -101,18 +101,18 @@ def test_not_measured_constraints():
 
 
 def test_mixture_weight_constraints_mixture():
-    calculated = _mixture_weight_constraints(nmixtures=2)
+    calculated = _mixture_weight_constraints(n_mixtures=2)
     for c in calculated:
         del c["description"]
-    expected = [{"loc": "mixture_weight", "type": "probability"}]
+    expected = [{"loc": "mixture_weights", "type": "probability"}]
     assert_list_equal_except_for_order(calculated, expected)
 
 
 def test_mixture_weight_constraints_normal():
-    calculated = _mixture_weight_constraints(nmixtures=1)
+    calculated = _mixture_weight_constraints(n_mixtures=1)
     for c in calculated:
         del c["description"]
-    expected = [{"loc": "mixture_weight", "type": "fixed", "value": 1.0}]
+    expected = [{"loc": "mixture_weights", "type": "fixed", "value": 1.0}]
     assert_list_equal_except_for_order(calculated, expected)
 
 
@@ -127,11 +127,11 @@ def test_stage_constraints():
 
     expected = [
         {
-            "locs": [("trans", 0), ("trans", 1), ("trans", 2)],
+            "locs": [("transition", 0), ("transition", 1), ("transition", 2)],
             "type": "pairwise_equality",
         },
         {
-            "locs": [("shock_sd", 0), ("shock_sd", 1), ("shock_sd", 2)],
+            "locs": [("shock_sds", 0), ("shock_sds", 1), ("shock_sds", 2)],
             "type": "pairwise_equality",
         },
     ]
@@ -155,8 +155,8 @@ def test_constant_factor_constraints():
     }
 
     expected = [
-        {"loc": ("shock_sd", 0, "fac2", "-"), "type": "fixed", "value": 0.0},
-        {"loc": ("shock_sd", 1, "fac2", "-"), "type": "fixed", "value": 0.0},
+        {"loc": ("shock_sds", 0, "fac2", "-"), "type": "fixed", "value": 0.0},
+        {"loc": ("shock_sds", 1, "fac2", "-"), "type": "fixed", "value": 0.0},
     ]
 
     calculated = _constant_factors_constraints(labels)
@@ -174,9 +174,9 @@ def test_initial_mean_constraints():
     nmixtures = 3
     factors = ["fac1", "fac2", "fac3"]
     ind_tups = [
-        ("initial_mean", 0, "mixture_0", "fac1"),
-        ("initial_mean", 0, "mixture_1", "fac1"),
-        ("initial_mean", 0, "mixture_2", "fac1"),
+        ("initial_states", 0, "mixture_0", "fac1"),
+        ("initial_states", 0, "mixture_1", "fac1"),
+        ("initial_states", 0, "mixture_2", "fac1"),
     ]
 
     expected = [{"loc": ind_tups, "type": "increasing"}]
@@ -202,17 +202,17 @@ def test_trans_coeff_constraints():
     expected = [
         {
             "loc": [
-                ("trans", 0, "fac1", "fac1"),
-                ("trans", 0, "fac1", "fac2"),
-                ("trans", 0, "fac1", "fac3"),
+                ("transition", 0, "fac1", "fac1"),
+                ("transition", 0, "fac1", "fac2"),
+                ("transition", 0, "fac1", "fac3"),
             ],
             "type": "probability",
         },
         {
             "loc": [
-                ("trans", 1, "fac1", "fac1"),
-                ("trans", 1, "fac1", "fac2"),
-                ("trans", 1, "fac1", "fac3"),
+                ("transition", 1, "fac1", "fac1"),
+                ("transition", 1, "fac1", "fac2"),
+                ("transition", 1, "fac1", "fac3"),
             ],
             "type": "probability",
         },
@@ -266,26 +266,10 @@ def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
     calculated = _anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
 
     expected = [
-        {
-            "loc": ("control_coeffs", 0, "outcome_f1", "constant"),
-            "type": "fixed",
-            "value": 0,
-        },
-        {
-            "loc": ("control_coeffs", 0, "outcome_f2", "constant"),
-            "type": "fixed",
-            "value": 0,
-        },
-        {
-            "loc": ("control_coeffs", 1, "outcome_f1", "constant"),
-            "type": "fixed",
-            "value": 0,
-        },
-        {
-            "loc": ("control_coeffs", 1, "outcome_f2", "constant"),
-            "type": "fixed",
-            "value": 0,
-        },
+        {"loc": ("controls", 0, "outcome_f1", "constant"), "type": "fixed", "value": 0},
+        {"loc": ("controls", 0, "outcome_f2", "constant"), "type": "fixed", "value": 0},
+        {"loc": ("controls", 1, "outcome_f1", "constant"), "type": "fixed", "value": 0},
+        {"loc": ("controls", 1, "outcome_f2", "constant"), "type": "fixed", "value": 0},
     ]
 
     assert calculated == expected
@@ -300,32 +284,32 @@ def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
     expected = [
         {
             "loc": [
-                ("control_coeffs", 0, "outcome_f1", "c1"),
-                ("control_coeffs", 0, "outcome_f1", "c2"),
+                ("controls", 0, "outcome_f1", "c1"),
+                ("controls", 0, "outcome_f1", "c2"),
             ],
             "type": "fixed",
             "value": 0,
         },
         {
             "loc": [
-                ("control_coeffs", 0, "outcome_f2", "c1"),
-                ("control_coeffs", 0, "outcome_f2", "c2"),
+                ("controls", 0, "outcome_f2", "c1"),
+                ("controls", 0, "outcome_f2", "c2"),
             ],
             "type": "fixed",
             "value": 0,
         },
         {
             "loc": [
-                ("control_coeffs", 1, "outcome_f1", "c1"),
-                ("control_coeffs", 1, "outcome_f1", "c2"),
+                ("controls", 1, "outcome_f1", "c1"),
+                ("controls", 1, "outcome_f1", "c2"),
             ],
             "type": "fixed",
             "value": 0,
         },
         {
             "loc": [
-                ("control_coeffs", 1, "outcome_f2", "c1"),
-                ("control_coeffs", 1, "outcome_f2", "c2"),
+                ("controls", 1, "outcome_f2", "c1"),
+                ("controls", 1, "outcome_f2", "c2"),
             ],
             "type": "fixed",
             "value": 0,
@@ -342,16 +326,16 @@ def test_anchoring_constraints_for_loadings(anch_uinfo, base_anchoring_info):
     expected = [
         {
             "loc": [
-                ("loading", 0, "outcome_f1", "f1"),
-                ("loading", 0, "outcome_f2", "f2"),
+                ("loadings", 0, "outcome_f1", "f1"),
+                ("loadings", 0, "outcome_f2", "f2"),
             ],
             "type": "fixed",
             "value": 1,
         },
         {
             "loc": [
-                ("loading", 1, "outcome_f1", "f1"),
-                ("loading", 1, "outcome_f2", "f2"),
+                ("loadings", 1, "outcome_f1", "f1"),
+                ("loadings", 1, "outcome_f2", "f2"),
             ],
             "type": "fixed",
             "value": 1,

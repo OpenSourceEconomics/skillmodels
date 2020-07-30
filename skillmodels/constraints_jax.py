@@ -57,8 +57,8 @@ def add_bounds(params_df, bounds_distance=0.0):
     df = params_df.copy()
     if "lower" not in df.columns:
         df["lower"] = -np.inf
-    df.loc["meas_sd", "lower"] = bounds_distance
-    df.loc["shock_sd", "lower"] = bounds_distance
+    df.loc["meas_sds", "lower"] = bounds_distance
+    df.loc["shock_sds", "lower"] = bounds_distance
     return df
 
 
@@ -85,7 +85,7 @@ def _normalization_constraints(normalizations):
             for meas, normval in loading_norminfo.items():
                 constraints.append(
                     {
-                        "loc": ("loading", period, meas, factor),
+                        "loc": ("loadings", period, meas, factor),
                         "type": "fixed",
                         "value": normval,
                         "description": msg,
@@ -95,7 +95,7 @@ def _normalization_constraints(normalizations):
             for meas, normval in intercept_norminfo.items():
                 constraints.append(
                     {
-                        "loc": ("control_coeffs", period, meas, "constant"),
+                        "loc": ("controls", period, meas, "constant"),
                         "type": "fixed",
                         "value": normval,
                         "description": msg,
@@ -138,11 +138,16 @@ def _mixture_weight_constraints(n_mixtures):
     if n_mixtures == 1:
         msg = "Set the mixture weight to 1 if there is only one mixture element."
         return [
-            {"loc": "mixture_weight", "type": "fixed", "value": 1.0, "description": msg}
+            {
+                "loc": "mixture_weights",
+                "type": "fixed",
+                "value": 1.0,
+                "description": msg,
+            }
         ]
     else:
         msg = "Ensure that weights are between 0 and 1 and sum to 1."
-        return [{"loc": "mixture_weight", "type": "probability", "description": msg}]
+        return [{"loc": "mixture_weights", "type": "probability", "description": msg}]
 
 
 def _stage_constraints(stagemap, stages):
@@ -167,8 +172,8 @@ def _stage_constraints(stagemap, stages):
             stages_to_periods[stage].append(period)
 
     for stage in stages:
-        locs_trans = [("trans", p) for p in stages_to_periods[stage]]
-        locs_q = [("shock_sd", p) for p in stages_to_periods[stage]]
+        locs_trans = [("transition", p) for p in stages_to_periods[stage]]
+        locs_q = [("shock_sds", p) for p in stages_to_periods[stage]]
         constraints.append(
             {"locs": locs_trans, "type": "pairwise_equality", "description": msg}
         )
@@ -197,7 +202,7 @@ def _constant_factors_constraints(labels):
             for period in labels["periods"][:-1]:
                 constraints.append(
                     {
-                        "loc": ("shock_sd", period, factor, "-"),
+                        "loc": ("shock_sds", period, factor, "-"),
                         "type": "fixed",
                         "value": 0.0,
                         "description": msg,
@@ -226,7 +231,7 @@ def _initial_mean_constraints(n_mixtures, factors):
     )
 
     ind_tups = [
-        ("initial_mean", 0, f"mixture_{emf}", factors[0]) for emf in range(n_mixtures)
+        ("initial_states", 0, f"mixture_{emf}", factors[0]) for emf in range(n_mixtures)
     ]
     constr = [{"loc": ind_tups, "type": "increasing", "description": msg}]
 
@@ -279,14 +284,14 @@ def _anchoring_constraints(update_info, controls, anchoring_info, periods):
     constraints = []
     if not anchoring_info["use_constant"]:
         for period, meas in anchoring_updates:
-            ind_tup = ("control_coeffs", period, meas, "constant")
+            ind_tup = ("controls", period, meas, "constant")
             constraints.append({"loc": ind_tup, "type": "fixed", "value": 0})
 
     if not anchoring_info["use_controls"]:
         for period, meas in anchoring_updates:
             ind_tups = []
             for cont in controls:
-                ind_tups.append(("control_coeffs", period, meas, cont))
+                ind_tups.append(("controls", period, meas, cont))
             constraints.append({"loc": ind_tups, "type": "fixed", "value": 0})
 
     if not anchoring_info["free_loadings"]:
@@ -294,7 +299,7 @@ def _anchoring_constraints(update_info, controls, anchoring_info, periods):
             ind_tups = []
             for factor in anchoring_info["factors"]:
                 meas = f"{anch_outcome}_{factor}"
-                ind_tups.append(("loading", period, meas, factor))
+                ind_tups.append(("loadings", period, meas, factor))
 
             constraints.append({"loc": ind_tups, "type": "fixed", "value": 1})
 
