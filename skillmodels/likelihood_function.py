@@ -23,7 +23,7 @@ def get_optimization_functions(
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
-        dataset (DataFrame): datset in long format. see :ref:`basic_usage`.
+        dataset (DataFrame): datset in long format.
         aggregation (str): One of "sum" and "mean" and None. Default: "sum".
         additional_data (bool): If true, the likelihood function returns a tuple where
             the first element is the aggregated log likelihood and the second a

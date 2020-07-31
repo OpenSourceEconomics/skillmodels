@@ -6,7 +6,7 @@ dependencies:
   - python=3.7
   - skillmodels
   - sphinxcontrib-bibtex
-  - sphinx_rtd_theme
+  - pydata-sphinx-theme>=0.3
   - sphinx
   - nbsphinx
   - statsmodels

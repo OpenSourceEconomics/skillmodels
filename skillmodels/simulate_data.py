@@ -6,7 +6,7 @@ from numpy.random import choice
 from numpy.random import multivariate_normal
 
 import skillmodels.transition_functions as tf
-from skillmodels import elliptical_functions
+from skillmodels import elliptical_distributions
 from skillmodels.parse_params import parse_params
 
 
@@ -15,25 +15,22 @@ def add_missings(data, meas_names, p_b, p_r):
 
     nans are only added to measurements, not to control variables or factors.
 
-    The function does not modify data in place. (create a new one)
+    Note that p is NOT the marginal probability of a measurement being missing.
+    The marginal probability is given by: p_m = p/(1-serial_corr), where
+    serial_corr = (p_r-p_b) in general != 0, since p_r != p_b. This means that in
+    average the share of missing values (in the entire dataset) will be larger
+    than p. Thus, p and q should be set accordingly given the desired share
+    of missing values.
 
     Args:
         data (pd.DataFrame): contains the observable part of a simulated dataset
         meas_names (list): list of strings of names of each measurement variable
         p_b (float): probability of a measurement to become missing
         p_r (float): probability of a measurement to remain missing in the next period
+
     Returns:
         data_with_missings (pd.DataFrame): Dataset with a share of measurements
         replaced by np.nan values
-
-    Notes:
-        - Time_periods should be sorted for each individual
-        - p is NOT the marginal probability of a measurement being missing.
-          The marginal probability is given by: p_m = p/(1-serial_corr), where
-          serial_corr = (p_r-p_b) in general != 0, since p_r != p_b. This means that in
-          average the share of missing values (in the entire dataset) will be larger
-          than p. Thus, p and q should be set accordingly given the desired share
-          of missing values.
 
     """
     n_meas = len(meas_names)
@@ -69,19 +66,21 @@ def simulate_datasets(
 
     Args:
         labels (dict): Dict of lists with labels for the model quantities like
-            factors, periods, controls, stagemap and stages. See :ref:`labels`
+            factors, periods, controls, stagemap and stages. See :ref:`labels`.
         dims (dict): Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
-        n_obs (int): number of observations
+        n_obs (int): number of observations.
         params (jax.numpy.array): 1d array with model parameters
         parsing_info (dict): Dictionary with information on how the parameters
             have to be parsed.
         control_mean (array): 1d array with initial means of the control variables
         dist_name (string): the elliptical distribution to use in the mixture
-        dist_arg_dict (list): list of length nmixtures of dictionaries with the
+        dist_arg_dict (list): list of length n_mixtures of dictionaries with the
             relevant arguments of the mixture distributions. Arguments with default
             values should NOT be included in the dictionaries. Lengths of arrays in the
-            arguments should be in accordance with n_states + n_controls
+            arguments should be in accordance with n_states + n_controls.
+            the key names of dist_arg_dict can be looked up in the module
+            elliptical_distributions. For multivariate_normal it's mean and cov.
         policies (list): list of dictionaries. Each dictionary specifies a
             a stochastic shock to a latent factor AT THE END of "period" for "factor"
             with mean "effect_size" and "standard deviation"
@@ -89,10 +88,9 @@ def simulate_datasets(
     Returns:
         observed_data (pd.DataFrame): Dataset with measurements and control variables
             in long format
-        latent_data (pd.DataFrame): Dataset with lantent factors in long format
-    Notes:
-        - the key names of dist_arg_dict can be looked up in the module
-          _elliptical_functions. For multivariate_normal it's [mean, cov].
+
+        latent_data (pd.DataFrame): Dataset with latent factors in long format
+
     """
     states, _, log_weights, pardict = parse_params(
         params, parsing_info, dims, labels, n_obs
@@ -130,8 +128,10 @@ def _simulate_datasets(
 
     Args:
         See simulate_data
+
     Returns:
         See simulate_data
+
     """
     policies = policies if policies is not None else []
 
@@ -216,12 +216,15 @@ def _simulate_datasets(
 
 def _get_shock(mean, sd, size):
     """Add stochastic effect to a  factor of length n_obs.
+
     Args:
         mean (float): mean of the stochastic effect
         sd (float): standard deviation of the effect
         size (int): length of resulting array
+
     Returns:
         shock (np.array): 1d array of length n_obs with the stochastic shock
+
     """
     if sd == 0:
         shock = np.full(size, mean)
@@ -257,12 +260,14 @@ def generate_start_state_and_control_variables_elliptical(
     n_states = dims["n_states"]
     n_controls = dims["n_controls"]
     if np.size(weights) == 1:
-        out = getattr(elliptical_functions, dist_name)(size=n_obs, **dist_arg_dict[0])
+        out = getattr(elliptical_distributions, dist_name)(
+            size=n_obs, **dist_arg_dict[0]
+        )
     else:
         helper_array = choice(np.arange(len(weights)), p=weights, size=n_obs)
         out = np.zeros((n_obs, n_states + n_controls - 1))
         for i in range(n_obs):
-            out[i] = getattr(elliptical_functions, dist_name)(
+            out[i] = getattr(elliptical_distributions, dist_name)(
                 **dist_arg_dict[helper_array[i]]
             )
     initial_states = out[:, 0:n_states]
@@ -322,6 +327,7 @@ def measurements_from_states(states, controls, loadings, control_params, sds):
 
     Returns:
         measurements (np.ndarray): array of shape (n_obs, n_meas) with measurements.
+
     """
     n_meas = loadings.shape[0]
     n_obs, n_states = states.shape

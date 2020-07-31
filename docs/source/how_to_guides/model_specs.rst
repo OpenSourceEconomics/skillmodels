@@ -1,3 +1,4 @@
+
 .. _model_specs:
 
 ********************
@@ -124,7 +125,6 @@ equation. The transition equations already implemented are:
     * ``translog`` (non KLS version; a log-linear-in-parameters function including
       squares and interaction terms.
 
-To see how new types of transition equations can be added see :ref:`model_functions`.
 
 The specification for fac2 is very similar and not reproduced here. The
 specification for fac3 looks a bit different as this factor is only measured

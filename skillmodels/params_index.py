@@ -13,10 +13,11 @@ def params_index(update_info, labels, dims):
 
     Args:
         update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
-        in the likelihood function. See :ref:`update_info`.
+            in the likelihood function. See :ref:`update_info`.
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
-        options (dict): Tuning parameters for the estimation. See :ref:`options`.
+        options (dict): Tuning parameters for the estimation.
+            See :ref:`estimation_options`.
 
     Returns:
         params_index (pd.MultiIndex)

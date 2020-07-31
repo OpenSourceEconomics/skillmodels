@@ -19,7 +19,7 @@ dependencies:
   - scipy
   - seaborn
   - sphinxcontrib-bibtex
-  - sphinx_rtd_theme
+  - pydata-sphinx-theme>=0.3
   - anaconda-client
   - nbsphinx
   - pdbpp
