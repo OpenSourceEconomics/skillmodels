@@ -4,9 +4,9 @@ import pytest
 from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.transition_functions_jax import linear
-from skillmodels.transition_functions_jax import log_ces
-from skillmodels.transition_functions_jax import translog
+from skillmodels.transition_functions import linear
+from skillmodels.transition_functions import log_ces
+from skillmodels.transition_functions import translog
 
 config.update("jax_enable_x64", True)
 # ======================================================================================

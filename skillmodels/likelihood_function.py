@@ -4,14 +4,14 @@ import jax.numpy as jnp
 from jax.ops import index
 from jax.ops import index_update
 
-from skillmodels.kalman_filters_jax import calculate_sigma_scaling_factor_and_weights
-from skillmodels.kalman_filters_jax import kalman_predict
-from skillmodels.kalman_filters_jax import kalman_update
-from skillmodels.params_index_jax import params_index
-from skillmodels.parse_params_jax import create_parsing_info
-from skillmodels.parse_params_jax import parse_params
-from skillmodels.process_data_jax import process_data_for_estimation
-from skillmodels.process_model_jax import process_model
+from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
+from skillmodels.kalman_filters import kalman_predict
+from skillmodels.kalman_filters import kalman_update
+from skillmodels.params_index import params_index
+from skillmodels.parse_params import create_parsing_info
+from skillmodels.parse_params import parse_params
+from skillmodels.process_data import process_data_for_estimation
+from skillmodels.process_model import process_model
 
 
 def get_optimization_functions(

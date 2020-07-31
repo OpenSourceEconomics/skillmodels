@@ -1,8 +1,8 @@
 """Construct an estimagic constraints list for a model."""
 import numpy as np
 
-import skillmodels.transition_functions_jax as tf
-from skillmodels.params_index_jax import loading_index_tuples
+import skillmodels.transition_functions as tf
+from skillmodels.params_index import loading_index_tuples
 
 
 def constraints(dimensions, labels, anchoring_info, update_info, normalizations):

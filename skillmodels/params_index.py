@@ -1,6 +1,6 @@
 import pandas as pd
 
-import skillmodels.transition_functions_jax as tf
+import skillmodels.transition_functions as tf
 
 
 def params_index(update_info, labels, dims):

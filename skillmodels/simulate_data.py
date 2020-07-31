@@ -5,9 +5,9 @@ from numpy.random import binomial
 from numpy.random import choice
 from numpy.random import multivariate_normal
 
-import skillmodels.transition_functions_jax as tf
-from skillmodels import elliptical_functions_jax
-from skillmodels.parse_params_jax import parse_params
+import skillmodels.transition_functions as tf
+from skillmodels import elliptical_functions
+from skillmodels.parse_params import parse_params
 
 
 def add_missings(data, meas_names, p_b, p_r):
@@ -257,14 +257,12 @@ def generate_start_state_and_control_variables_elliptical(
     n_states = dims["n_states"]
     n_controls = dims["n_controls"]
     if np.size(weights) == 1:
-        out = getattr(elliptical_functions_jax, dist_name)(
-            size=n_obs, **dist_arg_dict[0]
-        )
+        out = getattr(elliptical_functions, dist_name)(size=n_obs, **dist_arg_dict[0])
     else:
         helper_array = choice(np.arange(len(weights)), p=weights, size=n_obs)
         out = np.zeros((n_obs, n_states + n_controls - 1))
         for i in range(n_obs):
-            out[i] = getattr(elliptical_functions_jax, dist_name)(
+            out[i] = getattr(elliptical_functions, dist_name)(
                 **dist_arg_dict[helper_array[i]]
             )
     initial_states = out[:, 0:n_states]

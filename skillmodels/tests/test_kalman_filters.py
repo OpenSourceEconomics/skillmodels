@@ -7,11 +7,11 @@ from filterpy.kalman import KalmanFilter
 from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.kalman_filters_jax import _calculate_sigma_points
-from skillmodels.kalman_filters_jax import _transform_sigma_points
-from skillmodels.kalman_filters_jax import calculate_sigma_scaling_factor_and_weights
-from skillmodels.kalman_filters_jax import kalman_predict
-from skillmodels.kalman_filters_jax import kalman_update
+from skillmodels.kalman_filters import _calculate_sigma_points
+from skillmodels.kalman_filters import _transform_sigma_points
+from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
+from skillmodels.kalman_filters import kalman_predict
+from skillmodels.kalman_filters import kalman_update
 
 config.update("jax_enable_x64", True)
 

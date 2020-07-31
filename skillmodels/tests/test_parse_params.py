@@ -13,9 +13,9 @@ import pytest
 import yaml
 from numpy.testing import assert_array_equal as aae
 
-from skillmodels.parse_params_jax import create_parsing_info
-from skillmodels.parse_params_jax import parse_params
-from skillmodels.process_model_jax import process_model
+from skillmodels.parse_params import create_parsing_info
+from skillmodels.parse_params import parse_params
+from skillmodels.process_model import process_model
 
 
 @pytest.fixture

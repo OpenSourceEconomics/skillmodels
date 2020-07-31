@@ -7,11 +7,11 @@ import pandas as pd
 import pytest
 from numpy.testing import assert_array_equal as aae
 
-from skillmodels.process_data_jax import _generate_anchoring_variables_array
-from skillmodels.process_data_jax import _generate_controls_array
-from skillmodels.process_data_jax import _generate_measurements_array
-from skillmodels.process_data_jax import _handle_controls_with_missings
-from skillmodels.process_data_jax import _pre_process_data
+from skillmodels.process_data import _generate_anchoring_variables_array
+from skillmodels.process_data import _generate_controls_array
+from skillmodels.process_data import _generate_measurements_array
+from skillmodels.process_data import _handle_controls_with_missings
+from skillmodels.process_data import _pre_process_data
 
 
 def test_pre_process_data():

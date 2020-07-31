@@ -3,15 +3,15 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-from skillmodels.constraints_jax import _anchoring_constraints
-from skillmodels.constraints_jax import _constant_factors_constraints
-from skillmodels.constraints_jax import _initial_mean_constraints
-from skillmodels.constraints_jax import _mixture_weight_constraints
-from skillmodels.constraints_jax import _normalization_constraints
-from skillmodels.constraints_jax import _not_measured_constraints
-from skillmodels.constraints_jax import _stage_constraints
-from skillmodels.constraints_jax import _trans_coeff_constraints
-from skillmodels.constraints_jax import add_bounds
+from skillmodels.constraints import _anchoring_constraints
+from skillmodels.constraints import _constant_factors_constraints
+from skillmodels.constraints import _initial_mean_constraints
+from skillmodels.constraints import _mixture_weight_constraints
+from skillmodels.constraints import _normalization_constraints
+from skillmodels.constraints import _not_measured_constraints
+from skillmodels.constraints import _stage_constraints
+from skillmodels.constraints import _trans_coeff_constraints
+from skillmodels.constraints import add_bounds
 
 
 def test_add_bounds():

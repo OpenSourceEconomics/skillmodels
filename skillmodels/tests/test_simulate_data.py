@@ -5,7 +5,7 @@ import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 from pandas.testing import assert_frame_equal
 
-import skillmodels.simulate_data_jax as sd
+import skillmodels.simulate_data as sd
 
 
 # ===============================

@@ -4,16 +4,16 @@ import pandas as pd
 import pytest
 import yaml
 
-from skillmodels.params_index_jax import control_coeffs_index_tuples
-from skillmodels.params_index_jax import initial_cov_index_tuples
-from skillmodels.params_index_jax import initial_mean_index_tuples
-from skillmodels.params_index_jax import loading_index_tuples
-from skillmodels.params_index_jax import meas_sd_index_tuples
-from skillmodels.params_index_jax import mixture_weight_index_tuples
-from skillmodels.params_index_jax import params_index
-from skillmodels.params_index_jax import shock_sd_index_tuples
-from skillmodels.params_index_jax import trans_coeffs_index_tuples
-from skillmodels.process_model_jax import process_model
+from skillmodels.params_index import control_coeffs_index_tuples
+from skillmodels.params_index import initial_cov_index_tuples
+from skillmodels.params_index import initial_mean_index_tuples
+from skillmodels.params_index import loading_index_tuples
+from skillmodels.params_index import meas_sd_index_tuples
+from skillmodels.params_index import mixture_weight_index_tuples
+from skillmodels.params_index import params_index
+from skillmodels.params_index import shock_sd_index_tuples
+from skillmodels.params_index import trans_coeffs_index_tuples
+from skillmodels.process_model import process_model
 
 
 @pytest.fixture

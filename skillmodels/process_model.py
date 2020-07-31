@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
-import skillmodels.transition_functions_jax as tf
-from skillmodels.check_model_jax import check_model
+import skillmodels.transition_functions as tf
+from skillmodels.check_model import check_model
 
 
 def process_model(model_dict):

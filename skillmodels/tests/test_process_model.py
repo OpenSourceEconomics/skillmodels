@@ -5,7 +5,7 @@ import pytest
 import yaml
 from pandas.testing import assert_frame_equal
 
-from skillmodels.process_model_jax import process_model
+from skillmodels.process_model import process_model
 
 # ======================================================================================
 # Integration test with model2 from the replication files of CHS2010
