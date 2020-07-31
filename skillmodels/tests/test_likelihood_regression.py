@@ -34,10 +34,7 @@ def model2():
 def model2_data():
     test_dir = Path(__file__).parent.resolve()
     data = pd.read_stata(test_dir / "model2_simulated_data.dta")
-    data["period"] = data["period"].astype(int)
-    data["id"] = data["id"].astype(int)
-    data.loc[data["period"] != 7, "Q1"] = np.nan
-    data.set_index(["id", "period"], inplace=True)
+    data = data.set_index(["caseid", "period"])
     return data
 
 
