@@ -35,7 +35,7 @@ def parsed_parameters():
     labels = processed["labels"]
     dimensions = processed["dimensions"]
 
-    parsing_info = create_parsing_info(p_index, update_info, labels, dimensions)
+    parsing_info = create_parsing_info(p_index, update_info, labels)
 
     params_vec = jnp.arange(len(p_index))
     n_obs = 5

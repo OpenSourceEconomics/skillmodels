@@ -3,7 +3,7 @@ import pandas as pd
 import skillmodels.transition_functions as tf
 
 
-def get_params_index(update_info, labels, dims):
+def get_params_index(update_info, labels, dimensions):
     """Generate index for the params_df for estimagic.
 
     The index has four levels. The first is the parameter category. The second is the
@@ -27,9 +27,11 @@ def get_params_index(update_info, labels, dims):
     ind_tups += get_loadings_index_tuples(labels["factors"], update_info)
     ind_tups += get_meas_sds_index_tuples(update_info)
     ind_tups += get_shock_sds_index_tuples(labels["periods"], labels["factors"])
-    ind_tups += initial_mean_index_tuples(dims["n_mixtures"], labels["factors"])
-    ind_tups += get_mixture_weights_index_tuples(dims["n_mixtures"])
-    ind_tups += get_initial_cholcovs_index_tuples(dims["n_mixtures"], labels["factors"])
+    ind_tups += initial_mean_index_tuples(dimensions["n_mixtures"], labels["factors"])
+    ind_tups += get_mixture_weights_index_tuples(dimensions["n_mixtures"])
+    ind_tups += get_initial_cholcovs_index_tuples(
+        dimensions["n_mixtures"], labels["factors"]
+    )
     ind_tups += get_transition_index_tuples(
         labels["factors"], labels["periods"], labels["transition_names"]
     )

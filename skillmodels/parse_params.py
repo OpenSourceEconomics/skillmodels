@@ -7,7 +7,7 @@ from jax.ops import index
 from jax.ops import index_update
 
 
-def create_parsing_info(params_index, update_info, labels, dims):
+def create_parsing_info(params_index, update_info, labels):
     """Create a dictionary with information how the parameter vector has to be parsed.
 
     Args:
@@ -15,9 +15,6 @@ def create_parsing_info(params_index, update_info, labels, dims):
             "name1", "name2"]
         update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
-        dims (dict): Dimensional information like n_states, n_periods, n_controls,
-            n_mixtures. See :ref:`dimensions`.
-
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
 
@@ -125,21 +122,21 @@ def parse_params(params, parsing_info, dimensions, labels, n_obs):
     return states, upper_chols, log_weights, pardict
 
 
-def _get_initial_states(params, info, dims, n_obs):
+def _get_initial_states(params, info, dimensions, n_obs):
     """Create the array of initial states."""
     state = params[info["initial_states"]].reshape(
-        1, dims["n_mixtures"], dims["n_states"]
+        1, dimensions["n_mixtures"], dimensions["n_states"]
     )
     return jnp.repeat(state, n_obs, axis=0)
 
 
-def _get_initial_upper_chols(params, info, dims, n_obs):
+def _get_initial_upper_chols(params, info, dimensions, n_obs):
     """Create the array with cholesky factors of the initial states covariance matrix.
 
     Note: The matrices contain the transpose of the lower triangular cholesky factors.
 
     """
-    n_states, n_mixtures = dims["n_states"], dims["n_mixtures"]
+    n_states, n_mixtures = dimensions["n_states"], dimensions["n_mixtures"]
     chol_params = params[info["initial_cholcovs"]].reshape(n_mixtures, -1)
     upper_chols = jnp.zeros((n_obs, n_mixtures, n_states, n_states))
     for i in range(n_mixtures):
@@ -155,14 +152,14 @@ def _get_initial_log_mixture_weights(params, info, n_obs):
     return jnp.repeat(log_weights, n_obs, axis=0)
 
 
-def _get_control_params(params, info, dims):
+def _get_control_params(params, info, dimensions):
     """Create the parameters for control variables in measurement equations."""
-    return params[info["controls"]].reshape(-1, dims["n_controls"])
+    return params[info["controls"]].reshape(-1, dimensions["n_controls"])
 
 
-def _get_loadings(params, info, dims):
+def _get_loadings(params, info, dimensions):
     """Create the array of factor loadings."""
-    return params[info["loadings"]].reshape(-1, dims["n_states"])
+    return params[info["loadings"]].reshape(-1, dimensions["n_states"])
 
 
 def _get_meas_sds(params, info):
@@ -170,9 +167,9 @@ def _get_meas_sds(params, info):
     return params[info["meas_sds"]]
 
 
-def _get_shock_sds(params, info, dims):
+def _get_shock_sds(params, info, dimensions):
     """Create the array of standard deviations of the shocks in transition functions."""
-    return params[info["shock_sds"]].reshape(-1, dims["n_states"])
+    return params[info["shock_sds"]].reshape(-1, dimensions["n_states"])
 
 
 def _get_transition_params(params, info, dims, labels):
@@ -186,15 +183,15 @@ def _get_transition_params(params, info, dims, labels):
     return tuple(trans_params)
 
 
-def _get_anchoring_scaling_factors(loadings, info, dims):
+def _get_anchoring_scaling_factors(loadings, info, dimensions):
     """Create an array of anchoring scaling factors.
 
     Note: Parameters are not taken from the parameter vector but from the loadings.
 
     """
-    scaling_factors = jnp.ones((dims["n_periods"], dims["n_states"]))
+    scaling_factors = jnp.ones((dimensions["n_periods"], dimensions["n_states"]))
     free_anchoring_loadings = loadings[info["is_anchoring_loading"]].reshape(
-        dims["n_periods"], -1
+        dimensions["n_periods"], -1
     )
     scaling_factors = index_update(
         scaling_factors, index[:, info["is_anchored_factor"]], free_anchoring_loadings
