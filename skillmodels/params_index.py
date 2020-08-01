@@ -3,7 +3,7 @@ import pandas as pd
 import skillmodels.transition_functions as tf
 
 
-def params_index(update_info, labels, dims):
+def get_params_index(update_info, labels, dims):
     """Generate index for the params_df for estimagic.
 
     The index has four levels. The first is the parameter category. The second is the
@@ -23,14 +23,14 @@ def params_index(update_info, labels, dims):
         params_index (pd.MultiIndex)
 
     """
-    ind_tups = control_coeffs_index_tuples(labels["controls"], update_info)
-    ind_tups += loading_index_tuples(labels["factors"], update_info)
-    ind_tups += meas_sd_index_tuples(update_info)
-    ind_tups += shock_sd_index_tuples(labels["periods"], labels["factors"])
+    ind_tups = get_control_params_index_tuples(labels["controls"], update_info)
+    ind_tups += get_loadings_index_tuples(labels["factors"], update_info)
+    ind_tups += get_meas_sds_index_tuples(update_info)
+    ind_tups += get_shock_sds_index_tuples(labels["periods"], labels["factors"])
     ind_tups += initial_mean_index_tuples(dims["n_mixtures"], labels["factors"])
-    ind_tups += mixture_weight_index_tuples(dims["n_mixtures"])
-    ind_tups += initial_cov_index_tuples(dims["n_mixtures"], labels["factors"])
-    ind_tups += trans_coeffs_index_tuples(
+    ind_tups += get_mixture_weights_index_tuples(dims["n_mixtures"])
+    ind_tups += get_initial_cholcovs_index_tuples(dims["n_mixtures"], labels["factors"])
+    ind_tups += get_transition_index_tuples(
         labels["factors"], labels["periods"], labels["transition_names"]
     )
 
@@ -40,7 +40,7 @@ def params_index(update_info, labels, dims):
     return index
 
 
-def control_coeffs_index_tuples(controls, update_info):
+def get_control_params_index_tuples(controls, update_info):
     """Index tuples for control coeffs.
 
     Args:
@@ -57,7 +57,7 @@ def control_coeffs_index_tuples(controls, update_info):
     return ind_tups
 
 
-def loading_index_tuples(factors, update_info):
+def get_loadings_index_tuples(factors, update_info):
     """Index tuples for loading.
 
     Args:
@@ -75,7 +75,7 @@ def loading_index_tuples(factors, update_info):
     return ind_tups
 
 
-def meas_sd_index_tuples(update_info):
+def get_meas_sds_index_tuples(update_info):
     """Index tuples for meas_sd.
 
     Args:
@@ -92,7 +92,7 @@ def meas_sd_index_tuples(update_info):
     return ind_tups
 
 
-def shock_sd_index_tuples(periods, factors):
+def get_shock_sds_index_tuples(periods, factors):
     """Index tuples for shock_sd.
 
     Args:
@@ -128,7 +128,7 @@ def initial_mean_index_tuples(n_mixtures, factors):
     return ind_tups
 
 
-def mixture_weight_index_tuples(n_mixtures):
+def get_mixture_weights_index_tuples(n_mixtures):
     """Index tuples for mixture_weight.
 
     Args:
@@ -144,7 +144,7 @@ def mixture_weight_index_tuples(n_mixtures):
     return ind_tups
 
 
-def initial_cov_index_tuples(n_mixtures, factors):
+def get_initial_cholcovs_index_tuples(n_mixtures, factors):
     """Index tuples for initial_cov.
 
     Args:
@@ -171,7 +171,7 @@ def initial_cov_index_tuples(n_mixtures, factors):
     return ind_tups
 
 
-def trans_coeffs_index_tuples(factors, periods, transition_names):
+def get_transition_index_tuples(factors, periods, transition_names):
     """Index tuples for transition equation coefficients.
 
     Args:

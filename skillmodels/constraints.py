@@ -2,10 +2,10 @@
 import numpy as np
 
 import skillmodels.transition_functions as tf
-from skillmodels.params_index import loading_index_tuples
+from skillmodels.params_index import get_loadings_index_tuples
 
 
-def constraints(dimensions, labels, anchoring_info, update_info, normalizations):
+def get_constraints(dimensions, labels, anchoring_info, update_info, normalizations):
     """Generate the estimagic constraints implied by the model specification.
 
     Args:
@@ -26,14 +26,16 @@ def constraints(dimensions, labels, anchoring_info, update_info, normalizations)
     """
     constr = []
 
-    constr += _normalization_constraints(normalizations)
-    constr += _not_measured_constraints(update_info, labels)
-    constr += _mixture_weight_constraints(dimensions["n_mixtures"])
-    constr += _stage_constraints(labels["stagemap"], labels["stages"])
-    constr += _constant_factors_constraints(labels)
-    constr += _initial_mean_constraints(dimensions["n_mixtures"], labels["factors"])
-    constr += _trans_coeff_constraints(labels)
-    constr += _anchoring_constraints(
+    constr += _get_normalization_constraints(normalizations)
+    constr += _get_not_measured_constraints(update_info, labels)
+    constr += _get_mixture_weights_constraints(dimensions["n_mixtures"])
+    constr += _get_stage_constraints(labels["stagemap"], labels["stages"])
+    constr += _get_constant_factors_constraints(labels)
+    constr += _get_initial_states_constraints(
+        dimensions["n_mixtures"], labels["factors"]
+    )
+    constr += _get_transition_constraints(labels)
+    constr += _get_anchoring_constraints(
         update_info, labels["controls"], anchoring_info, labels["periods"]
     )
 
@@ -62,7 +64,7 @@ def add_bounds(params_df, bounds_distance=0.0):
     return df
 
 
-def _normalization_constraints(normalizations):
+def _get_normalization_constraints(normalizations):
     """List of constraints to enforce normalizations.
 
     Args:
@@ -105,7 +107,7 @@ def _normalization_constraints(normalizations):
     return constraints
 
 
-def _not_measured_constraints(update_info, labels):
+def _get_not_measured_constraints(update_info, labels):
     """Fix all loadings for non-measured factors to 0.
 
     Args:
@@ -126,14 +128,14 @@ def _not_measured_constraints(update_info, labels):
     )
 
     factors = labels["factors"]
-    all_loading_indices = loading_index_tuples(factors, update_info)
+    all_loading_indices = get_loadings_index_tuples(factors, update_info)
     to_fix = ~update_info[factors].to_numpy().flatten().astype(bool)
     locs = [tup for i, tup in enumerate(all_loading_indices) if to_fix[i]]
 
     return [{"loc": locs, "type": "fixed", "value": 0, "description": msg}]
 
 
-def _mixture_weight_constraints(n_mixtures):
+def _get_mixture_weights_constraints(n_mixtures):
     """Constrain mixture weights to be between 0 and 1 and sum to 1."""
     if n_mixtures == 1:
         msg = "Set the mixture weight to 1 if there is only one mixture element."
@@ -150,7 +152,7 @@ def _mixture_weight_constraints(n_mixtures):
         return [{"loc": "mixture_weights", "type": "probability", "description": msg}]
 
 
-def _stage_constraints(stagemap, stages):
+def _get_stage_constraints(stagemap, stages):
     """Equality constraints for transition and shock parameters within stages.
 
     Args:
@@ -184,7 +186,7 @@ def _stage_constraints(stagemap, stages):
     return constraints
 
 
-def _constant_factors_constraints(labels):
+def _get_constant_factors_constraints(labels):
     """Fix shock variances of constant factors to 0.
 
     Args:
@@ -211,7 +213,7 @@ def _constant_factors_constraints(labels):
     return constraints
 
 
-def _initial_mean_constraints(n_mixtures, factors):
+def _get_initial_states_constraints(n_mixtures, factors):
     """Enforce that the x values of the first factor are increasing.
 
     Otherwise the model would only be identified up to the order of the start factors.
@@ -238,7 +240,7 @@ def _initial_mean_constraints(n_mixtures, factors):
     return constr
 
 
-def _trans_coeff_constraints(labels):
+def _get_transition_constraints(labels):
     """Collect possible constraints on transition parameters.
 
     Args:
@@ -264,7 +266,7 @@ def _trans_coeff_constraints(labels):
     return constraints
 
 
-def _anchoring_constraints(update_info, controls, anchoring_info, periods):
+def _get_anchoring_constraints(update_info, controls, anchoring_info, periods):
     """Constraints on anchoring parameters.
 
     Args:

@@ -9,11 +9,11 @@ from jax.ops import index
 from jax.ops import index_update
 
 from skillmodels.constraints import add_bounds
-from skillmodels.constraints import constraints
+from skillmodels.constraints import get_constraints
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.kalman_filters import kalman_predict
 from skillmodels.kalman_filters import kalman_update
-from skillmodels.params_index import params_index
+from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
 from skillmodels.process_data import process_data_for_estimation
@@ -51,7 +51,9 @@ def get_maximization_inputs(model_dict, data):
 
     """
     model = process_model(model_dict)
-    p_index = params_index(model["update_info"], model["labels"], model["dimensions"])
+    p_index = get_params_index(
+        model["update_info"], model["labels"], model["dimensions"]
+    )
 
     parsing_info = create_parsing_info(
         p_index, model["update_info"], model["labels"], model["dimensions"]
@@ -109,7 +111,7 @@ def get_maximization_inputs(model_dict, data):
         numpy_crit["value"] = float(numpy_crit["value"])
         return numpy_crit, numpy_grad
 
-    constr = constraints(
+    constr = get_constraints(
         dimensions=model["dimensions"],
         labels=model["labels"],
         anchoring_info=model["anchoring"],

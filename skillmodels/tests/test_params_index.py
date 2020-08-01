@@ -4,15 +4,15 @@ import pandas as pd
 import pytest
 import yaml
 
-from skillmodels.params_index import control_coeffs_index_tuples
-from skillmodels.params_index import initial_cov_index_tuples
+from skillmodels.params_index import get_control_params_index_tuples
+from skillmodels.params_index import get_initial_cholcovs_index_tuples
+from skillmodels.params_index import get_loadings_index_tuples
+from skillmodels.params_index import get_meas_sds_index_tuples
+from skillmodels.params_index import get_mixture_weights_index_tuples
+from skillmodels.params_index import get_params_index
+from skillmodels.params_index import get_shock_sds_index_tuples
+from skillmodels.params_index import get_transition_index_tuples
 from skillmodels.params_index import initial_mean_index_tuples
-from skillmodels.params_index import loading_index_tuples
-from skillmodels.params_index import meas_sd_index_tuples
-from skillmodels.params_index import mixture_weight_index_tuples
-from skillmodels.params_index import params_index
-from skillmodels.params_index import shock_sd_index_tuples
-from skillmodels.params_index import trans_coeffs_index_tuples
 from skillmodels.process_model import process_model
 
 
@@ -27,7 +27,7 @@ def model2_inputs():
 
 def test_params_index_with_model2(model2_inputs):
     test_dir = Path(__file__).parent.resolve()
-    calculated = params_index(*model2_inputs)
+    calculated = get_params_index(*model2_inputs)
     expected = pd.read_csv(
         test_dir / "model2_correct_params_index.csv",
         index_col=["category", "period", "name1", "name2"],
@@ -54,7 +54,7 @@ def test_control_coeffs_index_tuples():
         ("controls", 1, "m2", "c1"),
     ]
 
-    calculated = control_coeffs_index_tuples(controls, uinfo)
+    calculated = get_control_params_index_tuples(controls, uinfo)
     assert calculated == expected
 
 
@@ -75,7 +75,7 @@ def test_loading_index_tuples():
         ("loadings", 1, "m2", "fac2"),
     ]
 
-    calculated = loading_index_tuples(factors, uinfo)
+    calculated = get_loadings_index_tuples(factors, uinfo)
     assert calculated == expected
 
 
@@ -91,7 +91,7 @@ def test_meas_sd_index_tuples():
         ("meas_sds", 1, "m2", "-"),
     ]
 
-    calculated = meas_sd_index_tuples(uinfo)
+    calculated = get_meas_sds_index_tuples(uinfo)
     assert calculated == expected
 
 
@@ -106,7 +106,7 @@ def test_shock_sd_index_tuples():
         ("shock_sds", 1, "fac2", "-"),
     ]
 
-    calculated = shock_sd_index_tuples(periods, factors)
+    calculated = get_shock_sds_index_tuples(periods, factors)
     assert calculated == expected
 
 
@@ -134,7 +134,7 @@ def test_mixture_weight_index_tuples():
         ("mixture_weights", 0, "mixture_1", "-"),
         ("mixture_weights", 0, "mixture_2", "-"),
     ]
-    calculated = mixture_weight_index_tuples(nmixtures)
+    calculated = get_mixture_weights_index_tuples(nmixtures)
     assert calculated == expected
 
 
@@ -156,7 +156,7 @@ def test_initial_cov_index_tuples():
         ("initial_cholcovs", 0, "mixture_1", "fac3-fac3"),
     ]
 
-    calculated = initial_cov_index_tuples(nmixtures, factors)
+    calculated = get_initial_cholcovs_index_tuples(nmixtures, factors)
     assert calculated == expected
 
 
@@ -184,6 +184,6 @@ def test_trans_coeffs_index_tuples():
         ("transition", 1, "fac3", "phi"),
     ]
 
-    calculated = trans_coeffs_index_tuples(factors, periods, transition_names)
+    calculated = get_transition_index_tuples(factors, periods, transition_names)
 
     assert calculated == expected

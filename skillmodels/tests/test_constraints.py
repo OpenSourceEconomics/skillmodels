@@ -3,14 +3,14 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-from skillmodels.constraints import _anchoring_constraints
-from skillmodels.constraints import _constant_factors_constraints
-from skillmodels.constraints import _initial_mean_constraints
-from skillmodels.constraints import _mixture_weight_constraints
-from skillmodels.constraints import _normalization_constraints
-from skillmodels.constraints import _not_measured_constraints
-from skillmodels.constraints import _stage_constraints
-from skillmodels.constraints import _trans_coeff_constraints
+from skillmodels.constraints import _get_anchoring_constraints
+from skillmodels.constraints import _get_constant_factors_constraints
+from skillmodels.constraints import _get_initial_states_constraints
+from skillmodels.constraints import _get_mixture_weights_constraints
+from skillmodels.constraints import _get_normalization_constraints
+from skillmodels.constraints import _get_not_measured_constraints
+from skillmodels.constraints import _get_stage_constraints
+from skillmodels.constraints import _get_transition_constraints
 from skillmodels.constraints import add_bounds
 
 
@@ -54,7 +54,7 @@ def test_normalization_constraints():
         {"loc": ("loadings", 0, "m3", "fac2"), "type": "fixed", "value": 1},
     ]
 
-    calculated = _normalization_constraints(norm)
+    calculated = _get_normalization_constraints(norm)
     for c in calculated:
         del c["description"]
 
@@ -88,7 +88,7 @@ def test_not_measured_constraints():
         }
     ]
 
-    calculated = _not_measured_constraints(uinfo, labels)
+    calculated = _get_not_measured_constraints(uinfo, labels)
     for c in calculated:
         del c["description"]
 
@@ -101,7 +101,7 @@ def test_not_measured_constraints():
 
 
 def test_mixture_weight_constraints_mixture():
-    calculated = _mixture_weight_constraints(n_mixtures=2)
+    calculated = _get_mixture_weights_constraints(n_mixtures=2)
     for c in calculated:
         del c["description"]
     expected = [{"loc": "mixture_weights", "type": "probability"}]
@@ -109,7 +109,7 @@ def test_mixture_weight_constraints_mixture():
 
 
 def test_mixture_weight_constraints_normal():
-    calculated = _mixture_weight_constraints(n_mixtures=1)
+    calculated = _get_mixture_weights_constraints(n_mixtures=1)
     for c in calculated:
         del c["description"]
     expected = [{"loc": "mixture_weights", "type": "fixed", "value": 1.0}]
@@ -136,7 +136,7 @@ def test_stage_constraints():
         },
     ]
 
-    calculated = _stage_constraints(stagemap, stages)
+    calculated = _get_stage_constraints(stagemap, stages)
     for c in calculated:
         del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
@@ -159,7 +159,7 @@ def test_constant_factor_constraints():
         {"loc": ("shock_sds", 1, "fac2", "-"), "type": "fixed", "value": 0.0},
     ]
 
-    calculated = _constant_factors_constraints(labels)
+    calculated = _get_constant_factors_constraints(labels)
     for c in calculated:
         del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
@@ -181,7 +181,7 @@ def test_initial_mean_constraints():
 
     expected = [{"loc": ind_tups, "type": "increasing"}]
 
-    calculated = _initial_mean_constraints(nmixtures, factors)
+    calculated = _get_initial_states_constraints(nmixtures, factors)
     for c in calculated:
         del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
@@ -217,7 +217,7 @@ def test_trans_coeff_constraints():
             "type": "probability",
         },
     ]
-    calculated = _trans_coeff_constraints(labels)
+    calculated = _get_transition_constraints(labels)
 
     for c in calculated:
         del c["description"]
@@ -257,13 +257,13 @@ def base_anchoring_info():
 
 
 def test_anchoring_constraints_no_constraint_needed(anch_uinfo, base_anchoring_info):
-    calculated = _anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
+    calculated = _get_anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
     assert calculated == []
 
 
 def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
     base_anchoring_info["use_constant"] = False
-    calculated = _anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
+    calculated = _get_anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
 
     expected = [
         {"loc": ("controls", 0, "outcome_f1", "constant"), "type": "fixed", "value": 0},
@@ -277,7 +277,7 @@ def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
 
 def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
     base_anchoring_info["use_controls"] = False
-    calculated = _anchoring_constraints(
+    calculated = _get_anchoring_constraints(
         anch_uinfo, ["c1", "c2"], base_anchoring_info, (0, 1)
     )
 
@@ -321,7 +321,7 @@ def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
 
 def test_anchoring_constraints_for_loadings(anch_uinfo, base_anchoring_info):
     base_anchoring_info["free_loadings"] = False
-    calculated = _anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
+    calculated = _get_anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
 
     expected = [
         {
