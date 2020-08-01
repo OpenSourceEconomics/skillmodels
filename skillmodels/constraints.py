@@ -27,7 +27,7 @@ def constraints(dimensions, labels, anchoring_info, update_info, normalizations)
     constr = []
 
     constr += _normalization_constraints(normalizations)
-    constr += _not_measured_constraints(update_info, anchoring_info, labels)
+    constr += _not_measured_constraints(update_info, labels)
     constr += _mixture_weight_constraints(dimensions["n_mixtures"])
     constr += _stage_constraints(labels["stagemap"], labels["stages"])
     constr += _constant_factors_constraints(labels)

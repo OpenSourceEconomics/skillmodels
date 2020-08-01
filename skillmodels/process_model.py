@@ -115,8 +115,17 @@ def _process_options(model_dict):
         "sigma_points_scale": 2,
         "robust_bounds": True,
         "bounds_distance": 1e-3,
+        "clipping_lower_bound": -1e250,
+        "clipping_upper_bound": None,
+        "clipping_lower_hardness": 1,
+        "clipping_upper_hardness": 1,
+        "return_all_contributions": False,
     }
     default_options.update(model_dict.get("options", {}))
+
+    if not default_options["robust_bounds"]:
+        default_options["bounds_distance"] = 0
+
     return default_options
 
 

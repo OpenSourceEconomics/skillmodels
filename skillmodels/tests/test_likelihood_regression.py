@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import pytest
@@ -9,7 +8,7 @@ import yaml
 from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.likelihood_function import get_log_likelihood_contributions_func
+from skillmodels.likelihood_function import get_maximization_inputs
 
 config.update("jax_enable_x64", True)
 
@@ -58,11 +57,11 @@ def test_likelihood_contributions_have_not_changed(model2, model2_data, model_na
     regvault = Path(__file__).parent.resolve() / "regression_vault"
     model = _convert_model(model2, model_name)
     params = pd.read_csv(regvault / f"{model_name}.csv")
-    contribs_func = get_log_likelihood_contributions_func(model, model2_data)
 
-    params_vec = jnp.array(params["value"].to_numpy())
-    contribs = contribs_func(params_vec)
-    new_loglikes = np.array(contribs.sum(axis=0))
+    func_dict = get_maximization_inputs(model, model2_data)
+    debug_loglike = func_dict["debug_loglike"]
+
+    new_loglikes = debug_loglike(params)["contributions"]
 
     with open(regvault / f"{model_name}_result.json") as j:
         old_loglikes = np.array(json.load(j))

@@ -1,9 +1,15 @@
 import functools
 
+import jax
 import jax.numpy as jnp
+import numpy as np
+import pandas as pd
+from jax import config
 from jax.ops import index
 from jax.ops import index_update
 
+from skillmodels.constraints import add_bounds
+from skillmodels.constraints import constraints
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.kalman_filters import kalman_predict
 from skillmodels.kalman_filters import kalman_update
@@ -13,35 +19,40 @@ from skillmodels.parse_params import parse_params
 from skillmodels.process_data import process_data_for_estimation
 from skillmodels.process_model import process_model
 
+config.update("jax_enable_x64", True)
 
-def get_optimization_functions(
-    model_dict, data, aggregation="sum", additional_data=False
-):
-    """Create a likelihood function and its first derivative.
 
-    The resulting functions take an estimagic-style params DataFrame as only argument.
+def get_maximization_inputs(model_dict, data):
+    """Create inputs for estimagic's maximize function.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
-        dataset (DataFrame): datset in long format.
-        aggregation (str): One of "sum" and "mean" and None. Default: "sum".
-        additional_data (bool): If true, the likelihood function returns a tuple where
-            the first element is the aggregated log likelihood and the second a
-            DataFrame with all likelihood contributions (i.e. disaggregated by
-            individual and measurement).
-        gradient_type (str): (One of "grad", "value_and_grad").
+        dataset (DataFrame): dataset in long format.
 
     Returns:
-        dict: Dictionary of functions for likelihood optimization. Has the entries:
-            "log_likelihood", "gradient", "value_and_gradient", "hessian"
+        loglike (function): A jax jitted function that takes an estimagic-style
+            params dataframe as only input and returns the a dict with the entries:
+            - "value": The scalar log likelihood
+            - "contributions": An array with the log likelihood per observation
+            - "all_contributions": A pandas DataFrame with the log likelihood of each
+                Kalman update.
+        debug_loglike (function): Same as loglike but not jitted. This
+            can be used to find out quickly if the likelihood function is defined at
+            the start params (because the jitted version takes long on the first run)
+            or to step through it with a debugger.
+        gradient (function): The gradient of the scalar log likelihood
+            function with respect to the parameters.
+        loglike_and_gradient (function): Combination of loglike and
+            loglike_gradient that is faster than calling the two functions separately.
+        constraints (list): List of estimagic constraints that are implied by the
+            model specification.
+        params_template (pd.DataFrame): Parameter DataFrame with correct index and
+            bounds but with empty value column.
 
     """
-    pass
-
-
-def get_log_likelihood_contributions_func(model_dict, data):
     model = process_model(model_dict)
     p_index = params_index(model["update_info"], model["labels"], model["dimensions"])
+
     parsing_info = create_parsing_info(
         p_index, model["update_info"], model["labels"], model["dimensions"]
     )
@@ -53,8 +64,8 @@ def get_log_likelihood_contributions_func(model_dict, data):
         model["dimensions"]["n_states"], model["options"]["sigma_points_scale"]
     )
 
-    partialed = functools.partial(
-        _log_likelihood_contributions_jax,
+    _loglike = functools.partial(
+        _log_likelihood_jax,
         parsing_info=parsing_info,
         update_info=model["update_info"],
         measurements=measurements,
@@ -65,20 +76,63 @@ def get_log_likelihood_contributions_func(model_dict, data):
         anchoring_variables=anchoring_variables,
         dimensions=model["dimensions"],
         labels=model["labels"],
+        options=model["options"],
     )
 
-    return partialed
+    _jitted_loglike = jax.jit(_loglike)
+    _gradient = jax.grad(_jitted_loglike, has_aux=True)
+
+    def debug_loglike(params):
+        params_vec = jnp.array(params["value"].to_numpy())
+        jax_output = _loglike(params_vec)[1]
+        numpy_output = _to_numpy(jax_output)
+        numpy_output["value"] = float(numpy_output["value"])
+        return numpy_output
+
+    def loglike(params):
+        params_vec = jnp.array(params["value"].to_numpy())
+        jax_output = _jitted_loglike(params_vec)[1]
+        numpy_output = _to_numpy(jax_output)
+        numpy_output["value"] = float(numpy_output["value"])
+        return numpy_output
+
+    def gradient(params):
+        params_vec = jnp.array(params["value"].to_numpy())
+        jax_output = _gradient(params_vec)[0]
+        return _to_numpy(jax_output)
+
+    def loglike_and_gradient(params):
+        params_vec = jnp.array(params["value"].to_numpy())
+        jax_grad, jax_crit = _gradient(params_vec)
+        numpy_grad = _to_numpy(jax_grad)
+        numpy_crit = _to_numpy(jax_crit)
+        numpy_crit["value"] = float(numpy_crit["value"])
+        return numpy_crit, numpy_grad
+
+    constr = constraints(
+        dimensions=model["dimensions"],
+        labels=model["labels"],
+        anchoring_info=model["anchoring"],
+        update_info=model["update_info"],
+        normalizations=model["normalizations"],
+    )
+
+    params_template = pd.DataFrame(columns=["value"], index=p_index)
+    params_template = add_bounds(params_template, model["options"]["bounds_distance"])
+
+    out = {
+        "loglike": loglike,
+        "debug_loglike": debug_loglike,
+        "gradient": gradient,
+        "loglike_and_gradient": loglike_and_gradient,
+        "constraints": constr,
+        "params_template": params_template,
+    }
+
+    return out
 
 
-def get_likelihood_jacobian(model_dict, data):
-    raise NotImplementedError
-
-
-def get_likelihood_hessian(model_dict, data):
-    raise NotImplementedError
-
-
-def _log_likelihood_contributions_jax(
+def _log_likelihood_jax(
     params,
     parsing_info,
     update_info,
@@ -90,11 +144,15 @@ def _log_likelihood_contributions_jax(
     anchoring_variables,
     dimensions,
     labels,
+    options,
 ):
-    """Log likelihood contributions per individual and update.
+    """Log likelihood of a skill formation model.
 
     This function is jax-differentiable and jax-jittable as long as all but the first
     argument are marked as static.
+
+    In contrast to most likelihood functions this returns both an aggregated likelihood
+    value and the likelihood contribution of each individual.
 
     Args:
         params (jax.numpy.array): 1d array with model parameters.
@@ -123,6 +181,7 @@ def _log_likelihood_contributions_jax(
             factors, periods, controls, stagemap and stages. See :ref:`labels`
 
     Returns:
+        jnp.array: 1d array of length 1, the aggregated log likelihood.
         jnp.array: Array of shape (n_obs, n_updates) log likelihood contributions per
             individual and update.
 
@@ -169,4 +228,86 @@ def _log_likelihood_contributions_jax(
                 anchoring_variables[t : t + 2],
             )
 
-    return loglikes
+        clipped = soft_clipping(
+            arr=loglikes,
+            lower=options["clipping_lower_bound"],
+            upper=options["clipping_upper_bound"],
+            lower_hardness=options["clipping_lower_hardness"],
+            upper_hardness=options["clipping_upper_hardness"],
+        )
+
+        value = clipped.sum()
+
+        additional_data = {
+            # used for scalar optimization, thus has to be clipped
+            "value": value,
+            # can be used for sum optimizers, thus has to be clipped
+            "contributions": clipped.sum(axis=0),
+        }
+        if options["return_all_contributions"]:
+            additional_data["all_contributions"] = loglikes
+
+    return value, additional_data
+
+
+def soft_clipping(arr, lower=None, upper=None, lower_hardness=1, upper_hardness=1):
+    """Clip values in an array elementwise using a soft maximum to avoid kinks.
+
+    Clipping from below is taking a maximum between two values. Clipping
+    from above is taking a minimum, but it can be rewritten as taking a maximum after
+    switching the signs.
+
+    To smooth out the kinks introduced by normal clipping, we first rewrite all clipping
+    operations to taking maxima. Then we replace the normal maximum by the soft maximum.
+
+    For background on the soft maximum check out this
+    `article by John Cook: <https://www.johndcook.com/soft_maximum.pdf>`_
+
+    Note that contrary to the name, the soft maximum can be calculated using
+    ``scipy.special.logsumexp``. ``scipy.special.softmax`` is the gradient of
+    ``scipy.special.logsumexp``.
+
+
+    Args:
+        arr (jax.numpy.array): Array that is clipped elementwise.
+        lower (float): The value at which the array is clipped from below.
+        upper (float): The value at which the array is clipped from above.
+        lower_hardness (float): Scaling factor that is applied inside the soft maximum.
+            High values imply a closer approximation of the real maximum.
+        upper_hardness (float): Scaling factor that is applied inside the soft maximum.
+            High values imply a closer approximation of the real maximum.
+
+    """
+    shape = arr.shape
+    flat = arr.flatten()
+    dim = len(flat)
+    if lower is not None:
+        helper = jnp.column_stack([flat, jnp.full(dim, lower)])
+        flat = (
+            jax.scipy.special.logsumexp(lower_hardness * helper, axis=1)
+            / lower_hardness
+        )
+    if upper is not None:
+        helper = jnp.column_stack([-flat, jnp.full(dim, -upper)])
+        flat = (
+            -jax.scipy.special.logsumexp(upper_hardness * helper, axis=1)
+            / upper_hardness
+        )
+    return flat.reshape(shape)
+
+
+def _to_numpy(obj):
+    if isinstance(obj, dict):
+        res = {}
+        for key, value in obj.items():
+            if np.isscalar(value):
+                res[key] = value
+            else:
+                res[key] = np.array(value)
+
+    elif np.isscalar(obj):
+        res = obj
+    else:
+        res = np.array(obj)
+
+    return res
