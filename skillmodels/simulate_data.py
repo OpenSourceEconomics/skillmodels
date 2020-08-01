@@ -51,7 +51,7 @@ def add_missings(data, meas_names, p_b, p_r):
 
 def simulate_datasets(
     labels,
-    dims,
+    dimensions,
     n_obs,
     params,
     parsing_info,
@@ -67,7 +67,7 @@ def simulate_datasets(
     Args:
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`.
-        dims (dict): Dimensional information like n_states, n_periods, n_controls,
+        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
         n_obs (int): number of observations.
         params (jax.numpy.array): 1d array with model parameters
@@ -93,7 +93,7 @@ def simulate_datasets(
 
     """
     states, _, log_weights, pardict = parse_params(
-        params, parsing_info, dims, labels, n_obs
+        params, parsing_info, dimensions, labels, n_obs
     )
 
     return _simulate_datasets(
@@ -101,7 +101,7 @@ def simulate_datasets(
         log_weights,
         pardict,
         labels,
-        dims,
+        dimensions,
         n_obs,
         update_info,
         control_means,
@@ -116,7 +116,7 @@ def _simulate_datasets(
     log_weights,
     pardict,
     labels,
-    dims,
+    dimensions,
     n_obs,
     update_info,
     control_means,
@@ -135,9 +135,9 @@ def _simulate_datasets(
     """
     policies = policies if policies is not None else []
 
-    n_states = dims["n_states"]
-    n_controls = dims["n_controls"]
-    n_periods = dims["n_periods"]
+    n_states = dimensions["n_states"]
+    n_controls = dimensions["n_controls"]
+    n_periods = dimensions["n_periods"]
 
     weights = np.exp(log_weights)
     loadings_df = pd.DataFrame(
@@ -163,7 +163,7 @@ def _simulate_datasets(
             d.update({"mean": initial_means[i]})
     stat = np.zeros((n_periods, n_obs, n_states))
     stat[0], cont = generate_start_state_and_control_variables_elliptical(
-        n_obs, dims, dist_name, dist_arg_dict, weights
+        n_obs, dimensions, dist_name, dist_arg_dict, weights
     )
     cont = pd.DataFrame(data=cont, columns=labels["controls"])
 
@@ -236,13 +236,13 @@ def _get_shock(mean, sd, size):
 
 
 def generate_start_state_and_control_variables_elliptical(
-    n_obs, dims, dist_name, dist_arg_dict, weights
+    n_obs, dimensions, dist_name, dist_arg_dict, weights
 ):
     """Draw initial states and control variables from a (mixture of) normals.
 
     Args:
         n_obs (int): number of observations
-        dims(dict): Dimensional information like n_states, n_periods, n_controls,
+        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
         dist_name (string): the elliptical distribution to use in the mixture
         dist_arg_dict (list of dict): list of length nmixtures of dictionaries with the
@@ -257,8 +257,8 @@ def generate_start_state_and_control_variables_elliptical(
         controls (np.ndarray): shape (n_obs, n_controls),
 
     """
-    n_states = dims["n_states"]
-    n_controls = dims["n_controls"]
+    n_states = dimensions["n_states"]
+    n_controls = dimensions["n_controls"]
     if np.size(weights) == 1:
         out = getattr(elliptical_distributions, dist_name)(
             size=n_obs, **dist_arg_dict[0]
