@@ -61,7 +61,8 @@ def get_maximization_inputs(model_dict, data):
     )
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
-        model["dimensions"]["n_states"], model["options"]["sigma_points_scale"]
+        model["dimensions"]["n_states"],
+        model["estimation_options"]["sigma_points_scale"],
     )
 
     _loglike = functools.partial(
@@ -76,7 +77,7 @@ def get_maximization_inputs(model_dict, data):
         anchoring_variables=anchoring_variables,
         dimensions=model["dimensions"],
         labels=model["labels"],
-        options=model["options"],
+        estimation_options=model["estimation_options"],
     )
 
     _jitted_loglike = jax.jit(_loglike)
@@ -118,7 +119,9 @@ def get_maximization_inputs(model_dict, data):
     )
 
     params_template = pd.DataFrame(columns=["value"], index=p_index)
-    params_template = add_bounds(params_template, model["options"]["bounds_distance"])
+    params_template = add_bounds(
+        params_template, model["estimation_options"]["bounds_distance"]
+    )
 
     out = {
         "loglike": loglike,
@@ -144,7 +147,7 @@ def _log_likelihood_jax(
     anchoring_variables,
     dimensions,
     labels,
-    options,
+    estimation_options,
 ):
     """Log likelihood of a skill formation model.
 
@@ -230,10 +233,10 @@ def _log_likelihood_jax(
 
         clipped = soft_clipping(
             arr=loglikes,
-            lower=options["clipping_lower_bound"],
-            upper=options["clipping_upper_bound"],
-            lower_hardness=options["clipping_lower_hardness"],
-            upper_hardness=options["clipping_upper_hardness"],
+            lower=estimation_options["clipping_lower_bound"],
+            upper=estimation_options["clipping_upper_bound"],
+            lower_hardness=estimation_options["clipping_lower_hardness"],
+            upper_hardness=estimation_options["clipping_upper_hardness"],
         )
 
         value = clipped.sum()
@@ -244,7 +247,7 @@ def _log_likelihood_jax(
             # can be used for sum optimizers, thus has to be clipped
             "contributions": clipped.sum(axis=0),
         }
-        if options["return_all_contributions"]:
+        if estimation_options["return_all_contributions"]:
             additional_data["all_contributions"] = loglikes
 
     return value, additional_data

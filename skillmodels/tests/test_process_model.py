@@ -37,8 +37,8 @@ def test_labels(model2):
     assert res["stages"] == [0]
 
 
-def test_options(model2):
-    res = process_model(model2)["options"]
+def test_estimation_options(model2):
+    res = process_model(model2)["estimation_options"]
     assert res["sigma_points_scale"] == 2
     assert res["robust_bounds"]
     assert res["bounds_distance"] == 0.001

@@ -39,7 +39,7 @@ anchoring:
   free_loadings: true
 controls: [x1]
 stagemap: [0, 0, 0, 0, 0, 0, 0]
-options:
+estimation_options:
   robust_bounds: true
   bounds_distance: 0.001
   n_mixtures: 1

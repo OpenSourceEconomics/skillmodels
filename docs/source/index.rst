@@ -77,43 +77,13 @@ Structure of the Documentation
     </div>
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 Welcome to skillmodels, a Python implementation of estimators for skill
 formation models. The econometrics of skill formation models is a very active
 field and several estimators were proposed. None of them is implemented in
 standard econometrics packages.
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-I start implementing the Kalman filter based maximum likelihood estimator
+Skillmodels implements the Kalman filter based maximum likelihood estimator
 proposed by Cunha, Heckman and Schennach (CHS), (`Econometrica 2010`_)
 
 
@@ -130,11 +100,6 @@ optionally use more robust square-root implementations of the Kalman filters.
 Most of the code is unit tested. Furthermore, the results have been compared
 to the Fortran code by CHS for two basic models with hypothetical data from
 their `replication files`_.
-
-The following documentation is ordered from high-level to low-level. To get
-started it is sufficient to read about Model specifications and Basic usage.
-Reading more is only necessary if you want to extend the code or understand
-the implementation details.
 
 
 **Citation**

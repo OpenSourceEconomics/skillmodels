@@ -40,7 +40,7 @@ def process_model(model_dict):
         "dimensions": dims,
         "labels": labels,
         "anchoring": anchoring,
-        "options": _process_options(model_dict),
+        "estimation_options": _process_estimation_options(model_dict),
         "transition_functions": _get_transition_functions(labels["transition_names"]),
         "update_info": _get_update_info(model_dict, dims, labels, anchoring),
         "normalizations": _process_normalizations(model_dict, dims, labels),
@@ -65,7 +65,7 @@ def _get_dimensions(model_dict):
         "n_periods": max(all_n_periods),
         # plus 1 for the constant
         "n_controls": len(model_dict.get("controls", [])) + 1,
-        "n_mixtures": model_dict["options"].get("n_mixtures", 1),
+        "n_mixtures": model_dict["estimation_options"].get("n_mixtures", 1),
     }
     return dims
 
@@ -101,7 +101,7 @@ def _get_labels(model_dict, dimensions):
     return labels
 
 
-def _process_options(model_dict):
+def _process_estimation_options(model_dict):
     """Process options.
 
     Args:
@@ -121,7 +121,7 @@ def _process_options(model_dict):
         "clipping_upper_hardness": 1,
         "return_all_contributions": False,
     }
-    default_options.update(model_dict.get("options", {}))
+    default_options.update(model_dict.get("estimation_options", {}))
 
     if not default_options["robust_bounds"]:
         default_options["bounds_distance"] = 0
