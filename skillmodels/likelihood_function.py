@@ -34,8 +34,7 @@ def get_maximization_inputs(model_dict, data):
             params dataframe as only input and returns the a dict with the entries:
             - "value": The scalar log likelihood
             - "contributions": An array with the log likelihood per observation
-            - "all_contributions": A pandas DataFrame with the log likelihood of each
-                Kalman update.
+            - "all_contributions": Array with the log likelihood of each Kalman update.
         debug_loglike (function): Same as loglike but not jitted. This
             can be used to find out quickly if the likelihood function is defined at
             the start params (because the jitted version takes long on the first run)

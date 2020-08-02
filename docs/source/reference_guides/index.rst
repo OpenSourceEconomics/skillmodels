@@ -8,6 +8,8 @@ Reference Guides
     pre_processing
     estimation
     simulation
+    transition_functions
+    endogeneity_corrections
 
 
 

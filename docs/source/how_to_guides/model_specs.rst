@@ -7,11 +7,8 @@ Model specifications
 
 Models are specified as
 `Python dictionaries <http://introtopython.org/dictionaries.html>`_.
-To improve reuse of the model specifications these dictionaries should be
-stored in `JSON <http://www.json.org/>`_ files. Users who are unfamiliar
-with `JSON <http://www.json.org/>`_ and
-`Python dictionaries <http://introtopython.org/dictionaries.html>`_ should
-read up on these topics first.
+To improve reuse of the model specifications these dictionaries can be stored in json
+or yaml files.
 
 Example 2 from the CHS replication files
 ****************************************
@@ -20,11 +17,11 @@ Below the model-specification is illustrated using Example 2 from the CHS
 `replication files`_. If you want you can read it in section 4.1 of their
 readme file but I briefly reproduce it here for convenience.
 
-Suppose that there are three factors fac1, fac2 and fac3 and that there are 8
-periods that all belong to the same development stage. fac1 evolves according
-to a log_ces production function and depends on its past values as well as the
-past values of all other factors. Moreover, it is linearly anchored with
-anchoring outcome Q1. This results in the following transition equation:
+There are three latent factors fac1, fac2 and fac3 and 8 periods that all belong to the
+same development stage. fac1 evolves according to a log_ces production function and
+depends on its past values as well as the past values of all other factors.
+Moreover, it is linearly anchored with anchoring outcome Q1. This results in the
+following transition equation:
 
 .. math::
 
@@ -73,100 +70,67 @@ general latent factor model:
     #. If anchoring is used: Which factors are anchored and what is the anchoring
        outcome?
 
-Translate the example to a model dictionary
-*******************************************
+Translating the model to a dictionary
+*************************************
 
-The first three points have to be specified for each latent factor of the
-model. This is done by adding a subdictionary for each latent factor to the
-``factor_specific`` key of the model dictionary. In the example model from the
-CHS `replication files`_ the dictionary for the first factor takes the
-following form:
-
-.. literalinclude:: test_model2.json
-    :lines: 2-28
-
-The value that corresponds to the ``measurements`` key is a list of lists. It
-has one sublist for each period of the model. Each sublist consists of the
-measurement variables of ``fac1`` in the corresponding period. Note that in
-the example the measurement variables are the same in each period. However,
-this is extremely rare in actual models. If a measurement measures more than
-one latent factor, it simply is included in the ``measurements`` list of all
-factors it measures. As in the Fortran code by CHS it is currently only
-possible to estimate models with linear measurement system. I plan to add the
-possibility to incorporate binary variables in a way similar to a probit model
-but have currently no plans to support arbitrary nonlinear measurement
-systems.
-
-The value that corresponds to the ``normalizations`` key is a dictionary in
-which the normalizations for factor loadings and intercepts are specified.
-Its values (for each type of normalization) are lists of dictionaries. There
-is one dictionary for each period. Its keys are the names of the measurements
-whose factor loading are normalized. The values are the number the loading is
-normalized to. For loadings it is typical to normalize to one, but any non-zero
-value is ok. Intercepts are typically normalized to zero, but any value is ok.
-
-The example model has no normalizations on intercepts and this is ok due to
-the known location and scale of the CES production function. The same result
-would have obtained if one had simply omitted 'intercepts' in the
-normalization dictionary.
-
-The model shown below deliberately uses too many normalizations in order to
-make the results comparable with the parameters from the CHS replication
-files.
-
-The value that corresponds to the ``trans_eq`` key is a dictionary. The
-``name`` entry specifies the name of the transition equation. The
-``included_factors`` entry specifies which factors enter the transition
-equation. The transition equations already implemented are:
-
-    * ``linear`` (Including a constant.)
-    * ``log_ces`` (Known Location and Scale (KLS) version. See :ref:`log_ces_problem`.)
-    * ``constant``
-    * ``translog`` (non KLS version; a log-linear-in-parameters function including
-      squares and interaction terms.
+before explaining how the model dictionary is written, here a full specification of the
+example model as yaml file:
 
 
-The specification for fac2 is very similar and not reproduced here. The
-specification for fac3 looks a bit different as this factor is only measured
-in the first period:
+.. literalinclude:: ../../../skillmodels/tests/model2.yaml
+  :language: yaml
+  :linenos:
 
-.. literalinclude:: test_model2.json
-    :lines: 54-77
+The model specification is a nested dictionary. The outer keys (which I call sections)
+are ``"factors"``, ``"anchoring"``, ``"controls"``, ``"stagemap"`` and
+``"estimation_options"``. All but the first are optional, but typically you will use at
+least some of them.
 
-Here it is important to note that empty sublists have to be added to the
-``measurements`` and ``normalizations`` key if no measurements are available
-in certain periods. Simply leaving the sublists out will result in an error.
 
-Points 4 and 5 are only specified once for all factors by adding entries to
-the ``time_specific`` key of the model dictionary:
+``factors``
+-----------
 
-.. literalinclude:: test_model2.json
-    :lines: 79-93
+The factors are described as a dictionary. The keys are the names of the factors.
+Any python string is possible as factor name. The values are dictionaries with three
+entries:
 
-The value that corresponds to ``controls`` is a list of lists analogous to the
-specification of measurements. Note that the constat variable ``x2`` is not
-specified here as constants are added automatically in each measurement
-equation without normalized intercept.
+- measurements: A nested list that is as long as the number of periods of the model.
+  Each sublist contains the names of the measurements in that period. If A factor has
+  no measurements in a period, it has to be an empty list. If a factor only has
+  measurements up to a certain period you can leave out the empty lists at the end. In
+  the example this is done for factor 3. Note that even in that case, the measurements
+  have to be specified as nested list. If a factor only starts having measurements in
+  some period, you still have to specify the empty lists for all periods before that
+  period.
 
-The value that corresponds to ``stagemap`` is a list of length nperiods. The
-t_th entry indicates to which stage period t belongs. In the example it is
-just a list of zeros. (stages have to be numbered starting with zeros and
-incrementing in steps of one.)
+- transition_equation: A string with the name of a transition equation. For a list of
+  all possible values see :ref:`transition_functions`. The list might seem a bit short
+  but not that many other transition equations can be expressed with parameter
+  constraints on the existing transition equations.
 
-The anchoring equation is specified as follows:
+- normalizations: This entry is optional. It is a dictionary that can have the keys
+  ``"loadings"`` and ``"intercepts"``. The values are lists of dictionaries. The list
+  needs to contain one dictionary per period of the model. The keys of the dictionaries
+  are names of measurements. The values are the value they are normalized to. Note that
+  loadings cannot be normalized to zero.
 
-.. literalinclude:: test_model2.json
-    :lines: 94-101
 
-Q1 is the anchoring outcome and the list contains all anchored factors. In the
-example this is just fac1. If you don't want to anchor the latent factors, simply
-omit the anchoring part in the model dictionary. The other options are as follows:
+Note that we could not express the constraint that ``"fac2"`` only depends on its own
+past values in the model dictionary. This has to be expressed as an additional
+constraint during optimization. Fortunately, this is very easy with estimagic.
 
-- ``"center``: Default False. If True, the observed anchoring outcome is subtracted
-  from the anchored factors. This only make sense, if the anchoring loading was
-  normalized to 0 and the anchoring intercept was normalized to zero. The main reason
-  for using this option is age-anchoring, where you want the factors to have the scale
-  of mental age, but want to get rid of the age-trend.
+``"anchoring"``
+---------------
+
+The specification for anchoring is a dictionary. It has the following entries:
+
+- ``"outcome"``: The name of the variable that is used as anchor.
+- ``"factors"``: A list containing the anchored factors.
+- ``"center``: Optional, default False. If True, the observed anchoring outcome is
+  subtracted from the anchored factors. This only make sense, if the anchoring loading
+  was normalized to 1 and the anchoring intercept was normalized to zero. The main
+  reason for using this option is age-anchoring, where you want the factors to have the
+  scale of mental age, but want to get rid of the age-trend.
 - ``"use_controls"``: Whether the control variables used in the measurement equations
   should also be used in the anchoring equations. Default False. This is mainly there
   to support the CHS example model and will probably not be set to True in any real
@@ -178,100 +142,49 @@ omit the anchoring part in the model dictionary. The other options are as follow
   one. In general, fixing the loading of an anchoring equation means, that no further
   normalizations of scale are needed for that factor in that period. Default False.
 
-The "general" section of the model dictionary:
-**********************************************
 
-Usually a research project comprises the estimation of more than one model and
-there are some specifications that are likely not to vary across these models.
-The default values for these specifications are hardcoded. If some or all of
-these values are redefined in the "general" section of the model dictionary
-the ones from the model dictionary have precedence. The specifications are:
+``"controls"``
+--------------
 
-    * ``n_mixture_components``: number of elements in the mixture of normals
-      distribution of the latent factors. Default 1, which corresponds to the
-      assumption that the factors are normally distributed.
-    * ``sigma_points_scale``: scaling parameter for the sigma_points. Default 2.
-    * ``robust_bounds``: takes the values true or false (default) and refers to the
-      bounds on parameters during the maximization of the likelihood function.
-      If true the lower bound for estimated standard deviations is not set to
-      zero but to ``bounds_distance``. This improves the stability of the estimator.
-    * ``bounds_distance``: a small number. Default 1e-6
-    * ``ignore_intercept_in_linear_anchoring``: takes the values true (default) and
-      false. Often the results remain interpretable if the intercept of the
-      anchoring equation is ignored in the anchoring process. CHS do so in the
-      example model (see equation above). Only used if anchoring_mode equals
-      'truly_anchor_latent_factors'
-    * ``anchoring_mode``: Takes the values 'only_estimate_anchoring_equation'
-      and 'truly_anchor_latent_factors'. The default is
-      'only_estimate_anchoring_equation'. It means that an anchoring equation
-      is estimated that can be used for the calculation of interpretable
-      marginal effects. This option does, however, not make the estimated
-      transition parameters interpretable. The other other option requires
-      more computer power and can make the transition parameters interpretable
-      if enough age invariant measures are available and used for
-      normalizations.
+A list of variables that are used as controls in the measurement equations. You do not
+have to specify as constant as control variable, because it is always included. If you
+want to get rid of controls in some periods, you have to normalize their coefficients
+to zero.
 
-    * ``time_invariant_measurement_system``: Takes the values True or False
-      (default). If True, measurement equations that occur in several periods
-      are restricted to have the same parameters across those periods. To
-      determine whether a measurement equation occurs more than once, the
-      notion of equality has to be defined for measurement equations.
-      Measurement equations are equal if and only if: 1) they use the same
-      measurement variable. 2) The same latent factors are measured. 3) They
-      occur in periods that use the same control variables. Currently, time
-      invariant measurement system can only be used with the CHS-estimator.
-
-      If ``time_invariant_measurement_system`` is True, the normalizations
-      across all occurrences of a measurement equation have to be compatible.
-      It is considered compatible if a parameter is normalized in some periods
-      but not in others. It is not compatible if a parameter is normalized to
-      different values. In this case, an error will be raised.
+``"stagemap"``
+--------------
 
 
+A list that has one entry less than the number of periods of the model. It maps periods
+to development stages. See :ref:`stages_vs_periods` for the meaning of development
+stages.
 
-A note on endogeneity correction methods:
-*****************************************
 
-In the empirical part of their paper, CHS use two methods for endogeneity
-correction. Both require very strong assumptions on the scale of factors.
-Below I give an overview of the proposed endogeneity correction methods that
-can serve as a starting point for someone who wants to extend skillmodels in
-that direction:
+``"estimation_options"``
+------------------------
 
-In secton 4.2.4 CHS extend their basic model with a time invariant individual
-specific heterogeneity component, i.e. a fixed effect. The time invariance
-assumption can only be valid if the scale of all factors remains the same
-throughout the model. This is highly unlikely, unless age invariant
-measurements (as defined by Wiswall and Agostinelli) are available and used
-for normalization in all periods for all factors. With KLS transition
-functions the assumption of the factor scales remaining constant in all
-periods is highly unlikely (see: :ref:`KLS_not_constant`). Moreover, this
-approach requires 3 adult outcomes. If you have a dataset with enough time
-invariant measurements and enough adult outcomes, this method is suitable for
-you and you could use the Fortran code by CHS as a starting point.
+Another dictionary. It has the following entries.
 
-In 4.2.5 they make a endogeneity correction with time varying heterogeneity.
-However, this heterogeneity follows the same AR1 process in each period and
-relies on an estimated time invariant investment equation, so it also requires
-the factor scales to be constant. This might not be a good assumption in many
-applications. Moreover, this correction method relies on a exclusion
-restriction (Income is an argument of the investment function but not of the
-transition functions of other latent factors) or suitable functional form
-assumptions for identification.
+- ``"sigma_points_scale"``: The scaling factor of Julier sigma points. Default 2 which
+  was shown to work well for the example models by Cunha, Heckman and Schennach.
+- ``"robust_bounds"``: Bool. If true, bound constraints are made stricter. This avoids
+  exploding likelihoods when the standard deviation of the measurement error is zero.
+  Default True.
+- ``"bounds_distance"``: By how much the bounds are made stricter. Only relevant when
+  robust bounds are used. Default ``0.001``.
+- ``"clipping_lower_bound": Strongly negative value at which the log likelihood is
+  clipped a log likelihood of -infinity. The clipping is done using a soft maximum
+  to avoid non-differentiable points in the likelihood. Default ``-1e-250``. Set to
+  ``None`` to disable this completely.
+- ``"clipping_upper_bound". Same as ``"clipping_lower_bound"`` but from above. Default
+  None because typically the better way of avoiding upwards exploding likelihoods is to
+  set bounds strictly above zero for the measurement error standard deviations.
+- ``"clipping_lower_hardness"`` and ``"clipping_upper_hardness"``. How closely the soft
+  maximum or minimum we use for clipping approximates its hard counterpart. Default 1
+  which is an extremely close approximation of the hard maximum or minimum. If you want
+  to make the likelihood function smoother you should set it to a much lower value.
 
-To use this correction method in models where not enough age invariant
-measurements are available to ensure constant factor scales, one would have to
-replace the AR1 process by a linear transition function with different
-estimated parameters in each period and also estimate a different investment
-function in each period. I don't know if this model is identified.
 
-I don't know if these methods could be used in the WA estimator.
-
-Wiswall and Agostinelli use a simpler model of endegeneity of investments that
-could be used with both estimators. See section 6.1.2 of their `paper`_.
-
-.. _paper:
-    https://tinyurl.com/y5ezloh2
 
 
 .. _replication files:
