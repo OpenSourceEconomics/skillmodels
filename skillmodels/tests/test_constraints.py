@@ -265,11 +265,18 @@ def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
     base_anchoring_info["use_constant"] = False
     calculated = _get_anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
 
+    del calculated[0]["description"]
     expected = [
-        {"loc": ("controls", 0, "outcome_f1", "constant"), "type": "fixed", "value": 0},
-        {"loc": ("controls", 0, "outcome_f2", "constant"), "type": "fixed", "value": 0},
-        {"loc": ("controls", 1, "outcome_f1", "constant"), "type": "fixed", "value": 0},
-        {"loc": ("controls", 1, "outcome_f2", "constant"), "type": "fixed", "value": 0},
+        {
+            "loc": [
+                ("controls", 0, "outcome_f1", "constant"),
+                ("controls", 0, "outcome_f2", "constant"),
+                ("controls", 1, "outcome_f1", "constant"),
+                ("controls", 1, "outcome_f2", "constant"),
+            ],
+            "type": "fixed",
+            "value": 0,
+        }
     ]
 
     assert calculated == expected
@@ -281,39 +288,24 @@ def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
         anch_uinfo, ["c1", "c2"], base_anchoring_info, (0, 1)
     )
 
+    for constr in calculated:
+        del constr["description"]
+
     expected = [
         {
             "loc": [
                 ("controls", 0, "outcome_f1", "c1"),
                 ("controls", 0, "outcome_f1", "c2"),
-            ],
-            "type": "fixed",
-            "value": 0,
-        },
-        {
-            "loc": [
                 ("controls", 0, "outcome_f2", "c1"),
                 ("controls", 0, "outcome_f2", "c2"),
-            ],
-            "type": "fixed",
-            "value": 0,
-        },
-        {
-            "loc": [
                 ("controls", 1, "outcome_f1", "c1"),
                 ("controls", 1, "outcome_f1", "c2"),
-            ],
-            "type": "fixed",
-            "value": 0,
-        },
-        {
-            "loc": [
                 ("controls", 1, "outcome_f2", "c1"),
                 ("controls", 1, "outcome_f2", "c2"),
             ],
             "type": "fixed",
             "value": 0,
-        },
+        }
     ]
 
     assert calculated == expected
@@ -328,19 +320,16 @@ def test_anchoring_constraints_for_loadings(anch_uinfo, base_anchoring_info):
             "loc": [
                 ("loadings", 0, "outcome_f1", "f1"),
                 ("loadings", 0, "outcome_f2", "f2"),
-            ],
-            "type": "fixed",
-            "value": 1,
-        },
-        {
-            "loc": [
                 ("loadings", 1, "outcome_f1", "f1"),
                 ("loadings", 1, "outcome_f2", "f2"),
             ],
             "type": "fixed",
             "value": 1,
-        },
+        }
     ]
+
+    for constr in calculated:
+        del constr["description"]
 
     assert calculated == expected
 

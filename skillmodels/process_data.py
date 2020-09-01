@@ -84,7 +84,6 @@ def _add_copies_of_anchoring_outcome(df, anchoring_info):
 
 def _check_data(df, controls, update_info, labels):
     var_report = pd.DataFrame(index=update_info.index[:0], columns=["problem"])
-
     for period in labels["periods"]:
         period_data = df.query(f"period == {period}")
         for cont in controls:

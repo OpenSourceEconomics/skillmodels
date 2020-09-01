@@ -132,7 +132,12 @@ def _get_not_measured_constraints(update_info, labels):
     to_fix = ~update_info[factors].to_numpy().flatten().astype(bool)
     locs = [tup for i, tup in enumerate(all_loading_indices) if to_fix[i]]
 
-    return [{"loc": locs, "type": "fixed", "value": 0, "description": msg}]
+    if locs:
+        constraints = [{"loc": locs, "type": "fixed", "value": 0, "description": msg}]
+    else:
+        constraints = []
+
+    return constraints
 
 
 def _get_mixture_weights_constraints(n_mixtures):
@@ -163,25 +168,32 @@ def _get_stage_constraints(stagemap, stages):
 
     """
     msg = (
-        "This constraint was generated because you have a 'stagemap' in your model "
-        "specification."
+        "This constraint was generated because all involved periods belong to stage {}."
     )
     constraints = []
 
     stages_to_periods = {stage: [] for stage in stages}
-    for stage in stages:
-        for period, stage in enumerate(stagemap):
-            stages_to_periods[stage].append(period)
+    for period, stage in enumerate(stagemap):
+        stages_to_periods[stage].append(period)
 
-    for stage in stages:
-        locs_trans = [("transition", p) for p in stages_to_periods[stage]]
-        locs_q = [("shock_sds", p) for p in stages_to_periods[stage]]
-        constraints.append(
-            {"locs": locs_trans, "type": "pairwise_equality", "description": msg}
-        )
-        constraints.append(
-            {"locs": locs_q, "type": "pairwise_equality", "description": msg}
-        )
+    for stage, stage_periods in stages_to_periods.items():
+        if len(stage_periods) > 1:
+            locs_trans = [("transition", p) for p in stage_periods]
+            locs_q = [("shock_sds", p) for p in stage_periods]
+            constraints.append(
+                {
+                    "locs": locs_trans,
+                    "type": "pairwise_equality",
+                    "description": msg.format(stage),
+                }
+            )
+            constraints.append(
+                {
+                    "locs": locs_q,
+                    "type": "pairwise_equality",
+                    "description": msg.format(stage),
+                }
+            )
 
     return constraints
 
@@ -285,24 +297,43 @@ def _get_anchoring_constraints(update_info, controls, anchoring_info, periods):
 
     constraints = []
     if not anchoring_info["use_constant"]:
+        msg = (
+            "This constraint was generated because use_constant in the anchoring "
+            "section of the model specification is set to False."
+        )
+        locs = []
         for period, meas in anchoring_updates:
-            ind_tup = ("controls", period, meas, "constant")
-            constraints.append({"loc": ind_tup, "type": "fixed", "value": 0})
+            locs.append(("controls", period, meas, "constant"))
+        constraints.append(
+            {"loc": locs, "type": "fixed", "value": 0, "description": msg}
+        )
 
     if not anchoring_info["use_controls"]:
+        msg = (
+            "This constraint was generated because use_controls in the anchoring "
+            "section of the model specification is set to False."
+        )
+        ind_tups = []
         for period, meas in anchoring_updates:
-            ind_tups = []
             for cont in controls:
                 ind_tups.append(("controls", period, meas, cont))
-            constraints.append({"loc": ind_tups, "type": "fixed", "value": 0})
+        constraints.append(
+            {"loc": ind_tups, "type": "fixed", "value": 0, "description": msg}
+        )
 
     if not anchoring_info["free_loadings"]:
+        msg = (
+            "This constraint was generated because free_loadings in the anchoring "
+            "section of the model specification is set to False."
+        )
+        ind_tups = []
         for period in periods:
-            ind_tups = []
             for factor in anchoring_info["factors"]:
                 meas = f"{anch_outcome}_{factor}"
                 ind_tups.append(("loadings", period, meas, factor))
 
-            constraints.append({"loc": ind_tups, "type": "fixed", "value": 1})
+        constraints.append(
+            {"loc": ind_tups, "type": "fixed", "value": 1, "description": msg}
+        )
 
     return constraints
