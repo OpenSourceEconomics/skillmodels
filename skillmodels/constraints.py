@@ -76,33 +76,34 @@ def _get_normalization_constraints(normalizations):
 
     """
     msg = "This constraint was generated because of an explicit normalization."
-    constraints = []
     factors = sorted(normalizations.keys())
     periods = range(len(normalizations[factors[0]]["loadings"]))
+
+    index_tuples = []
+    fixed_values = []
+
     for factor in factors:
         if "variances" in normalizations[factor].keys():
             raise ValueError("normalization for variances cannot be provided")
         for period in periods:
             loading_norminfo = normalizations[factor]["loadings"][period]
             for meas, normval in loading_norminfo.items():
-                constraints.append(
-                    {
-                        "loc": ("loadings", period, meas, factor),
-                        "type": "fixed",
-                        "value": normval,
-                        "description": msg,
-                    }
-                )
+                index_tuples.append(("loadings", period, meas, factor))
+                fixed_values.append(normval)
+
             intercept_norminfo = normalizations[factor]["intercepts"][period]
             for meas, normval in intercept_norminfo.items():
-                constraints.append(
-                    {
-                        "loc": ("controls", period, meas, "constant"),
-                        "type": "fixed",
-                        "value": normval,
-                        "description": msg,
-                    }
-                )
+                index_tuples.append(("controls", period, meas, "constant"))
+                fixed_values.append(normval)
+
+    constraints = [
+        {
+            "loc": index_tuples,
+            "type": "fixed",
+            "value": fixed_values,
+            "description": msg,
+        }
+    ]
 
     return constraints
 

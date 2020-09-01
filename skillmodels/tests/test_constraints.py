@@ -47,11 +47,17 @@ def test_normalization_constraints():
     }
 
     expected = [
-        {"loc": ("loadings", 0, "m1", "fac1"), "type": "fixed", "value": 2},
-        {"loc": ("loadings", 0, "m2", "fac1"), "type": "fixed", "value": 1.5},
-        {"loc": ("loadings", 1, "m1", "fac1"), "type": "fixed", "value": 3},
-        {"loc": ("controls", 0, "m1", "constant"), "type": "fixed", "value": 0.5},
-        {"loc": ("loadings", 0, "m3", "fac2"), "type": "fixed", "value": 1},
+        {
+            "loc": [
+                ("loadings", 0, "m1", "fac1"),
+                ("loadings", 0, "m2", "fac1"),
+                ("controls", 0, "m1", "constant"),
+                ("loadings", 1, "m1", "fac1"),
+                ("loadings", 0, "m3", "fac2"),
+            ],
+            "type": "fixed",
+            "value": [2, 1.5, 0.5, 3, 1],
+        }
     ]
 
     calculated = _get_normalization_constraints(norm)
