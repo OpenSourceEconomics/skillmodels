@@ -23,10 +23,10 @@ def test_add_bounds():
     df = pd.DataFrame(
         index=pd.MultiIndex.from_tuples(ind_tups),
         data=np.arange(16).reshape(8, 2),
-        columns=["lower", "upper"],
+        columns=["lower_bound", "upper_bound"],
     )
     expected = df.copy(deep=True)
-    expected["lower"] = [0.1] * 5 + [0.1, 12, 0.1]
+    expected["lower_bound"] = [0.1] * 5 + [0.1, 12, 0.1]
 
     calculated = add_bounds(df, 0.1)
     assert_frame_equal(calculated, expected)

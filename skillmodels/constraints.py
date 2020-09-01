@@ -57,7 +57,7 @@ def add_bounds(params_df, bounds_distance=0.0):
 
     """
     df = params_df.copy()
-    if "lower" not in df.columns:
+    if "lower_bound" not in df.columns:
         df["lower_bound"] = -np.inf
     df.loc["meas_sds", "lower_bound"] = bounds_distance
     df.loc["shock_sds", "lower_bound"] = bounds_distance
@@ -244,10 +244,14 @@ def _get_initial_states_constraints(n_mixtures, factors):
         "uniqueness of the maximum likelihood estimator."
     )
 
-    ind_tups = [
-        ("initial_states", 0, f"mixture_{emf}", factors[0]) for emf in range(n_mixtures)
-    ]
-    constr = [{"loc": ind_tups, "type": "increasing", "description": msg}]
+    if n_mixtures > 1:
+        ind_tups = [
+            ("initial_states", 0, f"mixture_{emf}", factors[0])
+            for emf in range(n_mixtures)
+        ]
+        constr = [{"loc": ind_tups, "type": "increasing", "description": msg}]
+    else:
+        constr = []
 
     return constr
 
@@ -335,5 +339,7 @@ def _get_anchoring_constraints(update_info, controls, anchoring_info, periods):
         constraints.append(
             {"loc": ind_tups, "type": "fixed", "value": 1, "description": msg}
         )
+
+    constraints = [c for c in constraints if c["loc"] != []]
 
     return constraints
