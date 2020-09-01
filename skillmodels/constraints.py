@@ -58,9 +58,9 @@ def add_bounds(params_df, bounds_distance=0.0):
     """
     df = params_df.copy()
     if "lower" not in df.columns:
-        df["lower"] = -np.inf
-    df.loc["meas_sds", "lower"] = bounds_distance
-    df.loc["shock_sds", "lower"] = bounds_distance
+        df["lower_bound"] = -np.inf
+    df.loc["meas_sds", "lower_bound"] = bounds_distance
+    df.loc["shock_sds", "lower_bound"] = bounds_distance
     return df
 
 
