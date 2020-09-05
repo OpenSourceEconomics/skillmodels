@@ -34,11 +34,10 @@ def get_maximization_inputs(model_dict, data):
             params dataframe as only input and returns the a dict with the entries:
             - "value": The scalar log likelihood
             - "contributions": An array with the log likelihood per observation
-            - "all_contributions": Array with the log likelihood of each Kalman update.
-        debug_loglike (function): Same as loglike but not jitted. This
-            can be used to find out quickly if the likelihood function is defined at
-            the start params (because the jitted version takes long on the first run)
-            or to step through it with a debugger.
+        debug_loglike (function): Similar to loglike, with the following differences:
+            - It is not jitted and thus faster on the first call and debuggable
+            - It returns more intermediate results as additional entries in the result
+              dictionary. Those can be used for debugging and plotting.
         gradient (function): The gradient of the scalar log likelihood
             function with respect to the parameters.
         loglike_and_gradient (function): Combination of loglike and
@@ -64,7 +63,7 @@ def get_maximization_inputs(model_dict, data):
         model["estimation_options"]["sigma_points_scale"],
     )
 
-    _loglike = functools.partial(
+    _base_loglike = functools.partial(
         _log_likelihood_jax,
         parsing_info=parsing_info,
         update_info=model["update_info"],
@@ -79,12 +78,16 @@ def get_maximization_inputs(model_dict, data):
         estimation_options=model["estimation_options"],
     )
 
+    _debug_loglike = functools.partial(_base_loglike, debug=True)
+
+    _loglike = functools.partial(_base_loglike, debug=False)
+
     _jitted_loglike = jax.jit(_loglike)
     _gradient = jax.grad(_jitted_loglike, has_aux=True)
 
     def debug_loglike(params):
         params_vec = jnp.array(params["value"].to_numpy())
-        jax_output = _loglike(params_vec)[1]
+        jax_output = _debug_loglike(params_vec)[1]
         numpy_output = _to_numpy(jax_output)
         numpy_output["value"] = float(numpy_output["value"])
         return numpy_output
@@ -147,14 +150,18 @@ def _log_likelihood_jax(
     dimensions,
     labels,
     estimation_options,
+    debug,
 ):
     """Log likelihood of a skill formation model.
 
     This function is jax-differentiable and jax-jittable as long as all but the first
     argument are marked as static.
 
-    In contrast to most likelihood functions this returns both an aggregated likelihood
-    value and the likelihood contribution of each individual.
+    The function returns both a tuple (float, dict). The first entry is the aggregated
+    log likelihood value. The second additional information like the log likelihood
+    contribution of each individual. Note that the dict also contains the aggregated
+    value. Returning that value separately is only needed to calculate a gradient
+    with Jax.
 
     Args:
         params (jax.numpy.array): 1d array with model parameters.
@@ -181,11 +188,13 @@ def _log_likelihood_jax(
             n_mixtures. See :ref:`dimensions`.
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
+        debug (bool): Boolean flag. If True, more intermediate results are returned
 
     Returns:
         jnp.array: 1d array of length 1, the aggregated log likelihood.
-        jnp.array: Array of shape (n_obs, n_updates) log likelihood contributions per
-            individual and update.
+        dict: Additional data, containing log likelihood contribution of each Kalman
+            update potentially if ``debug`` is ``True`` additional information like
+            the filtered states.
 
     """
     n_obs = measurements.shape[1]
@@ -230,24 +239,25 @@ def _log_likelihood_jax(
                 anchoring_variables[t : t + 2],
             )
 
-        clipped = soft_clipping(
-            arr=loglikes,
-            lower=estimation_options["clipping_lower_bound"],
-            upper=estimation_options["clipping_upper_bound"],
-            lower_hardness=estimation_options["clipping_lower_hardness"],
-            upper_hardness=estimation_options["clipping_upper_hardness"],
-        )
+    clipped = soft_clipping(
+        arr=loglikes,
+        lower=estimation_options["clipping_lower_bound"],
+        upper=estimation_options["clipping_upper_bound"],
+        lower_hardness=estimation_options["clipping_lower_hardness"],
+        upper_hardness=estimation_options["clipping_upper_hardness"],
+    )
 
-        value = clipped.sum()
+    value = clipped.sum()
 
-        additional_data = {
-            # used for scalar optimization, thus has to be clipped
-            "value": value,
-            # can be used for sum optimizers, thus has to be clipped
-            "contributions": clipped.sum(axis=0),
-        }
-        if estimation_options["return_all_contributions"]:
-            additional_data["all_contributions"] = loglikes
+    additional_data = {
+        # used for scalar optimization, thus has to be clipped
+        "value": value,
+        # can be used for sum-structure optimizers, thus has to be clipped
+        "contributions": clipped.sum(axis=0),
+    }
+
+    if debug:
+        additional_data["all_contributions"] = loglikes
 
     return value, additional_data
 

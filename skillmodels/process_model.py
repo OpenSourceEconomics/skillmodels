@@ -119,7 +119,6 @@ def _process_estimation_options(model_dict):
         "clipping_upper_bound": None,
         "clipping_lower_hardness": 1,
         "clipping_upper_hardness": 1,
-        "return_all_contributions": False,
     }
     default_options.update(model_dict.get("estimation_options", {}))
 
