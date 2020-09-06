@@ -5,7 +5,7 @@ package:
   version: {{ data.get('version') }}
 
 source:
-  git_url: ../
+  path: ../
 
 build:
   noarch: python
@@ -20,20 +20,23 @@ requirements:
   run:
     - python >=3.6
     - numpy
-    - pandas <=1.0.5
+    - pandas >=0.24,<=1.0.5
     - seaborn
     - scipy
     - jax >=0.1.7
     - jaxlib >=0.1.51
+    - pyyaml
 
 test:
-  commands:
-    - py.test
-  files:
-    - skillmodels/tests/
   requires:
     - pytest
+    - pytest-xdist
     - filterpy
+  source_files:
+    - tox.ini
+    - skillmodels/tests
+  commands:
+    - pytest
 
 
 about:
