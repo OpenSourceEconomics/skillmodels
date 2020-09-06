@@ -42,8 +42,8 @@ def kalman_update(
         log_mixture_weights (jax.numpy.array): Array of shape (n_obs, n_mixtures) with
             the natural logarithm of the weights of each element of the mixture of
             normals distribution.
-        debug (bool): If true, the debug_info contains the residuals and residual_sds
-            of the update. Otherwise, it is an empty dict.
+        debug (bool): If true, the debug_info contains the residuals of the update and
+            their standard deviations. Otherwise, it is an empty dict.
 
     Returns:
         states (jax.numpy.array): Same format as states.
@@ -51,8 +51,7 @@ def kalman_update(
         new_upper_chols (jax.numpy.array): Same format as upper_chols
         new_log_mixture_weights: (jax.numpy.array): Same format as log_mixture_weights
         new_loglikes: (jax.numpy.array): 1d array of length n_obs
-        debug_info (dict): Empty or containing residuals and residual_sds (depending
-            on the value of ``debug``).
+        debug_info (dict): Empty or containing residuals and residual_sds
 
     """
     # find out which measurements are missing
