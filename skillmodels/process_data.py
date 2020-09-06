@@ -72,6 +72,7 @@ def _pre_process_data(df):
 
     # set new index
     df = df.reindex(new_index)
+
     return df
 
 

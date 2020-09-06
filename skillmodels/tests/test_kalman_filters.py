@@ -44,7 +44,7 @@ def test_kalman_update(seed):
 
     sm_states, sm_chols = _filterpy_to_skillmodels(state, cov)
 
-    calc_states, calc_chols, calc_weights, calc_loglikes = kalman_update(
+    calc_states, calc_chols, calc_weights, calc_loglikes, _ = kalman_update(
         states=sm_states,
         upper_chols=sm_chols,
         loadings=jnp.array(loadings),
@@ -54,6 +54,7 @@ def test_kalman_update(seed):
         measurements=jnp.array([measurement]) + 1,
         controls=jnp.ones((1, 2)) * 0.5,
         log_mixture_weights=jnp.ones((1, 1)),
+        debug=False,
     )
     calculated_state = calc_states.flatten()
     calculated_cov = calc_chols.reshape(dim, dim).T @ calc_chols.reshape(dim, dim)
@@ -84,7 +85,7 @@ def test_kalman_update_with_missing():
     measurements = jnp.array([13, jnp.nan, jnp.nan])
     weights = jnp.log(jnp.ones((n_obs, n_mixtures)) * 0.5)
 
-    calc_states, calc_chols, calc_weights, calc_loglikes = kalman_update(
+    calc_states, calc_chols, calc_weights, calc_loglikes, _ = kalman_update(
         states=states,
         upper_chols=chols,
         loadings=jnp.ones(n_states) * 2,
@@ -93,6 +94,7 @@ def test_kalman_update_with_missing():
         measurements=measurements,
         controls=jnp.ones((n_obs, 2)) * 0.5,
         log_mixture_weights=jnp.log(jnp.ones((n_obs, 2)) * 0.5),
+        debug=False,
     )
 
     aaae(calc_states[1:], states[1:])

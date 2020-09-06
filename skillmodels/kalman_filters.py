@@ -22,6 +22,7 @@ def kalman_update(
     measurements,
     controls,
     log_mixture_weights,
+    debug,
 ):
     """Perform a Kalman update with likelihood evaluation.
 
@@ -41,6 +42,17 @@ def kalman_update(
         log_mixture_weights (jax.numpy.array): Array of shape (n_obs, n_mixtures) with
             the natural logarithm of the weights of each element of the mixture of
             normals distribution.
+        debug (bool): If true, the debug_info contains the residuals and residual_sds
+            of the update. Otherwise, it is an empty dict.
+
+    Returns:
+        states (jax.numpy.array): Same format as states.
+        new_states (jax.numpy.array): Same format as states.
+        new_upper_chols (jax.numpy.array): Same format as upper_chols
+        new_log_mixture_weights: (jax.numpy.array): Same format as log_mixture_weights
+        new_loglikes: (jax.numpy.array): 1d array of length n_obs
+        debug_info (dict): Empty or containing residuals and residual_sds (depending
+            on the value of ``debug``).
 
     """
     # find out which measurements are missing
@@ -100,7 +112,25 @@ def kalman_update(
         log_mixture_weights, index[not_missing], _new_log_mixture_weights
     )
 
-    return new_states, new_upper_chols, new_log_mixture_weights, new_loglikes
+    debug_info = {}
+    if debug:
+        n_obs, n_mixtures = new_log_mixture_weights.shape
+
+        residuals = jnp.full((n_obs, n_mixtures), jnp.nan)
+        residuals = index_update(residuals, index[not_missing], _residuals)
+        debug_info["residuals"] = residuals
+
+        residual_sds = jnp.full((n_obs, n_mixtures), jnp.nan)
+        residual_sds = index_update(residual_sds, index[not_missing], _abs_root_sigmas)
+        debug_info["residual_sds"] = residual_sds
+
+    return (
+        new_states,
+        new_upper_chols,
+        new_log_mixture_weights,
+        new_loglikes,
+        debug_info,
+    )
 
 
 # ======================================================================================

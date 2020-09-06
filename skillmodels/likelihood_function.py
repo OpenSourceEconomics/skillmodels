@@ -17,6 +17,7 @@ from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
 from skillmodels.process_data import process_data_for_estimation
+from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
 
 config.update("jax_enable_x64", True)
@@ -78,6 +79,8 @@ def get_maximization_inputs(model_dict, data):
         estimation_options=model["estimation_options"],
     )
 
+    partialed_process_debug_data = functools.partial(process_debug_data, model=model)
+
     _debug_loglike = functools.partial(_base_loglike, debug=True)
 
     _loglike = functools.partial(_base_loglike, debug=False)
@@ -90,6 +93,7 @@ def get_maximization_inputs(model_dict, data):
         jax_output = _debug_loglike(params_vec)[1]
         numpy_output = _to_numpy(jax_output)
         numpy_output["value"] = float(numpy_output["value"])
+        numpy_output = partialed_process_debug_data(numpy_output)
         return numpy_output
 
     def loglike(params):
@@ -203,13 +207,15 @@ def _log_likelihood_jax(
     )
     n_updates = len(update_info)
     loglikes = jnp.zeros((n_updates, n_obs))
+    debug_infos = []
+    states_history = []
 
     k = 0
     for t in labels["periods"]:
         nmeas = len(update_info.loc[t])
         for _j in range(nmeas):
             purpose = update_info.iloc[k]["purpose"]
-            new_states, new_upper_chols, new_weights, loglikes_k = kalman_update(
+            new_states, new_upper_chols, new_weights, loglikes_k, info = kalman_update(
                 states,
                 upper_chols,
                 pardict["loadings"][k],
@@ -218,11 +224,17 @@ def _log_likelihood_jax(
                 measurements[k],
                 controls[t],
                 log_mixture_weights,
+                debug,
             )
+            if debug:
+                states_history.append(new_states)
+
             loglikes = index_update(loglikes, index[k], loglikes_k)
             log_mixture_weights = new_weights
             if purpose == "measurement":
                 states, upper_chols = new_states, new_upper_chols
+
+            debug_infos.append(info)
 
             k += 1
 
@@ -258,6 +270,15 @@ def _log_likelihood_jax(
 
     if debug:
         additional_data["all_contributions"] = loglikes
+        additional_data["residuals"] = [info["residuals"] for info in debug_infos]
+        additional_data["residual_sds"] = [info["residual_sds"] for info in debug_infos]
+
+        initial_states, *_ = parse_params(
+            params, parsing_info, dimensions, labels, n_obs
+        )
+        additional_data["initial_states"] = initial_states
+
+        additional_data["filtered_states"] = states_history
 
     return value, additional_data
 
