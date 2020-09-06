@@ -5,20 +5,26 @@ package:
   version: {{ data.get('version') }}
 
 source:
-  path: ../skillmodels
+  git_url: ../
+
+build:
+  noarch: python
+  number: 0
 
 requirements:
   build:
     - python {{ python }}
     - setuptools
+  host:
+    python >=3.6
   run:
-    - python {{ python }}
+    - python >=3.6
     - numpy
-    - pandas >=0.24
+    - pandas <=1.0.5
     - seaborn
-    - scipy <=1.2.1
-    - jax >= 0.1.7
-    - jaxlib >= 0.1.51
+    - scipy
+    - jax >=0.1.7
+    - jaxlib >=0.1.51
 
 test:
   commands:
@@ -31,7 +37,7 @@ test:
 
 
 about:
-  home: https://github.com/suri5471/skillmodels
+  home: https://github.com/janosg/skillmodels
   license: BSD
   license_file: LICENSE
   summary: Estimate non-linear skill formation models.
