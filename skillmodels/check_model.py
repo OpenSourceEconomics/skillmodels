@@ -63,11 +63,9 @@ def _check_anchoring(anchoring):
             report.append("anchoring['outcome'] must be a valid pandas column name.")
     if not isinstance(anchoring["factors"], list):
         report.append("anchoring['factors'] must be a list.")
-    if not isinstance(anchoring["center"], bool):
-        report.append("anchoring['center'] must be a bool.")
-    if not isinstance(anchoring["use_controls"], bool):
+    if not isinstance(anchoring["free_controls"], bool):
         report.append("anchoring['use_controls'] must be a bool")
-    if not isinstance(anchoring["use_constant"], bool):
+    if not isinstance(anchoring["free_constant"], bool):
         report.append("anchoring['use_constant'] must be a bool.")
     if not isinstance(anchoring["free_loadings"], bool):
         report.append("anchoring['free_loadings'] must be a bool.")

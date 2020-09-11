@@ -23,9 +23,6 @@ def process_data_for_estimation(df, labels, update_info, anchoring_info):
             observed measurements. NaN if the measurement was not observed.
         control_data (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
             with observed control variables for the measurement equations.
-        anchoring_variables (jax.numpy.array): Array of shape (n_periods, n_obs, n_fac)
-            with anchoring outcomes. Can be 0 for unanchored factors or if no centering
-            is desired.
 
     """
     df = _pre_process_data(df)
@@ -36,11 +33,8 @@ def process_data_for_estimation(df, labels, update_info, anchoring_info):
     df = _handle_controls_with_missings(df, labels["controls"], update_info)
     meas_data = _generate_measurements_array(df, update_info, n_obs)
     control_data = _generate_controls_array(df, labels, n_obs)
-    anchoring_variables = _generate_anchoring_variables_array(
-        df, labels, anchoring_info, n_obs
-    )
 
-    return meas_data, control_data, anchoring_variables
+    return meas_data, control_data
 
 
 def _pre_process_data(df):
@@ -144,17 +138,4 @@ def _generate_controls_array(df, labels, n_obs):
     arr = np.zeros((len(labels["periods"]), n_obs, len(labels["controls"])))
     for period in labels["periods"]:
         arr[period] = df.query(f"period == {period}")[labels["controls"]].to_numpy()
-    return jnp.array(arr)
-
-
-def _generate_anchoring_variables_array(df, labels, anchoring_info, n_obs):
-    arr = np.zeros((len(labels["periods"]), n_obs, len(labels["factors"])))
-    if anchoring_info["center"]:
-        for period in labels["periods"]:
-            anch_var = df.query(f"period == {period}")[
-                anchoring_info["outcome"]
-            ].to_numpy()
-            for f, factor in enumerate(labels["factors"]):
-                if factor in anchoring_info["factors"]:
-                    arr[period, :, f] = anch_var
     return jnp.array(arr)

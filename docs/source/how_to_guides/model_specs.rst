@@ -126,20 +126,21 @@ The specification for anchoring is a dictionary. It has the following entries:
 
 - ``"outcome"``: The name of the variable that is used as anchor.
 - ``"factors"``: A list containing the anchored factors.
-- ``"center``: Optional, default False. If True, the observed anchoring outcome is
-  subtracted from the anchored factors. The main reason for using this option is
-  age-anchoring, where you want the factors to have the scale of mental age, but want to
-  get rid of the age-trend.
-- ``"use_controls"``: Whether the control variables used in the measurement equations
+- ``"free_controls"``: Whether the control variables used in the measurement equations
   should also be used in the anchoring equations. Default False. This is mainly there
   to support the CHS example model and will probably not be set to True in any real
   application.
-- ``"use_constant"``: Whether the anchoring equation should have a constant. Default
+- ``"free_constant"``: Whether the anchoring equation should have a constant. Default
   False. This should be set to True if there are normalizations of location (i.e.
   normalized intercepts) in the measurement equations.
 - ``"free_loadings"``: If true, the loadings are estimated, otherwise they are fixed to
   one. Default False. This should be set to True if there are normalizations of scale
   (i.e. normalized loadings) in the measurement equations.
+- ``"ignore_constant_when_anchoring"``: If true, no constant is used when anchoring the
+  latent factors, even if one was estimated. Default False. This is mainly there
+  to support the CHS example model and will probably not be set to True in any real
+  application.
+
 
 
 ``"controls"``

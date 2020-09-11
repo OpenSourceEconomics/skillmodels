@@ -142,9 +142,8 @@ def _process_anchoring(model_dict):
         "anchoring": False,
         "factors": [],
         "outcome": None,
-        "center": False,
-        "use_controls": False,
-        "use_constant": False,
+        "free_controls": False,
+        "free_constant": False,
         "free_loadings": False,
     }
 

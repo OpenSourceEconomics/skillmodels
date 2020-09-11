@@ -162,14 +162,11 @@ def test_transformation_of_sigma_points():
     trans_coeffs = (jnp.array([2]), jnp.array([]))
 
     anch_scaling = jnp.array([[1, 1], [2, 1]])
-    anchvars = np.zeros((2, 1, 2))
-    anchvars[0] = 1
-    anchvars = jnp.array(anchvars)
 
-    expected = jnp.array([[[[1, 1], [5, 3], [9, 5], [13, 7], [17, 9]]]])
+    expected = jnp.array([[[[3, 2], [7, 4], [11, 6], [15, 8], [19, 10]]]])
 
     calculated = _transform_sigma_points(
-        sp, transition_functions, trans_coeffs, anch_scaling, anchvars
+        sp, transition_functions, trans_coeffs, anch_scaling
     )
 
     aaae(calculated, expected)
@@ -178,7 +175,7 @@ def test_transformation_of_sigma_points():
 # ======================================================================================
 # test special case against linear predict from filterpy
 # - anchoring scaling factors are 1
-# - anchoring variables are 0
+# - anchoring constants are 0
 # - linear transition functions
 # ======================================================================================
 
@@ -210,7 +207,6 @@ def test_predict_against_linear_filterpy(seed):
     transition_functions = (("linear", linear) for i in range(dim))
     trans_coeffs = (jnp.array(trans_mat[i]) for i in range(dim))
     anch_scaling = jnp.ones((2, dim))
-    anch_vars = jnp.zeros((2, 1, dim))
 
     calc_states, calc_chols = kalman_predict(
         sm_state,
@@ -221,7 +217,6 @@ def test_predict_against_linear_filterpy(seed):
         trans_coeffs,
         jnp.array(shock_sds),
         anch_scaling,
-        anch_vars,
     )
 
     aaae(calc_states.flatten(), expected_state.flatten())

@@ -48,9 +48,8 @@ def test_anchoring(model2):
     res = process_model(model2)["anchoring"]
     assert res["outcome"] == "Q1"
     assert res["factors"] == ["fac1"]
-    assert not res["center"]
-    assert res["use_controls"]
-    assert res["use_constant"]
+    assert res["free_controls"]
+    assert res["free_constant"]
     assert res["free_loadings"]
 
 

@@ -255,8 +255,8 @@ def base_anchoring_info():
     anch_info = {
         "factors": ["f1", "f2"],
         "outcome": "outcome",
-        "use_controls": True,
-        "use_constant": True,
+        "free_controls": True,
+        "free_constant": True,
         "free_loadings": True,
     }
     return anch_info
@@ -268,7 +268,7 @@ def test_anchoring_constraints_no_constraint_needed(anch_uinfo, base_anchoring_i
 
 
 def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
-    base_anchoring_info["use_constant"] = False
+    base_anchoring_info["free_constant"] = False
     calculated = _get_anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
 
     del calculated[0]["description"]
@@ -289,7 +289,7 @@ def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
 
 
 def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
-    base_anchoring_info["use_controls"] = False
+    base_anchoring_info["free_controls"] = False
     calculated = _get_anchoring_constraints(
         anch_uinfo, ["c1", "c2"], base_anchoring_info, (0, 1)
     )

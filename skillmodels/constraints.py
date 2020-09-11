@@ -323,9 +323,9 @@ def _get_anchoring_constraints(update_info, controls, anchoring_info, periods):
     anchoring_updates = update_info[update_info["purpose"] == "anchoring"].index
 
     constraints = []
-    if not anchoring_info["use_constant"]:
+    if not anchoring_info["free_constant"]:
         msg = (
-            "This constraint was generated because use_constant in the anchoring "
+            "This constraint was generated because free_constant in the anchoring "
             "section of the model specification is set to False."
         )
         locs = []
@@ -335,9 +335,9 @@ def _get_anchoring_constraints(update_info, controls, anchoring_info, periods):
             {"loc": locs, "type": "fixed", "value": 0, "description": msg}
         )
 
-    if not anchoring_info["use_controls"]:
+    if not anchoring_info["free_controls"]:
         msg = (
-            "This constraint was generated because use_controls in the anchoring "
+            "This constraint was generated because free_controls in the anchoring "
             "section of the model specification is set to False."
         )
         ind_tups = []

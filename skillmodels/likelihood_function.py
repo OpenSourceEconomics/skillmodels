@@ -55,7 +55,7 @@ def get_maximization_inputs(model_dict, data):
     )
 
     parsing_info = create_parsing_info(p_index, model["update_info"], model["labels"])
-    measurements, controls, anchoring_variables = process_data_for_estimation(
+    measurements, controls, = process_data_for_estimation(
         data, model["labels"], model["update_info"], model["anchoring"]
     )
 
@@ -73,7 +73,6 @@ def get_maximization_inputs(model_dict, data):
         transition_functions=model["transition_functions"],
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
-        anchoring_variables=anchoring_variables,
         dimensions=model["dimensions"],
         labels=model["labels"],
         estimation_options=model["estimation_options"],
@@ -150,7 +149,6 @@ def _log_likelihood_jax(
     transition_functions,
     sigma_scaling_factor,
     sigma_weights,
-    anchoring_variables,
     dimensions,
     labels,
     estimation_options,
@@ -185,9 +183,6 @@ def _log_likelihood_jax(
             the sigma_point algorithm chosen.
         sigma_weights (jax.numpy.array): 1d array of length n_sigma with non-negative
             sigma weights.
-        anchoring_variables (jax.numpy.array): Array of shape (n_periods, n_obs, n_fac)
-            with anchoring outcomes. Can be 0 for unanchored factors or if no centering
-            is desired.
         dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
         labels (dict): Dict of lists with labels for the model quantities like
@@ -248,7 +243,6 @@ def _log_likelihood_jax(
                 pardict["transition"][t],
                 pardict["shock_sds"][t],
                 pardict["anchoring_scaling_factors"][t : t + 2],
-                anchoring_variables[t : t + 2],
             )
 
     clipped = soft_clipping(

@@ -7,7 +7,6 @@ import pandas as pd
 import pytest
 from numpy.testing import assert_array_equal as aae
 
-from skillmodels.process_data import _generate_anchoring_variables_array
 from skillmodels.process_data import _generate_controls_array
 from skillmodels.process_data import _generate_measurements_array
 from skillmodels.process_data import _handle_controls_with_missings
@@ -84,21 +83,6 @@ def test_generate_controls_array():
 
     calculated = _generate_controls_array(data, labels, 2)
     expected = jnp.array([[[1, 2], [5, 8]], [[3, 4], [7, 8]]])
-    aae(calculated, expected)
-
-
-def test_generate_anchoring_variables_array():
-    df = pd.DataFrame()
-    df["id"] = [0, 1]
-    df["period"] = 0
-    df.set_index(["id", "period"], inplace=True)
-    df["q1"] = [5, 6]
-
-    labels = {"periods": [0], "factors": ["fac1", "fac2"]}
-    anchoring_info = {"factors": ["fac1"], "outcome": "q1", "center": True}
-
-    expected = jnp.array([[[5, 0], [6, 0]]])
-    calculated = _generate_anchoring_variables_array(df, labels, anchoring_info, 2)
     aae(calculated, expected)
 
 
