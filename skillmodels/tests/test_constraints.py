@@ -19,14 +19,14 @@ def test_add_bounds():
         ("meas_sds", 4),
         ("bla", "blubb"),
         ("meas_sds", "foo"),
+        ("initial_cholcovs", "a-b-c"),
+        ("initial_cholcovs", "cog-cog"),
     ]
     df = pd.DataFrame(
-        index=pd.MultiIndex.from_tuples(ind_tups),
-        data=np.arange(16).reshape(8, 2),
-        columns=["lower_bound", "upper_bound"],
+        index=pd.MultiIndex.from_tuples(ind_tups, names=["category", "name2"])
     )
     expected = df.copy(deep=True)
-    expected["lower_bound"] = [0.1] * 5 + [0.1, 12, 0.1]
+    expected["lower_bound"] = [0.1] * 5 + [0.1, -np.inf, 0.1, -np.inf, 0.1]
 
     calculated = add_bounds(df, 0.1)
     assert_frame_equal(calculated, expected)

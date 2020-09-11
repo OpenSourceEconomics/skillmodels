@@ -61,7 +61,26 @@ def add_bounds(params_df, bounds_distance=0.0):
         df["lower_bound"] = -np.inf
     df.loc["meas_sds", "lower_bound"] = bounds_distance
     df.loc["shock_sds", "lower_bound"] = bounds_distance
+
+    cholcov_index = df.query("category == 'initial_cholcovs'").index.tolist()
+    ind_tups = [tup for tup in cholcov_index if _is_diagonal_entry(tup)]
+    df.loc[ind_tups, "lower_bound"] = bounds_distance
+
     return df
+
+
+def _is_diagonal_entry(ind_tup):
+    name2 = ind_tup[-1]
+    middle_pos = int(len(name2) // 2)
+    if len(name2) % 2 == 0:
+        is_diag = False
+    elif name2[middle_pos] != "-":
+        is_diag = False
+    elif name2[:middle_pos] != name2[middle_pos + 1 :]:
+        is_diag = False
+    else:
+        is_diag = True
+    return is_diag
 
 
 def _get_normalization_constraints(normalizations):
@@ -96,14 +115,17 @@ def _get_normalization_constraints(normalizations):
                 index_tuples.append(("controls", period, meas, "constant"))
                 fixed_values.append(normval)
 
-    constraints = [
-        {
-            "loc": index_tuples,
-            "type": "fixed",
-            "value": fixed_values,
-            "description": msg,
-        }
-    ]
+    if index_tuples:
+        constraints = [
+            {
+                "loc": index_tuples,
+                "type": "fixed",
+                "value": fixed_values,
+                "description": msg,
+            }
+        ]
+    else:
+        constraints = []
 
     return constraints
 
@@ -320,7 +342,7 @@ def _get_anchoring_constraints(update_info, controls, anchoring_info, periods):
         )
         ind_tups = []
         for period, meas in anchoring_updates:
-            for cont in controls:
+            for cont in [c for c in controls if c != "constant"]:
                 ind_tups.append(("controls", period, meas, cont))
         constraints.append(
             {"loc": ind_tups, "type": "fixed", "value": 0, "description": msg}
