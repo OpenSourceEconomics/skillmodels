@@ -168,6 +168,7 @@ def kalman_predict(
     trans_coeffs,
     shock_sds,
     anchoring_scaling_factors,
+    anchoring_constants,
 ):
     """Make a unscented Kalman predict.
 
@@ -190,6 +191,9 @@ def kalman_predict(
         anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_fac) with
             the scaling factors for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
+        anchoring_constants (jax.numpy.array): Array of shape (2, n_states) with the
+            constants for anchoring. The first row corresponds to the input
+            period, the second to the output period (i.e. input period + 1).
 
     Returns:
         jax.numpy.array: Predicted states, same shape as states.
@@ -198,7 +202,11 @@ def kalman_predict(
     """
     sigma_points = _calculate_sigma_points(states, upper_chols, sigma_scaling_factor)
     transformed = _transform_sigma_points(
-        sigma_points, transition_functions, trans_coeffs, anchoring_scaling_factors
+        sigma_points,
+        transition_functions,
+        trans_coeffs,
+        anchoring_scaling_factors,
+        anchoring_constants,
     )
 
     n_obs, n_mixtures, n_sigma, n_fac = sigma_points.shape
@@ -251,7 +259,11 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor):
 
 
 def _transform_sigma_points(
-    sigma_points, transition_functions, trans_coeffs, anchoring_scaling_factors
+    sigma_points,
+    transition_functions,
+    trans_coeffs,
+    anchoring_scaling_factors,
+    anchoring_constants,
 ):
     """Anchor sigma points, transform them and unanchor the transformed sigma points.
 
@@ -262,8 +274,11 @@ def _transform_sigma_points(
             function. Order is important and corresponds to the latent
             factors in alphabetical order.
         trans_coeffs (tuple): Tuple of 1d jax.numpy.arrays with transition parameters.
-        anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_fac) with
+        anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_states) with
             the scaling factors for anchoring. The first row corresponds to the input
+            period, the second to the output period (i.e. input period + 1).
+        anchoring_constants (jax.numpy.array): Array of shape (2, n_states) with the
+            constants for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
 
     Returns:
@@ -272,7 +287,7 @@ def _transform_sigma_points(
 
     """
     n_obs, n_mixtures, n_sigma, n_states = sigma_points.shape
-    anchored = sigma_points * anchoring_scaling_factors[0]
+    anchored = sigma_points * anchoring_scaling_factors[0] + anchoring_constants[0]
 
     transformed_anchored = anchored
     for i, ((name, func), coeffs) in enumerate(zip(transition_functions, trans_coeffs)):
@@ -282,6 +297,8 @@ def _transform_sigma_points(
                 transformed_anchored, index[..., i], output
             )
 
-    transformed_unanchored = transformed_anchored / anchoring_scaling_factors[1]
+    transformed_unanchored = (
+        transformed_anchored - anchoring_constants[1]
+    ) / anchoring_scaling_factors[1]
 
     return transformed_unanchored

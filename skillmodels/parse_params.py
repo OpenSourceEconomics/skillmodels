@@ -7,7 +7,7 @@ from jax.ops import index
 from jax.ops import index_update
 
 
-def create_parsing_info(params_index, update_info, labels):
+def create_parsing_info(params_index, update_info, labels, anchoring):
     """Create a dictionary with information how the parameter vector has to be parsed.
 
     Args:
@@ -57,6 +57,10 @@ def create_parsing_info(params_index, update_info, labels):
     parsing_info["is_anchored_factor"] = jnp.array(
         update_info.query("purpose == 'anchoring'")[labels["factors"]].any(axis=0)
     )
+    parsing_info["is_anchoring_update"] = is_anchoring.flatten()
+    parsing_info["ignore_constant_when_anchoring"] = anchoring[
+        "ignore_constant_when_anchoring"
+    ]
 
     return parsing_info
 
@@ -102,6 +106,7 @@ def parse_params(params, parsing_info, dimensions, labels, n_obs):
             - "shock_sds":
             - "trans_params":
             - "anchoring_scaling_factors":
+            - "anchoring_constants":
 
     """
     states = _get_initial_states(params, parsing_info, dimensions, n_obs)
@@ -117,6 +122,10 @@ def parse_params(params, parsing_info, dimensions, labels, n_obs):
 
     pardict["anchoring_scaling_factors"] = _get_anchoring_scaling_factors(
         pardict["loadings"], parsing_info, dimensions
+    )
+
+    pardict["anchoring_constants"] = _get_anchoring_constants(
+        pardict["controls"], parsing_info, dimensions
     )
 
     return states, upper_chols, log_weights, pardict
@@ -198,3 +207,20 @@ def _get_anchoring_scaling_factors(loadings, info, dimensions):
     )
 
     return scaling_factors
+
+
+def _get_anchoring_constants(controls, info, dimensions):
+    """Create an array of anchoring constants.
+
+    Note: Parameters are not taken from the parameter vector but from the controls.
+
+    """
+    constants = jnp.zeros((dimensions["n_periods"], dimensions["n_states"]))
+    if not info["ignore_constant_when_anchoring"]:
+        values = controls[:, 0][info["is_anchoring_update"]].reshape(
+            dimensions["n_periods"], -1
+        )
+        constants = index_update(
+            constants, index[:, info["is_anchored_factor"]], values
+        )
+    return constants

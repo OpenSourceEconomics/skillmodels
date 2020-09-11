@@ -163,10 +163,12 @@ def test_transformation_of_sigma_points():
 
     anch_scaling = jnp.array([[1, 1], [2, 1]])
 
+    anch_constants = np.array([[0, 0], [0, 0]])
+
     expected = jnp.array([[[[3, 2], [7, 4], [11, 6], [15, 8], [19, 10]]]])
 
     calculated = _transform_sigma_points(
-        sp, transition_functions, trans_coeffs, anch_scaling
+        sp, transition_functions, trans_coeffs, anch_scaling, anch_constants
     )
 
     aaae(calculated, expected)
@@ -207,6 +209,7 @@ def test_predict_against_linear_filterpy(seed):
     transition_functions = (("linear", linear) for i in range(dim))
     trans_coeffs = (jnp.array(trans_mat[i]) for i in range(dim))
     anch_scaling = jnp.ones((2, dim))
+    anch_constants = jnp.zeros((2, dim))
 
     calc_states, calc_chols = kalman_predict(
         sm_state,
@@ -217,6 +220,7 @@ def test_predict_against_linear_filterpy(seed):
         trans_coeffs,
         jnp.array(shock_sds),
         anch_scaling,
+        anch_constants,
     )
 
     aaae(calc_states.flatten(), expected_state.flatten())

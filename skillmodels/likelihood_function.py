@@ -54,7 +54,9 @@ def get_maximization_inputs(model_dict, data):
         model["update_info"], model["labels"], model["dimensions"]
     )
 
-    parsing_info = create_parsing_info(p_index, model["update_info"], model["labels"])
+    parsing_info = create_parsing_info(
+        p_index, model["update_info"], model["labels"], model["anchoring"]
+    )
     measurements, controls, = process_data_for_estimation(
         data, model["labels"], model["update_info"], model["anchoring"]
     )
@@ -243,6 +245,7 @@ def _log_likelihood_jax(
                 pardict["transition"][t],
                 pardict["shock_sds"][t],
                 pardict["anchoring_scaling_factors"][t : t + 2],
+                pardict["anchoring_constants"][t : t + 2],
             )
 
     clipped = soft_clipping(

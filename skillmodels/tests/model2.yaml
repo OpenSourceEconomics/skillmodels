@@ -36,6 +36,7 @@ anchoring:
   free_controls: true
   free_constant: true
   free_loadings: true
+  ignore_constant_when_anchoring: true
 controls: [x1]
 stagemap: [0, 0, 0, 0, 0, 0, 0]
 estimation_options:

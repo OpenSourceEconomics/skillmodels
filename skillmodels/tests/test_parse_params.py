@@ -34,8 +34,11 @@ def parsed_parameters():
     update_info = processed["update_info"]
     labels = processed["labels"]
     dimensions = processed["dimensions"]
+    # this overwrites the anchoring setting from the model specification to get a
+    # more meaningful test
+    anchoring = {"ignore_constant_when_anchoring": False}
 
-    parsing_info = create_parsing_info(p_index, update_info, labels)
+    parsing_info = create_parsing_info(p_index, update_info, labels, anchoring)
 
     params_vec = jnp.arange(len(p_index))
     n_obs = 5
@@ -97,4 +100,11 @@ def test_anchoring_scaling_factors(parsed_parameters):
     calculated = parsed_parameters["pardict"]["anchoring_scaling_factors"]
     expected = np.ones((8, 3))
     expected[:, 0] = [145 + 21 * i for i in range(8)]
+    aae(calculated, expected)
+
+
+def test_anchoring_constants(parsed_parameters):
+    calculated = parsed_parameters["pardict"]["anchoring_constants"]
+    expected = np.zeros((8, 3))
+    expected[:, 0] = [18 + i * 14 for i in range(8)]
     aae(calculated, expected)

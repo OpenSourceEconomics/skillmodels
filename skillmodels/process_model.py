@@ -145,6 +145,7 @@ def _process_anchoring(model_dict):
         "free_controls": False,
         "free_constant": False,
         "free_loadings": False,
+        "ignore_constant_when_anchoring": False,
     }
 
     if "anchoring" in model_dict:
