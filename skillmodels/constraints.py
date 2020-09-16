@@ -1,4 +1,6 @@
 """Construct an estimagic constraints list for a model."""
+import warnings
+
 import numpy as np
 
 import skillmodels.transition_functions as tf
@@ -57,14 +59,18 @@ def add_bounds(params_df, bounds_distance=0.0):
 
     """
     df = params_df.copy()
-    if "lower_bound" not in df.columns:
-        df["lower_bound"] = -np.inf
-    df.loc["meas_sds", "lower_bound"] = bounds_distance
-    df.loc["shock_sds", "lower_bound"] = bounds_distance
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message="indexing past lexsort depth may impact performance."
+        )
+        if "lower_bound" not in df.columns:
+            df["lower_bound"] = -np.inf
+        df.loc["meas_sds", "lower_bound"] = bounds_distance
+        df.loc["shock_sds", "lower_bound"] = bounds_distance
 
-    cholcov_index = df.query("category == 'initial_cholcovs'").index.tolist()
-    ind_tups = [tup for tup in cholcov_index if _is_diagonal_entry(tup)]
-    df.loc[ind_tups, "lower_bound"] = bounds_distance
+        cholcov_index = df.query("category == 'initial_cholcovs'").index.tolist()
+        ind_tups = [tup for tup in cholcov_index if _is_diagonal_entry(tup)]
+        df.loc[ind_tups, "lower_bound"] = bounds_distance
 
     return df
 
