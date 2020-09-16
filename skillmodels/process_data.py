@@ -73,7 +73,8 @@ def _pre_process_data(df):
 def _add_copies_of_anchoring_outcome(df, anchoring_info):
     df = df.copy()
     for factor in anchoring_info["factors"]:
-        df[f"{anchoring_info['outcome']}_{factor}"] = df[anchoring_info["outcome"]]
+        outcome = anchoring_info["outcomes"][factor]
+        df[f"{outcome}_{factor}"] = df[outcome]
     return df
 
 

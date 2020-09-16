@@ -46,7 +46,7 @@ def test_estimation_options(model2):
 
 def test_anchoring(model2):
     res = process_model(model2)["anchoring"]
-    assert res["outcome"] == "Q1"
+    assert res["outcomes"] == {"fac1": "Q1"}
     assert res["factors"] == ["fac1"]
     assert res["free_controls"]
     assert res["free_constant"]

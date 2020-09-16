@@ -140,8 +140,8 @@ def _process_anchoring(model_dict):
     """
     anchinfo = {
         "anchoring": False,
+        "outcomes": {},
         "factors": [],
-        "outcome": None,
         "free_controls": False,
         "free_constant": False,
         "free_loadings": False,
@@ -151,6 +151,7 @@ def _process_anchoring(model_dict):
     if "anchoring" in model_dict:
         anchinfo.update(model_dict["anchoring"])
         anchinfo["anchoring"] = True
+        anchinfo["factors"] = sorted(anchinfo["outcomes"].keys())
 
     return anchinfo
 
@@ -200,7 +201,8 @@ def _get_update_info(model_dict, dimensions, labels, anchoring_info):
                 uinfo.loc[(period, meas), factor] = True
                 uinfo.loc[(period, meas), "purpose"] = "measurement"
         for factor in anchoring_info["factors"]:
-            name = f"{anchoring_info['outcome']}_{factor}"
+            outcome = anchoring_info["outcomes"][factor]
+            name = f"{outcome}_{factor}"
             uinfo.loc[(period, name), factor] = True
             uinfo.loc[(period, name), "purpose"] = "anchoring"
 

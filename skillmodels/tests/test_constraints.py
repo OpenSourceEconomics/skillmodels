@@ -254,7 +254,7 @@ def anch_uinfo():
 def base_anchoring_info():
     anch_info = {
         "factors": ["f1", "f2"],
-        "outcome": "outcome",
+        "outcomes": {"f1": "outcome", "f2": "outcome"},
         "free_controls": True,
         "free_constant": True,
         "free_loadings": True,

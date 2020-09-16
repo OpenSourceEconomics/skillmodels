@@ -124,8 +124,8 @@ constraint during optimization. Fortunately, this is very easy with estimagic.
 
 The specification for anchoring is a dictionary. It has the following entries:
 
-- ``"outcome"``: The name of the variable that is used as anchor.
-- ``"factors"``: A list containing the anchored factors.
+- ``"outcomes"``: a dictionary that maps names of factors to variables that are used
+  as anchoring outcome. Factors that are not anchored can simply be left out.
 - ``"free_controls"``: Whether the control variables used in the measurement equations
   should also be used in the anchoring equations. Default False. This is mainly there
   to support the CHS example model and will probably not be set to True in any real

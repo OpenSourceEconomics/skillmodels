@@ -325,7 +325,6 @@ def _get_anchoring_constraints(update_info, controls, anchoring_info, periods):
         constraints (list)
 
     """
-    anch_outcome = anchoring_info["outcome"]
     anchoring_updates = update_info[update_info["purpose"] == "anchoring"].index
 
     constraints = []
@@ -362,7 +361,8 @@ def _get_anchoring_constraints(update_info, controls, anchoring_info, periods):
         ind_tups = []
         for period in periods:
             for factor in anchoring_info["factors"]:
-                meas = f"{anch_outcome}_{factor}"
+                outcome = anchoring_info["outcomes"][factor]
+                meas = f"{outcome}_{factor}"
                 ind_tups.append(("loadings", period, meas, factor))
 
         constraints.append(

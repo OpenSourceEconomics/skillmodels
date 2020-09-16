@@ -58,11 +58,14 @@ def _check_anchoring(anchoring):
     report = []
     if not isinstance(anchoring["anchoring"], bool):
         report.append("anchoring['anchoring'] must be a bool.")
-    if anchoring["outcome"] is not None:
-        if not isinstance(anchoring["outcome"], (str, int, tuple)):
-            report.append("anchoring['outcome'] must be a valid pandas column name.")
-    if not isinstance(anchoring["factors"], list):
-        report.append("anchoring['factors'] must be a list.")
+    if not isinstance(anchoring["outcomes"], dict):
+        report.append("anchoring['outcomes'] must be a dict")
+    else:
+        variables = list(anchoring["outcomes"].values())
+        for var in variables:
+            if not isinstance(var, (str, int, tuple)):
+                report.append("Outcomes variables have to be valid variable names.")
+
     if not isinstance(anchoring["free_controls"], bool):
         report.append("anchoring['use_controls'] must be a bool")
     if not isinstance(anchoring["free_constant"], bool):
