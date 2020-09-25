@@ -54,6 +54,7 @@ def test_kalman_update(seed):
         measurements=jnp.array([measurement]) + 1,
         controls=jnp.ones((1, 2)) * 0.5,
         log_mixture_weights=jnp.ones((1, 1)),
+        not_missing=jnp.array([True]),
         debug=False,
     )
     calculated_state = calc_states.flatten()
@@ -94,6 +95,7 @@ def test_kalman_update_with_missing():
         measurements=measurements,
         controls=jnp.ones((n_obs, 2)) * 0.5,
         log_mixture_weights=jnp.log(jnp.ones((n_obs, 2)) * 0.5),
+        not_missing=jnp.array([True, False, False]),
         debug=False,
     )
 
