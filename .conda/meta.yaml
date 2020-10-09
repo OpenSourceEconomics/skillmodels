@@ -23,8 +23,6 @@ requirements:
     - pandas >=0.24,<=1.0.5
     - seaborn
     - scipy
-    - jax >=0.1.7
-    - jaxlib >=0.1.51
     - pyyaml
 
 test:
@@ -32,6 +30,7 @@ test:
     - pytest
     - pytest-xdist
     - filterpy
+    - jax >=0.2.0
   source_files:
     - tox.ini
     - skillmodels/tests
