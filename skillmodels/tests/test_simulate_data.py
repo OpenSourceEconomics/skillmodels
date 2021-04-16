@@ -5,7 +5,7 @@ import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 from pandas.testing import assert_frame_equal
 
-from skillmodels.simulate_data import _simulate_datasets
+from skillmodels.simulate_data import _simulate_dataset
 from skillmodels.simulate_data import measurements_from_states
 from skillmodels.simulate_data import next_period_states
 
@@ -182,12 +182,12 @@ def expected_dataset():
 
 
 def test_simulate_latent_data(set_up_generate_datasets, expected_dataset):
-    latent_data = _simulate_datasets(**set_up_generate_datasets)[1]
+    latent_data = _simulate_dataset(**set_up_generate_datasets)[1]
     assert_frame_equal(latent_data, expected_dataset["latent_data"], check_dtype=False)
 
 
 def test_simulate_observed_data(set_up_generate_datasets, expected_dataset):
-    obs_data = _simulate_datasets(**set_up_generate_datasets)[0]
+    obs_data = _simulate_dataset(**set_up_generate_datasets)[0]
     assert_frame_equal(obs_data, expected_dataset["observed_data"], check_dtype=False)
 
 
@@ -277,7 +277,7 @@ def expected_dataset_2_mix():
 def test_simulate_latent_data_2_mix(
     set_up_generate_datasets_2_mix, expected_dataset_2_mix
 ):
-    latent_data = _simulate_datasets(**set_up_generate_datasets_2_mix)[1]
+    latent_data = _simulate_dataset(**set_up_generate_datasets_2_mix)[1]
     assert_frame_equal(
         latent_data, expected_dataset_2_mix["latent_data"], check_dtype=False
     )
@@ -286,7 +286,7 @@ def test_simulate_latent_data_2_mix(
 def test_simulate_observed_data_2_mix(
     set_up_generate_datasets_2_mix, expected_dataset_2_mix
 ):
-    obs_data = _simulate_datasets(**set_up_generate_datasets_2_mix)[0]
+    obs_data = _simulate_dataset(**set_up_generate_datasets_2_mix)[0]
     assert_frame_equal(
         obs_data, expected_dataset_2_mix["observed_data"], check_dtype=False
     )

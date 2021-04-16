@@ -48,7 +48,7 @@ def add_missings(data, meas_names, p_b, p_r):
     return data_with_missings
 
 
-def simulate_datasets(
+def simulate_dataset(
     labels,
     dimensions,
     n_obs,
@@ -87,7 +87,7 @@ def simulate_datasets(
         params, parsing_info, dimensions, labels, n_obs
     )
 
-    return _simulate_datasets(
+    return _simulate_dataset(
         states,
         covs,
         log_weights,
@@ -102,7 +102,7 @@ def simulate_datasets(
     )
 
 
-def _simulate_datasets(
+def _simulate_dataset(
     states,
     covs,
     log_weights,
