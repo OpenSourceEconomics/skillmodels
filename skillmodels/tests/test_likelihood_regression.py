@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -8,6 +7,7 @@ import yaml
 from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
 
+from skillmodels.config import TEST_DIR
 from skillmodels.likelihood_function import get_maximization_inputs
 
 config.update("jax_enable_x64", True)
@@ -23,16 +23,14 @@ model_names = [
 
 @pytest.fixture
 def model2():
-    test_dir = Path(__file__).parent.resolve()
-    with open(test_dir / "model2.yaml") as y:
+    with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     return model_dict
 
 
 @pytest.fixture
 def model2_data():
-    test_dir = Path(__file__).parent.resolve()
-    data = pd.read_stata(test_dir / "model2_simulated_data.dta")
+    data = pd.read_stata(TEST_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])
     return data
 
@@ -54,7 +52,7 @@ def _convert_model(base_model, model_name):
 
 @pytest.mark.parametrize("model_name", model_names)
 def test_likelihood_contributions_have_not_changed(model2, model2_data, model_name):
-    regvault = Path(__file__).parent.resolve() / "regression_vault"
+    regvault = TEST_DIR / "regression_vault"
     model = _convert_model(model2, model_name)
     params = pd.read_csv(regvault / f"{model_name}.csv")
 

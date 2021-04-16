@@ -2,12 +2,41 @@
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 from numpy.testing import assert_array_almost_equal as aaae
 from pandas.testing import assert_frame_equal
 
+from skillmodels.config import TEST_DIR
 from skillmodels.simulate_data import _simulate_dataset
 from skillmodels.simulate_data import measurements_from_states
 from skillmodels.simulate_data import next_period_states
+from skillmodels.simulate_data import simulate_dataset
+
+
+# =======================================================
+# test that simulate_dataset works with the example model
+# =======================================================
+
+
+def test_simulate_dataset():
+    with open(TEST_DIR / "model2.yaml") as y:
+        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+
+    params = pd.read_csv(TEST_DIR / "regression_vault" / f"one_stage_anchoring.csv")
+    params = params.set_index(["category", "period", "name1", "name2"])
+
+    n_obs = 2000
+    control_means = pd.Series([0], index=["x1"])
+    control_sds = pd.Series([1], index=["x1"])
+
+    observed_data, latent_data = simulate_dataset(
+        model_dict=model_dict,
+        params=params,
+        n_obs=n_obs,
+        control_means=control_means,
+        control_sds=control_sds,
+    )
+
 
 # ===============================
 # test measuerments_from_factors
