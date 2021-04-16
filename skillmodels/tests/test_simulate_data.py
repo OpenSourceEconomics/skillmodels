@@ -92,6 +92,7 @@ def test_next_period_factors(set_up_npfac, expected_npfac):
 def set_up_generate_datasets():
     out = {}
     out["states"] = np.array([0, 0] * 5).reshape(5, 1, 2)
+    out["covs"] = np.zeros((1, 1, 2, 2))
     out["log_weights"] = 0
     pardict = {}
     pardict["loadings"] = np.array([[0.5, 0.4], [0.2, 0.7]] * 3)
@@ -105,16 +106,20 @@ def set_up_generate_datasets():
     labels["controls"] = ["constant", "c1", "c2"]
     labels["transition_names"] = ["linear", "linear"]
     out["labels"] = labels
-    out["dimensions"] = {"n_states": 2, "n_controls": 3, "n_periods": 3}
+    out["dimensions"] = {
+        "n_states": 2,
+        "n_controls": 3,
+        "n_periods": 3,
+        "n_mixtures": 1,
+    }
     out["n_obs"] = 5
     update_info = pd.DataFrame(np.empty(2 * 3))
     update_info.index = pd.MultiIndex.from_tuples(
         [(0, "m1"), (0, "m2"), (1, "m1"), (1, "m2"), (2, "m1"), (2, "m2")]
     )
     out["update_info"] = update_info
-    out["control_means"] = np.array([0.5, 0.5])
-    dist_arg_dict = {"cov": np.zeros((4, 4))}
-    out["dist_arg_dict"] = [dist_arg_dict]
+    out["control_means"] = np.array([0.5, 0.5, 0.5])
+    out["control_sds"] = np.zeros(3)
     out["policies"] = [
         {"period": 0, "factor": "f1", "effect_size": 0.2, "standard_deviation": 0.0},
         {"period": 1, "factor": "f2", "effect_size": 0.1, "standard_deviation": 0.0},
@@ -195,6 +200,7 @@ def test_simulate_observed_data(set_up_generate_datasets, expected_dataset):
 def set_up_generate_datasets_2_mix():
     out = {}
     out["states"] = np.array([0, 0] * 10).reshape(5, 2, 2)
+    out["covs"] = np.zeros((1, 2, 2, 2))
     out["log_weights"] = np.log(np.array([0.5, 0.5]))
     pardict = {}
     pardict["loadings"] = np.array([[0.5, 0.5], [0.6, 0.6]] * 3)
@@ -208,17 +214,20 @@ def set_up_generate_datasets_2_mix():
     labels["controls"] = ["constant", "c1", "c2"]
     labels["transition_names"] = ["linear", "linear"]
     out["labels"] = labels
-    out["dimensions"] = {"n_states": 2, "n_controls": 3, "n_periods": 3}
+    out["dimensions"] = {
+        "n_states": 2,
+        "n_controls": 3,
+        "n_periods": 3,
+        "n_mixtures": 2,
+    }
     out["n_obs"] = 5
     update_info = pd.DataFrame(np.empty(2 * 3))
     update_info.index = pd.MultiIndex.from_tuples(
         [(0, "m1"), (0, "m2"), (1, "m1"), (1, "m2"), (2, "m1"), (2, "m2")]
     )
     out["update_info"] = update_info
-    out["control_means"] = np.array([[0.5, 0.5], [0.5, 0.5]])
-    covs = np.zeros((2, 4, 4))
-    dist_arg_dict = [{"cov": covs[0]}, {"cov": covs[1]}]
-    out["dist_arg_dict"] = dist_arg_dict
+    out["control_means"] = np.array([0.5, 0.5, 0.5])
+    out["control_sds"] = np.zeros(3)
     out["policies"] = None
 
     return out
