@@ -155,31 +155,31 @@ def _simulate_datasets(
         args["cov"] = full_cov
         dist_args.append(args)
 
-    stat = np.zeros((n_periods, n_obs, n_states))
-    stat[0], cont = generate_start_state_and_control_variable(
+    states = np.zeros((n_periods, n_obs, n_states))
+    states[0], controls = generate_start_state_and_control_variable(
         n_obs, dimensions, dist_args, weights
     )
-    cont = pd.DataFrame(data=cont, columns=labels["controls"])
+    controls = pd.DataFrame(data=controls, columns=labels["controls"])
 
     for t in range(n_periods - 1):
         # if there is a shock in period t, add it here
         policies_t = [p for p in policies if p["period"] == t]
         for policy in policies_t:
             position = labels["factors"].index(policy["factor"])
-            stat[t, :, position] += _get_shock(
+            states[t, :, position] += _get_shock(
                 mean=policy["effect_size"], sd=policy["standard_deviation"], size=n_obs
             )
 
-        stat[t + 1] = next_period_states(
-            stat[t], transition_names, transition_params[t], shock_sds[t]
+        states[t + 1] = next_period_states(
+            states[t], transition_names, transition_params[t], shock_sds[t]
         )
     observed_data_by_period = []
 
     for t in range(n_periods):
         meas = pd.DataFrame(
             data=measurements_from_states(
-                stat[t],
-                cont.to_numpy(),
+                states[t],
+                controls.to_numpy(),
                 loadings_df.loc[t].to_numpy(),
                 control_params_df.loc[t].to_numpy(),
                 meas_sds.loc[t].to_numpy().flatten(),
@@ -187,7 +187,7 @@ def _simulate_datasets(
             columns=loadings_df.loc[t].index,
         )
         meas["period"] = t
-        observed_data_by_period.append(pd.concat([meas, cont], axis=1))
+        observed_data_by_period.append(pd.concat([meas, controls], axis=1))
 
     observed_data = pd.concat(observed_data_by_period, axis=0, sort=True)
     observed_data["id"] = observed_data.index
@@ -196,7 +196,7 @@ def _simulate_datasets(
 
     latent_data_by_period = []
     for t in range(n_periods):
-        lat = pd.DataFrame(data=stat[t], columns=labels["factors"])
+        lat = pd.DataFrame(data=states[t], columns=labels["factors"])
         lat["period"] = t
         latent_data_by_period.append(lat)
 
