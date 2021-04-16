@@ -113,9 +113,8 @@ def set_up_generate_datasets():
     )
     out["update_info"] = update_info
     out["control_means"] = np.array([0.5, 0.5])
-    dist_arg_dict = {"cov": np.zeros((4, 4)), "d_f": 3}
+    dist_arg_dict = {"cov": np.zeros((4, 4))}
     out["dist_arg_dict"] = [dist_arg_dict]
-    out["dist_name"] = "_mv_student_t"
     out["policies"] = [
         {"period": 0, "factor": "f1", "effect_size": 0.2, "standard_deviation": 0.0},
         {"period": 1, "factor": "f2", "effect_size": 0.1, "standard_deviation": 0.0},
@@ -220,7 +219,6 @@ def set_up_generate_datasets_2_mix():
     covs = np.zeros((2, 4, 4))
     dist_arg_dict = [{"cov": covs[0]}, {"cov": covs[1]}]
     out["dist_arg_dict"] = dist_arg_dict
-    out["dist_name"] = "multivariate_normal"
     out["policies"] = None
 
     return out
