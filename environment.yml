@@ -4,30 +4,26 @@ channels:
   - opensourceeconomics
 dependencies:
   - python=3.7
+  - jax>=0.1.7
+  - jaxlib>=0.1.51
   - pip
   - conda-build
   - doc8
-  - estimagic>=0.0.25
   - jupyter
-  - matplotlib
-  - mkl-service
-  - nose
-  - numba>=0.45
-  - numpy<1.18
-  - pandas>=0.24
-  - click
+  - numpy
+  - pandas<=1.0.5
   - pytest
-  - pytest-mock
   - pytest-xdist
   - restructuredtext_lint
   - tox-conda
-  - scipy <= 1.2.1
+  - scipy
   - seaborn
   - sphinxcontrib-bibtex
-  - sphinx_rtd_theme
-  - statsmodels>=0.9
+  - pydata-sphinx-theme>=0.3
   - anaconda-client
   - nbsphinx
   - pdbpp
+  - filterpy
   - pip:
     - pre-commit
+    - black

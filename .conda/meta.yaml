@@ -1,0 +1,45 @@
+{% set data = load_setup_py_data() %}
+
+package:
+  name: skillmodels
+  version: {{ data.get('version') }}
+
+source:
+  path: ../
+
+build:
+  noarch: python
+  number: 0
+
+requirements:
+  build:
+    - python {{ python }}
+    - setuptools
+  host:
+    python >=3.6
+  run:
+    - python >=3.6
+    - numpy
+    - pandas >=0.24,<=1.0.5
+    - seaborn
+    - scipy
+    - pyyaml
+
+test:
+  requires:
+    - pytest
+    - pytest-xdist
+    - filterpy
+    - jax >=0.2.0
+  source_files:
+    - tox.ini
+    - skillmodels/tests
+  commands:
+    - pytest
+
+
+about:
+  home: https://github.com/janosg/skillmodels
+  license: BSD
+  license_file: LICENSE
+  summary: Estimate non-linear skill formation models.
