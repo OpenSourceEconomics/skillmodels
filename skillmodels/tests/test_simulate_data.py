@@ -118,8 +118,8 @@ def set_up_generate_datasets():
         [(0, "m1"), (0, "m2"), (1, "m1"), (1, "m2"), (2, "m1"), (2, "m2")]
     )
     out["update_info"] = update_info
-    out["control_means"] = np.array([0.5, 0.5, 0.5])
-    out["control_sds"] = np.zeros(3)
+    out["control_means"] = pd.Series([0.5, 0.5], index=["c1", "c2"])
+    out["control_sds"] = pd.Series(np.zeros(2), index=["c1", "c2"])
     out["policies"] = [
         {"period": 0, "factor": "f1", "effect_size": 0.2, "standard_deviation": 0.0},
         {"period": 1, "factor": "f2", "effect_size": 0.1, "standard_deviation": 0.0},
@@ -226,8 +226,8 @@ def set_up_generate_datasets_2_mix():
         [(0, "m1"), (0, "m2"), (1, "m1"), (1, "m2"), (2, "m1"), (2, "m2")]
     )
     out["update_info"] = update_info
-    out["control_means"] = np.array([0.5, 0.5, 0.5])
-    out["control_sds"] = np.zeros(3)
+    out["control_means"] = pd.Series([0.5, 0.5], index=["c1", "c2"])
+    out["control_sds"] = pd.Series(np.zeros(2), index=["c1", "c2"])
     out["policies"] = None
 
     return out
