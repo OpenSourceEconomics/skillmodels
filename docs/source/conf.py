@@ -16,8 +16,6 @@ import sys
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath("../.."))
 
-bibtex_bibfiles = ["refs.bib"]
-
 
 # -- General configuration ----------------------------------------------------
 
@@ -30,7 +28,6 @@ needs_sphinx = "1.6"
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
-    "sphinxcontrib.bibtex",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx.ext.todo",
