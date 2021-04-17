@@ -67,7 +67,7 @@ def process_debug_data(debug_data, model):
 
     filtered_states = _create_filtered_states(post_update_states, update_info)
 
-    state_ranges = _create_state_ranges(filtered_states, factors)
+    state_ranges = create_state_ranges(filtered_states, factors)
 
     residuals = _process_residuals(debug_data["residuals"], update_info)
     residual_sds = _process_residual_sds(debug_data["residual_sds"], update_info)
@@ -177,7 +177,7 @@ def _create_filtered_states(post_update_states, update_info):
     return filtered_states
 
 
-def _create_state_ranges(filtered_states, factors):
+def create_state_ranges(filtered_states, factors):
     ranges = {}
     minima = filtered_states.groupby("period").min()
     maxima = filtered_states.groupby("period").max()
