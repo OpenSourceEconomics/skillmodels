@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -7,7 +8,6 @@ import yaml
 from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.config import TEST_DIR
 from skillmodels.likelihood_function import get_maximization_inputs
 
 config.update("jax_enable_x64", True)
@@ -19,6 +19,8 @@ model_names = [
     "one_stage_anchoring",
     "two_stages_anchoring",
 ]
+
+TEST_DIR = Path(__file__).parent.resolve()
 
 
 @pytest.fixture

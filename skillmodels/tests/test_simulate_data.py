@@ -1,4 +1,6 @@
 """Tests for functions in simulate_data module."""
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -6,12 +8,12 @@ import yaml
 from numpy.testing import assert_array_almost_equal as aaae
 from pandas.testing import assert_frame_equal
 
-from skillmodels.config import TEST_DIR
 from skillmodels.simulate_data import _simulate_dataset
 from skillmodels.simulate_data import measurements_from_states
 from skillmodels.simulate_data import next_period_states
 from skillmodels.simulate_data import simulate_dataset
 
+TEST_DIR = Path(__file__).parent.resolve()
 
 # =======================================================
 # test that simulate_dataset works with the example model
