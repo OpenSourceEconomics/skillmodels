@@ -122,7 +122,7 @@ def set_up_generate_datasets():
     out = {}
     out["states"] = np.array([0, 0] * 5).reshape(5, 1, 2)
     out["covs"] = np.zeros((1, 1, 2, 2))
-    out["log_weights"] = 0
+    out["log_weights"] = np.zeros((1, 1))
     pardict = {}
     pardict["loadings"] = np.array([[0.5, 0.4], [0.2, 0.7]] * 3)
     pardict["controls"] = np.array([[0, 0.5, 0.3], [0, 0.5, 0.6]] * 3)
@@ -230,7 +230,7 @@ def set_up_generate_datasets_2_mix():
     out = {}
     out["states"] = np.array([0, 0] * 10).reshape(5, 2, 2)
     out["covs"] = np.zeros((1, 2, 2, 2))
-    out["log_weights"] = np.log(np.array([0.5, 0.5]))
+    out["log_weights"] = np.log(np.array([[0.5, 0.5]]))
     pardict = {}
     pardict["loadings"] = np.array([[0.5, 0.5], [0.6, 0.6]] * 3)
     pardict["controls"] = np.array([[0, 0.5, 0.5], [0, 0.6, 0.6]] * 3)
