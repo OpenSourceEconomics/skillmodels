@@ -71,7 +71,7 @@ def _get_positional_selector_from_loc(range_sr, loc):
             "ignore", message="indexing past lexsort depth may impact performance."
         )
         try:
-            ilocs = list(range_sr.loc[loc])
+            ilocs = jnp.array(range_sr.loc[loc])
         except KeyError:
             ilocs = slice(0, 0)
         except Exception:

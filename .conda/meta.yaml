@@ -20,7 +20,7 @@ requirements:
   run:
     - python >=3.6
     - numpy
-    - pandas >=0.24,<=1.0.5
+    - pandas
     - seaborn
     - scipy
     - pyyaml
@@ -34,6 +34,7 @@ test:
   source_files:
     - tox.ini
     - skillmodels/tests
+    - skillmodels/tests/model2.yaml
   commands:
     - pytest
 

@@ -1,13 +1,49 @@
 """Tests for functions in simulate_data module."""
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 from numpy.testing import assert_array_almost_equal as aaae
 from pandas.testing import assert_frame_equal
 
-from skillmodels.simulate_data import _simulate_datasets
+from skillmodels.simulate_data import _simulate_dataset
 from skillmodels.simulate_data import measurements_from_states
 from skillmodels.simulate_data import next_period_states
+from skillmodels.simulate_data import simulate_dataset
+
+TEST_DIR = Path(__file__).parent.resolve()
+
+# =======================================================
+# test that simulate_dataset works with the example model
+# =======================================================
+
+
+@pytest.fixture
+def model2():
+    with open(TEST_DIR / "model2.yaml") as y:
+        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+    return model_dict
+
+
+def test_simulate_dataset(model2):
+    model_dict = model2
+    params = pd.read_csv(TEST_DIR / "regression_vault" / f"one_stage_anchoring.csv")
+    params = params.set_index(["category", "period", "name1", "name2"])
+
+    n_obs = 2000
+    control_means = pd.Series([0], index=["x1"])
+    control_sds = pd.Series([1], index=["x1"])
+
+    observed_data, latent_data = simulate_dataset(
+        model_dict=model_dict,
+        params=params,
+        n_obs=n_obs,
+        control_means=control_means,
+        control_sds=control_sds,
+    )
+
 
 # ===============================
 # test measuerments_from_factors
@@ -92,7 +128,8 @@ def test_next_period_factors(set_up_npfac, expected_npfac):
 def set_up_generate_datasets():
     out = {}
     out["states"] = np.array([0, 0] * 5).reshape(5, 1, 2)
-    out["log_weights"] = 0
+    out["covs"] = np.zeros((1, 1, 2, 2))
+    out["log_weights"] = np.zeros((1, 1))
     pardict = {}
     pardict["loadings"] = np.array([[0.5, 0.4], [0.2, 0.7]] * 3)
     pardict["controls"] = np.array([[0, 0.5, 0.3], [0, 0.5, 0.6]] * 3)
@@ -105,17 +142,20 @@ def set_up_generate_datasets():
     labels["controls"] = ["constant", "c1", "c2"]
     labels["transition_names"] = ["linear", "linear"]
     out["labels"] = labels
-    out["dimensions"] = {"n_states": 2, "n_controls": 3, "n_periods": 3}
+    out["dimensions"] = {
+        "n_states": 2,
+        "n_controls": 3,
+        "n_periods": 3,
+        "n_mixtures": 1,
+    }
     out["n_obs"] = 5
     update_info = pd.DataFrame(np.empty(2 * 3))
     update_info.index = pd.MultiIndex.from_tuples(
         [(0, "m1"), (0, "m2"), (1, "m1"), (1, "m2"), (2, "m1"), (2, "m2")]
     )
     out["update_info"] = update_info
-    out["control_means"] = np.array([0.5, 0.5])
-    dist_arg_dict = {"cov": np.zeros((4, 4)), "d_f": 3}
-    out["dist_arg_dict"] = [dist_arg_dict]
-    out["dist_name"] = "_mv_student_t"
+    out["control_means"] = pd.Series([0.5, 0.5], index=["c1", "c2"])
+    out["control_sds"] = pd.Series(np.zeros(2), index=["c1", "c2"])
     out["policies"] = [
         {"period": 0, "factor": "f1", "effect_size": 0.2, "standard_deviation": 0.0},
         {"period": 1, "factor": "f2", "effect_size": 0.1, "standard_deviation": 0.0},
@@ -178,12 +218,12 @@ def expected_dataset():
 
 
 def test_simulate_latent_data(set_up_generate_datasets, expected_dataset):
-    latent_data = _simulate_datasets(**set_up_generate_datasets)[1]
+    latent_data = _simulate_dataset(**set_up_generate_datasets)[1]
     assert_frame_equal(latent_data, expected_dataset["latent_data"], check_dtype=False)
 
 
 def test_simulate_observed_data(set_up_generate_datasets, expected_dataset):
-    obs_data = _simulate_datasets(**set_up_generate_datasets)[0]
+    obs_data = _simulate_dataset(**set_up_generate_datasets)[0]
     assert_frame_equal(obs_data, expected_dataset["observed_data"], check_dtype=False)
 
 
@@ -196,7 +236,8 @@ def test_simulate_observed_data(set_up_generate_datasets, expected_dataset):
 def set_up_generate_datasets_2_mix():
     out = {}
     out["states"] = np.array([0, 0] * 10).reshape(5, 2, 2)
-    out["log_weights"] = np.log(np.array([0.5, 0.5]))
+    out["covs"] = np.zeros((1, 2, 2, 2))
+    out["log_weights"] = np.log(np.array([[0.5, 0.5]]))
     pardict = {}
     pardict["loadings"] = np.array([[0.5, 0.5], [0.6, 0.6]] * 3)
     pardict["controls"] = np.array([[0, 0.5, 0.5], [0, 0.6, 0.6]] * 3)
@@ -209,18 +250,20 @@ def set_up_generate_datasets_2_mix():
     labels["controls"] = ["constant", "c1", "c2"]
     labels["transition_names"] = ["linear", "linear"]
     out["labels"] = labels
-    out["dimensions"] = {"n_states": 2, "n_controls": 3, "n_periods": 3}
+    out["dimensions"] = {
+        "n_states": 2,
+        "n_controls": 3,
+        "n_periods": 3,
+        "n_mixtures": 2,
+    }
     out["n_obs"] = 5
     update_info = pd.DataFrame(np.empty(2 * 3))
     update_info.index = pd.MultiIndex.from_tuples(
         [(0, "m1"), (0, "m2"), (1, "m1"), (1, "m2"), (2, "m1"), (2, "m2")]
     )
     out["update_info"] = update_info
-    out["control_means"] = np.array([[0.5, 0.5], [0.5, 0.5]])
-    covs = np.zeros((2, 4, 4))
-    dist_arg_dict = [{"cov": covs[0]}, {"cov": covs[1]}]
-    out["dist_arg_dict"] = dist_arg_dict
-    out["dist_name"] = "multivariate_normal"
+    out["control_means"] = pd.Series([0.5, 0.5], index=["c1", "c2"])
+    out["control_sds"] = pd.Series(np.zeros(2), index=["c1", "c2"])
     out["policies"] = None
 
     return out
@@ -270,7 +313,7 @@ def expected_dataset_2_mix():
 def test_simulate_latent_data_2_mix(
     set_up_generate_datasets_2_mix, expected_dataset_2_mix
 ):
-    latent_data = _simulate_datasets(**set_up_generate_datasets_2_mix)[1]
+    latent_data = _simulate_dataset(**set_up_generate_datasets_2_mix)[1]
     assert_frame_equal(
         latent_data, expected_dataset_2_mix["latent_data"], check_dtype=False
     )
@@ -279,7 +322,7 @@ def test_simulate_latent_data_2_mix(
 def test_simulate_observed_data_2_mix(
     set_up_generate_datasets_2_mix, expected_dataset_2_mix
 ):
-    obs_data = _simulate_datasets(**set_up_generate_datasets_2_mix)[0]
+    obs_data = _simulate_dataset(**set_up_generate_datasets_2_mix)[0]
     assert_frame_equal(
         obs_data, expected_dataset_2_mix["observed_data"], check_dtype=False
     )

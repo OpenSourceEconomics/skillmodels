@@ -57,7 +57,7 @@ def _pre_process_data(df):
     # replace existing codes for periods and
     df.index.names = ["id", "period"]
     for level in [0, 1]:
-        df.index.set_levels(range(len(df.index.levels[level])), level, inplace=True)
+        df.index = df.index.set_levels(range(len(df.index.levels[level])), level)
 
     # create new index
     ids = sorted(df.index.get_level_values("id").unique())
