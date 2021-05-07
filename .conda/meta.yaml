@@ -20,7 +20,7 @@ requirements:
   run:
     - python >=3.6
     - numpy
-    - pandas
+    - pandas >=1.2
     - seaborn
     - scipy
     - pyyaml
