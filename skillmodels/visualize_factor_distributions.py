@@ -19,7 +19,7 @@ def plot_pairwise_factor_distributions(
     state_ranges=None,
     n_points=50,
 ):
-    """Visualize pairwise_factor_distributions.
+    """Visualize pairwise_factor_distributions in certain period.
     Args:
         states (pandas.DataFrame): Tidy DataFrame with filtered or simulated states.
             They are used to estimate the state ranges in each period (if state_ranges
