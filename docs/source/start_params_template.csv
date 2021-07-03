@@ -1,4 +1,4 @@
-category,period,name1,name2,value,lower,upper
+category,period,name1,name2,value,lower_bound,upper_bound
 delta,0,y1,constant,,-inf,inf
 delta,0,y1,x1,,-inf,inf
 delta,0,y2,constant,,-inf,inf
