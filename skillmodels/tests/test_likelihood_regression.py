@@ -1,17 +1,15 @@
 import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
 from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
 
+from skillmodels.config import TEST_DIR
 from skillmodels.likelihood_function import get_maximization_inputs
 
 config.update("jax_enable_x64", True)
-
 
 model_names = [
     "no_stages_anchoring",
@@ -19,22 +17,6 @@ model_names = [
     "one_stage_anchoring",
     "two_stages_anchoring",
 ]
-
-TEST_DIR = Path(__file__).parent.resolve()
-
-
-@pytest.fixture
-def model2():
-    with open(TEST_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
-    return model_dict
-
-
-@pytest.fixture
-def model2_data():
-    data = pd.read_stata(TEST_DIR / "model2_simulated_data.dta")
-    data = data.set_index(["caseid", "period"])
-    return data
 
 
 def _convert_model(base_model, model_name):

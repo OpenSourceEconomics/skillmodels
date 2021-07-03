@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
 from numpy.testing import assert_array_almost_equal as aaae
 from pandas.testing import assert_frame_equal
 
@@ -18,13 +17,6 @@ TEST_DIR = Path(__file__).parent.resolve()
 # =======================================================
 # test that simulate_dataset works with the example model
 # =======================================================
-
-
-@pytest.fixture
-def model2():
-    with open(TEST_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
-    return model_dict
 
 
 def test_simulate_dataset(model2):
