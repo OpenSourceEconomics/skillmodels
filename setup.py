@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name="skillmodels",
-    version="0.2.1",
+    version="0.2.2",
     packages=find_packages(),
     package_data={"skillmodels": ["tests/model2.yaml"]},
     include_package_data=True,
