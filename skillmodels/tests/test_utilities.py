@@ -146,7 +146,6 @@ def test_reduce_params_via_extract_factors(model2):
             ("meas_sds", 0, "y7", "-"),
             ("meas_sds", 0, "y8", "-"),
             ("meas_sds", 0, "y9", "-"),
-            ("shock_sds", 0, "fac3", "-"),
             ("initial_states", 0, "mixture_0", "fac3"),
             ("mixture_weights", 0, "mixture_0", "-"),
             ("initial_cholcovs", 0, "mixture_0", "fac3-fac3"),
