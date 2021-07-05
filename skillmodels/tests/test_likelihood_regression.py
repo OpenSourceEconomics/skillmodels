@@ -67,3 +67,19 @@ def test_likelihood_contributions_have_not_changed(model2, model2_data, model_na
         old_loglikes = np.array(json.load(j))
 
     aaae(new_loglikes, old_loglikes)
+
+
+@pytest.mark.xfail
+def test_likelihood_runs_with_empty_periods(model2, model2_data):
+    regvault = TEST_DIR / "regression_vault"
+    del model2["anchoring"]
+    for factor in ["fac1", "fac2"]:
+        model2["factors"][factor]["measurements"][-1] = []
+        model2["factors"][factor]["normalizations"]["loadings"][-1] = {}
+
+    params = pd.read_csv(regvault / f"no_stages_anchoring.csv")
+
+    func_dict = get_maximization_inputs(model2, model2_data)
+    debug_loglike = func_dict["debug_loglike"]
+
+    debug_loglike(params)["contributions"]
