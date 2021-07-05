@@ -18,8 +18,8 @@ from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
 from skillmodels.process_data import process_data_for_estimation
 from skillmodels.process_debug_data import process_debug_data
+from skillmodels.process_model import get_period_measurements
 from skillmodels.process_model import process_model
-from skillmodels.utilities import get_period_measurements
 
 config.update("jax_enable_x64", True)
 

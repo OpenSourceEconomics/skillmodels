@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from skillmodels.params_index import get_params_index
-from skillmodels.process_model import _get_dimensions
+from skillmodels.process_model import get_dimensions
 from skillmodels.process_model import process_model
 
 
@@ -87,7 +87,7 @@ def remove_factors(factors, model_dict, params=None):
             out = _remove_from_dict(out, "anchoring")
 
     # Remove periods if necessary
-    new_n_periods = _get_dimensions(out)["n_periods"]
+    new_n_periods = get_dimensions(out)["n_periods"]
     out = reduce_n_periods(out, new_n_periods)
 
     if params is not None:
@@ -331,11 +331,3 @@ def _shorten_if_necessary(list_, length):
     if len(list_) > length:
         list_ = list_[:length]
     return list_
-
-
-def get_period_measurements(update_info, period):
-    if period in update_info.index:
-        measurements = list(update_info.loc[period].index)
-    else:
-        measurements = []
-    return measurements

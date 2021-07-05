@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 
-from skillmodels.utilities import get_period_measurements
+from skillmodels.process_model import get_period_measurements
 
 
 def process_data_for_estimation(df, labels, update_info, anchoring_info):

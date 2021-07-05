@@ -31,7 +31,7 @@ def process_model(model_dict):
         loadings and intercepts for each factor. See :ref:`normalizations`.
 
     """
-    dims = _get_dimensions(model_dict)
+    dims = get_dimensions(model_dict)
     labels = _get_labels(model_dict, dims)
     anchoring = _process_anchoring(model_dict)
     check_model(model_dict, labels, dims, anchoring)
@@ -48,7 +48,7 @@ def process_model(model_dict):
     return processed
 
 
-def _get_dimensions(model_dict):
+def get_dimensions(model_dict):
     """Extract the dimensions of the model.
 
     Args:
@@ -251,3 +251,11 @@ def fill_list(short_list, fill_value, length):
     if diff >= 1:
         res += [fill_value] * diff
     return res
+
+
+def get_period_measurements(update_info, period):
+    if period in update_info.index:
+        measurements = list(update_info.loc[period].index)
+    else:
+        measurements = []
+    return measurements
