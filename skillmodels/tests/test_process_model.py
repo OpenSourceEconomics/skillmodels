@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
+import yaml
 from pandas.testing import assert_frame_equal
 
 from skillmodels.process_model import process_model
@@ -8,6 +10,16 @@ from skillmodels.process_model import process_model
 # ======================================================================================
 # Integration test with model2 from the replication files of CHS2010
 # ======================================================================================
+
+# importing the TEST_DIR from config does not work for test run in conda build
+TEST_DIR = Path(__file__).parent.resolve()
+
+
+@pytest.fixture
+def model2():
+    with open(TEST_DIR / "model2.yaml") as y:
+        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+    return model_dict
 
 
 def test_dimensions(model2):

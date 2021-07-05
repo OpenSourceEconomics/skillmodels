@@ -16,7 +16,7 @@ include *.yaml
 include *.yml
 
 graft docs
-graft estimagic
+graft skillmodels
 
 prune docs/_build
 prune docs/getting_started/__tutorial__
