@@ -69,7 +69,6 @@ def test_likelihood_contributions_have_not_changed(model2, model2_data, model_na
     aaae(new_loglikes, old_loglikes)
 
 
-@pytest.mark.xfail
 def test_likelihood_runs_with_empty_periods(model2, model2_data):
     regvault = TEST_DIR / "regression_vault"
     del model2["anchoring"]

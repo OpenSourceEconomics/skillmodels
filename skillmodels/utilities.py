@@ -331,3 +331,11 @@ def _shorten_if_necessary(list_, length):
     if len(list_) > length:
         list_ = list_[:length]
     return list_
+
+
+def get_period_measurements(update_info, period):
+    if period in update_info.index:
+        measurements = list(update_info.loc[period].index)
+    else:
+        measurements = []
+    return measurements

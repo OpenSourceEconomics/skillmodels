@@ -4,6 +4,8 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 
+from skillmodels.utilities import get_period_measurements
+
 
 def process_data_for_estimation(df, labels, update_info, anchoring_info):
     """Process the data for estimation.
@@ -86,7 +88,7 @@ def _check_data(df, controls, update_info, labels):
             if cont not in period_data.columns or period_data[cont].isnull().all():
                 var_report.loc[(period, cont), "problem"] = "Variable is missing"
 
-        for meas in update_info.loc[period].index:
+        for meas in get_period_measurements(update_info, period):
             if meas not in period_data.columns:
                 var_report.loc[(period, meas), "problem"] = "Variable is missing"
             elif len(period_data[meas].dropna().unique()) == 1:
@@ -115,7 +117,7 @@ def _handle_controls_with_missings(df, controls, update_info):
     for period in periods:
         period_data = df.query(f"period == {period}")
         control_data = period_data[controls]
-        meas_data = period_data[update_info.loc[period].index]
+        meas_data = period_data[get_period_measurements(update_info, period)]
         problem = control_data.isnull().any(axis=1) & meas_data.notnull().any(axis=1)
         problematic_index = problematic_index.union(period_data[problem].index)
 
