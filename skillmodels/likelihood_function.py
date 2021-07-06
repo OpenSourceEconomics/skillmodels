@@ -29,16 +29,16 @@ def get_maximization_inputs(model_dict, data):
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
-        dataset (DataFrame): dataset in long format.
+        data (DataFrame): dataset in long format.
 
-    Returns:
+    Returns a dictionary with keys:
         loglike (function): A jax jitted function that takes an estimagic-style
-            params dataframe as only input and returns the a dict with the entries:
+            params dataframe as only input and returns a dict with entries:
             - "value": The scalar log likelihood
             - "contributions": An array with the log likelihood per observation
         debug_loglike (function): Similar to loglike, with the following differences:
             - It is not jitted and thus faster on the first call and debuggable
-            - It returns more intermediate results as additional entries in the result
+            - It will add intermediate results as additional entries in the returned
               dictionary. Those can be used for debugging and plotting.
         gradient (function): The gradient of the scalar log likelihood
             function with respect to the parameters.
