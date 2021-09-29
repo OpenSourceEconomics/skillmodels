@@ -112,8 +112,8 @@ def get_maximization_inputs(model_dict, data):
         if jax_output["contributions"].dtype != "float64":
             raise TypeError()
         numpy_output = _to_numpy(jax_output)
-        numpy_output["value"] = float(numpy_output["value"])
-        numpy_output = partialed_process_debug_data(numpy_output)
+        # numpy_output["value"] = float(numpy_output["value"])
+        # numpy_output = partialed_process_debug_data(numpy_output)
         return numpy_output
 
     def loglike(params):
@@ -162,6 +162,184 @@ def get_maximization_inputs(model_dict, data):
 
 
 def _log_likelihood_jax(
+    params,
+    parsing_info,
+    measurements,
+    controls,
+    transition_functions,
+    sigma_scaling_factor,
+    sigma_weights,
+    dimensions,
+    labels,
+    estimation_options,
+    not_missing,
+    is_measurement_iteration,
+    is_predict_iteration,
+    iteration_to_period,
+    debug,
+):
+    """Log likelihood of a skill formation model.
+
+    This function is jax-differentiable and jax-jittable as long as all but the first
+    argument are marked as static.
+
+    The function returns both a tuple (float, dict). The first entry is the aggregated
+    log likelihood value. The second additional information like the log likelihood
+    contribution of each individual. Note that the dict also contains the aggregated
+    value. Returning that value separately is only needed to calculate a gradient
+    with Jax.
+
+    Args:
+        params (jax.numpy.array): 1d array with model parameters.
+        parsing_info (dict): Contains information how to parse parameter vector.
+        update_info (pandas.DataFrame): Contains information about number of updates in
+            each period and purpose of each update.
+        measurements (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
+            observed measurements. NaN if the measurement was not observed.
+        controls (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
+            with observed control variables for the measurement equations.
+        transition_functions (tuple): tuple of tuples where the first element is the
+            name of the transition function and the second the actual transition
+            function. Order is important and corresponds to the latent
+            factors in alphabetical order.
+        sigma_scaling_factor (float): A scaling factor that controls the spread of the
+            sigma points. Bigger means that sigma points are further apart. Depends on
+            the sigma_point algorithm chosen.
+        sigma_weights (jax.numpy.array): 1d array of length n_sigma with non-negative
+            sigma weights.
+        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
+            n_mixtures. See :ref:`dimensions`.
+        labels (dict): Dict of lists with labels for the model quantities like
+            factors, periods, controls, stagemap and stages. See :ref:`labels`
+        not_missing (jax.numpy.array): Array with same shape as measurements that is
+            True where measurements are not missing.
+        debug (bool): Boolean flag. If True, more intermediate results are returned
+
+    Returns:
+        jnp.array: 1d array of length 1, the aggregated log likelihood.
+        dict: Additional data, containing log likelihood contribution of each Kalman
+            update potentially if ``debug`` is ``True`` additional information like
+            the filtered states.
+
+    """
+    n_obs = measurements.shape[1]
+    states, upper_chols, log_mixture_weights, pardict = parse_params(
+        params, parsing_info, dimensions, labels, n_obs
+    )
+
+    state = {
+        "states": states,
+        "upper_chols": upper_chols,
+        "log_mixture_weights": log_mixture_weights,
+    }
+
+    loop_args = {
+        "period": iteration_to_period,
+        "loadings": pardict["loadings"],
+        "control_params": pardict["controls"],
+        "meas_sds": pardict["meas_sds"],
+        "measurements": measurements,
+        "not_missing": not_missing,
+        "is_measurement_iteration": is_measurement_iteration,
+        "is_predict_iteration": is_predict_iteration,
+    }
+
+    _body = functools.partial(
+        _scan_body,
+        controls=controls,
+        pardict=pardict,
+        sigma_scaling_factor=sigma_scaling_factor,
+        sigma_weights=sigma_weights,
+        transition_functions=transition_functions,
+        debug=debug,
+    )
+
+    loglike_list = []
+
+    for k in range(len(iteration_to_period)):
+        la = {key: val[k] for key, val in loop_args.items()}
+
+        state, static_out = _body(state, la)
+        loglike_list.append(static_out["loglikes"])
+
+    loglikes = jnp.vstack(loglike_list)
+
+    clipped = soft_clipping(
+        arr=loglikes,
+        lower=estimation_options["clipping_lower_bound"],
+        upper=estimation_options["clipping_upper_bound"],
+        lower_hardness=estimation_options["clipping_lower_hardness"],
+        upper_hardness=estimation_options["clipping_upper_hardness"],
+    )
+
+    value = clipped.sum()
+
+    additional_data = {
+        # used for scalar optimization, thus has to be clipped
+        "value": value,
+        # can be used for sum-structure optimizers, thus has to be clipped
+        "contributions": clipped.sum(axis=0),
+    }
+
+    return value, additional_data
+
+
+def _scan_body(
+    state,
+    loop_args,
+    controls,
+    pardict,
+    sigma_scaling_factor,
+    sigma_weights,
+    transition_functions,
+    debug,
+):
+    t = loop_args["period"]
+    states = state["states"]
+    upper_chols = state["upper_chols"]
+    log_mixture_weights = state["log_mixture_weights"]
+
+    new_states, new_upper_chols, log_mixture_weights, loglikes, info = kalman_update(
+        states=states,
+        upper_chols=upper_chols,
+        loadings=loop_args["loadings"],
+        control_params=loop_args["control_params"],
+        meas_sd=loop_args["meas_sds"],
+        measurements=loop_args["measurements"],
+        controls=controls[t],
+        log_mixture_weights=log_mixture_weights,
+        not_missing=loop_args["not_missing"],
+        debug=debug,
+    )
+
+    if loop_args["is_measurement_iteration"]:
+        states = new_states
+        upper_chols = new_upper_chols
+
+    if loop_args["is_predict_iteration"]:
+        states, upper_chols = kalman_predict(
+            states,
+            upper_chols,
+            sigma_scaling_factor,
+            sigma_weights,
+            transition_functions,
+            pardict["transition"][t],
+            pardict["shock_sds"][t],
+            pardict["anchoring_scaling_factors"][t : t + 2],
+            pardict["anchoring_constants"][t : t + 2],
+        )
+
+    new_state = {
+        "states": states,
+        "upper_chols": upper_chols,
+        "log_mixture_weights": log_mixture_weights,
+    }
+
+    static_out = {"loglikes": loglikes, **info}
+    return new_state, static_out
+
+
+def _log_likelihood_jax_old(
     params,
     parsing_info,
     measurements,
