@@ -1,13 +1,15 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.config import TEST_DIR
 from skillmodels.likelihood_function import get_maximization_inputs
+from skillmodels.utilities import reduce_n_periods
 
 config.update("jax_enable_x64", True)
 
@@ -17,6 +19,23 @@ model_names = [
     "one_stage_anchoring",
     "two_stages_anchoring",
 ]
+
+# importing the TEST_DIR from config does not work for test run in conda build
+TEST_DIR = Path(__file__).parent.resolve()
+
+
+@pytest.fixture
+def model2():
+    with open(TEST_DIR / "model2.yaml") as y:
+        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+    return model_dict
+
+
+@pytest.fixture
+def model2_data():
+    data = pd.read_stata(TEST_DIR / "model2_simulated_data.dta")
+    data = data.set_index(["caseid", "period"])
+    return data
 
 
 def _convert_model(base_model, model_name):
@@ -49,3 +68,29 @@ def test_likelihood_contributions_have_not_changed(model2, model2_data, model_na
         old_loglikes = np.array(json.load(j))
 
     aaae(new_loglikes, old_loglikes)
+
+
+def test_likelihood_runs_with_empty_periods(model2, model2_data):
+    del model2["anchoring"]
+    for factor in ["fac1", "fac2"]:
+        model2["factors"][factor]["measurements"][-1] = []
+        model2["factors"][factor]["normalizations"]["loadings"][-1] = {}
+
+    func_dict = get_maximization_inputs(model2, model2_data)
+
+    params = func_dict["params_template"]
+    params["value"] = 0.1
+
+    debug_loglike = func_dict["debug_loglike"]
+    debug_loglike(params)["contributions"]
+
+
+def test_likelihood_runs_with_too_long_data(model2, model2_data):
+    model = reduce_n_periods(model2, 2)
+    func_dict = get_maximization_inputs(model, model2_data)
+
+    params = func_dict["params_template"]
+    params["value"] = 0.1
+
+    debug_loglike = func_dict["debug_loglike"]
+    debug_loglike(params)["contributions"]

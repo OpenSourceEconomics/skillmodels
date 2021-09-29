@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from skillmodels.params_index import get_params_index
-from skillmodels.process_model import fill_list
+from skillmodels.process_model import get_dimensions
 from skillmodels.process_model import process_model
 
 
@@ -61,6 +61,9 @@ def remove_factors(factors, model_dict, params=None):
 
     If provided, a params DataFrame is also reduced correspondingly.
 
+    It is possible that the reduced model has fewer periods than the original one.
+    This happens if the remaining factors do not have measurements in later periods.
+
     Args:
         factors (str or list): Name(s) of the factor(s) to remove.
         model_dict (dict): The model specification. See: :ref:`model_specs`.
@@ -83,13 +86,9 @@ def remove_factors(factors, model_dict, params=None):
         if out["anchoring"]["outcomes"] == {}:
             out = _remove_from_dict(out, "anchoring")
 
-    # fill remaining measurement lists to have original length
-    mod = process_model(model_dict)
-    n_periods = mod["dimensions"]["n_periods"]
-    for factor in out["factors"]:
-        out["factors"][factor]["measurements"] = fill_list(
-            out["factors"][factor]["measurements"], [], n_periods
-        )
+    # Remove periods if necessary
+    new_n_periods = get_dimensions(out)["n_periods"]
+    out = reduce_n_periods(out, new_n_periods)
 
     if params is not None:
         out_params = _reduce_params(params, out)

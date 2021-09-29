@@ -4,9 +4,12 @@ All tests should not only assert that modified model specifications are correct 
 also that there are no side effects on the inputs.
 
 """
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 from pandas.testing import assert_frame_equal
 from pandas.testing import assert_index_equal
 
@@ -23,6 +26,17 @@ from skillmodels.utilities import remove_measurements
 from skillmodels.utilities import switch_linear_to_translog
 from skillmodels.utilities import switch_translog_to_linear
 from skillmodels.utilities import update_parameter_values
+
+
+# importing the TEST_DIR from config does not work for test run in conda build
+TEST_DIR = Path(__file__).parent.resolve()
+
+
+@pytest.fixture
+def model2():
+    with open(TEST_DIR / "model2.yaml") as y:
+        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+    return model_dict
 
 
 @pytest.mark.parametrize("factors", ["fac2", ["fac2"]])
@@ -132,7 +146,6 @@ def test_reduce_params_via_extract_factors(model2):
             ("meas_sds", 0, "y7", "-"),
             ("meas_sds", 0, "y8", "-"),
             ("meas_sds", 0, "y9", "-"),
-            ("shock_sds", 0, "fac3", "-"),
             ("initial_states", 0, "mixture_0", "fac3"),
             ("mixture_weights", 0, "mixture_0", "-"),
             ("initial_cholcovs", 0, "mixture_0", "fac3-fac3"),

@@ -4,6 +4,8 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 
+from skillmodels.process_model import get_period_measurements
+
 
 def process_data_for_estimation(df, labels, update_info, anchoring_info):
     """Process the data for estimation.
@@ -25,7 +27,7 @@ def process_data_for_estimation(df, labels, update_info, anchoring_info):
             with observed control variables for the measurement equations.
 
     """
-    df = _pre_process_data(df)
+    df = _pre_process_data(df, labels["periods"])
     df["constant"] = 1
     df = _add_copies_of_anchoring_outcome(df, anchoring_info)
     _check_data(df, labels["controls"], update_info, labels)
@@ -37,8 +39,8 @@ def process_data_for_estimation(df, labels, update_info, anchoring_info):
     return meas_data, control_data
 
 
-def _pre_process_data(df):
-    """Balance a panel dataset in long format and set an appropriate index.
+def _pre_process_data(df, periods):
+    """Balance panel data in long format, drop unnecessary periods and set index.
 
     Args:
         df (DataFrame): panel dataset in long format. It has a MultiIndex
@@ -61,7 +63,6 @@ def _pre_process_data(df):
 
     # create new index
     ids = sorted(df.index.get_level_values("id").unique())
-    periods = sorted(df.index.get_level_values("period").unique())
     new_index = pd.MultiIndex.from_product([ids, periods], names=["id", "period"])
 
     # set new index
@@ -86,7 +87,7 @@ def _check_data(df, controls, update_info, labels):
             if cont not in period_data.columns or period_data[cont].isnull().all():
                 var_report.loc[(period, cont), "problem"] = "Variable is missing"
 
-        for meas in update_info.loc[period].index:
+        for meas in get_period_measurements(update_info, period):
             if meas not in period_data.columns:
                 var_report.loc[(period, meas), "problem"] = "Variable is missing"
             elif len(period_data[meas].dropna().unique()) == 1:
@@ -94,28 +95,18 @@ def _check_data(df, controls, update_info, labels):
 
     var_report = var_report.to_string() if len(var_report) > 0 else ""
 
-    general_problems = []
-    data_n_periods = len(df.index.get_level_values("period").unique())
-    model_n_periods = len(labels["periods"])
-    if data_n_periods != model_n_periods:
-        general_problems.append(
-            f"The model has {model_n_periods}, the dataset has {data_n_periods}."
-        )
-
-    general_report = "\n".join(general_problems)
-
-    if var_report != "" or general_report != "":
-        raise ValueError(var_report + "\n" + general_report)
+    if var_report:
+        raise ValueError(var_report)
 
 
 def _handle_controls_with_missings(df, controls, update_info):
     df = df.copy(deep=True)
-    periods = df.index.get_level_values(1).unique().tolist()
+    periods = update_info.index.get_level_values(0).unique().tolist()
     problematic_index = df.index[:0]
     for period in periods:
         period_data = df.query(f"period == {period}")
         control_data = period_data[controls]
-        meas_data = period_data[update_info.loc[period].index]
+        meas_data = period_data[get_period_measurements(update_info, period)]
         problem = control_data.isnull().any(axis=1) & meas_data.notnull().any(axis=1)
         problematic_index = problematic_index.union(period_data[problem].index)
 

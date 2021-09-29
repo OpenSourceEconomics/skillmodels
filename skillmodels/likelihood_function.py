@@ -18,6 +18,7 @@ from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
 from skillmodels.process_data import process_data_for_estimation
 from skillmodels.process_debug_data import process_debug_data
+from skillmodels.process_model import get_period_measurements
 from skillmodels.process_model import process_model
 
 config.update("jax_enable_x64", True)
@@ -223,7 +224,7 @@ def _log_likelihood_jax(
 
     k = 0
     for t in labels["periods"]:
-        nmeas = len(update_info.loc[t])
+        nmeas = len(get_period_measurements(update_info, t))
         for _j in range(nmeas):
             purpose = update_info.iloc[k]["purpose"]
             new_states, new_upper_chols, new_weights, loglikes_k, info = kalman_update(

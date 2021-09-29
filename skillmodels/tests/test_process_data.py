@@ -28,7 +28,7 @@ def test_pre_process_data():
     exp = pd.DataFrame(data=data, columns=["__period__", "__id__", "var"])
     exp.set_index(["__id__", "__period__"], inplace=True)
 
-    res = _pre_process_data(df)
+    res = _pre_process_data(df, [0, 1, 2, 3])
 
     assert res["var"].equals(exp["var"])
 
