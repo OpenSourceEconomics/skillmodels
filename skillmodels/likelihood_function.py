@@ -18,7 +18,6 @@ from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
 from skillmodels.process_data import process_data_for_estimation
 from skillmodels.process_debug_data import process_debug_data
-from skillmodels.process_model import get_period_measurements
 from skillmodels.process_model import process_model
 
 config.update("jax_enable_x64", True)
@@ -222,36 +221,36 @@ def _log_likelihood_jax(
     debug_infos = []
     states_history = []
 
-    k = 0
-    for t in labels["periods"]:
-        nmeas = len(get_period_measurements(update_info, t))
-        for _j in range(nmeas):
-            purpose = update_info.iloc[k]["purpose"]
-            new_states, new_upper_chols, new_weights, loglikes_k, info = kalman_update(
-                states,
-                upper_chols,
-                pardict["loadings"][k],
-                pardict["controls"][k],
-                pardict["meas_sds"][k],
-                measurements[k],
-                controls[t],
-                log_mixture_weights,
-                not_missing[k],
-                debug,
-            )
-            if debug:
-                states_history.append(new_states)
+    is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
+    _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
+    is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
+    iteration_to_period = _periods.to_numpy()
 
-            loglikes = index_update(loglikes, index[k], loglikes_k)
-            log_mixture_weights = new_weights
-            if purpose == "measurement":
-                states, upper_chols = new_states, new_upper_chols
+    for k, t in enumerate(iteration_to_period):
 
-            debug_infos.append(info)
+        new_states, new_upper_chols, new_weights, loglikes_k, info = kalman_update(
+            states,
+            upper_chols,
+            pardict["loadings"][k],
+            pardict["controls"][k],
+            pardict["meas_sds"][k],
+            measurements[k],
+            controls[t],
+            log_mixture_weights,
+            not_missing[k],
+            debug,
+        )
+        if debug:
+            states_history.append(new_states)
 
-            k += 1
+        loglikes = index_update(loglikes, index[k], loglikes_k)
+        log_mixture_weights = new_weights
+        if is_measurement_iteration[k]:
+            states, upper_chols = new_states, new_upper_chols
 
-        if t != labels["periods"][-1]:
+        debug_infos.append(info)
+
+        if is_predict_iteration[k]:
             states, upper_chols = kalman_predict(
                 states,
                 upper_chols,
