@@ -1,3 +1,5 @@
+import itertools
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -12,6 +14,7 @@ from skillmodels.kalman_filters import _transform_sigma_points
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.kalman_filters import kalman_predict
 from skillmodels.kalman_filters import kalman_update
+from skillmodels.kalman_filters import kalman_update_padded
 
 config.update("jax_enable_x64", True)
 
@@ -20,10 +23,12 @@ config.update("jax_enable_x64", True)
 # ======================================================================================
 
 SEEDS = range(20)
+FUNCS = [kalman_update, kalman_update_padded]
+TEST_CASES = itertools.product(SEEDS, FUNCS)
 
 
-@pytest.mark.parametrize("seed", SEEDS)
-def test_kalman_update(seed):
+@pytest.mark.parametrize("seed, update_func", TEST_CASES)
+def test_kalman_update(seed, update_func):
     np.random.seed(seed)
     state, cov = _random_state_and_covariance()
     loadings, measurement, meas_sd = _random_loadings_measurement_and_meas_sd(state)
@@ -44,7 +49,7 @@ def test_kalman_update(seed):
 
     sm_states, sm_chols = _filterpy_to_skillmodels(state, cov)
 
-    calc_states, calc_chols, calc_weights, calc_loglikes, _ = kalman_update(
+    calc_states, calc_chols, calc_weights, calc_loglikes, _ = update_func(
         states=sm_states,
         upper_chols=sm_chols,
         loadings=jnp.array(loadings),
@@ -71,7 +76,8 @@ def test_kalman_update(seed):
 # ======================================================================================
 
 
-def test_kalman_update_with_missing():
+@pytest.mark.parametrize("update_func", FUNCS)
+def test_kalman_update_with_missing(update_func):
     """State, cov and weights should not change, log likelihood should be zero."""
 
     n_mixtures = 2
@@ -86,7 +92,7 @@ def test_kalman_update_with_missing():
     measurements = jnp.array([13, jnp.nan, jnp.nan])
     weights = jnp.log(jnp.ones((n_obs, n_mixtures)) * 0.5)
 
-    calc_states, calc_chols, calc_weights, calc_loglikes, _ = kalman_update(
+    calc_states, calc_chols, calc_weights, calc_loglikes, _ = update_func(
         states=states,
         upper_chols=chols,
         loadings=jnp.ones(n_states) * 2,

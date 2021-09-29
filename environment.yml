@@ -24,6 +24,7 @@ dependencies:
   - nbsphinx
   - pdbpp
   - filterpy
+  - estimagic
   - pip:
     - pre-commit
     - black
