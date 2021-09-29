@@ -74,10 +74,15 @@ def get_maximization_inputs(model_dict, data):
         model["estimation_options"]["sigma_points_scale"],
     )
 
+    update_info = model["update_info"]
+    is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
+    _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
+    is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
+    iteration_to_period = _periods.to_numpy()
+
     _base_loglike = functools.partial(
         _log_likelihood_jax,
         parsing_info=parsing_info,
-        update_info=model["update_info"],
         measurements=measurements,
         controls=controls,
         transition_functions=model["transition_functions"],
@@ -87,6 +92,9 @@ def get_maximization_inputs(model_dict, data):
         labels=model["labels"],
         estimation_options=model["estimation_options"],
         not_missing=not_missing_list,
+        is_measurement_iteration=is_measurement_iteration,
+        is_predict_iteration=is_predict_iteration,
+        iteration_to_period=iteration_to_period,
     )
 
     partialed_process_debug_data = functools.partial(process_debug_data, model=model)
@@ -156,7 +164,6 @@ def get_maximization_inputs(model_dict, data):
 def _log_likelihood_jax(
     params,
     parsing_info,
-    update_info,
     measurements,
     controls,
     transition_functions,
@@ -166,6 +173,9 @@ def _log_likelihood_jax(
     labels,
     estimation_options,
     not_missing,
+    is_measurement_iteration,
+    is_predict_iteration,
+    iteration_to_period,
     debug,
 ):
     """Log likelihood of a skill formation model.
@@ -216,15 +226,10 @@ def _log_likelihood_jax(
     states, upper_chols, log_mixture_weights, pardict = parse_params(
         params, parsing_info, dimensions, labels, n_obs
     )
-    n_updates = len(update_info)
+    n_updates = len(iteration_to_period)
     loglikes = jnp.zeros((n_updates, n_obs))
     debug_infos = []
     states_history = []
-
-    is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
-    _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
-    is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
-    iteration_to_period = _periods.to_numpy()
 
     for k, t in enumerate(iteration_to_period):
 
