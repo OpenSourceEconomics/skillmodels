@@ -7,6 +7,7 @@ import pandas as pd
 from jax import config
 from jax.ops import index
 from jax.ops import index_update
+from jax import lax
 
 from skillmodels.constraints import add_bounds
 from skillmodels.constraints import get_constraints
@@ -78,7 +79,8 @@ def get_maximization_inputs(model_dict, data):
     is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
     _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
     is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
-    iteration_to_period = _periods.to_numpy()
+    last_period = model["labels"]["periods"][-1]
+    iteration_to_period = _periods.replace(last_period, -1).to_numpy()
 
     _base_loglike = functools.partial(
         _log_likelihood_jax,
@@ -91,7 +93,7 @@ def get_maximization_inputs(model_dict, data):
         dimensions=model["dimensions"],
         labels=model["labels"],
         estimation_options=model["estimation_options"],
-        not_missing=not_missing_list,
+        not_missing_arr=not_missing_arr,
         is_measurement_iteration=is_measurement_iteration,
         is_predict_iteration=is_predict_iteration,
         iteration_to_period=iteration_to_period,
@@ -172,7 +174,7 @@ def _log_likelihood_jax(
     dimensions,
     labels,
     estimation_options,
-    not_missing,
+    not_missing_arr,
     is_measurement_iteration,
     is_predict_iteration,
     iteration_to_period,
@@ -239,7 +241,7 @@ def _log_likelihood_jax(
         "control_params": pardict["controls"],
         "meas_sds": pardict["meas_sds"],
         "measurements": measurements,
-        "not_missing": not_missing,
+        # "not_missing": not_missing,
         "is_measurement_iteration": is_measurement_iteration,
         "is_predict_iteration": is_predict_iteration,
     }
@@ -252,10 +254,11 @@ def _log_likelihood_jax(
         sigma_weights=sigma_weights,
         transition_functions=transition_functions,
         debug=debug,
+        not_missing_arr=not_missing_arr,
     )
 
+    # ====
     loglike_list = []
-
     for k in range(len(iteration_to_period)):
         la = {key: val[k] for key, val in loop_args.items()}
 
@@ -263,6 +266,12 @@ def _log_likelihood_jax(
         loglike_list.append(static_out["loglikes"])
 
     loglikes = jnp.vstack(loglike_list)
+    # ===
+    state, static_out = lax.scan(_body, state, loop_args)
+
+    breakpoint()
+
+
 
     clipped = soft_clipping(
         arr=loglikes,
@@ -293,41 +302,56 @@ def _scan_body(
     sigma_weights,
     transition_functions,
     debug,
+    not_missing_arr,
 ):
     t = loop_args["period"]
     states = state["states"]
     upper_chols = state["upper_chols"]
     log_mixture_weights = state["log_mixture_weights"]
 
-    new_states, new_upper_chols, log_mixture_weights, loglikes, info = kalman_update(
-        states=states,
-        upper_chols=upper_chols,
-        loadings=loop_args["loadings"],
-        control_params=loop_args["control_params"],
-        meas_sd=loop_args["meas_sds"],
-        measurements=loop_args["measurements"],
-        controls=controls[t],
-        log_mixture_weights=log_mixture_weights,
-        not_missing=loop_args["not_missing"],
-        debug=debug,
+    update_kwargs = {
+        "states": states,
+        "upper_chols": upper_chols,
+        "loadings": loop_args["loadings"],
+        "control_params": loop_args["control_params"],
+        "meas_sd": loop_args["meas_sds"],
+        "measurements": loop_args["measurements"],
+        "controls": controls[t],
+        "log_mixture_weights": log_mixture_weights,
+    }
+
+    fixed_kwargs = {
+        "not_missing": not_missing_arr[t],
+        "debug": debug,
+    }
+
+    states, upper_chols, log_mixture_weights, loglikes, info = lax.cond(
+        loop_args["is_measurement_iteration"],
+        functools.partial(_one_arg_measurement_update, **fixed_kwargs),
+        functools.partial(_one_arg_anchoring_update, **fixed_kwargs),
+        update_kwargs,
     )
 
-    if loop_args["is_measurement_iteration"]:
-        states = new_states
-        upper_chols = new_upper_chols
+    # predict_kwargs = {
+    #     "states": states,
+    #     "upper_chols": upper_chols,
+    #     "sigma_scaling_factor": sigma_scaling_factor,
+    #     "sigma_weights": sigma_weights,
+    #     # "transition_functions": transition_functions,
+    #     "trans_coeffs": pardict["transition"][t],
+    #     "shock_sds": pardict["shock_sds"][t],
+    #     "anchoring_scaling_factors": pardict["anchoring_scaling_factors"][t : t + 2],
+    #     "anchoring_constants": pardict["anchoring_constants"][t : t + 2],
+    # }
 
-    if loop_args["is_predict_iteration"]:
-        states, upper_chols = kalman_predict(
-            states,
-            upper_chols,
-            sigma_scaling_factor,
-            sigma_weights,
-            transition_functions,
-            pardict["transition"][t],
-            pardict["shock_sds"][t],
-            pardict["anchoring_scaling_factors"][t : t + 2],
-            pardict["anchoring_constants"][t : t + 2],
-        )
+    # fixed_kwargs = {"transition_functions": transition_functions}
+
+    # states, upper_chols = lax.cond(
+    #     loop_args["is_predict_iteration"],
+    #     functools.partial(_one_arg_predict, **fixed_kwargs),
+    #     functools.partial(_one_arg_no_predict, **fixed_kwargs),
+    #     predict_kwargs,
+    # )
 
     new_state = {
         "states": states,
@@ -337,6 +361,26 @@ def _scan_body(
 
     static_out = {"loglikes": loglikes, **info}
     return new_state, static_out
+
+
+def _one_arg_measurement_update(kwargs, not_missing, debug):
+    out = kalman_update(**kwargs, not_missing=not_missing, debug=debug)
+    return out
+
+
+def _one_arg_anchoring_update(kwargs, not_missing, debug):
+    _, _, new_log_mixture_weights, new_loglikes, debug_info = kalman_update(**kwargs, not_missing=not_missing, debug=debug)
+    out = (kwargs["states"], kwargs["upper_chols"], new_log_mixture_weights, new_loglikes, debug_info)
+    return out
+
+
+def _one_arg_no_predict(kwargs, transition_functions):
+    return kwargs["states"], kwargs["upper_chols"]
+
+
+def _one_arg_predict(kwargs, transition_functions):
+    out = kalman_predict(**kwargs, transition_functions=transition_functions)
+    return out
 
 
 def _log_likelihood_jax_old(
