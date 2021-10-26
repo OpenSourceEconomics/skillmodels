@@ -236,10 +236,11 @@ def kalman_update_padded(
 
     debug_info = {}
     if debug:
-        residuals = jnp.where(not_missing, _residuals, jnp.nan)
+        residuals = jnp.where(not_missing.reshape(n_obs, 1), _residuals, jnp.nan)
         debug_info["residuals"] = residuals
-
-        residual_sds = jnp.where(not_missing, _abs_root_sigmas, jnp.nan)
+        residual_sds = jnp.where(
+            not_missing.reshape(n_obs, 1), _abs_root_sigmas, jnp.nan
+        )
         debug_info["residual_sds"] = residual_sds
 
     return (

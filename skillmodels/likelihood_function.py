@@ -12,7 +12,7 @@ from skillmodels.constraints import add_bounds
 from skillmodels.constraints import get_constraints
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.kalman_filters import kalman_predict
-from skillmodels.kalman_filters import kalman_update
+from skillmodels.kalman_filters import kalman_update_padded
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
@@ -227,7 +227,13 @@ def _log_likelihood_jax(
         nmeas = len(get_period_measurements(update_info, t))
         for _j in range(nmeas):
             purpose = update_info.iloc[k]["purpose"]
-            new_states, new_upper_chols, new_weights, loglikes_k, info = kalman_update(
+            (
+                new_states,
+                new_upper_chols,
+                new_weights,
+                loglikes_k,
+                info,
+            ) = kalman_update_padded(
                 states,
                 upper_chols,
                 pardict["loadings"][k],
