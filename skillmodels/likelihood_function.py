@@ -18,7 +18,6 @@ from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
 from skillmodels.process_data import process_data_for_estimation
 from skillmodels.process_debug_data import process_debug_data
-from skillmodels.process_model import get_period_measurements
 from skillmodels.process_model import process_model
 
 config.update("jax_enable_x64", True)
@@ -67,10 +66,16 @@ def get_maximization_inputs(model_dict, data):
         model["estimation_options"]["sigma_points_scale"],
     )
 
+    update_info = model["update_info"]
+    is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
+    _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
+    is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
+    last_period = model["labels"]["periods"][-1]
+    iteration_to_period = _periods.replace(last_period, -1).to_numpy()
+
     _base_loglike = functools.partial(
         _log_likelihood_jax,
         parsing_info=parsing_info,
-        update_info=model["update_info"],
         measurements=measurements,
         controls=controls,
         transition_functions=model["transition_functions"],
@@ -79,6 +84,9 @@ def get_maximization_inputs(model_dict, data):
         dimensions=model["dimensions"],
         labels=model["labels"],
         estimation_options=model["estimation_options"],
+        is_measurement_iteration=is_measurement_iteration,
+        is_predict_iteration=is_predict_iteration,
+        iteration_to_period=iteration_to_period,
     )
 
     partialed_process_debug_data = functools.partial(process_debug_data, model=model)
@@ -148,7 +156,6 @@ def get_maximization_inputs(model_dict, data):
 def _log_likelihood_jax(
     params,
     parsing_info,
-    update_info,
     measurements,
     controls,
     transition_functions,
@@ -157,6 +164,9 @@ def _log_likelihood_jax(
     dimensions,
     labels,
     estimation_options,
+    is_measurement_iteration,
+    is_predict_iteration,
+    iteration_to_period,
     debug,
 ):
     """Log likelihood of a skill formation model.
@@ -205,46 +215,34 @@ def _log_likelihood_jax(
     states, upper_chols, log_mixture_weights, pardict = parse_params(
         params, parsing_info, dimensions, labels, n_obs
     )
-    n_updates = len(update_info)
+    n_updates = len(iteration_to_period)
     loglikes = jnp.zeros((n_updates, n_obs))
     debug_infos = []
     states_history = []
 
-    k = 0
-    for t in labels["periods"]:
-        nmeas = len(get_period_measurements(update_info, t))
-        for _j in range(nmeas):
-            purpose = update_info.iloc[k]["purpose"]
-            (
-                new_states,
-                new_upper_chols,
-                new_weights,
-                loglikes_k,
-                info,
-            ) = kalman_update(
-                states,
-                upper_chols,
-                pardict["loadings"][k],
-                pardict["controls"][k],
-                pardict["meas_sds"][k],
-                measurements[k],
-                controls[t],
-                log_mixture_weights,
-                debug,
-            )
-            if debug:
-                states_history.append(new_states)
+    for k, t in enumerate(iteration_to_period):
+        (new_states, new_upper_chols, new_weights, loglikes_k, info) = kalman_update(
+            states,
+            upper_chols,
+            pardict["loadings"][k],
+            pardict["controls"][k],
+            pardict["meas_sds"][k],
+            measurements[k],
+            controls[t],
+            log_mixture_weights,
+            debug,
+        )
+        if debug:
+            states_history.append(new_states)
 
-            loglikes = index_update(loglikes, index[k], loglikes_k)
-            log_mixture_weights = new_weights
-            if purpose == "measurement":
-                states, upper_chols = new_states, new_upper_chols
+        loglikes = index_update(loglikes, index[k], loglikes_k)
+        log_mixture_weights = new_weights
+        if is_measurement_iteration[k]:
+            states, upper_chols = new_states, new_upper_chols
 
-            debug_infos.append(info)
+        debug_infos.append(info)
 
-            k += 1
-
-        if t != labels["periods"][-1]:
+        if is_predict_iteration[k]:
             states, upper_chols = kalman_predict(
                 states,
                 upper_chols,
