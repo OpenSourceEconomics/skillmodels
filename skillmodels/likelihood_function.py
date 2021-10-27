@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from jax import config
+from jax import lax
 
 from skillmodels.constraints import add_bounds
 from skillmodels.constraints import get_constraints
@@ -69,7 +70,12 @@ def get_maximization_inputs(model_dict, data):
     _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
     is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
     last_period = model["labels"]["periods"][-1]
-    iteration_to_period = _periods.replace(last_period, -1).to_numpy()
+    # The last period is replaced by zero. Periods are only used for things that are
+    # related to the predict step. Since there is no predict step in the last period,
+    # it does not matter which entry is there. However, leaving it at the last period
+    # would cause an index error in the dummy predict function (that does nothing)
+    # during the jax tracing.
+    iteration_to_period = _periods.replace(last_period, 0).to_numpy()
 
     _base_loglike = functools.partial(
         _log_likelihood_jax,
@@ -300,34 +306,43 @@ def _scan_body(
     upper_chols = state["upper_chols"]
     log_mixture_weights = state["log_mixture_weights"]
 
-    new_states, new_upper_chols, log_mixture_weights, loglikes, info = kalman_update(
-        states=states,
-        upper_chols=upper_chols,
-        loadings=loop_args["loadings"],
-        control_params=loop_args["control_params"],
-        meas_sd=loop_args["meas_sds"],
-        measurements=loop_args["measurements"],
-        controls=controls[t],
-        log_mixture_weights=log_mixture_weights,
-        debug=debug,
+    update_kwargs = {
+        "states": states,
+        "upper_chols": upper_chols,
+        "loadings": loop_args["loadings"],
+        "control_params": loop_args["control_params"],
+        "meas_sd": loop_args["meas_sds"],
+        "measurements": loop_args["measurements"],
+        "controls": controls[t],
+        "log_mixture_weights": log_mixture_weights,
+    }
+
+    states, upper_chols, log_mixture_weights, loglikes, info = lax.cond(
+        loop_args["is_measurement_iteration"],
+        functools.partial(_one_arg_measurement_update, debug=debug),
+        functools.partial(_one_arg_anchoring_update, debug=debug),
+        update_kwargs,
     )
 
-    if loop_args["is_measurement_iteration"]:
-        states = new_states
-        upper_chols = new_upper_chols
+    predict_kwargs = {
+        "states": states,
+        "upper_chols": upper_chols,
+        "sigma_scaling_factor": sigma_scaling_factor,
+        "sigma_weights": sigma_weights,
+        "trans_coeffs": pardict["transition"][t],
+        "shock_sds": pardict["shock_sds"][t],
+        "anchoring_scaling_factors": pardict["anchoring_scaling_factors"][t : t + 2],
+        "anchoring_constants": pardict["anchoring_constants"][t : t + 2],
+    }
 
-    if loop_args["is_predict_iteration"]:
-        states, upper_chols = kalman_predict(
-            states,
-            upper_chols,
-            sigma_scaling_factor,
-            sigma_weights,
-            transition_functions,
-            pardict["transition"][t],
-            pardict["shock_sds"][t],
-            pardict["anchoring_scaling_factors"][t : t + 2],
-            pardict["anchoring_constants"][t : t + 2],
-        )
+    fixed_kwargs = {"transition_functions": transition_functions}
+
+    states, upper_chols = lax.cond(
+        loop_args["is_predict_iteration"],
+        functools.partial(_one_arg_predict, **fixed_kwargs),
+        functools.partial(_one_arg_no_predict, **fixed_kwargs),
+        predict_kwargs,
+    )
 
     new_state = {
         "states": states,
@@ -337,6 +352,34 @@ def _scan_body(
 
     static_out = {"loglikes": loglikes, **info}
     return new_state, static_out
+
+
+def _one_arg_measurement_update(kwargs, debug):
+    out = kalman_update(**kwargs, debug=debug)
+    return out
+
+
+def _one_arg_anchoring_update(kwargs, debug):
+    _, _, new_log_mixture_weights, new_loglikes, debug_info = kalman_update(
+        **kwargs, debug=debug
+    )
+    out = (
+        kwargs["states"],
+        kwargs["upper_chols"],
+        new_log_mixture_weights,
+        new_loglikes,
+        debug_info,
+    )
+    return out
+
+
+def _one_arg_no_predict(kwargs, transition_functions):
+    return kwargs["states"], kwargs["upper_chols"]
+
+
+def _one_arg_predict(kwargs, transition_functions):
+    out = kalman_predict(**kwargs, transition_functions=transition_functions)
+    return out
 
 
 def soft_clipping(arr, lower=None, upper=None, lower_hardness=1, upper_hardness=1):
