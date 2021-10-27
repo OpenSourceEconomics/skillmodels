@@ -14,7 +14,6 @@ from skillmodels.kalman_filters import _transform_sigma_points
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.kalman_filters import kalman_predict
 from skillmodels.kalman_filters import kalman_update
-from skillmodels.kalman_filters import kalman_update_padded
 
 config.update("jax_enable_x64", True)
 
@@ -23,7 +22,7 @@ config.update("jax_enable_x64", True)
 # ======================================================================================
 
 SEEDS = range(20)
-UPDATE_FUNCS = [kalman_update, kalman_update_padded]
+UPDATE_FUNCS = [kalman_update]
 TEST_CASES = product(SEEDS, UPDATE_FUNCS)
 
 

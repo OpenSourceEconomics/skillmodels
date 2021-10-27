@@ -12,7 +12,7 @@ from skillmodels.constraints import add_bounds
 from skillmodels.constraints import get_constraints
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.kalman_filters import kalman_predict
-from skillmodels.kalman_filters import kalman_update_padded
+from skillmodels.kalman_filters import kalman_update
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
@@ -63,12 +63,6 @@ def get_maximization_inputs(model_dict, data):
     )
 
     not_missing_arr = jnp.isfinite(measurements)
-    # not_missing needs to be a list of 1d jax arrays, not a 2d jax array. Otherwise
-    # selecting one row of the 2d array generates a new array which causes a problem
-    # in jax jitted functions. I made an issue for what I think is the underlying
-    # problem (https://github.com/google/jax/issues/4471) and hope it will be resolved
-    # soon.
-    not_missing_list = [row for row in not_missing_arr]  # noqa
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
         model["dimensions"]["n_states"],
@@ -87,7 +81,7 @@ def get_maximization_inputs(model_dict, data):
         dimensions=model["dimensions"],
         labels=model["labels"],
         estimation_options=model["estimation_options"],
-        not_missing=not_missing_list,
+        not_missing=not_missing_arr,
     )
 
     partialed_process_debug_data = functools.partial(process_debug_data, model=model)
@@ -233,7 +227,7 @@ def _log_likelihood_jax(
                 new_weights,
                 loglikes_k,
                 info,
-            ) = kalman_update_padded(
+            ) = kalman_update(
                 states,
                 upper_chols,
                 pardict["loadings"][k],
