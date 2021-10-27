@@ -137,7 +137,10 @@ def set_up_generate_datasets():
     pardict["loadings"] = np.array([[0.5, 0.4], [0.2, 0.7]] * 3)
     pardict["controls"] = np.array([[0, 0.5, 0.3], [0, 0.5, 0.6]] * 3)
     pardict["meas_sds"] = np.zeros(2 * 3)
-    pardict["transition"] = [[np.array([0.2, 0.2, 0.0]), np.array([0.2, 0.2, 0.3])]] * 2
+    pardict["transition"] = [
+        np.array([[0.2, 0.2, 0.0]] * 2),
+        np.array([[0.2, 0.2, 0.3]] * 2),
+    ]
     pardict["shock_sds"] = [np.zeros(2)] * 2
     out["pardict"] = pardict
     labels = {}
@@ -245,7 +248,10 @@ def set_up_generate_datasets_2_mix():
     pardict["loadings"] = np.array([[0.5, 0.5], [0.6, 0.6]] * 3)
     pardict["controls"] = np.array([[0, 0.5, 0.5], [0, 0.6, 0.6]] * 3)
     pardict["meas_sds"] = np.zeros(2 * 3)
-    pardict["transition"] = [[np.array([0.2, 0.2, 0.0]), np.array([0.2, 0.2, 0.3])]] * 2
+    pardict["transition"] = [
+        np.array([[0.2, 0.2, 0.0]] * 2),
+        np.array([[0.2, 0.2, 0.3]] * 2),
+    ]
     pardict["shock_sds"] = [np.zeros(2)] * 2
     out["pardict"] = pardict
     labels = {}

@@ -333,7 +333,7 @@ def _scan_body(
         "upper_chols": upper_chols,
         "sigma_scaling_factor": sigma_scaling_factor,
         "sigma_weights": sigma_weights,
-        "trans_coeffs": pardict["transition"][t],
+        "trans_coeffs": tuple(arr[t] for arr in pardict["transition"]),
         "shock_sds": pardict["shock_sds"][t],
         "anchoring_scaling_factors": pardict["anchoring_scaling_factors"][t : t + 2],
         "anchoring_constants": pardict["anchoring_constants"][t : t + 2],

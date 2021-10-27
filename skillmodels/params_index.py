@@ -188,8 +188,8 @@ def get_transition_index_tuples(factors, periods, transition_names):
 
     """
     ind_tups = []
-    for period in periods[:-1]:
-        for f, factor in enumerate(factors):
+    for f, factor in enumerate(factors):
+        for period in periods[:-1]:
             func = getattr(tf, "index_tuples_{}".format(transition_names[f]))
             ind_tups += func(factor, factors, period)
     return ind_tups
