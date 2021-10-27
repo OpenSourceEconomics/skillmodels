@@ -95,6 +95,10 @@ def get_maximization_inputs(model_dict, data):
 
     partialed_process_debug_data = functools.partial(process_debug_data, model=model)
 
+    partialed_get_jnp_params_vec = functools.partial(
+        _get_jnp_params_vec, target_index=p_index
+    )
+
     _debug_loglike = functools.partial(_base_loglike, debug=True)
 
     _loglike = functools.partial(_base_loglike, debug=False)
@@ -103,7 +107,7 @@ def get_maximization_inputs(model_dict, data):
     _gradient = jax.grad(_jitted_loglike, has_aux=True)
 
     def debug_loglike(params):
-        params_vec = jnp.array(params["value"].to_numpy())
+        params_vec = partialed_get_jnp_params_vec(params)
         jax_output = _debug_loglike(params_vec)[1]
         if jax_output["contributions"].dtype != "float64":
             raise TypeError()
@@ -113,19 +117,19 @@ def get_maximization_inputs(model_dict, data):
         return numpy_output
 
     def loglike(params):
-        params_vec = jnp.array(params["value"].to_numpy())
+        params_vec = partialed_get_jnp_params_vec(params)
         jax_output = _jitted_loglike(params_vec)[1]
         numpy_output = _to_numpy(jax_output)
         numpy_output["value"] = float(numpy_output["value"])
         return numpy_output
 
     def gradient(params):
-        params_vec = jnp.array(params["value"].to_numpy())
+        params_vec = partialed_get_jnp_params_vec(params)
         jax_output = _gradient(params_vec)[0]
         return _to_numpy(jax_output)
 
     def loglike_and_gradient(params):
-        params_vec = jnp.array(params["value"].to_numpy())
+        params_vec = partialed_get_jnp_params_vec(params)
         jax_grad, jax_crit = _gradient(params_vec)
         numpy_grad = _to_numpy(jax_grad)
         numpy_crit = _to_numpy(jax_crit)
@@ -443,3 +447,18 @@ def _to_numpy(obj):
         res = np.array(obj)
 
     return res
+
+
+def _get_jnp_params_vec(params, target_index):
+    if set(params.index) != set(target_index):
+        additional_entries = params.index.difference(target_index).tolist()
+        missing_entries = target_index.difference(params.index).tolist()
+        msg = "Invalid params DataFrame. "
+        if additional_entries:
+            msg += f"Your params have additional entries: {additional_entries}. "
+        if missing_entries:
+            msg += f"Your params have missing entries: {missing_entries}. "
+        raise ValueError(msg)
+
+    vec = jnp.array(params.reindex(target_index)["value"].to_numpy())
+    return vec
