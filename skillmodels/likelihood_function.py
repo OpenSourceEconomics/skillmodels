@@ -250,18 +250,8 @@ def _log_likelihood_jax(
         debug=debug,
     )
 
-    debug_infos = []
-    states_history = []
-    loglike_list = []
-
-    for k in range(len(iteration_to_period)):
-        la = {key: val[k] for key, val in loop_args.items()}
-        state, static_out = _body(state, la)
-        loglike_list.append(static_out["loglikes"])
-        states_history.append(state["states"])
-        debug_infos.append(static_out)
-
-    loglikes = jnp.vstack(loglike_list)
+    state, static_out = lax.scan(_body, state, loop_args)
+    loglikes = static_out["loglikes"]
 
     clipped = soft_clipping(
         arr=loglikes,
@@ -282,15 +272,15 @@ def _log_likelihood_jax(
 
     if debug:
         additional_data["all_contributions"] = loglikes
-        additional_data["residuals"] = [info["residuals"] for info in debug_infos]
-        additional_data["residual_sds"] = [info["residual_sds"] for info in debug_infos]
+        additional_data["residuals"] = static_out["residuals"]
+        additional_data["residual_sds"] = static_out["residual_sds"]
 
         initial_states, *_ = parse_params(
             params, parsing_info, dimensions, labels, n_obs
         )
         additional_data["initial_states"] = initial_states
 
-        additional_data["filtered_states"] = states_history
+        additional_data["filtered_states"] = static_out["states"]
 
     return value, additional_data
 
@@ -335,8 +325,10 @@ def _scan_body(
         "sigma_weights": sigma_weights,
         "trans_coeffs": tuple(arr[t] for arr in pardict["transition"]),
         "shock_sds": pardict["shock_sds"][t],
-        "anchoring_scaling_factors": pardict["anchoring_scaling_factors"][t : t + 2],
-        "anchoring_constants": pardict["anchoring_constants"][t : t + 2],
+        "anchoring_scaling_factors": pardict["anchoring_scaling_factors"][
+            jnp.array([t, t + 1])
+        ],
+        "anchoring_constants": pardict["anchoring_constants"][jnp.array([t, t + 1])],
     }
 
     fixed_kwargs = {"transition_functions": transition_functions}
@@ -354,7 +346,7 @@ def _scan_body(
         "log_mixture_weights": log_mixture_weights,
     }
 
-    static_out = {"loglikes": loglikes, **info}
+    static_out = {"loglikes": loglikes, **info, "states": states}
     return new_state, static_out
 
 
