@@ -22,10 +22,10 @@ def kalman_update(
     measurements,
     controls,
     log_mixture_weights,
-    not_missing,
     debug,
 ):
     """Perform a Kalman update with likelihood evaluation.
+
     Args:
         states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states) with
             pre-update states estimates.
@@ -42,11 +42,9 @@ def kalman_update(
         log_mixture_weights (jax.numpy.array): Array of shape (n_obs, n_mixtures) with
             the natural logarithm of the weights of each element of the mixture of
             normals distribution.
-        not_missung (jax.numpy.array): Boolean 1d array of length n_obs that indicates
-            if a measurement not missing. This could be calculated on the fly but that
-            generates a jax error on GPUs.
         debug (bool): If true, the debug_info contains the residuals of the update and
             their standard deviations. Otherwise, it is an empty dict.
+
     Returns:
         states (jax.numpy.array): Same format as states.
         new_states (jax.numpy.array): Same format as states.
@@ -54,8 +52,11 @@ def kalman_update(
         new_log_mixture_weights: (jax.numpy.array): Same format as log_mixture_weights
         new_loglikes: (jax.numpy.array): 1d array of length n_obs
         debug_info (dict): Empty or containing residuals and residual_sds
+
     """
     n_obs, n_mixtures, n_states = states.shape
+
+    not_missing = jnp.isfinite(measurements)
 
     _expected_measurements = jnp.dot(states, loadings) + jnp.dot(
         controls, control_params

@@ -62,8 +62,6 @@ def get_maximization_inputs(model_dict, data):
         data, model["labels"], model["update_info"], model["anchoring"]
     )
 
-    not_missing_arr = jnp.isfinite(measurements)
-
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
         model["dimensions"]["n_states"],
         model["estimation_options"]["sigma_points_scale"],
@@ -81,7 +79,6 @@ def get_maximization_inputs(model_dict, data):
         dimensions=model["dimensions"],
         labels=model["labels"],
         estimation_options=model["estimation_options"],
-        not_missing=not_missing_arr,
     )
 
     partialed_process_debug_data = functools.partial(process_debug_data, model=model)
@@ -160,7 +157,6 @@ def _log_likelihood_jax(
     dimensions,
     labels,
     estimation_options,
-    not_missing,
     debug,
 ):
     """Log likelihood of a skill formation model.
@@ -196,8 +192,6 @@ def _log_likelihood_jax(
             n_mixtures. See :ref:`dimensions`.
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
-        not_missing (jax.numpy.array): Array with same shape as measurements that is
-            True where measurements are not missing.
         debug (bool): Boolean flag. If True, more intermediate results are returned
 
     Returns:
@@ -236,7 +230,6 @@ def _log_likelihood_jax(
                 measurements[k],
                 controls[t],
                 log_mixture_weights,
-                not_missing[k],
                 debug,
             )
             if debug:

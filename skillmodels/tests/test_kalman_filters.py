@@ -72,7 +72,6 @@ def test_kalman_update(seed, update_func):
         measurements=jnp.array(measurements) + 1,
         controls=jnp.ones((n_obs, 2)) * 0.5,
         log_mixture_weights=jnp.full((n_obs, n_mix), jnp.log(0.5)),
-        not_missing=jnp.array([True] * n_obs),
         debug=False,
     )
     calculated_covs = np.matmul(np.transpose(calc_chols, axes=(0, 1, 3, 2)), calc_chols)
@@ -110,7 +109,6 @@ def test_kalman_update_with_missing():
         measurements=measurements,
         controls=jnp.ones((n_obs, 2)) * 0.5,
         log_mixture_weights=jnp.log(jnp.ones((n_obs, 2)) * 0.5),
-        not_missing=jnp.array([True, False, False]),
         debug=False,
     )
 
