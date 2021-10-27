@@ -5,8 +5,6 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from jax import config
-from jax.ops import index
-from jax.ops import index_update
 
 from skillmodels.constraints import add_bounds
 from skillmodels.constraints import get_constraints
@@ -215,45 +213,45 @@ def _log_likelihood_jax(
     states, upper_chols, log_mixture_weights, pardict = parse_params(
         params, parsing_info, dimensions, labels, n_obs
     )
-    n_updates = len(iteration_to_period)
-    loglikes = jnp.zeros((n_updates, n_obs))
+
+    state = {
+        "states": states,
+        "upper_chols": upper_chols,
+        "log_mixture_weights": log_mixture_weights,
+    }
+
+    loop_args = {
+        "period": iteration_to_period,
+        "loadings": pardict["loadings"],
+        "control_params": pardict["controls"],
+        "meas_sds": pardict["meas_sds"],
+        "measurements": measurements,
+        "is_measurement_iteration": is_measurement_iteration,
+        "is_predict_iteration": is_predict_iteration,
+    }
+
+    _body = functools.partial(
+        _scan_body,
+        controls=controls,
+        pardict=pardict,
+        sigma_scaling_factor=sigma_scaling_factor,
+        sigma_weights=sigma_weights,
+        transition_functions=transition_functions,
+        debug=debug,
+    )
+
     debug_infos = []
     states_history = []
+    loglike_list = []
 
-    for k, t in enumerate(iteration_to_period):
-        (new_states, new_upper_chols, new_weights, loglikes_k, info) = kalman_update(
-            states,
-            upper_chols,
-            pardict["loadings"][k],
-            pardict["controls"][k],
-            pardict["meas_sds"][k],
-            measurements[k],
-            controls[t],
-            log_mixture_weights,
-            debug,
-        )
-        if debug:
-            states_history.append(new_states)
+    for k in range(len(iteration_to_period)):
+        la = {key: val[k] for key, val in loop_args.items()}
+        state, static_out = _body(state, la)
+        loglike_list.append(static_out["loglikes"])
+        states_history.append(state["states"])
+        debug_infos.append(static_out)
 
-        loglikes = index_update(loglikes, index[k], loglikes_k)
-        log_mixture_weights = new_weights
-        if is_measurement_iteration[k]:
-            states, upper_chols = new_states, new_upper_chols
-
-        debug_infos.append(info)
-
-        if is_predict_iteration[k]:
-            states, upper_chols = kalman_predict(
-                states,
-                upper_chols,
-                sigma_scaling_factor,
-                sigma_weights,
-                transition_functions,
-                pardict["transition"][t],
-                pardict["shock_sds"][t],
-                pardict["anchoring_scaling_factors"][t : t + 2],
-                pardict["anchoring_constants"][t : t + 2],
-            )
+    loglikes = jnp.vstack(loglike_list)
 
     clipped = soft_clipping(
         arr=loglikes,
@@ -285,6 +283,60 @@ def _log_likelihood_jax(
         additional_data["filtered_states"] = states_history
 
     return value, additional_data
+
+
+def _scan_body(
+    state,
+    loop_args,
+    controls,
+    pardict,
+    sigma_scaling_factor,
+    sigma_weights,
+    transition_functions,
+    debug,
+):
+    t = loop_args["period"]
+    states = state["states"]
+    upper_chols = state["upper_chols"]
+    log_mixture_weights = state["log_mixture_weights"]
+
+    new_states, new_upper_chols, log_mixture_weights, loglikes, info = kalman_update(
+        states=states,
+        upper_chols=upper_chols,
+        loadings=loop_args["loadings"],
+        control_params=loop_args["control_params"],
+        meas_sd=loop_args["meas_sds"],
+        measurements=loop_args["measurements"],
+        controls=controls[t],
+        log_mixture_weights=log_mixture_weights,
+        debug=debug,
+    )
+
+    if loop_args["is_measurement_iteration"]:
+        states = new_states
+        upper_chols = new_upper_chols
+
+    if loop_args["is_predict_iteration"]:
+        states, upper_chols = kalman_predict(
+            states,
+            upper_chols,
+            sigma_scaling_factor,
+            sigma_weights,
+            transition_functions,
+            pardict["transition"][t],
+            pardict["shock_sds"][t],
+            pardict["anchoring_scaling_factors"][t : t + 2],
+            pardict["anchoring_constants"][t : t + 2],
+        )
+
+    new_state = {
+        "states": states,
+        "upper_chols": upper_chols,
+        "log_mixture_weights": log_mixture_weights,
+    }
+
+    static_out = {"loglikes": loglikes, **info}
+    return new_state, static_out
 
 
 def soft_clipping(arr, lower=None, upper=None, lower_hardness=1, upper_hardness=1):
