@@ -83,17 +83,14 @@ def test_initial_upper_chols(parsed_parameters):
 
 
 def test_transition_parameters(parsed_parameters):
-    first_period = (jnp.arange(385, 389), jnp.arange(389, 393), jnp.zeros(0))
 
     calculated = parsed_parameters["pardict"]["transition"]
 
-    for period in range(7):
-        for factor in range(3):
-            expected = first_period[factor] + period * 8
-            aae(calculated[period][factor], expected)
+    aae(calculated[0], jnp.arange(385, 413).reshape(7, 4))
+    aae(calculated[1], jnp.arange(413, 441).reshape(7, 4))
+    aae(calculated[2], jnp.zeros((7, 0)))
 
     assert isinstance(calculated, tuple)
-    assert all(isinstance(entry, tuple) for entry in calculated)
 
 
 def test_anchoring_scaling_factors(parsed_parameters):

@@ -41,13 +41,13 @@ def create_parsing_info(params_index, update_info, labels, anchoring):
         parsing_info[quantity] = _get_positional_selector_from_loc(range_sr, quantity)
 
     # "trans_coeffs"
-    parsing_info["transition"] = []
-    for period in labels["periods"]:
-        period_dict = {}
-        for factor in labels["factors"]:
-            loc = ("transition", period, factor)
-            period_dict[factor] = _get_positional_selector_from_loc(range_sr, loc)
-        parsing_info["transition"].append(period_dict)
+    pos_dict = {}
+    for factor in labels["factors"]:
+        helper = pd.DataFrame(index=params_index)
+        loc = helper.query(f"category == 'transition' & name1 == '{factor}'").index
+        pos_dict[factor] = _get_positional_selector_from_loc(range_sr, loc)
+
+    parsing_info["transition"] = pos_dict
 
     # anchoring_scaling_factors
     is_free_loading = update_info[labels["factors"]].to_numpy()
@@ -184,11 +184,11 @@ def _get_shock_sds(params, info, dimensions):
 def _get_transition_params(params, info, dims, labels):
     """Create a list of arrays with transition equation parameters."""
     trans_params = []
-    for period in range(dims["n_periods"] - 1):
-        trans_params_t = []
-        for factor in labels["factors"]:
-            trans_params_t.append(params[info["transition"][period][factor]])
-        trans_params.append(tuple(trans_params_t))
+    t_info = info["transition"]
+    n_periods = len(labels["periods"])
+    for factor in labels["factors"]:
+        ilocs = t_info[factor]
+        trans_params.append(params[ilocs].reshape(n_periods - 1, -1))
     return tuple(trans_params)
 
 

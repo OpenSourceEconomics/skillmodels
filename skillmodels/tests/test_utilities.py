@@ -74,11 +74,11 @@ def test_remove_factors(model2, factors):
     process_model(reduced)
 
 
-@pytest.mark.parametrize("measurements", ["y4", ["y4"]])
+@pytest.mark.parametrize("measurements", ["y5", ["y5"]])
 def test_remove_measurements(model2, measurements):
     reduced = remove_measurements(measurements, model2)
-    assert reduced["factors"]["fac2"]["measurements"] == [["y5", "y6"]] * 8
-    assert "y4" in model2["factors"]["fac2"]["measurements"][0]
+    assert reduced["factors"]["fac2"]["measurements"] == [["y4", "y6"]] * 8
+    assert "y5" in model2["factors"]["fac2"]["measurements"][0]
     process_model(reduced)
 
 

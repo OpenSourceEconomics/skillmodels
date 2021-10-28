@@ -22,7 +22,6 @@ def kalman_update(
     measurements,
     controls,
     log_mixture_weights,
-    not_missing,
     debug,
 ):
     """Perform a Kalman update with likelihood evaluation.
@@ -43,9 +42,6 @@ def kalman_update(
         log_mixture_weights (jax.numpy.array): Array of shape (n_obs, n_mixtures) with
             the natural logarithm of the weights of each element of the mixture of
             normals distribution.
-        not_missung (jax.numpy.array): Boolean 1d array of length n_obs that indicates
-            if a measurement not missing. This could be calculated on the fly but that
-            generates a jax error on GPUs.
         debug (bool): If true, the debug_info contains the residuals of the update and
             their standard deviations. Otherwise, it is an empty dict.
 
@@ -58,26 +54,33 @@ def kalman_update(
         debug_info (dict): Empty or containing residuals and residual_sds
 
     """
-    # reduce everything to non-missing entries. Variables that refer to the reduced
-    # arrays or dimensions have a leading underscore in their name
-    _states = states[not_missing]
-    _upper_chols = upper_chols[not_missing]
-    _measurements = measurements[not_missing]
-    _log_mixture_weights = log_mixture_weights[not_missing]
-    _controls = controls[not_missing]
-    _n_obs, _n_mixtures, _n_states = _states.shape
+    n_obs, n_mixtures, n_states = states.shape
 
-    # actual square-root Kalman updates
-    _expected_measurements = jnp.dot(_states, loadings) + jnp.dot(
-        _controls, control_params
-    ).reshape(_n_obs, 1)
-    _residuals = _measurements.reshape(_n_obs, 1) - _expected_measurements
-    _f_stars = jnp.dot(_upper_chols, loadings.reshape(_n_states, 1))
+    not_missing = jnp.isfinite(measurements)
 
-    _m = jnp.zeros((_n_obs, _n_mixtures, _n_states + 1, _n_states + 1))
+    _expected_measurements = jnp.dot(states, loadings) + jnp.dot(
+        controls, control_params
+    ).reshape(n_obs, 1)
+
+    # replace missing measurements by average expected measurements to avoid NaNs in the
+    # gradient calculation. Note that all values that are influenced by that are
+    # replaced by other values later (using jnp.where). Choosing the average expected
+    # expected measurements as fill value just ensures that all numbers are well
+    # defined because the fill values have a reasonable order of magnitude.
+    # See https://github.com/tensorflow/probability/blob/main/discussion/where-nan.pdf
+    # and https://jax.readthedocs.io/en/latest/faq.html
+    # for more details on the issue of NaNs in gradient calculations.
+    _safe_measurements = jnp.where(
+        not_missing, measurements, _expected_measurements.mean(axis=1)
+    )
+
+    _residuals = _safe_measurements.reshape(n_obs, 1) - _expected_measurements
+    _f_stars = jnp.dot(upper_chols, loadings.reshape(n_states, 1))
+
+    _m = jnp.zeros((n_obs, n_mixtures, n_states + 1, n_states + 1))
     _m = index_update(_m, index[..., 0, 0], meas_sd)
     _m = index_update(_m, index[..., 1:, :1], _f_stars)
-    _m = index_update(_m, index[..., 1:, 1:], _upper_chols)
+    _m = index_update(_m, index[..., 1:, 1:], upper_chols)
 
     _r = array_qr_jax(_m)[1]
 
@@ -86,13 +89,13 @@ def kalman_update(
     _abs_root_sigmas = jnp.abs(_root_sigmas)
     # it is important not to divide by the absolute value of _root_sigmas in order
     # to recover the sign of the Kalman gain.
-    _kalman_gains = _r[..., 0, 1:] / _root_sigmas.reshape(_n_obs, _n_mixtures, 1)
-    _new_states = _states + _kalman_gains * _residuals.reshape(_n_obs, _n_mixtures, 1)
+    _kalman_gains = _r[..., 0, 1:] / _root_sigmas.reshape(n_obs, n_mixtures, 1)
+    _new_states = states + _kalman_gains * _residuals.reshape(n_obs, n_mixtures, 1)
 
     # calculate log likelihood per individual and update mixture weights
     _loglikes_per_dist = jax.scipy.stats.norm.logpdf(_residuals, 0, _abs_root_sigmas)
-    if _n_mixtures >= 2:
-        _weighted_loglikes_per_dist = _loglikes_per_dist + _log_mixture_weights
+    if n_mixtures >= 2:
+        _weighted_loglikes_per_dist = _loglikes_per_dist + log_mixture_weights
         _loglikes = jax.scipy.special.logsumexp(_weighted_loglikes_per_dist, axis=1)
         _new_log_mixture_weights = _weighted_loglikes_per_dist - _loglikes.reshape(
             -1, 1
@@ -100,28 +103,25 @@ def kalman_update(
 
     else:
         _loglikes = _loglikes_per_dist.flatten()
-        _new_log_mixture_weights = _log_mixture_weights
+        _new_log_mixture_weights = log_mixture_weights
 
     # combine pre-update quantities for missing observations with updated quantities
-    new_states = index_update(states, index[not_missing], _new_states)
-    new_upper_chols = index_update(upper_chols, index[not_missing], _new_upper_chols)
-    new_loglikes = index_update(
-        jnp.zeros(len(measurements)), index[not_missing], _loglikes
+    new_states = jnp.where(not_missing.reshape(n_obs, 1, 1), _new_states, states)
+    new_upper_chols = jnp.where(
+        not_missing.reshape(n_obs, 1, 1, 1), _new_upper_chols, upper_chols
     )
-    new_log_mixture_weights = index_update(
-        log_mixture_weights, index[not_missing], _new_log_mixture_weights
+    new_loglikes = jnp.where(not_missing, _loglikes, 0)
+    new_log_mixture_weights = jnp.where(
+        not_missing.reshape(n_obs, 1), _new_log_mixture_weights, log_mixture_weights
     )
 
     debug_info = {}
     if debug:
-        n_obs, n_mixtures = new_log_mixture_weights.shape
-
-        residuals = jnp.full((n_obs, n_mixtures), jnp.nan)
-        residuals = index_update(residuals, index[not_missing], _residuals)
+        residuals = jnp.where(not_missing.reshape(n_obs, 1), _residuals, jnp.nan)
         debug_info["residuals"] = residuals
-
-        residual_sds = jnp.full((n_obs, n_mixtures), jnp.nan)
-        residual_sds = index_update(residual_sds, index[not_missing], _abs_root_sigmas)
+        residual_sds = jnp.where(
+            not_missing.reshape(n_obs, 1), _abs_root_sigmas, jnp.nan
+        )
         debug_info["residual_sds"] = residual_sds
 
     return (
@@ -134,7 +134,7 @@ def kalman_update(
 
 
 # ======================================================================================
-# Update Step
+# Predict Step
 # ======================================================================================
 
 
