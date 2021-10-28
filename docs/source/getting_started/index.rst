@@ -5,4 +5,3 @@ Getting Started
     :maxdepth: 1
 
     tutorial.ipynb
-    how_to_visualize_transition_equations.ipynb
