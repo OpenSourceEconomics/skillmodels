@@ -57,7 +57,9 @@ def _convert_model(base_model, model_name):
 def test_likelihood_contributions_have_not_changed(model2, model2_data, model_name):
     regvault = TEST_DIR / "regression_vault"
     model = _convert_model(model2, model_name)
-    params = pd.read_csv(regvault / f"{model_name}.csv")
+    params = pd.read_csv(regvault / f"{model_name}.csv").set_index(
+        ["category", "period", "name1", "name2"]
+    )
 
     func_dict = get_maximization_inputs(model, model2_data)
     debug_loglike = func_dict["debug_loglike"]

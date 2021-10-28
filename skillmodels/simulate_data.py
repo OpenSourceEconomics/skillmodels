@@ -193,7 +193,10 @@ def _simulate_dataset(
             )
 
         states[t + 1] = next_period_states(
-            states[t], transition_names, transition_params[t], shock_sds[t]
+            states=states[t],
+            transition_names=transition_names,
+            transition_params=tuple(arr[t] for arr in transition_params),
+            shock_sds=shock_sds[t],
         )
     observed_data_by_period = []
 

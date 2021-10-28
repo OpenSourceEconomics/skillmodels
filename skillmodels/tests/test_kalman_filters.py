@@ -1,3 +1,5 @@
+from itertools import product
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -20,50 +22,62 @@ config.update("jax_enable_x64", True)
 # ======================================================================================
 
 SEEDS = range(20)
+UPDATE_FUNCS = [kalman_update]
+TEST_CASES = product(SEEDS, UPDATE_FUNCS)
 
 
-@pytest.mark.parametrize("seed", SEEDS)
-def test_kalman_update(seed):
+@pytest.mark.parametrize("seed, update_func", TEST_CASES)
+def test_kalman_update(seed, update_func):
     np.random.seed(seed)
-    state, cov = _random_state_and_covariance()
-    loadings, measurement, meas_sd = _random_loadings_measurement_and_meas_sd(state)
-    dim = len(state)
+    dim = np.random.randint(low=1, high=10)
+    n_obs = 5
+    n_mix = 2
 
-    fp_filter = KalmanFilter(dim_x=dim, dim_z=1)
-    fp_filter.x = state.reshape(dim, 1)
-    fp_filter.F = np.eye(dim)
-    fp_filter.H = loadings.reshape(1, dim)
-    fp_filter.P = cov
-    fp_filter.R = meas_sd ** 2
+    states = np.zeros((n_obs, n_mix, dim))
+    covs = np.zeros((n_obs, n_mix, dim, dim))
+    for i in range(n_obs):
+        for j in range(n_mix):
+            states[i, j], covs[i, j] = _random_state_and_covariance(dim=dim)
 
-    fp_filter.update(measurement)
+    loadings, measurements, meas_sd = _random_loadings_measurements_and_meas_sd(states)
 
-    expected_cov = fp_filter.P
-    expected_state = fp_filter.x.flatten()
-    expected_loglike = fp_filter.log_likelihood
+    expected_states = np.zeros_like(states)
+    expected_covs = np.zeros_like(covs)
 
-    sm_states, sm_chols = _filterpy_to_skillmodels(state, cov)
+    for i in range(n_obs):
+        for j in range(n_mix):
+            fp_filter = KalmanFilter(dim_x=dim, dim_z=1)
+            fp_filter.x = states[i, j].reshape(dim, 1)
+            fp_filter.F = np.eye(dim)
+            fp_filter.H = loadings.reshape(1, dim)
+            fp_filter.P = covs[i, j]
+            fp_filter.R = meas_sd ** 2
 
-    calc_states, calc_chols, calc_weights, calc_loglikes, _ = kalman_update(
+            fp_filter.update(measurements[i])
+
+            expected_states[i, j] = fp_filter.x.flatten()
+            expected_covs[i, j] = fp_filter.P
+
+    sm_states, sm_chols = _convert_update_inputs_from_filterpy_to_skillmodels(
+        states, covs
+    )
+
+    calc_states, calc_chols, calc_weights, calc_loglikes, _ = update_func(
         states=sm_states,
         upper_chols=sm_chols,
         loadings=jnp.array(loadings),
         control_params=jnp.ones(2),
         meas_sd=meas_sd,
         # plus 1 for the effect of the control variables
-        measurements=jnp.array([measurement]) + 1,
-        controls=jnp.ones((1, 2)) * 0.5,
-        log_mixture_weights=jnp.ones((1, 1)),
-        not_missing=jnp.array([True]),
+        measurements=jnp.array(measurements) + 1,
+        controls=jnp.ones((n_obs, 2)) * 0.5,
+        log_mixture_weights=jnp.full((n_obs, n_mix), jnp.log(0.5)),
         debug=False,
     )
-    calculated_state = calc_states.flatten()
-    calculated_cov = calc_chols.reshape(dim, dim).T @ calc_chols.reshape(dim, dim)
-    calculated_loglike = calc_loglikes[0]
+    calculated_covs = np.matmul(np.transpose(calc_chols, axes=(0, 1, 3, 2)), calc_chols)
 
-    aaae(calculated_state, expected_state)
-    aaae(calculated_loglike, expected_loglike)
-    aaae(calculated_cov, expected_cov)
+    aaae(calc_states, expected_states)
+    aaae(calculated_covs, expected_covs)
 
 
 # ======================================================================================
@@ -95,7 +109,6 @@ def test_kalman_update_with_missing():
         measurements=measurements,
         controls=jnp.ones((n_obs, 2)) * 0.5,
         log_mixture_weights=jnp.log(jnp.ones((n_obs, 2)) * 0.5),
-        not_missing=jnp.array([True, False, False]),
         debug=False,
     )
 
@@ -119,7 +132,7 @@ def test_sigma_points(seed):
     np.random.seed(seed)
     state, cov = _random_state_and_covariance()
     expected = JulierSigmaPoints(n=len(state), kappa=2).sigma_points(state, cov)
-    sm_state, sm_chol = _filterpy_to_skillmodels(state, cov)
+    sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor = np.sqrt(len(state) + 2)
     calculated = _calculate_sigma_points(sm_state, sm_chol, scaling_factor)
     aaae(calculated.reshape(expected.shape), expected)
@@ -206,7 +219,7 @@ def test_predict_against_linear_filterpy(seed):
     def linear(sigma_points, params):
         return np.dot(sigma_points, params)
 
-    sm_state, sm_chol = _filterpy_to_skillmodels(state, cov)
+    sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)
     transition_functions = (("linear", linear) for i in range(dim))
     trans_coeffs = (jnp.array(trans_mat[i]) for i in range(dim))
@@ -234,24 +247,36 @@ def test_predict_against_linear_filterpy(seed):
 # ======================================================================================
 
 
-def _random_state_and_covariance():
-    dim = np.random.randint(low=1, high=10)
+def _random_state_and_covariance(dim=None):
+    if dim is None:
+        dim = np.random.randint(low=1, high=10)
     factorized = np.random.uniform(low=-1, high=3, size=(dim, dim))
     cov = factorized @ factorized.T * 0.5 + np.eye(dim)
     state = np.random.uniform(low=-5, high=5, size=dim)
     return state, cov
 
 
-def _random_loadings_measurement_and_meas_sd(state):
-    dim = len(state)
+def _random_loadings_measurements_and_meas_sd(state):
+    n_obs, n_mix, dim = state.shape
     loadings = np.random.uniform(size=dim)
     meas_sd = np.random.uniform()
-    epsilon = np.random.normal(loc=0, scale=meas_sd)
-    measurement = state @ loadings + epsilon
+    epsilon = np.random.normal(loc=0, scale=meas_sd, size=(n_obs))
+    measurement = (state @ loadings).sum(axis=1) + epsilon
     return loadings, measurement, meas_sd
 
 
-def _filterpy_to_skillmodels(state, cov):
+def _convert_update_inputs_from_filterpy_to_skillmodels(state, cov):
+    n_obs, n_mix, n_fac = state.shape
+    sm_state = jnp.array(state)
+    sm_chol = np.zeros_like(cov)
+    for i in range(n_obs):
+        for j in range(n_mix):
+            sm_chol[i, j] = scipy.linalg.cholesky(cov[i, j])
+    sm_chol = jnp.array(sm_chol)
+    return sm_state, sm_chol
+
+
+def _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov):
     n_fac = len(state)
     sm_state = jnp.array(state).reshape(1, 1, n_fac)
     sm_chol = jnp.array(scipy.linalg.cholesky(cov)).reshape(1, 1, n_fac, n_fac)
