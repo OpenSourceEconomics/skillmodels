@@ -31,7 +31,7 @@ def process_model(model_dict):
         loadings and intercepts for each factor. See :ref:`normalizations`.
 
     """
-    dims = _get_dimensions(model_dict)
+    dims = get_dimensions(model_dict)
     labels = _get_labels(model_dict, dims)
     anchoring = _process_anchoring(model_dict)
     check_model(model_dict, labels, dims, anchoring)
@@ -48,7 +48,7 @@ def process_model(model_dict):
     return processed
 
 
-def _get_dimensions(model_dict):
+def get_dimensions(model_dict):
     """Extract the dimensions of the model.
 
     Args:
@@ -191,7 +191,7 @@ def _get_update_info(model_dict, dimensions, labels, anchoring_info):
 
     measurements = {}
     for factor in labels["factors"]:
-        measurements[factor] = _fill_list(
+        measurements[factor] = fill_list(
             model_dict["factors"][factor]["measurements"], [], dimensions["n_periods"]
         )
 
@@ -231,17 +231,17 @@ def _process_normalizations(model_dict, dimensions, labels):
         norminfo = model_dict["factors"][factor].get("normalizations", {})
         for norm_type in ["loadings", "intercepts"]:
             candidate = norminfo.get(norm_type, [])
-            candidate = _fill_list(candidate, {}, dimensions["n_periods"])
+            candidate = fill_list(candidate, {}, dimensions["n_periods"])
             normalizations[factor][norm_type] = candidate
 
     return normalizations
 
 
-def _fill_list(short_list, fill_value, length):
+def fill_list(short_list, fill_value, length):
     """Extend a list to specified length by filling it with the fill_value.
 
     Examples:
-    >>> _fill_list(["a"], "b", 3)
+    >>> fill_list(["a"], "b", 3)
     ['a', 'b', 'b']
 
     """
@@ -251,3 +251,11 @@ def _fill_list(short_list, fill_value, length):
     if diff >= 1:
         res += [fill_value] * diff
     return res
+
+
+def get_period_measurements(update_info, period):
+    if period in update_info.index:
+        measurements = list(update_info.loc[period].index)
+    else:
+        measurements = []
+    return measurements

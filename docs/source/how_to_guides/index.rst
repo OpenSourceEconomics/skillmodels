@@ -6,3 +6,4 @@ How-To Guides
     :maxdepth: 1
 
     model_specs
+    utilities

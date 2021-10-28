@@ -11,11 +11,13 @@ from skillmodels.process_model import process_model
 # Integration test with model2 from the replication files of CHS2010
 # ======================================================================================
 
+# importing the TEST_DIR from config does not work for test run in conda build
+TEST_DIR = Path(__file__).parent.resolve()
+
 
 @pytest.fixture
 def model2():
-    test_dir = Path(__file__).parent.resolve()
-    with open(test_dir / "model2.yaml") as y:
+    with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     return model_dict
 
