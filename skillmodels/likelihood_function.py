@@ -224,7 +224,7 @@ def _log_likelihood_jax(
         params, parsing_info, dimensions, labels, n_obs
     )
 
-    state = {
+    carry = {
         "states": states,
         "upper_chols": upper_chols,
         "log_mixture_weights": log_mixture_weights,
@@ -250,7 +250,7 @@ def _log_likelihood_jax(
         debug=debug,
     )
 
-    state, static_out = lax.scan(_body, state, loop_args)
+    carry, static_out = lax.scan(_body, carry, loop_args)
     loglikes = static_out["loglikes"]
 
     clipped = soft_clipping(
@@ -286,7 +286,7 @@ def _log_likelihood_jax(
 
 
 def _scan_body(
-    state,
+    carry,
     loop_args,
     controls,
     pardict,
@@ -296,9 +296,9 @@ def _scan_body(
     debug,
 ):
     t = loop_args["period"]
-    states = state["states"]
-    upper_chols = state["upper_chols"]
-    log_mixture_weights = state["log_mixture_weights"]
+    states = carry["states"]
+    upper_chols = carry["upper_chols"]
+    log_mixture_weights = carry["log_mixture_weights"]
 
     update_kwargs = {
         "states": states,
