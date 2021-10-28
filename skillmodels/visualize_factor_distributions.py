@@ -15,31 +15,34 @@ def plot_pairwise_factor_distributions(
     states,
     model_dict,
     period,
-    combined_plots,
-    add_3d_plots,
+    combine_plots_in_grid=True,
+    add_3d_plots=False,
     state_ranges=None,
     n_points=50,
 ):
     """Visualize pairwise_factor_distributions in certain period.
+
     Args:
-        states (pandas.DataFrame): list of tidy DataFrame with filtered
+        states (list, pandas.DataFrame): list of tidy DataFrames with filtered
             or simulated states or only one DataFrame with filtered or
             simulated states.They are used to estimate the state ranges in
             each period (if state_ranges are not given explicitly) and to
-            estimate the distribution of the factors that are not visualized.
+            estimate the distribution of the latent factors.
         model_dict (dict): The model specification. See: :ref:'model_specs'
         period (int): The selected period of the filtered states that are plotted.
-        combined_plots (boolen): decide whether to retrun a grid of plots
-            or return a dict of individual plots
-        add_3d_plots (boolen):decide whether to adda 3D plots in grid of plots
-            or in the dict of individual plots
+        combine_plots_in_grid (boolen): decide whether to retrun a grid of plots
+            or return a dict of individual plots. Default True.
+        add_3d_plots (boolen):decide whether to add 3D plots in grid of plots
+            or in the dict of individual plots. Default False.
         state_ranges (dict): The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
             The state_ranges are used to define the axis limits of the plots.
         n_points (int): Number of grid points per plot. For 3d plots this is per
-            dimension.
+            dimension. Default 50.
+
     Returns:
         matplotlib.Figure: The grid plot or dict of individual plots
+
     """
     model = process_model(model_dict)
     if state_ranges is None:
@@ -59,13 +62,13 @@ def plot_pairwise_factor_distributions(
     else:
         states = [states]
     plot_dict = {}
-    if combined_plots is not None:
-        if add_3d_plots is not None:
+    if combine_plots_in_grid:
+        if add_3d_plots:
             plot_dict = _plot_grid_2d_3d(states, state_ranges, period, n_points)
         else:
             plot_dict = _plot_changes_grid_2d(states, state_ranges, period, n_points)
     else:
-        if add_3d_plots is not None:
+        if add_3d_plots:
             dict2 = _plot_changes_seperately_2d(states, state_ranges, period, n_points)
             dict1 = _plot_3d_seperately(states, state_ranges, period)
             plot_dict = {**dict1, **dict2}

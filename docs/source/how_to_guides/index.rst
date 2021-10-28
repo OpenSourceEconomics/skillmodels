@@ -10,5 +10,4 @@ How-To Guides
     how_to_visualize_transition_equations.ipynb
     how_to_simulate_dataset.ipynb
     how_to_visualize_pairwise_factor_distribution.ipynb
-    how_to_visualize_changes_in_pairwise_factor_distributions.ipynb
 
