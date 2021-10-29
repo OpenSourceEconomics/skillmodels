@@ -1,11 +1,12 @@
+import sys
 import warnings
+from traceback import format_exception
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy
 import seaborn as sns
-from estimagic.exceptions import get_traceback
 
 from skillmodels.process_model import process_model
 
@@ -235,3 +236,10 @@ def _calculate_kde_for_3d(data_cleaned, a, b, n_points):
     kernel = scipy.stats.gaussian_kde(values)
     f = np.reshape(kernel(positions).T, xx.shape)
     return xx, yy, f
+
+
+def get_traceback():
+    tb = format_exception(*sys.exc_info())
+    if isinstance(tb, list):
+        tb = "".join(tb)
+    return tb
