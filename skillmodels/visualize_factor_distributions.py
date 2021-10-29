@@ -1,8 +1,11 @@
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy
 import seaborn as sns
+from estimagic.exceptions import get_traceback
 
 from skillmodels.process_model import process_model
 
@@ -83,7 +86,14 @@ def plot_factor_distributions(
                     "hue": hue,
                     "ax": ax,
                 }
-                _ = sns.kdeplot(**kwargs)
+                try:
+                    _ = sns.kdeplot(**kwargs)
+                except (KeyboardInterrupt, SystemExit):
+                    raise
+                except Exception:
+                    msg = _get_error_message(data, [fac1, fac2], "bivariate kdeplot")
+                    warnings.warn(msg)
+
             elif col == row:
                 kwargs = {
                     "gridsize": n_points,
@@ -94,16 +104,29 @@ def plot_factor_distributions(
                     "hue": hue,
                     "ax": ax,
                 }
-                _ = sns.kdeplot(**kwargs)
+                try:
+                    _ = sns.kdeplot(**kwargs)
+                except (KeyboardInterrupt, SystemExit):
+                    raise
+                except Exception:
+                    msg = _get_error_message(data, fac1, "univariate kdeplot")
+                    warnings.warn(msg)
+
             elif add_3d_plots:
-                _ = _3d_kdeplot(
-                    x=fac1,
-                    y=fac2,
-                    data=data,
-                    n_points=n_points,
-                    ax=ax,
-                    surface_kws=surface_kws,
-                )
+                try:
+                    _ = _3d_kdeplot(
+                        x=fac1,
+                        y=fac2,
+                        data=data,
+                        n_points=n_points,
+                        ax=ax,
+                        surface_kws=surface_kws,
+                    )
+                except (KeyboardInterrupt, SystemExit):
+                    raise
+                except Exception:
+                    msg = _get_error_message(data, [fac1, fac2], "surface plot")
+                    warnings.warn(msg)
 
     sns.despine()
 
@@ -118,6 +141,17 @@ def plot_factor_distributions(
                     out[(fac1, fac2)] = grid[row][col].get_figure()
 
     return out
+
+
+def _get_error_message(data, factors, plot_type):
+    summary = data[factors].describe().round(3).to_string()
+    tb = get_traceback()
+    msg = (
+        f"An error occured while trying to generate a {plot_type} for the "
+        f"factors {factors}. Here is some information on the factors:\n{summary}\n\n"
+        f"The error was:\n{tb}"
+    )
+    return msg
 
 
 def _3d_kdeplot(x, y, data, n_points, ax, surface_kws):
