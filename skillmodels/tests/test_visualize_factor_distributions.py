@@ -5,9 +5,7 @@ import yaml
 
 from skillmodels.likelihood_function import get_maximization_inputs
 from skillmodels.simulate_data import simulate_dataset
-from skillmodels.visualize_factor_distributions import (
-    plot_pairwise_factor_distributions,
-)
+from skillmodels.visualize_factor_distributions import plot_factor_distributions
 
 
 # importing the TEST_DIR from config does not work for test run in conda build
@@ -29,7 +27,7 @@ def test_visualize_factor_distributions_runs_with_filtered_states():
     debug_data = debug_loglike(params)
     filtered_states = debug_data["filtered_states"]
 
-    plot_pairwise_factor_distributions(
+    plot_factor_distributions(
         states=filtered_states, model_dict=model_dict, add_3d_plots=False, period=1
     )
 
@@ -53,6 +51,6 @@ def test_visualize_factor_distributions_runs_with_simulated_states():
         policies=None,
     )
 
-    plot_pairwise_factor_distributions(
+    plot_factor_distributions(
         states=data, model_dict=model_dict, add_3d_plots=False, period=1
     )
