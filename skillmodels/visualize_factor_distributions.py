@@ -37,9 +37,6 @@ def plot_factor_distributions(
             individual plots. Default True.
         add_3d_plots (boolen):decide whether to add 3D plots in grid of plots
             or in the dict of individual plots. Default False.
-        state_ranges (dict): The keys are the names of the latent factors.
-            The values are DataFrames with the columns "period", "minimum", "maximum".
-            The state_ranges are used to define the axis limits of the plots.
         n_points (int): Number of grid points per plot. For 3d plots this is per
             dimension. Default 50.
         lower_kde_kws (dict): Keyword arguments for seaborn.kdeplot, used to generate
@@ -149,8 +146,8 @@ def _get_error_message(data, factors, plot_type):
     tb = get_traceback()
     msg = (
         f"\n\n\nAn error occured while trying to generate a {plot_type} for the\n"
-        f"factors\n\n\n    {factors}\n\n\nHere is some information on the factors:\n\n\n{summary}\n\n\n"
-        f"The error was:\n{tb}"
+        f"factors\n\n\n    {factors}\n\n\nHere is some information on the factors:"
+        f"\n\n\n{summary}\n\n\n The error was:\n{tb}"
     )
     return msg
 
