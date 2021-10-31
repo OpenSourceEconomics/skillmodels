@@ -61,7 +61,7 @@ def plot_factor_distributions(
     surface_kws = {} if surface_kws is None else surface_kws
 
     model = process_model(model_dict)
-    factors = model["labels"]["factors"]
+    factors = model["labels"]["latent_factors"]
 
     data, hue = _process_data(states, period, factors)
 

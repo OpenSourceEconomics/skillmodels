@@ -52,7 +52,7 @@ def process_debug_data(debug_data, model):
 
     """
     update_info = model["update_info"]
-    factors = model["labels"]["factors"]
+    factors = model["labels"]["latent_factors"]
 
     pre_update_states = _create_pre_update_states(
         debug_data["initial_states"],

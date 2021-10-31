@@ -79,7 +79,7 @@ def test_not_measured_constraints():
     uinfo = pd.DataFrame(
         data, columns=columns, index=pd.MultiIndex.from_tuples(ind_tups)
     )
-    labels = {"factors": columns}
+    labels = {"latent_factors": columns}
 
     expected = [
         {
@@ -155,7 +155,7 @@ def test_stage_constraints():
 
 def test_constant_factor_constraints():
     labels = {
-        "factors": ["fac1", "fac2"],
+        "latent_factors": ["fac1", "fac2"],
         "periods": [0, 1, 2],
         "transition_names": ["bla", "constant"],
     }
@@ -200,10 +200,11 @@ def test_initial_mean_constraints():
 
 def test_trans_coeff_constraints():
     labels = {
-        "factors": ["fac1", "fac2", "fac3"],
+        "latent_factors": ["fac1", "fac2", "fac3"],
         "transition_names": ["log_ces", "bla", "blubb"],
         "periods": [0, 1, 2],
     }
+    labels["all_factors"] = labels["latent_factors"]
 
     expected = [
         {

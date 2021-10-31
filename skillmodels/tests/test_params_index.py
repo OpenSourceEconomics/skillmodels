@@ -161,7 +161,8 @@ def test_initial_cov_index_tuples():
 
 
 def test_trans_coeffs_index_tuples():
-    factors = ["fac1", "fac2", "fac3"]
+    latent_factors = ["fac1", "fac2", "fac3"]
+    all_factors = latent_factors
     periods = [0, 1, 2]
     transition_names = ["linear", "constant", "log_ces"]
 
@@ -184,6 +185,8 @@ def test_trans_coeffs_index_tuples():
         ("transition", 1, "fac3", "phi"),
     ]
 
-    calculated = get_transition_index_tuples(factors, periods, transition_names)
+    calculated = get_transition_index_tuples(
+        latent_factors, all_factors, periods, transition_names
+    )
 
     assert calculated == expected

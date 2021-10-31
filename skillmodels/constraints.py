@@ -34,7 +34,7 @@ def get_constraints(dimensions, labels, anchoring_info, update_info, normalizati
     constr += _get_stage_constraints(labels["stagemap"], labels["stages"])
     constr += _get_constant_factors_constraints(labels)
     constr += _get_initial_states_constraints(
-        dimensions["n_mixtures"], labels["factors"]
+        dimensions["n_mixtures"], labels["latent_factors"]
     )
     constr += _get_transition_constraints(labels)
     constr += _get_anchoring_constraints(
@@ -156,7 +156,7 @@ def _get_not_measured_constraints(update_info, labels):
         "a measurement to 0."
     )
 
-    factors = labels["factors"]
+    factors = labels["latent_factors"]
     all_loading_indices = get_loadings_index_tuples(factors, update_info)
     to_fix = ~update_info[factors].to_numpy().flatten().astype(bool)
     locs = [tup for i, tup in enumerate(all_loading_indices) if to_fix[i]]
@@ -239,7 +239,7 @@ def _get_constant_factors_constraints(labels):
 
     """
     constraints = []
-    for f, factor in enumerate(labels["factors"]):
+    for f, factor in enumerate(labels["latent_factors"]):
         if labels["transition_names"][f] == "constant":
             msg = f"This constraint was generated because {factor} is constant."
             for period in labels["periods"][:-1]:
@@ -297,14 +297,14 @@ def _get_transition_constraints(labels):
 
     """
     constraints = []
-    for f, factor in enumerate(labels["factors"]):
+    for f, factor in enumerate(labels["latent_factors"]):
         tname = labels["transition_names"][f]
         msg = f"This constraint is inherent to the {tname} production function."
         for period in labels["periods"][:-1]:
             funcname = f"constraints_{tname}"
             if hasattr(tf, funcname):
                 func = getattr(tf, funcname)
-                constr = func(factor, labels["factors"], period)
+                constr = func(factor, labels["all_factors"], period)
                 if "description" not in constr:
                     constr["description"] = msg
                 constraints.append(constr)

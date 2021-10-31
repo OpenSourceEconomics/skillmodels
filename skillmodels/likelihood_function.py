@@ -61,7 +61,7 @@ def get_maximization_inputs(model_dict, data):
     )
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
-        model["dimensions"]["n_states"],
+        model["dimensions"]["n_latent_factors"],
         model["estimation_options"]["sigma_points_scale"],
     )
 

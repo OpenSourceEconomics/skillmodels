@@ -54,6 +54,9 @@ def visualize_transition_equations(
     elif isinstance(quantiles_of_other_factors, tuple):
         quantiles_of_other_factors = list(quantiles_of_other_factors)
 
+    if plot_marginal_effects:
+        raise NotImplementedError()
+
     model = process_model(model_dict)
 
     if period >= model["labels"]["periods"][-1]:
@@ -84,7 +87,7 @@ def visualize_transition_equations(
         n_obs=1,
     )
 
-    factors = model["labels"]["factors"]
+    factors = model["labels"]["latent_factors"]
 
     if state_ranges is None:
         state_ranges = create_state_ranges(states, model["labels"]["factors"])

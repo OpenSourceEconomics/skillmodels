@@ -42,7 +42,7 @@ def create_parsing_info(params_index, update_info, labels, anchoring):
 
     # "trans_coeffs"
     pos_dict = {}
-    for factor in labels["factors"]:
+    for factor in labels["latent_factors"]:
         helper = pd.DataFrame(index=params_index)
         loc = helper.query(f"category == 'transition' & name1 == '{factor}'").index
         pos_dict[factor] = _get_positional_selector_from_loc(range_sr, loc)
@@ -50,12 +50,14 @@ def create_parsing_info(params_index, update_info, labels, anchoring):
     parsing_info["transition"] = pos_dict
 
     # anchoring_scaling_factors
-    is_free_loading = update_info[labels["factors"]].to_numpy()
+    is_free_loading = update_info[labels["latent_factors"]].to_numpy()
     is_anchoring = (update_info["purpose"] == "anchoring").to_numpy().reshape(-1, 1)
     is_anchoring_loading = jnp.array(is_free_loading & is_anchoring)
     parsing_info["is_anchoring_loading"] = is_anchoring_loading
     parsing_info["is_anchored_factor"] = jnp.array(
-        update_info.query("purpose == 'anchoring'")[labels["factors"]].any(axis=0)
+        update_info.query("purpose == 'anchoring'")[labels["latent_factors"]].any(
+            axis=0
+        )
     )
     parsing_info["is_anchoring_update"] = is_anchoring.flatten()
     parsing_info["ignore_constant_when_anchoring"] = anchoring[
@@ -117,7 +119,7 @@ def parse_params(params, parsing_info, dimensions, labels, n_obs):
         "loadings": _get_loadings(params, parsing_info, dimensions),
         "meas_sds": _get_meas_sds(params, parsing_info),
         "shock_sds": _get_shock_sds(params, parsing_info, dimensions),
-        "transition": _get_transition_params(params, parsing_info, dimensions, labels),
+        "transition": _get_transition_params(params, parsing_info, labels),
     }
 
     pardict["anchoring_scaling_factors"] = _get_anchoring_scaling_factors(
@@ -134,7 +136,7 @@ def parse_params(params, parsing_info, dimensions, labels, n_obs):
 def _get_initial_states(params, info, dimensions, n_obs):
     """Create the array of initial states."""
     state = params[info["initial_states"]].reshape(
-        1, dimensions["n_mixtures"], dimensions["n_states"]
+        1, dimensions["n_mixtures"], dimensions["n_latent_factors"]
     )
     return jnp.repeat(state, n_obs, axis=0)
 
@@ -145,7 +147,7 @@ def _get_initial_upper_chols(params, info, dimensions, n_obs):
     Note: The matrices contain the transpose of the lower triangular cholesky factors.
 
     """
-    n_states, n_mixtures = dimensions["n_states"], dimensions["n_mixtures"]
+    n_states, n_mixtures = dimensions["n_latent_factors"], dimensions["n_mixtures"]
     chol_params = params[info["initial_cholcovs"]].reshape(n_mixtures, -1)
     upper_chols = jnp.zeros((n_obs, n_mixtures, n_states, n_states))
     for i in range(n_mixtures):
@@ -168,7 +170,7 @@ def _get_control_params(params, info, dimensions):
 
 def _get_loadings(params, info, dimensions):
     """Create the array of factor loadings."""
-    return params[info["loadings"]].reshape(-1, dimensions["n_states"])
+    return params[info["loadings"]].reshape(-1, dimensions["n_latent_factors"])
 
 
 def _get_meas_sds(params, info):
@@ -178,15 +180,15 @@ def _get_meas_sds(params, info):
 
 def _get_shock_sds(params, info, dimensions):
     """Create the array of standard deviations of the shocks in transition functions."""
-    return params[info["shock_sds"]].reshape(-1, dimensions["n_states"])
+    return params[info["shock_sds"]].reshape(-1, dimensions["n_latent_factors"])
 
 
-def _get_transition_params(params, info, dims, labels):
+def _get_transition_params(params, info, labels):
     """Create a list of arrays with transition equation parameters."""
     trans_params = []
     t_info = info["transition"]
     n_periods = len(labels["periods"])
-    for factor in labels["factors"]:
+    for factor in labels["latent_factors"]:
         ilocs = t_info[factor]
         trans_params.append(params[ilocs].reshape(n_periods - 1, -1))
     return tuple(trans_params)
@@ -198,13 +200,21 @@ def _get_anchoring_scaling_factors(loadings, info, dimensions):
     Note: Parameters are not taken from the parameter vector but from the loadings.
 
     """
-    scaling_factors = jnp.ones((dimensions["n_periods"], dimensions["n_states"]))
+    scaling_factors = jnp.ones(
+        (dimensions["n_periods"], dimensions["n_latent_factors"])
+    )
     free_anchoring_loadings = loadings[info["is_anchoring_loading"]].reshape(
         dimensions["n_periods"], -1
     )
     scaling_factors = index_update(
         scaling_factors, index[:, info["is_anchored_factor"]], free_anchoring_loadings
     )
+
+    scaling_for_observed = jnp.ones(
+        (dimensions["n_periods"], dimensions["n_observed_factors"])
+    )
+
+    scaling_factors = jnp.hstack([scaling_factors, scaling_for_observed])
 
     return scaling_factors
 
@@ -215,7 +225,7 @@ def _get_anchoring_constants(controls, info, dimensions):
     Note: Parameters are not taken from the parameter vector but from the controls.
 
     """
-    constants = jnp.zeros((dimensions["n_periods"], dimensions["n_states"]))
+    constants = jnp.zeros((dimensions["n_periods"], dimensions["n_latent_factors"]))
     if not info["ignore_constant_when_anchoring"]:
         values = controls[:, 0][info["is_anchoring_update"]].reshape(
             dimensions["n_periods"], -1
@@ -223,4 +233,11 @@ def _get_anchoring_constants(controls, info, dimensions):
         constants = index_update(
             constants, index[:, info["is_anchored_factor"]], values
         )
+
+    constants_for_observed = jnp.zeros(
+        (dimensions["n_periods"], dimensions["n_observed_factors"])
+    )
+
+    constants = jnp.hstack([constants, constants_for_observed])
+
     return constants

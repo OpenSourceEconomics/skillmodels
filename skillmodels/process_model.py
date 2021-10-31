@@ -60,13 +60,16 @@ def get_dimensions(model_dict):
 
     """
     all_n_periods = [len(d["measurements"]) for d in model_dict["factors"].values()]
+
     dims = {
-        "n_states": len(model_dict["factors"]),
+        "n_latent_factors": len(model_dict["factors"]),
+        "n_observed_factors": len(model_dict.get("observed_factors", [])),
         "n_periods": max(all_n_periods),
         # plus 1 for the constant
         "n_controls": len(model_dict.get("controls", [])) + 1,
         "n_mixtures": model_dict["estimation_options"].get("n_mixtures", 1),
     }
+    dims["n_all_factors"] = dims["n_latent_factors"] + dims["n_observed_factors"]
     return dims
 
 
@@ -86,15 +89,18 @@ def _get_labels(model_dict, dimensions):
     stagemap = model_dict.get("stagemap", list(range(dimensions["n_periods"] - 1)))
 
     labels = {
-        "factors": sorted(model_dict["factors"]),
+        "latent_factors": sorted(model_dict["factors"]),
+        "observed_factors": sorted(model_dict.get("observed_factors", [])),
         "controls": ["constant"] + sorted(model_dict.get("controls", [])),
         "periods": list(range(dimensions["n_periods"])),
         "stagemap": stagemap,
         "stages": sorted(np.unique(stagemap)),
     }
 
+    labels["all_factors"] = labels["latent_factors"] + labels["observed_factors"]
+
     trans_names = []
-    for factor in labels["factors"]:
+    for factor in labels["latent_factors"]:
         trans_names.append(model_dict["factors"][factor]["transition_function"])
     labels["transition_names"] = trans_names
 
@@ -187,16 +193,16 @@ def _get_update_info(model_dict, dimensions, labels, anchoring_info):
 
     """
     index = pd.MultiIndex(levels=[[], []], codes=[[], []], names=["period", "variable"])
-    uinfo = DataFrame(index=index, columns=labels["factors"] + ["purpose"])
+    uinfo = DataFrame(index=index, columns=labels["latent_factors"] + ["purpose"])
 
     measurements = {}
-    for factor in labels["factors"]:
+    for factor in labels["latent_factors"]:
         measurements[factor] = fill_list(
             model_dict["factors"][factor]["measurements"], [], dimensions["n_periods"]
         )
 
     for period in labels["periods"]:
-        for factor in labels["factors"]:
+        for factor in labels["latent_factors"]:
             for meas in measurements[factor][period]:
                 uinfo.loc[(period, meas), factor] = True
                 uinfo.loc[(period, meas), "purpose"] = "measurement"
@@ -226,7 +232,7 @@ def _process_normalizations(model_dict, dimensions, labels):
 
     """
     normalizations = {}
-    for factor in labels["factors"]:
+    for factor in labels["latent_factors"]:
         normalizations[factor] = {}
         norminfo = model_dict["factors"][factor].get("normalizations", {})
         for norm_type in ["loadings", "intercepts"]:

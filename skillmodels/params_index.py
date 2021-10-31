@@ -24,16 +24,21 @@ def get_params_index(update_info, labels, dimensions):
 
     """
     ind_tups = get_control_params_index_tuples(labels["controls"], update_info)
-    ind_tups += get_loadings_index_tuples(labels["factors"], update_info)
+    ind_tups += get_loadings_index_tuples(labels["latent_factors"], update_info)
     ind_tups += get_meas_sds_index_tuples(update_info)
-    ind_tups += get_shock_sds_index_tuples(labels["periods"], labels["factors"])
-    ind_tups += initial_mean_index_tuples(dimensions["n_mixtures"], labels["factors"])
+    ind_tups += get_shock_sds_index_tuples(labels["periods"], labels["latent_factors"])
+    ind_tups += initial_mean_index_tuples(
+        dimensions["n_mixtures"], labels["latent_factors"]
+    )
     ind_tups += get_mixture_weights_index_tuples(dimensions["n_mixtures"])
     ind_tups += get_initial_cholcovs_index_tuples(
-        dimensions["n_mixtures"], labels["factors"]
+        dimensions["n_mixtures"], labels["latent_factors"]
     )
     ind_tups += get_transition_index_tuples(
-        labels["factors"], labels["periods"], labels["transition_names"]
+        labels["latent_factors"],
+        labels["all_factors"],
+        labels["periods"],
+        labels["transition_names"],
     )
 
     index = pd.MultiIndex.from_tuples(
@@ -173,23 +178,22 @@ def get_initial_cholcovs_index_tuples(n_mixtures, factors):
     return ind_tups
 
 
-def get_transition_index_tuples(factors, periods, transition_names):
+def get_transition_index_tuples(latent_factors, all_factors, periods, transition_names):
     """Index tuples for transition equation coefficients.
 
     Args:
-        factors (list): The latent factors of the model
+        latent_factors (list): The latent factors of the model
+        all_factors (list): The latent and observed factors of the model.
         periods (list): The periods of the model
         transition_names (list): name of the transition equation of each factor
-        included_factors (list): the factors that appear on the right hand side of
-            the transition equations of the latent factors.
 
     Returns:
         ind_tups (list)
 
     """
     ind_tups = []
-    for f, factor in enumerate(factors):
+    for f, factor in enumerate(latent_factors):
         for period in periods[:-1]:
             func = getattr(tf, "index_tuples_{}".format(transition_names[f]))
-            ind_tups += func(factor, factors, period)
+            ind_tups += func(factor, all_factors, period)
     return ind_tups

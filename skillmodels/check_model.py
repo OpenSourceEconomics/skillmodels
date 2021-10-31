@@ -30,8 +30,8 @@ def check_model(model_dict, labels, dimensions, anchoring):
         labels["stagemap"], labels["stages"], dimensions["n_periods"]
     )
     report += _check_anchoring(anchoring)
-    report += _check_measurements(model_dict, labels["factors"])
-    report += _check_normalizations(model_dict, labels["factors"])
+    report += _check_measurements(model_dict, labels["latent_factors"])
+    report += _check_normalizations(model_dict, labels["latent_factors"])
 
     report = "\n".join(report)
     if report != "":

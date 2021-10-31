@@ -24,7 +24,9 @@ def model2():
 
 def test_dimensions(model2):
     res = process_model(model2)["dimensions"]
-    assert res["n_states"] == 3
+    assert res["n_latent_factors"] == 3
+    assert res["n_observed_factors"] == 0
+    assert res["n_all_factors"] == 3
     assert res["n_periods"] == 8
     assert res["n_controls"] == 2
     assert res["n_mixtures"] == 1
@@ -32,7 +34,9 @@ def test_dimensions(model2):
 
 def test_labels(model2):
     res = process_model(model2)["labels"]
-    assert res["factors"] == ["fac1", "fac2", "fac3"]
+    assert res["latent_factors"] == ["fac1", "fac2", "fac3"]
+    assert res["observed_factors"] == []
+    assert res["all_factors"] == ["fac1", "fac2", "fac3"]
     assert res["controls"] == ["constant", "x1"]
     assert res["periods"] == [0, 1, 2, 3, 4, 5, 6, 7]
     assert res["stagemap"] == [0, 0, 0, 0, 0, 0, 0]
