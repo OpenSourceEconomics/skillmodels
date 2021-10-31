@@ -148,8 +148,8 @@ def _get_error_message(data, factors, plot_type):
     summary = data[factors].describe().round(3).to_string()
     tb = get_traceback()
     msg = (
-        f"An error occured while trying to generate a {plot_type} for the "
-        f"factors {factors}. Here is some information on the factors:\n{summary}\n\n"
+        f"\n\n\nAn error occured while trying to generate a {plot_type} for the\n"
+        f"factors\n\n\n    {factors}\n\n\nHere is some information on the factors:\n\n\n{summary}\n\n\n"
         f"The error was:\n{tb}"
     )
     return msg
