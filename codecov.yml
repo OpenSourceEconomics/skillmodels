@@ -12,7 +12,7 @@ coverage:
         target: 80%
     project:
       default:
-        target: 90%
+        target: 87.5%
 
 ignore:
   - ".tox/**/*"
