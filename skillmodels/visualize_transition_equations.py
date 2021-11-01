@@ -227,7 +227,7 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
         quantile_data["quantile"] = quantile
         to_concat.append(quantile_data)
 
-    out = pd.concat(to_concat)
+    out = pd.concat(to_concat).reset_index()
     return out
 
 
