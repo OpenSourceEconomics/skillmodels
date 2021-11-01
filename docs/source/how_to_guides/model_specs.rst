@@ -69,6 +69,7 @@ general latent factor model:
     #. If development stages are used: Which periods belong to which stage?
     #. If anchoring is used: Which factors are anchored and what is the anchoring
        outcome?
+    #. Are there any observed factors?
 
 Translating the model to a dictionary
 *************************************
@@ -158,6 +159,20 @@ to zero.
 A list that has one entry less than the number of periods of the model. It maps periods
 to development stages. See :ref:`stages_vs_periods` for the meaning of development
 stages.
+
+
+``"observed_factors"``
+----------------------
+
+A list with variable names. Those variable names must be present in the dataset and
+contain information about observed factors. An example of an observed factor could
+be income, a treatment assignment or age.
+
+
+Observed factors do not have transition equations, do not require multiple measurements
+per period and are not part of the covariance matrix of the latent factors. As such,
+adding an observed factor is computationally much less demanding than adding an
+unobserved factor.
 
 
 ``"estimation_options"``
