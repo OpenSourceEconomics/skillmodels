@@ -242,8 +242,8 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factor
         scaling_factor (float): A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
-        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
-            n_observed_factors) with data on the observed factors.
+        observed_factors (jax.numpy.array): Array of shape (n_obs, n_observed_factors)
+            with data on the observed factors in period t.
 
     Returns:
         jax.numpy.array: Array of shape n_obs, n_mixtures, n_sigma, n_fac (where n_sigma
@@ -252,6 +252,7 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factor
     """
     n_obs, n_mixtures, n_fac = states.shape
     n_sigma = 2 * n_fac + 1
+    n_observed = observed_factors.shape[1]
 
     scaled_upper_chols = upper_chols * scaling_factor
     sigma_points = jnp.repeat(states, n_sigma, axis=1).reshape(
@@ -263,6 +264,12 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factor
     sigma_points = index_add(
         sigma_points, index[:, :, n_fac + 1 :], -scaled_upper_chols
     )
+
+    observed_part = observed_factors.repeat(n_sigma, axis=0).reshape(
+        n_obs, n_mixtures, n_sigma, n_observed
+    )
+
+    sigma_points = jnp.concatenate([sigma_points, observed_part], axis=-1)
     return sigma_points
 
 

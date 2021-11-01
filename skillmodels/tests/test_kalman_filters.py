@@ -131,10 +131,12 @@ def test_kalman_update_with_missing():
 def test_sigma_points(seed):
     np.random.seed(seed)
     state, cov = _random_state_and_covariance()
+    observed_factors = np.arange(2).reshape(1, 2)
     expected = JulierSigmaPoints(n=len(state), kappa=2).sigma_points(state, cov)
+    observed_part = np.tile(observed_factors, len(expected)).reshape(-1, 2)
+    expected = np.hstack([expected, observed_part])
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor = np.sqrt(len(state) + 2)
-    observed_factors = jnp.arange(2).reshape(1, 2)
     calculated = _calculate_sigma_points(
         sm_state, sm_chol, scaling_factor, observed_factors
     )
