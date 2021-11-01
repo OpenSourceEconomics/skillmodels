@@ -170,6 +170,7 @@ def kalman_predict(
     shock_sds,
     anchoring_scaling_factors,
     anchoring_constants,
+    observed_factors,
 ):
     """Make a unscented Kalman predict.
 
@@ -195,13 +196,17 @@ def kalman_predict(
         anchoring_constants (jax.numpy.array): Array of shape (2, n_states) with the
             constants for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
+        observed_factors (jax.numpy.array): Array of shape (n_obs, n_observed_factors)
+            with data on the observed factors in period t.
 
     Returns:
         jax.numpy.array: Predicted states, same shape as states.
         jax.numpy.array: Predicted upper_chols, same shape as upper_chols.
 
     """
-    sigma_points = _calculate_sigma_points(states, upper_chols, sigma_scaling_factor)
+    sigma_points = _calculate_sigma_points(
+        states, upper_chols, sigma_scaling_factor, observed_factors
+    )
     transformed = _transform_sigma_points(
         sigma_points,
         transition_functions,
@@ -225,7 +230,7 @@ def kalman_predict(
     return predicted_states, predicted_covs
 
 
-def _calculate_sigma_points(states, upper_chols, scaling_factor):
+def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factors):
     """Calculate the array of sigma_points for the unscented transform.
 
     Args:
@@ -237,6 +242,8 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor):
         scaling_factor (float): A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
+        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
+            n_observed_factors) with data on the observed factors.
 
     Returns:
         jax.numpy.array: Array of shape n_obs, n_mixtures, n_sigma, n_fac (where n_sigma

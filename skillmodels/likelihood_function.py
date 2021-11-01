@@ -56,7 +56,7 @@ def get_maximization_inputs(model_dict, data):
     parsing_info = create_parsing_info(
         p_index, model["update_info"], model["labels"], model["anchoring"]
     )
-    measurements, controls, _ = process_data_for_estimation(
+    measurements, controls, observed_factors = process_data_for_estimation(
         data, model["labels"], model["update_info"], model["anchoring"]
     )
 
@@ -91,6 +91,7 @@ def get_maximization_inputs(model_dict, data):
         is_measurement_iteration=is_measurement_iteration,
         is_predict_iteration=is_predict_iteration,
         iteration_to_period=iteration_to_period,
+        observed_factors=observed_factors,
     )
 
     partialed_process_debug_data = functools.partial(process_debug_data, model=model)
@@ -176,6 +177,7 @@ def _log_likelihood_jax(
     is_predict_iteration,
     iteration_to_period,
     debug,
+    observed_factors,
 ):
     """Log likelihood of a skill formation model.
 
@@ -211,6 +213,8 @@ def _log_likelihood_jax(
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
         debug (bool): Boolean flag. If True, more intermediate results are returned
+        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
+            n_observed_factors) with data on the observed factors.
 
     Returns:
         jnp.array: 1d array of length 1, the aggregated log likelihood.
@@ -247,6 +251,7 @@ def _log_likelihood_jax(
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
         transition_functions=transition_functions,
+        observed_factors=observed_factors,
         debug=debug,
     )
 
@@ -293,6 +298,7 @@ def _scan_body(
     sigma_scaling_factor,
     sigma_weights,
     transition_functions,
+    observed_factors,
     debug,
 ):
     t = loop_args["period"]
@@ -329,6 +335,7 @@ def _scan_body(
             jnp.array([t, t + 1])
         ],
         "anchoring_constants": pardict["anchoring_constants"][jnp.array([t, t + 1])],
+        "observed_factors": observed_factors[t],
     }
 
     fixed_kwargs = {"transition_functions": transition_functions}

@@ -134,7 +134,10 @@ def test_sigma_points(seed):
     expected = JulierSigmaPoints(n=len(state), kappa=2).sigma_points(state, cov)
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor = np.sqrt(len(state) + 2)
-    calculated = _calculate_sigma_points(sm_state, sm_chol, scaling_factor)
+    observed_factors = jnp.arange(2).reshape(1, 2)
+    calculated = _calculate_sigma_points(
+        sm_state, sm_chol, scaling_factor, observed_factors
+    )
     aaae(calculated.reshape(expected.shape), expected)
 
 
@@ -225,6 +228,7 @@ def test_predict_against_linear_filterpy(seed):
     trans_coeffs = (jnp.array(trans_mat[i]) for i in range(dim))
     anch_scaling = jnp.ones((2, dim))
     anch_constants = jnp.zeros((2, dim))
+    observed_factors = jnp.zeros((1, 0))
 
     calc_states, calc_chols = kalman_predict(
         sm_state,
@@ -236,6 +240,7 @@ def test_predict_against_linear_filterpy(seed):
         jnp.array(shock_sds),
         anch_scaling,
         anch_constants,
+        observed_factors,
     )
 
     aaae(calc_states.flatten(), expected_state.flatten())
