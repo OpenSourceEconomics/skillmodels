@@ -15,7 +15,7 @@ from skillmodels.kalman_filters import kalman_update
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
-from skillmodels.process_data import process_data_for_estimation
+from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
 
@@ -56,7 +56,7 @@ def get_maximization_inputs(model_dict, data):
     parsing_info = create_parsing_info(
         p_index, model["update_info"], model["labels"], model["anchoring"]
     )
-    measurements, controls, observed_factors = process_data_for_estimation(
+    measurements, controls, observed_factors = process_data(
         data, model["labels"], model["update_info"], model["anchoring"]
     )
 

@@ -7,7 +7,7 @@ import pandas as pd
 from skillmodels.process_model import get_period_measurements
 
 
-def process_data_for_estimation(df, labels, update_info, anchoring_info):
+def process_data(df, labels, update_info, anchoring_info):
     """Process the data for estimation.
 
     Args:
