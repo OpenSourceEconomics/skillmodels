@@ -1,8 +1,5 @@
 import jax
 import jax.numpy as jnp
-from jax.ops import index
-from jax.ops import index_add
-from jax.ops import index_update
 
 
 array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
@@ -78,9 +75,9 @@ def kalman_update(
     _f_stars = jnp.dot(upper_chols, loadings.reshape(n_states, 1))
 
     _m = jnp.zeros((n_obs, n_mixtures, n_states + 1, n_states + 1))
-    _m = index_update(_m, index[..., 0, 0], meas_sd)
-    _m = index_update(_m, index[..., 1:, :1], _f_stars)
-    _m = index_update(_m, index[..., 1:, 1:], upper_chols)
+    _m = _m.at[..., 0, 0].set(meas_sd)
+    _m = _m.at[..., 1:, :1].set(_f_stars)
+    _m = _m.at[..., 1:, 1:].set(upper_chols)
 
     _r = array_qr_jax(_m)[1]
 
@@ -156,7 +153,7 @@ def calculate_sigma_scaling_factor_and_weights(n_states, kappa=2):
     scaling_factor = jnp.sqrt(kappa + n_states)
     n_sigma = 2 * n_states + 1
     weights = 0.5 * jnp.ones(n_sigma) / (n_states + kappa)
-    weights = index_update(weights, index[0], kappa / (n_states + kappa))
+    weights = weights.at[0].set(kappa / (n_states + kappa))
     return scaling_factor, weights
 
 
@@ -224,8 +221,8 @@ def kalman_predict(
 
     qr_weights = jnp.sqrt(sigma_weights).reshape(n_sigma, 1)
     qr_points = jnp.zeros((n_obs, n_mixtures, n_sigma + n_fac, n_fac))
-    qr_points = index_update(qr_points, index[:, :, 0:n_sigma], devs * qr_weights)
-    qr_points = index_update(qr_points, index[:, :, n_sigma:], jnp.diag(shock_sds))
+    qr_points = qr_points.at[:, :, 0:n_sigma].set(devs * qr_weights)
+    qr_points = qr_points.at[:, :, n_sigma:].set(jnp.diag(shock_sds))
     predicted_covs = array_qr_jax(qr_points)[1][:, :, :n_fac]
 
     return predicted_states, predicted_covs
@@ -259,12 +256,8 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factor
     sigma_points = jnp.repeat(states, n_sigma, axis=1).reshape(
         n_obs, n_mixtures, n_sigma, n_fac
     )
-    sigma_points = index_add(
-        sigma_points, index[:, :, 1 : n_fac + 1], scaled_upper_chols
-    )
-    sigma_points = index_add(
-        sigma_points, index[:, :, n_fac + 1 :], -scaled_upper_chols
-    )
+    sigma_points = sigma_points.at[:, :, 1 : n_fac + 1].add(scaled_upper_chols)
+    sigma_points = sigma_points.at[:, :, n_fac + 1 :].add(-scaled_upper_chols)
 
     observed_part = observed_factors.repeat(n_sigma, axis=0).reshape(
         n_obs, n_mixtures, n_sigma, n_observed
@@ -309,9 +302,7 @@ def _transform_sigma_points(
     for i, ((name, func), coeffs) in enumerate(zip(transition_functions, trans_coeffs)):
         if name != "constant":
             output = func(anchored, coeffs)
-            transformed_anchored = index_update(
-                transformed_anchored, index[..., i], output
-            )
+            transformed_anchored = transformed_anchored.at[..., i].set(output)
 
     transformed_unanchored = (
         transformed_anchored - anchoring_constants[1]

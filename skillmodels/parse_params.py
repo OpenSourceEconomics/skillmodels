@@ -3,8 +3,6 @@ import warnings
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-from jax.ops import index
-from jax.ops import index_update
 
 
 def create_parsing_info(params_index, update_info, labels, anchoring):
@@ -152,8 +150,8 @@ def _get_initial_upper_chols(params, info, dimensions, n_obs):
     upper_chols = jnp.zeros((n_obs, n_mixtures, n_states, n_states))
     for i in range(n_mixtures):
         filler = jnp.zeros((n_states, n_states))
-        filler = index_update(filler, jnp.tril_indices(n_states), chol_params[i])
-        upper_chols = index_update(upper_chols, index[:, i], filler.T)
+        filler = filler.at[jnp.tril_indices(n_states)].set(chol_params[i])
+        upper_chols = upper_chols.at[:, i].set(filler.T)
     return upper_chols
 
 
@@ -206,8 +204,8 @@ def _get_anchoring_scaling_factors(loadings, info, dimensions):
     free_anchoring_loadings = loadings[info["is_anchoring_loading"]].reshape(
         dimensions["n_periods"], -1
     )
-    scaling_factors = index_update(
-        scaling_factors, index[:, info["is_anchored_factor"]], free_anchoring_loadings
+    scaling_factors = scaling_factors.at[:, info["is_anchored_factor"]].set(
+        free_anchoring_loadings
     )
 
     scaling_for_observed = jnp.ones(
@@ -230,9 +228,7 @@ def _get_anchoring_constants(controls, info, dimensions):
         values = controls[:, 0][info["is_anchoring_update"]].reshape(
             dimensions["n_periods"], -1
         )
-        constants = index_update(
-            constants, index[:, info["is_anchored_factor"]], values
-        )
+        constants = constants.at[:, info["is_anchored_factor"]].set(values)
 
     constants_for_observed = jnp.zeros(
         (dimensions["n_periods"], dimensions["n_observed_factors"])
