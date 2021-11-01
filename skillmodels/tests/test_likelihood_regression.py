@@ -84,7 +84,7 @@ def test_likelihood_runs_with_empty_periods(model2, model2_data):
     params["value"] = 0.1
 
     debug_loglike = func_dict["debug_loglike"]
-    debug_loglike(params)["contributions"]
+    debug_loglike(params)
 
 
 def test_likelihood_runs_with_too_long_data(model2, model2_data):
@@ -95,4 +95,17 @@ def test_likelihood_runs_with_too_long_data(model2, model2_data):
     params["value"] = 0.1
 
     debug_loglike = func_dict["debug_loglike"]
-    debug_loglike(params)["contributions"]
+    debug_loglike(params)
+
+
+def test_likelihood_runs_with_observed_factors(model2, model2_data):
+    model2["observed_factors"] = ["ob1", "ob2"]
+    model2_data["ob1"] = np.arange(len(model2_data))
+    model2_data["ob2"] = np.ones(len(model2_data))
+    func_dict = get_maximization_inputs(model2, model2_data)
+
+    params = func_dict["params_template"]
+    params["value"] = 0.1
+
+    debug_loglike = func_dict["debug_loglike"]
+    debug_loglike(params)

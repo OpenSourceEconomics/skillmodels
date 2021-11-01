@@ -226,7 +226,7 @@ def test_predict_against_linear_filterpy(seed):
 
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)
-    transition_functions = (("linear", linear) for i in range(dim))
+    transition_functions = tuple(("linear", linear) for i in range(dim))
     trans_coeffs = (jnp.array(trans_mat[i]) for i in range(dim))
     anch_scaling = jnp.ones((2, dim))
     anch_constants = jnp.zeros((2, dim))

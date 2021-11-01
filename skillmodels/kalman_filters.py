@@ -215,7 +215,8 @@ def kalman_predict(
         anchoring_constants,
     )
 
-    n_obs, n_mixtures, n_sigma, n_fac = sigma_points.shape
+    # do not use sigma_points.shape because sigma_points contain observed factors
+    n_obs, n_mixtures, n_sigma, n_fac = transformed.shape
 
     predicted_states = jnp.dot(sigma_weights, transformed)
 
@@ -301,8 +302,8 @@ def _transform_sigma_points(
         equals 2 * n_fac + 1) with transformed sigma points.
 
     """
-    n_obs, n_mixtures, n_sigma, n_states = sigma_points.shape
     anchored = sigma_points * anchoring_scaling_factors[0] + anchoring_constants[0]
+    n_observed_factors = len(transition_functions)
 
     transformed_anchored = anchored
     for i, ((name, func), coeffs) in enumerate(zip(transition_functions, trans_coeffs)):
@@ -316,4 +317,6 @@ def _transform_sigma_points(
         transformed_anchored - anchoring_constants[1]
     ) / anchoring_scaling_factors[1]
 
-    return transformed_unanchored
+    out = transformed_unanchored[..., :n_observed_factors]
+
+    return out

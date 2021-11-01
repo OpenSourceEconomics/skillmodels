@@ -99,8 +99,6 @@ def _check_data(df, update_info, labels):
         for factor in labels["observed_factors"]:
             if factor not in period_data.columns:
                 var_report.loc[(period, factor), "problem"] = "Variable is missing"
-            elif len(period_data[factor].dropna().unique()) == 1:
-                var_report.loc[(period, factor), "problem"] = "Variable has no variable"
             elif period_data[factor].isnull().any():
                 var_report.loc[(period, factor), "problem"] = "Variable has missings"
 
