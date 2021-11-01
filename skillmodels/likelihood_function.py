@@ -56,7 +56,7 @@ def get_maximization_inputs(model_dict, data):
     parsing_info = create_parsing_info(
         p_index, model["update_info"], model["labels"], model["anchoring"]
     )
-    measurements, controls, = process_data_for_estimation(
+    measurements, controls, _ = process_data_for_estimation(
         data, model["labels"], model["update_info"], model["anchoring"]
     )
 
