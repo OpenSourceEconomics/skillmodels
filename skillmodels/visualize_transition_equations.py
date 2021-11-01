@@ -9,6 +9,7 @@ import seaborn as sns
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
+from skillmodels.process_data import process_data_for_estimation
 from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
 
@@ -23,6 +24,7 @@ def visualize_transition_equations(
     plot_marginal_effects=False,
     n_points=50,
     n_draws=50,
+    data=None,
 ):
     """Visualize transition equations.
 
@@ -44,6 +46,10 @@ def visualize_transition_equations(
             dimension.
         n_draws (int): Number of randomly drawn values of the non visualized factors
             if those factors are not fixed at a quantile but averaged out.
+        data (pd.DataFrame): Emprical dataset that is used to estimate the model. This
+            is only needed if the model has observed factors. Those factors are then
+            extracted from the data and treated like other factors that are kept fixed
+            in a given plot.
 
     Returns:
         matplotlib.Figure: The plot
@@ -58,6 +64,27 @@ def visualize_transition_equations(
         raise NotImplementedError()
 
     model = process_model(model_dict)
+
+    has_observed_factors = bool(model["labels"]["observed_factors"])
+
+    if has_observed_factors and data is None:
+        raise ValueError(
+            "data is required to visualize transition equations of a model with "
+            "observed factors."
+        )
+
+    if has_observed_factors:
+        _, _, observed_arr = process_data_for_estimation(
+            df=data,
+            labels=model["labels"],
+            update_info=model["update_info"],
+            anchoring_info=model["anchoring"],
+        )
+        observed_factor_data = pd.DataFrame(
+            data=observed_arr[period], columns=model["labels"]["observed_factors"]
+        )
+    else:
+        observed_factor_data = None
 
     if period >= model["labels"]["periods"][-1]:
         raise ValueError(
@@ -90,7 +117,7 @@ def visualize_transition_equations(
     factors = model["labels"]["latent_factors"]
 
     if state_ranges is None:
-        state_ranges = create_state_ranges(states, model["labels"]["factors"])
+        state_ranges = create_state_ranges(states, model["labels"]["latent_factors"])
 
     figsize = (2.5 * len(factors), 2 * len(factors))
     fig, axes = plt.subplots(
@@ -115,7 +142,9 @@ def visualize_transition_equations(
                 n_points=n_points,
                 transition_function=transition_function,
                 transition_params=transition_params,
-                factors=factors,
+                latent_factors=factors,
+                all_factors=model["labels"]["all_factors"],
+                observed_factor_data=observed_factor_data,
             )
         else:
             plot_data = _prepare_data_for_one_plot_average_2d(
@@ -128,7 +157,9 @@ def visualize_transition_equations(
                 n_draws=n_draws,
                 transition_function=transition_function,
                 transition_params=transition_params,
-                factors=factors,
+                latent_factors=factors,
+                all_factors=model["labels"]["all_factors"],
+                observed_factor_data=observed_factor_data,
             )
 
         hue = None
@@ -166,20 +197,25 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
     n_points,
     transition_function,
     transition_params,
-    factors,
+    latent_factors,
+    all_factors,
+    observed_factor_data,
 ):
 
-    period_data = states.query(f"period == {period}")[factors]
+    period_data = states.query(f"period == {period}")[latent_factors]
     transition_name, transition_function = transition_function
     input_min = state_ranges[input_factor].loc[period]["minimum"]
     input_max = state_ranges[input_factor].loc[period]["maximum"]
     to_concat = []
     for quantile in quantiles_of_other_factors:
-        fixed_quantiles = period_data.drop(columns=input_factor).quantile(quantile)
         input_data = pd.DataFrame()
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
+        fixed_quantiles = period_data.drop(columns=input_factor).quantile(quantile)
         input_data[fixed_quantiles.index] = fixed_quantiles
-        input_arr = jnp.array(input_data[factors].to_numpy())
+        if observed_factor_data is not None:
+            observed_quantiles = observed_factor_data.quantile(quantile)
+            input_data[observed_quantiles.index] = observed_quantiles
+        input_arr = jnp.array(input_data[all_factors].to_numpy())
         if transition_name != "constant":
             output_arr = transition_function(input_arr, transition_params)
         else:
@@ -205,12 +241,17 @@ def _prepare_data_for_one_plot_average_2d(
     n_draws,
     transition_function,
     transition_params,
-    factors,
+    latent_factors,
+    all_factors,
+    observed_factor_data,
 ):
 
     transition_name, transition_function = transition_function
-    period_data = states.query(f"period == {period}")[factors]
-    sampled_factors = [factor for factor in factors if factor != input_factor]
+    period_data = states.query(f"period == {period}")[latent_factors].reset_index()
+    if observed_factor_data is not None:
+        period_data = pd.concat([period_data, observed_factor_data], axis=1)
+
+    sampled_factors = [factor for factor in all_factors if factor != input_factor]
     draws = period_data[sampled_factors].sample(n=n_draws)
     input_min = state_ranges[input_factor].loc[period]["minimum"]
     input_max = state_ranges[input_factor].loc[period]["maximum"]
@@ -220,7 +261,7 @@ def _prepare_data_for_one_plot_average_2d(
         input_data = pd.DataFrame()
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
         input_data[draw.index] = draw
-        input_arr = jnp.array(input_data[factors].to_numpy())
+        input_arr = jnp.array(input_data[all_factors].to_numpy())
         if transition_name != "constant":
             output_arr = transition_function(input_arr, transition_params)
         else:
