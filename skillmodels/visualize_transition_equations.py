@@ -162,12 +162,13 @@ def visualize_transition_equations(
                 observed_factor_data=observed_factor_data,
             )
 
-        hue = None
         if (
             isinstance(quantiles_of_other_factors, list)
             and len(quantiles_of_other_factors) > 1
         ):
             hue = "quantile"
+        else:
+            hue = None
 
         sns.lineplot(
             data=plot_data,
@@ -181,7 +182,9 @@ def visualize_transition_equations(
             ax.get_legend().remove()
 
     if hue is not None:
-        fig.legend(handles, labels, loc="upper center", ncol=len(factors))
+        fig.legend(
+            handles, labels, loc="upper center", ncol=len(quantiles_of_other_factors)
+        )
     fig.tight_layout()
     sns.despine()
     return fig
