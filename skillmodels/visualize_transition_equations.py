@@ -46,7 +46,7 @@ def visualize_transition_equations(
             dimension.
         n_draws (int): Number of randomly drawn values of the non visualized factors
             if those factors are not fixed at a quantile but averaged out.
-        data (pd.DataFrame): Emprical dataset that is used to estimate the model. This
+        data (pd.DataFrame): Empirical dataset that is used to estimate the model. This
             is only needed if the model has observed factors. Those factors are then
             extracted from the data and treated like other factors that are kept fixed
             in a given plot.
@@ -69,8 +69,8 @@ def visualize_transition_equations(
 
     if has_observed_factors and data is None:
         raise ValueError(
-            "data is required to visualize transition equations of a model with "
-            "observed factors."
+            "The model has observed factors. You must pass the empirical data to "
+            "'visualize_transition_equations' via the keyword *data*."
         )
 
     if has_observed_factors:
@@ -88,7 +88,7 @@ def visualize_transition_equations(
 
     if period >= model["labels"]["periods"][-1]:
         raise ValueError(
-            "Period mast be the penultimate period of the model or earlier."
+            "*period* must be the penultimate period of the model or earlier."
         )
 
     params_index = get_params_index(
