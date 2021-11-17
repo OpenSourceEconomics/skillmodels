@@ -24,6 +24,8 @@ def visualize_transition_equations(
     plot_marginal_effects=False,
     n_points=50,
     n_draws=50,
+    sharex=False,
+    sharey="row",
     data=None,
 ):
     """Visualize transition equations.
@@ -47,6 +49,12 @@ def visualize_transition_equations(
         n_points (int): Number of grid points per input. Default 50.
         n_draws (int): Number of randomly drawn values of the factors that are averaged
             out. Only relevant if quantiles_of_other_factors is *None*. Default 50.
+        sharex (bool or {'none', 'all', 'col'}): Whether to share the properties of
+            x-axis across subplots. See API docs of matplotlib.pyplot.subplots.
+            Default False.
+        sharey (bool or {'none', 'all', 'row'}): : Whether to share the properties of
+            y-axis across subplots. See API docs of matplotlib.pyplot.subplots.
+            Default 'row'.
         data (pd.DataFrame): Empirical dataset that is used to estimate the model. Only
             needed if the model has observed factors. Those factors are directly taken
             from the data to calculate their quantiles or averages.
@@ -133,8 +141,8 @@ def visualize_transition_equations(
         nrows=len(latent_factors),
         ncols=len(all_factors),
         figsize=figsize,
-        sharex=False,
-        sharey=False,
+        sharex=sharex,
+        sharey=sharey,
     )
 
     for (output_factor, input_factor), ax in zip(
