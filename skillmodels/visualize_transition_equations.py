@@ -36,20 +36,20 @@ def visualize_transition_equations(
             are not given explicitly) and to estimate the distribution of the factors
             that are not visualized.
         period (int): The start period of the transition equations that are plotted.
+        combine_plots_in_grid (boolen): Return a figure containing subplots for each
+            pair of factors or a dictionary of individual plots. Default True.
         state_ranges (dict): The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
             The state_ranges are used to define the axis limits of the plots.
         quantiles_of_other_factors (float, list or None): Quantiles at which the factors
             that are not varied in a given plot are fixed. If None, those factors are
             not fixed but integrated out.
-        n_points (int): Number of grid points per plot. For 3d plots this is per
-            dimension.
-        n_draws (int): Number of randomly drawn values of the non visualized factors
-            if those factors are not fixed at a quantile but averaged out.
-        data (pd.DataFrame): Empirical dataset that is used to estimate the model. This
-            is only needed if the model has observed factors. Those factors are then
-            extracted from the data and treated like other factors that are kept fixed
-            in a given plot.
+        n_points (int): Number of grid points per input. Default 50.
+        n_draws (int): Number of randomly drawn values of the factors that are averaged
+            out. Only relevant if quantiles_of_other_factors is *None*. Default 50.
+        data (pd.DataFrame): Empirical dataset that is used to estimate the model. Only
+            needed if the model has observed factors. Those factors are directly taken
+            from the data to calculate their quantiles or averages.
 
     Returns:
         matplotlib.Figure: The plot
@@ -65,31 +65,42 @@ def visualize_transition_equations(
 
     model = process_model(model_dict)
 
-    has_observed_factors = bool(model["labels"]["observed_factors"])
+    if period >= model["labels"]["periods"][-1]:
+        raise ValueError(
+            "*period* must be the penultimate period of the model or earlier."
+        )
 
-    if has_observed_factors and data is None:
+    latent_factors = model["labels"]["latent_factors"]
+    observed_factors = model["labels"]["observed_factors"]
+    all_factors = model["labels"]["all_factors"]
+
+    if observed_factors and data is None:
         raise ValueError(
             "The model has observed factors. You must pass the empirical data to "
             "'visualize_transition_equations' via the keyword *data*."
         )
 
-    if has_observed_factors:
-        _, _, observed_arr = process_data(
+    if observed_factors:
+        _, _, _observed_arr = process_data(
             df=data,
             labels=model["labels"],
             update_info=model["update_info"],
             anchoring_info=model["anchoring"],
         )
-        observed_factor_data = pd.DataFrame(
-            data=observed_arr[period], columns=model["labels"]["observed_factors"]
+        observed_data = pd.DataFrame(
+            data=_observed_arr[period], columns=observed_factors
+        )
+        observed_data["id"] = observed_data.index
+        observed_data["period"] = period
+        states_data = pd.merge(
+            left=states,
+            right=observed_data,
+            left_on=["id", "period"],
+            right_on=["id", "period"],
+            how="left",
         )
     else:
-        observed_factor_data = None
-
-    if period >= model["labels"]["periods"][-1]:
-        raise ValueError(
-            "*period* must be the penultimate period of the model or earlier."
-        )
+        states_data = states.copy()
 
     params_index = get_params_index(
         update_info=model["update_info"],
@@ -114,26 +125,28 @@ def visualize_transition_equations(
         n_obs=1,
     )
 
-    factors = model["labels"]["latent_factors"]
-
     if state_ranges is None:
-        state_ranges = create_state_ranges(states, model["labels"]["latent_factors"])
+        state_ranges = create_state_ranges(states_data, all_factors)
 
-    figsize = (2.5 * len(factors), 2 * len(factors))
+    figsize = (2.5 * len(all_factors), 2 * len(latent_factors))
     fig, axes = plt.subplots(
-        nrows=len(factors), ncols=len(factors), figsize=figsize, sharey="row"
+        nrows=len(latent_factors),
+        ncols=len(all_factors),
+        figsize=figsize,
+        sharex=False,
+        sharey=False,
     )
 
     for (output_factor, input_factor), ax in zip(
-        itertools.product(factors, repeat=2), axes.flatten()
+        itertools.product(latent_factors, all_factors), axes.flatten()
     ):
-        output_factor_position = factors.index(output_factor)
+        output_factor_position = latent_factors.index(output_factor)
         transition_function = model["transition_functions"][output_factor_position]
         transition_params = pardict["transition"][period][output_factor_position]
 
         if quantiles_of_other_factors is not None:
             plot_data = _prepare_data_for_one_plot_fixed_quantile_2d(
-                states=states,
+                states_data=states_data,
                 state_ranges=state_ranges,
                 period=period,
                 input_factor=input_factor,
@@ -142,13 +155,11 @@ def visualize_transition_equations(
                 n_points=n_points,
                 transition_function=transition_function,
                 transition_params=transition_params,
-                latent_factors=factors,
-                all_factors=model["labels"]["all_factors"],
-                observed_factor_data=observed_factor_data,
+                all_factors=all_factors,
             )
         else:
             plot_data = _prepare_data_for_one_plot_average_2d(
-                states=states,
+                states_data=states_data,
                 state_ranges=state_ranges,
                 period=period,
                 input_factor=input_factor,
@@ -157,9 +168,7 @@ def visualize_transition_equations(
                 n_draws=n_draws,
                 transition_function=transition_function,
                 transition_params=transition_params,
-                latent_factors=factors,
-                all_factors=model["labels"]["all_factors"],
-                observed_factor_data=observed_factor_data,
+                all_factors=all_factors,
             )
 
         if (
@@ -183,15 +192,20 @@ def visualize_transition_equations(
 
     if hue is not None:
         fig.legend(
-            handles, labels, loc="upper center", ncol=len(quantiles_of_other_factors)
+            handles=handles,
+            labels=labels,
+            bbox_to_anchor=(0.5, -0.05),
+            loc="lower center",
+            ncol=len(quantiles_of_other_factors),
         )
+
     fig.tight_layout()
     sns.despine()
     return fig
 
 
 def _prepare_data_for_one_plot_fixed_quantile_2d(
-    states,
+    states_data,
     state_ranges,
     period,
     input_factor,
@@ -200,12 +214,10 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
     n_points,
     transition_function,
     transition_params,
-    latent_factors,
     all_factors,
-    observed_factor_data,
 ):
 
-    period_data = states.query(f"period == {period}")[latent_factors]
+    period_data = states_data.query(f"period == {period}")[all_factors]
     transition_name, transition_function = transition_function
     input_min = state_ranges[input_factor].loc[period]["minimum"]
     input_max = state_ranges[input_factor].loc[period]["maximum"]
@@ -215,9 +227,6 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
         fixed_quantiles = period_data.drop(columns=input_factor).quantile(quantile)
         input_data[fixed_quantiles.index] = fixed_quantiles
-        if observed_factor_data is not None:
-            observed_quantiles = observed_factor_data.quantile(quantile)
-            input_data[observed_quantiles.index] = observed_quantiles
         input_arr = jnp.array(input_data[all_factors].to_numpy())
         if transition_name != "constant":
             output_arr = transition_function(input_arr, transition_params)
@@ -235,7 +244,7 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
 
 
 def _prepare_data_for_one_plot_average_2d(
-    states,
+    states_data,
     state_ranges,
     period,
     input_factor,
@@ -244,15 +253,11 @@ def _prepare_data_for_one_plot_average_2d(
     n_draws,
     transition_function,
     transition_params,
-    latent_factors,
     all_factors,
-    observed_factor_data,
 ):
 
     transition_name, transition_function = transition_function
-    period_data = states.query(f"period == {period}")[latent_factors].reset_index()
-    if observed_factor_data is not None:
-        period_data = pd.concat([period_data, observed_factor_data], axis=1)
+    period_data = states_data.query(f"period == {period}")[all_factors].reset_index()
 
     sampled_factors = [factor for factor in all_factors if factor != input_factor]
     draws = period_data[sampled_factors].sample(n=n_draws)
