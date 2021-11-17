@@ -36,8 +36,7 @@ def plot_factor_distributions(
             pair of factors or a dictionary of individual plots. Default True.
         add_3d_plots (boolen): Draw and return 3D plots or not. Default False.
         add_contour_plots (boolen): Draw and return contour plots or not. Default True.
-        n_points (int): Number of grid points per plot. For 3d plots this is per
-            dimension. Default 50.
+        n_points (int): Number of grid points per axis and plot. Default 50.
         lower_kde_kws (dict): Keyword arguments for seaborn.kdeplot, used to generate
             the plots in the lower triangle of the grid, i.e. the two dimensional
             kdeplot for each factor pair.
