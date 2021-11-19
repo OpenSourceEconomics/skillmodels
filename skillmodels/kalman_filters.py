@@ -59,19 +59,22 @@ def kalman_update(
         controls, control_params
     ).reshape(n_obs, 1)
 
-    # replace missing measurements by average expected measurements to avoid NaNs in the
-    # gradient calculation. Note that all values that are influenced by that are
+    # replace missing measurements by reasonable fill values to avoid NaNs in the
+    # gradient calculation. Note that all values that are influenced by that, are
     # replaced by other values later (using jnp.where). Choosing the average expected
-    # expected measurements as fill value just ensures that all numbers are well
-    # defined because the fill values have a reasonable order of magnitude.
+    # expected measurements without controls as fill value ensures that all numbers
+    # are well defined because the fill values have a reasonable order of magnitude.
     # See https://github.com/tensorflow/probability/blob/main/discussion/where-nan.pdf
     # and https://jax.readthedocs.io/en/latest/faq.html
     # for more details on the issue of NaNs in gradient calculations.
-    _safe_measurements = jnp.where(
-        not_missing, measurements, _expected_measurements.mean(axis=1)
+    _fillers = jnp.dot(states, loadings) + control_params[0]
+    _safe_measurements = jnp.where(not_missing, measurements, _fillers.mean(axis=1))
+
+    _safe_expected_measurements = jnp.where(
+        not_missing.reshape(n_obs, 1), _expected_measurements, _fillers
     )
 
-    _residuals = _safe_measurements.reshape(n_obs, 1) - _expected_measurements
+    _residuals = _safe_measurements.reshape(n_obs, 1) - _safe_expected_measurements
     _f_stars = jnp.dot(upper_chols, loadings.reshape(n_states, 1))
 
     _m = jnp.zeros((n_obs, n_mixtures, n_states + 1, n_states + 1))

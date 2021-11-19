@@ -100,6 +100,10 @@ def test_kalman_update_with_missing():
     measurements = jnp.array([13, jnp.nan, jnp.nan])
     weights = jnp.log(jnp.ones((n_obs, n_mixtures)) * 0.5)
 
+    controls = np.ones((n_obs, 2)) * 0.5
+    controls[1:] = np.nan
+    controls = jnp.array(controls)
+
     calc_states, calc_chols, calc_weights, calc_loglikes, _ = kalman_update(
         states=states,
         upper_chols=chols,
@@ -107,7 +111,7 @@ def test_kalman_update_with_missing():
         control_params=jnp.ones(2),
         meas_sd=1,
         measurements=measurements,
-        controls=jnp.ones((n_obs, 2)) * 0.5,
+        controls=controls,
         log_mixture_weights=jnp.log(jnp.ones((n_obs, 2)) * 0.5),
         debug=False,
     )

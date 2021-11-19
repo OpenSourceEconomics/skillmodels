@@ -70,12 +70,11 @@ def get_maximization_inputs(model_dict, data):
     _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
     is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
     last_period = model["labels"]["periods"][-1]
-    # The last period is replaced by zero. Periods are only used for things that are
-    # related to the predict step. Since there is no predict step in the last period,
-    # it does not matter which entry is there. However, leaving it at the last period
-    # would cause an index error in the dummy predict function (that does nothing)
-    # during the jax tracing.
-    iteration_to_period = _periods.replace(last_period, 0).to_numpy()
+    # iteration_to_period is used as an indexer to loop over arrays of different lengths
+    # in a lax.scan. It needs to work for arrays of length n_periods and not raise
+    # IndexErrors on tracer arrays of length n_periods - 1 (i.e. n_transitions).
+    # To achieve that, we replace the last period by -1.
+    iteration_to_period = _periods.replace(last_period, -1).to_numpy()
 
     _base_loglike = functools.partial(
         _log_likelihood_jax,
