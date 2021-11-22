@@ -66,6 +66,8 @@ def test_likelihood_contributions_have_not_changed(model2, model2_data, model_na
 
     new_loglikes = debug_loglike(params)["contributions"]
 
+    func_dict["loglike"](params)
+
     with open(regvault / f"{model_name}_result.json") as j:
         old_loglikes = np.array(json.load(j))
 
