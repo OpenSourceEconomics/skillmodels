@@ -150,7 +150,7 @@ def visualize_transition_equations(
     ):
         output_factor_position = latent_factors.index(output_factor)
         transition_function = model["transition_functions"][output_factor_position]
-        transition_params = pardict["transition"][period][output_factor_position]
+        transition_params = pardict["transition"][output_factor_position][period]
 
         if quantiles_of_other_factors is not None:
             plot_data = _prepare_data_for_one_plot_fixed_quantile_2d(
