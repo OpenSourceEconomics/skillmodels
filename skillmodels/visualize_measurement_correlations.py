@@ -1,5 +1,5 @@
 """Visualize the correlations of measurement variables in a given period."""
-import mathplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import seaborn as sns
 
 from skillmodels.process_model import process_model
