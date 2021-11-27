@@ -6,8 +6,8 @@ dependencies:
   - jupyterlab
   - nb_black
   - python=3.8
-  # - jax>=0.1.7
-  # - jaxlib>=0.1.51
+  - jax>=0.1.7
+  - jaxlib>=0.1.51
   - pip
   - conda-build
   - doc8
