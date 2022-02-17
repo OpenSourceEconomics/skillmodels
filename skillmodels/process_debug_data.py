@@ -109,7 +109,13 @@ def _create_pre_update_states(initial_states, filtered_states, factors, update_i
         if purpose == "measurement":
             pos = k
         else:
-            pos = _get_position_of_last_measurement_in_period(update_info, period)
+            # Hack to allow for measures not being present in the beginning when
+            # estimating model factor by factor.
+            try:
+                pos = _get_position_of_last_measurement_in_period(update_info, period)
+            except IndexError:
+                to_concat.append(to_concat[-1].copy())
+                continue
 
         df = _convert_state_array_to_df(filtered_states[pos], factors)
         df["period"] = period
@@ -163,14 +169,18 @@ def _create_filtered_states(post_update_states, update_info):
     periods = sorted(update_info.index.get_level_values("period").unique())
     to_concat = []
     for period in periods:
-        last_measurement = update_info.query(
+        rows_with_measurements = update_info.query(
             f"purpose == 'measurement' & period == {period}"
-        ).index[-1][1]
-        to_concat.append(
-            post_update_states.query(
-                f"period == {period} & measurement == '{last_measurement}'"
-            )
         )
+        if len(rows_with_measurements) > 0:
+            last_measurement = rows_with_measurements.index[-1][1]
+            to_concat.append(
+                post_update_states.query(
+                    f"period == {period} & measurement == '{last_measurement}'"
+                )
+            )
+        else:
+            to_concat.append(post_update_states.query(f"period == {period}"))
 
     filtered_states = pd.concat(to_concat)
     filtered_states.drop(columns=["measurement"], inplace=True)
