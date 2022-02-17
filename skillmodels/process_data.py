@@ -29,17 +29,42 @@ def process_data(df, labels, update_info, anchoring_info):
             n_observed_factors) with data on the observed factors.
 
     """
-    df = _pre_process_data(df, labels["periods"])
-    df["constant"] = 1
-    df = _add_copies_of_anchoring_outcome(df, anchoring_info)
-    _check_data(df, update_info, labels)
+    df = process_df(
+        df=df, labels=labels, update_info=update_info, anchoring_info=anchoring_info
+    )
     n_obs = int(len(df) / len(labels["periods"]))
-    df = _handle_controls_with_missings(df, labels["controls"], update_info)
     meas_data = _generate_measurements_array(df, update_info, n_obs)
     control_data = _generate_controls_array(df, labels, n_obs)
     observed_data = _generate_observed_factor_array(df, labels, n_obs)
 
     return meas_data, control_data, observed_data
+
+
+def process_df(df_in, labels, update_info, anchoring_info):
+    """Process the data for estimation in Pandas.
+
+    Args:
+        df_in (DataFrame): panel dataset in long format. It has a MultiIndex
+            where the first level indicates the period and the second
+            the individual.
+        labels (dict): Dict of lists with labels for the model quantities like
+            factors, periods, controls, stagemap and stages. See :ref:`labels`
+        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
+            in the likelihood function. See :ref:`update_info`.
+        anchoring_info (dict): Information about anchoring. See :ref:`anchoring`
+
+    Returns:
+        df (DataFrame): balanced panel dataset in long format. Corresponds to
+            skillmodels-internal representation; index of *df_in* is kept in
+            columns "__old_id__", "__old_period__".
+
+    """
+    df = _pre_process_data(df_in, labels["periods"])
+    df["constant"] = 1
+    df = _add_copies_of_anchoring_outcome(df, anchoring_info)
+    _check_data(df, update_info, labels)
+    df = _handle_controls_with_missings(df, labels["controls"], update_info)
+    return df
 
 
 def _pre_process_data(df, periods):
