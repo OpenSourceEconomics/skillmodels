@@ -16,7 +16,7 @@ def test_visualize_transition_equations_runs():
 
     model_dict["observed_factors"] = ["ob1"]
 
-    params = pd.read_csv(TEST_DIR / "regression_vault" / f"one_stage_anchoring.csv")
+    params = pd.read_csv(TEST_DIR / "regression_vault" / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
 
     data = pd.read_stata(TEST_DIR / "model2_simulated_data.dta")

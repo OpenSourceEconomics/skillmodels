@@ -10,6 +10,7 @@ from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
 from skillmodels.process_data import process_data
+from skillmodels.process_data import process_df
 from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
 
@@ -89,11 +90,16 @@ def visualize_transition_equations(
         )
 
     if observed_factors:
-        _, _, _observed_arr = process_data(
-            df=data,
+        df_processed = process_df(
+            df_in=data,
             labels=model["labels"],
             update_info=model["update_info"],
             anchoring_info=model["anchoring"],
+        )
+        _, _, _observed_arr = process_data(
+            df_processed=df_processed,
+            labels=model["labels"],
+            update_info=model["update_info"],
         )
         observed_data = pd.DataFrame(
             data=np.array(_observed_arr[period]), columns=observed_factors

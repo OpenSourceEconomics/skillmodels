@@ -16,6 +16,7 @@ from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
 from skillmodels.process_data import process_data
+from skillmodels.process_data import process_df
 from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
 
@@ -56,8 +57,11 @@ def get_maximization_inputs(model_dict, data):
     parsing_info = create_parsing_info(
         p_index, model["update_info"], model["labels"], model["anchoring"]
     )
-    measurements, controls, observed_factors = process_data(
+    df_processed = process_df(
         data, model["labels"], model["update_info"], model["anchoring"]
+    )
+    measurements, controls, observed_factors = process_data(
+        df_processed, model["labels"], model["update_info"]
     )
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
@@ -150,6 +154,7 @@ def get_maximization_inputs(model_dict, data):
     )
 
     out = {
+        "df": df_processed,
         "loglike": loglike,
         "debug_loglike": debug_loglike,
         "gradient": gradient,

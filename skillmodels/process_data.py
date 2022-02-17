@@ -7,39 +7,6 @@ import pandas as pd
 from skillmodels.process_model import get_period_measurements
 
 
-def process_data(df, labels, update_info, anchoring_info):
-    """Process the data for estimation.
-
-    Args:
-        df (DataFrame): panel dataset in long format. It has a MultiIndex
-            where the first level indicates the period and the second
-            the individual.
-        labels (dict): Dict of lists with labels for the model quantities like
-            factors, periods, controls, stagemap and stages. See :ref:`labels`
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
-            in the likelihood function. See :ref:`update_info`.
-        anchoring_info (dict): Information about anchoring. See :ref:`anchoring`
-
-    Returns:
-        meas_data (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
-            observed measurements. NaN if the measurement was not observed.
-        control_data (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
-            with observed control variables for the measurement equations.
-        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
-            n_observed_factors) with data on the observed factors.
-
-    """
-    df = process_df(
-        df=df, labels=labels, update_info=update_info, anchoring_info=anchoring_info
-    )
-    n_obs = int(len(df) / len(labels["periods"]))
-    meas_data = _generate_measurements_array(df, update_info, n_obs)
-    control_data = _generate_controls_array(df, labels, n_obs)
-    observed_data = _generate_observed_factor_array(df, labels, n_obs)
-
-    return meas_data, control_data, observed_data
-
-
 def process_df(df_in, labels, update_info, anchoring_info):
     """Process the data for estimation in Pandas.
 
@@ -65,6 +32,34 @@ def process_df(df_in, labels, update_info, anchoring_info):
     _check_data(df, update_info, labels)
     df = _handle_controls_with_missings(df, labels["controls"], update_info)
     return df
+
+
+def process_data(df_processed, labels, update_info):
+    """Process the data for estimation.
+
+    Args:
+        df_processed (DataFrame): balanced panel dataset in long format, typically
+            output of :func:`process_df`
+        labels (dict): Dict of lists with labels for the model quantities like
+            factors, periods, controls, stagemap and stages. See :ref:`labels`
+        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
+            in the likelihood function. See :ref:`update_info`.
+
+    Returns:
+        meas_data (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
+            observed measurements. NaN if the measurement was not observed.
+        control_data (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
+            with observed control variables for the measurement equations.
+        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
+            n_observed_factors) with data on the observed factors.
+
+    """
+    n_obs = len(df_processed) // len(labels["periods"])
+    meas_data = _generate_measurements_array(df_processed, update_info, n_obs)
+    control_data = _generate_controls_array(df_processed, labels, n_obs)
+    observed_data = _generate_observed_factor_array(df_processed, labels, n_obs)
+
+    return meas_data, control_data, observed_data
 
 
 def _pre_process_data(df, periods):
