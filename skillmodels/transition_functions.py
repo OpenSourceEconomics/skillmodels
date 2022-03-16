@@ -46,10 +46,9 @@ def linear(sigma_points, params):
     return jnp.dot(sigma_points, betas) + constant
 
 
-def index_tuples_linear(factor, factors, period):
+def names_linear(factors):
     """Index tuples for linear transition function."""
-    ind_tups = [("transition", period, factor, rhs_fac) for rhs_fac in factors]
-    return ind_tups + [("transition", period, factor, "constant")]
+    return factors + ["constant"]
 
 
 def translog(sigma_points, params):
@@ -74,18 +73,15 @@ def translog(sigma_points, params):
     return res
 
 
-def index_tuples_translog(factor, factors, period):
+def names_translog(factors):
     """Index tuples for the translog production function."""
-    ind_tups = [("transition", period, factor, rhs_fac) for rhs_fac in factors]
-    ind_tups += [
-        ("transition", period, factor, f"{rhs_fac} ** 2") for rhs_fac in factors
-    ]
-    ind_tups += [
-        ("transition", period, factor, f"{a} * {b}")
-        for a, b in combinations(factors, 2)
-    ]
-    ind_tups += [("transition", period, factor, "constant")]
-    return ind_tups
+    names = (
+        factors
+        + [f"{factor} ** 2" for factor in factors]
+        + [f"{a} * {b}" for a, b in combinations(factors, 2)]
+        + ["constant"]
+    )
+    return names
 
 
 def log_ces(sigma_points, params):
@@ -106,15 +102,14 @@ def log_ces(sigma_points, params):
     return result
 
 
-def index_tuples_log_ces(factor, factors, period):
+def names_log_ces(factors):
     """Index tuples for the log_ces production function."""
-    ind_tups = [("transition", period, factor, rhs_fac) for rhs_fac in factors]
-    return ind_tups + [("transition", period, factor, "phi")]
+    return factors + ["phi"]
 
 
 def constraints_log_ces(factor, factors, period):
-    ind_tups = index_tuples_log_ces(factor, factors, period)
-    loc = ind_tups[:-1]
+    names = names_log_ces(factors)
+    loc = [("transition", period, factor, name) for name in names[:-1]]
     return {"loc": loc, "type": "probability"}
 
 
@@ -123,6 +118,6 @@ def constant(sigma_points, params):
     raise NotImplementedError
 
 
-def index_tuples_constant(factor, factors, period):
+def names_constant(factors):
     """Index tuples for the constant production function."""
     return []
