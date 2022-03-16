@@ -4,30 +4,26 @@ Below the signature and purpose of a transition function and its helper
 functions is explained with a transition function called example_func:
 
 
-**example_func(** *sigma_points, params**)**:
+**example_func(** *flat_sigma_points, params**)**:
 
     The actual transition function.
 
     Args:
-        * sigma_points: 4d numpy array of sigma_points or states being transformed.
-            The shape is n_obs, n_mixtures, n_sigma, n_fac.
+        * flat_sigma_points: 2d numpy array where each row is a sigma point to be
+            transformed. The shape is (n_obs * n_mixtures * n_sigma, n_fac).
         * params: 1d numpy array with coefficients specific to this transition function
 
     Returns
-        * np.ndarray: Shape is n_obs, n_mixtures, n_sigma
+        * np.ndarray: 1d Numpy array of length n_obs * n_mixtures * n_sigma
 
 
-**index_tuples_example_func(** *factor, factors, period* **)**:
+**names_example_func(** *factors* **)**:
 
-    Generate a list of index tuples for the params of the transition function.
+    Generate a list of names for the params of the transition function.
 
-    Each index tuple contains four entries
+    The names will be used to construct index tuples in the following way:
 
-    - 'transition' (fix)
-    - period
-    - factor
-    - 'some-name'
-
+    ('transition', period, factor, NAME)
 
 The transition functions have to be JAX jittable and differentiable. However, they
 should not be jitted yet.
