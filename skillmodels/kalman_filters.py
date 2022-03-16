@@ -297,19 +297,28 @@ def _transform_sigma_points(
         equals 2 * n_fac + 1) with transformed sigma points.
 
     """
-    anchored = sigma_points * anchoring_scaling_factors[0] + anchoring_constants[0]
-    n_observed_factors = len(transition_functions)
+    n_obs, n_mixtures, n_sigma, n_fac = sigma_points.shape
+    n_unobserved_factors = len(transition_functions)
 
+    flat_sigma_points = sigma_points.reshape(-1, n_fac)
+
+    anchored = flat_sigma_points * anchoring_scaling_factors[0] + anchoring_constants[0]
+
+    # ==================================================================================
+    # actual transition
+    # ==================================================================================
     transformed_anchored = anchored
     for i, ((name, func), coeffs) in enumerate(zip(transition_functions, trans_coeffs)):
         if name != "constant":
             output = func(anchored, coeffs)
             transformed_anchored = transformed_anchored.at[..., i].set(output)
+    # ==================================================================================
 
     transformed_unanchored = (
         transformed_anchored - anchoring_constants[1]
     ) / anchoring_scaling_factors[1]
 
-    out = transformed_unanchored[..., :n_observed_factors]
+    out_shape = (n_obs, n_mixtures, n_sigma, n_unobserved_factors)
+    out = transformed_unanchored[:, :n_unobserved_factors].reshape(out_shape)
 
     return out
