@@ -148,9 +148,8 @@ def visualize_transition_equations(
     for (output_factor, input_factor), ax in zip(
         itertools.product(latent_factors, all_factors), axes.flatten()
     ):
-        output_factor_position = latent_factors.index(output_factor)
-        transition_function = model["transition_functions"][output_factor_position]
-        transition_params = pardict["transition"][output_factor_position][period]
+        transition_function = model["transition_functions"][output_factor]
+        transition_params = pardict["transition"][output_factor][period]
 
         if quantiles_of_other_factors is not None:
             plot_data = _prepare_data_for_one_plot_fixed_quantile_2d(
@@ -226,7 +225,7 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
 ):
 
     period_data = states_data.query(f"period == {period}")[all_factors]
-    transition_name, transition_function = transition_function
+    transition_name = transition_function.__name__
     input_min = state_ranges[input_factor].loc[period]["minimum"]
     input_max = state_ranges[input_factor].loc[period]["maximum"]
     to_concat = []
@@ -264,7 +263,7 @@ def _prepare_data_for_one_plot_average_2d(
     all_factors,
 ):
 
-    transition_name, transition_function = transition_function
+    transition_name = transition_function.__name__
     period_data = states_data.query(f"period == {period}")[all_factors].reset_index()
 
     sampled_factors = [factor for factor in all_factors if factor != input_factor]

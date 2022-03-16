@@ -181,9 +181,9 @@ def test_transformation_of_sigma_points():
     def constant(sigma_points, params):
         raise NotImplementedError
 
-    transition_functions = (("scale_and_sum", scale_and_sum), ("constant", constant))
+    transition_functions = {"fac1": scale_and_sum, "fac2": constant}
 
-    trans_coeffs = (jnp.array([2]), jnp.array([]))
+    trans_coeffs = {"fac1": jnp.array([2]), "fac2": jnp.array([])}
 
     anch_scaling = jnp.array([[1, 1], [2, 1]])
 
@@ -230,8 +230,8 @@ def test_predict_against_linear_filterpy(seed):
 
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)
-    transition_functions = tuple(("linear", linear) for i in range(dim))
-    trans_coeffs = (jnp.array(trans_mat[i]) for i in range(dim))
+    transition_functions = {f"fac{i}": linear for i in range(dim)}
+    trans_coeffs = {f"fac{i}": jnp.array(trans_mat[i]) for i in range(dim)}
     anch_scaling = jnp.ones((2, dim))
     anch_constants = jnp.zeros((2, dim))
     observed_factors = jnp.zeros((1, 0))

@@ -62,7 +62,9 @@ def test_anchoring(model2):
 def test_transition_functions(model2):
     res = process_model(model2)["transition_functions"]
     assert len(res) == 3
-    assert [tup[0] for tup in res] == ["log_ces", "linear", "constant"]
+    assert list(res) == ["fac1", "fac2", "fac3"]
+    func_names = [val.__name__ for val in res.values()]
+    assert func_names == ["log_ces", "linear", "constant"]
 
 
 def test_update_info(model2):

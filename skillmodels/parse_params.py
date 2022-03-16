@@ -183,13 +183,13 @@ def _get_shock_sds(params, info, dimensions):
 
 def _get_transition_params(params, info, labels):
     """Create a list of arrays with transition equation parameters."""
-    trans_params = []
+    trans_params = {}
     t_info = info["transition"]
     n_periods = len(labels["periods"])
     for factor in labels["latent_factors"]:
         ilocs = t_info[factor]
-        trans_params.append(params[ilocs].reshape(n_periods - 1, -1))
-    return tuple(trans_params)
+        trans_params[factor] = params[ilocs].reshape(n_periods - 1, -1)
+    return trans_params
 
 
 def _get_anchoring_scaling_factors(loadings, info, dimensions):

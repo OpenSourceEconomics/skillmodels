@@ -41,7 +41,9 @@ def process_model(model_dict):
         "labels": labels,
         "anchoring": anchoring,
         "estimation_options": _process_estimation_options(model_dict),
-        "transition_functions": _get_transition_functions(labels["transition_names"]),
+        "transition_functions": _get_transition_functions(
+            labels["transition_names"], labels["latent_factors"]
+        ),
         "update_info": _get_update_info(model_dict, dims, labels, anchoring),
         "normalizations": _process_normalizations(model_dict, dims, labels),
     }
@@ -162,7 +164,7 @@ def _process_anchoring(model_dict):
     return anchinfo
 
 
-def _get_transition_functions(transition_names):
+def _get_transition_functions(transition_names, factors):
     """Collect the transition functions in a nested tuple.
 
     Args:
@@ -173,7 +175,7 @@ def _get_transition_functions(transition_names):
             has the following two entries: (name_of_transition_function, callable).
 
     """
-    return tuple((name, getattr(tf, name)) for name in transition_names)
+    return {fac: getattr(tf, name) for fac, name in zip(factors, transition_names)}
 
 
 def _get_update_info(model_dict, dimensions, labels, anchoring_info):

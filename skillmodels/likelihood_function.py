@@ -328,7 +328,7 @@ def _scan_body(
         "upper_chols": upper_chols,
         "sigma_scaling_factor": sigma_scaling_factor,
         "sigma_weights": sigma_weights,
-        "trans_coeffs": tuple(arr[t] for arr in pardict["transition"]),
+        "trans_coeffs": {k: arr[t] for k, arr in pardict["transition"].items()},
         "shock_sds": pardict["shock_sds"][t],
         "anchoring_scaling_factors": pardict["anchoring_scaling_factors"][
             jnp.array([t, t + 1])

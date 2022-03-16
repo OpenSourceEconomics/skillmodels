@@ -86,11 +86,11 @@ def test_transition_parameters(parsed_parameters):
 
     calculated = parsed_parameters["pardict"]["transition"]
 
-    aae(calculated[0], jnp.arange(385, 413).reshape(7, 4))
-    aae(calculated[1], jnp.arange(413, 441).reshape(7, 4))
-    aae(calculated[2], jnp.zeros((7, 0)))
+    aae(calculated["fac1"], jnp.arange(385, 413).reshape(7, 4))
+    aae(calculated["fac2"], jnp.arange(413, 441).reshape(7, 4))
+    aae(calculated["fac3"], jnp.zeros((7, 0)))
 
-    assert isinstance(calculated, tuple)
+    assert isinstance(calculated, dict)
 
 
 def test_anchoring_scaling_factors(parsed_parameters):

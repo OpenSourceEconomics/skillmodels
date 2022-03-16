@@ -280,7 +280,7 @@ def _transform_sigma_points(
 
     Args:
         sigma_points (jax.numpy.array) of shape n_obs, n_mixtures, n_sigma, n_fac.
-        transition_functions (tuple): tuple of tuples where the first element is the
+        transition_functions (dict): tuple of tuples where the first element is the
             name of the transition function and the second the actual transition
             function. Order is important and corresponds to the latent
             factors in alphabetical order.
@@ -308,8 +308,10 @@ def _transform_sigma_points(
     # actual transition
     # ==================================================================================
     transformed_anchored = anchored
-    for i, ((name, func), coeffs) in enumerate(zip(transition_functions, trans_coeffs)):
-        if name != "constant":
+    for i, factor in enumerate(transition_functions):
+        func = transition_functions[factor]
+        coeffs = trans_coeffs[factor]
+        if func.__name__ != "constant":
             output = func(anchored, coeffs)
             transformed_anchored = transformed_anchored.at[..., i].set(output)
     # ==================================================================================
