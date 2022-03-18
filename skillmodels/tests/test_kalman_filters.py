@@ -179,7 +179,11 @@ def test_transformation_of_sigma_points():
         out = jnp.column_stack([(states * params["fac1"][0]).sum(axis=1), fac2])
         return out
 
-    transition_info = {"func": f, "columns": {"fac2": 1}}
+    transition_info = {
+        "func": f,
+        "columns": {"fac2": 1},
+        "order": ["states", "fac2", "params"],
+    }
 
     trans_coeffs = {"fac1": jnp.array([2]), "fac2": jnp.array([])}
 
@@ -232,7 +236,11 @@ def test_predict_against_linear_filterpy(seed):
 
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)
-    transition_info = {"func": transition_function, "columns": {}}
+    transition_info = {
+        "func": transition_function,
+        "columns": {},
+        "order": ["states", "params"],
+    }
     trans_coeffs = {f"fac{i}": jnp.array(trans_mat[i]) for i in range(dim)}
     anch_scaling = jnp.ones((2, dim))
     anch_constants = jnp.zeros((2, dim))

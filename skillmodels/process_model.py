@@ -1,7 +1,10 @@
+import inspect
+
 import numpy as np
 import pandas as pd
 from dags import concatenate_functions
 from dags.signature import rename_arguments
+from jax import vmap
 from pandas import DataFrame
 
 import skillmodels.transition_functions as tf
@@ -193,7 +196,17 @@ def _get_transition_info(transition_names, factors):
 
     transition_function = jax_array_output(transition_function)
 
-    out = {"func": transition_function, "columns": extracted_columns}
+    ordered_args = list(inspect.signature(transition_function).parameters)
+    in_axes = [0] * len(ordered_args)
+    in_axes[ordered_args.index("params")] = None
+    in_axes = tuple(in_axes)
+    transition_function = vmap(transition_function, in_axes=in_axes)
+
+    out = {
+        "func": transition_function,
+        "columns": extracted_columns,
+        "order": ordered_args,
+    }
     return out
 
 

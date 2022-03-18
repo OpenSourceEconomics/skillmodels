@@ -308,7 +308,8 @@ def _transform_sigma_points(
 
     transition_function = transition_info["func"]
 
-    transformed_anchored = transition_function(**kwargs)
+    args = tuple(kwargs[key] for key in transition_info["order"])
+    transformed_anchored = transition_function(*args)
 
     n_observed = transformed_anchored.shape[-1]
 
