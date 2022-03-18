@@ -1,9 +1,13 @@
 import numpy as np
 import pandas as pd
+from dags import concatenate_functions
+from dags.signature import rename_arguments
 from pandas import DataFrame
 
 import skillmodels.transition_functions as tf
 from skillmodels.check_model import check_model
+from skillmodels.decorators import extract_params
+from skillmodels.decorators import jax_array_output
 
 
 def process_model(model_dict):
@@ -41,7 +45,7 @@ def process_model(model_dict):
         "labels": labels,
         "anchoring": anchoring,
         "estimation_options": _process_estimation_options(model_dict),
-        "transition_functions": _get_transition_functions(
+        "transition_functions": _get_transition_info(
             labels["transition_names"], labels["latent_factors"]
         ),
         "update_info": _get_update_info(model_dict, dims, labels, anchoring),
@@ -164,7 +168,7 @@ def _process_anchoring(model_dict):
     return anchinfo
 
 
-def _get_transition_functions(transition_names, factors):
+def _get_transition_info(transition_names, factors):
     """Collect the transition functions in a nested tuple.
 
     Args:
@@ -175,7 +179,23 @@ def _get_transition_functions(transition_names, factors):
             has the following two entries: (name_of_transition_function, callable).
 
     """
-    return {fac: getattr(tf, name) for fac, name in zip(factors, transition_names)}
+    functions = {}
+    extracted_columns = {}
+    for i, (factor, name) in enumerate(zip(factors, transition_names)):
+        func = extract_params(getattr(tf, name), key=factor)
+        if name == "constant":
+            extracted_columns[factor] = i
+            func = rename_arguments(func, mapper={"sigma_point": factor})
+        functions[f"next_{factor}"] = func
+
+    transition_function = concatenate_functions(
+        functions=functions, targets=list(functions)
+    )
+
+    transition_function = jax_array_output(transition_function)
+
+    out = {"func": transition_function, "columns": extracted_columns}
+    return out
 
 
 def _get_update_info(model_dict, dimensions, labels, anchoring_info):

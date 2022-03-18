@@ -271,7 +271,7 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factor
 
 def _transform_sigma_points(
     sigma_points,
-    transition_functions,
+    transition_info,
     trans_coeffs,
     anchoring_scaling_factors,
     anchoring_constants,
@@ -280,10 +280,7 @@ def _transform_sigma_points(
 
     Args:
         sigma_points (jax.numpy.array) of shape n_obs, n_mixtures, n_sigma, n_fac.
-        transition_functions (dict): tuple of tuples where the first element is the
-            name of the transition function and the second the actual transition
-            function. Order is important and corresponds to the latent
-            factors in alphabetical order.
+        transition_info (dict): Dict with the entries "func", "columns".
         trans_coeffs (tuple): Tuple of 1d jax.numpy.arrays with transition parameters.
         anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_states) with
             the scaling factors for anchoring. The first row corresponds to the input
@@ -298,29 +295,27 @@ def _transform_sigma_points(
 
     """
     n_obs, n_mixtures, n_sigma, n_fac = sigma_points.shape
-    n_unobserved_factors = len(transition_functions)
 
     flat_sigma_points = sigma_points.reshape(-1, n_fac)
 
     anchored = flat_sigma_points * anchoring_scaling_factors[0] + anchoring_constants[0]
 
-    # ==================================================================================
-    # actual transition
-    # ==================================================================================
-    transformed_anchored = anchored
-    for i, factor in enumerate(transition_functions):
-        func = transition_functions[factor]
-        coeffs = trans_coeffs[factor]
-        if func.__name__ != "constant":
-            output = func(anchored, coeffs)
-            transformed_anchored = transformed_anchored.at[..., i].set(output)
-    # ==================================================================================
+    kwargs = {"sigma_points": anchored, "params": trans_coeffs}
+
+    for factor_name, position in transition_info["columns"].items():
+        kwargs[factor_name] = anchored[:, position]
+
+    transition_function = transition_info["func"]
+
+    transformed_anchored = transition_function(**kwargs)
+
+    n_observed = transformed_anchored.shape[-1]
 
     transformed_unanchored = (
-        transformed_anchored - anchoring_constants[1]
-    ) / anchoring_scaling_factors[1]
+        transformed_anchored - anchoring_constants[1][:n_observed]
+    ) / anchoring_scaling_factors[1][:n_observed]
 
-    out_shape = (n_obs, n_mixtures, n_sigma, n_unobserved_factors)
-    out = transformed_unanchored[:, :n_unobserved_factors].reshape(out_shape)
+    out_shape = (n_obs, n_mixtures, n_sigma, -1)
+    out = transformed_unanchored.reshape(out_shape)
 
     return out

@@ -175,13 +175,11 @@ def test_sigma_scaling_factor_and_weights(seed):
 def test_transformation_of_sigma_points():
     sp = jnp.arange(10).reshape(1, 1, 5, 2) + 1
 
-    def scale_and_sum(sigma_points, params):
-        return (sigma_points * params[0]).sum(axis=-1)
+    def f(sigma_points, fac2, params):
+        out = jnp.column_stack([(sigma_points * params["fac1"][0]).sum(axis=1), fac2])
+        return out
 
-    def constant(sigma_points, params):
-        raise NotImplementedError
-
-    transition_functions = {"fac1": scale_and_sum, "fac2": constant}
+    transition_info = {"func": f, "columns": {"fac2": 1}}
 
     trans_coeffs = {"fac1": jnp.array([2]), "fac2": jnp.array([])}
 
@@ -192,7 +190,7 @@ def test_transformation_of_sigma_points():
     expected = jnp.array([[[[3, 2], [7, 4], [11, 6], [15, 8], [19, 10]]]])
 
     calculated = _transform_sigma_points(
-        sp, transition_functions, trans_coeffs, anch_scaling, anch_constants
+        sp, transition_info, trans_coeffs, anch_scaling, anch_constants
     )
 
     aaae(calculated, expected)
@@ -228,9 +226,15 @@ def test_predict_against_linear_filterpy(seed):
     def linear(sigma_points, params):
         return np.dot(sigma_points, params)
 
+    def transition_function(sigma_points, params):
+        out = jnp.column_stack(
+            [linear(sigma_points, params[f"fac{i}"]) for i in range(dim)]
+        )
+        return out
+
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)
-    transition_functions = {f"fac{i}": linear for i in range(dim)}
+    transition_info = {"func": transition_function, "columns": {}}
     trans_coeffs = {f"fac{i}": jnp.array(trans_mat[i]) for i in range(dim)}
     anch_scaling = jnp.ones((2, dim))
     anch_constants = jnp.zeros((2, dim))
@@ -241,7 +245,7 @@ def test_predict_against_linear_filterpy(seed):
         sm_chol,
         scaling_factor,
         weights,
-        transition_functions,
+        transition_info,
         trans_coeffs,
         jnp.array(shock_sds),
         anch_scaling,

@@ -109,9 +109,9 @@ def constraints_log_ces(factor, factors, period):
     return {"loc": loc, "type": "probability"}
 
 
-def constant(sigma_points, params):
+def constant(sigma_point, params):
     """Constant production function should never be called."""
-    raise NotImplementedError
+    return sigma_point
 
 
 def names_constant(factors):

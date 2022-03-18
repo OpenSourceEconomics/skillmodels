@@ -59,12 +59,13 @@ def test_anchoring(model2):
     assert res["free_loadings"]
 
 
-def test_transition_functions(model2):
+def test_transition_info(model2):
     res = process_model(model2)["transition_functions"]
-    assert len(res) == 3
-    assert list(res) == ["fac1", "fac2", "fac3"]
-    func_names = [val.__name__ for val in res.values()]
-    assert func_names == ["log_ces", "linear", "constant"]
+
+    assert isinstance(res, dict)
+    assert callable(res["func"])
+    assert isinstance(res["columns"], dict)
+    assert res["columns"] == {"fac3": 2}
 
 
 def test_update_info(model2):
