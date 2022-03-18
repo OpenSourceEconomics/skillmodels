@@ -31,7 +31,7 @@ def jax_array_output(func):
     @functools.wraps(func)
     def wrapper_jax_array_output(*args, **kwargs):
         raw = func(*args, **kwargs)
-        out = jnp.column_stack(raw)
+        out = jnp.array(raw)
         return out
 
     return wrapper_jax_array_output
