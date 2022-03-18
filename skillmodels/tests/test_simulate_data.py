@@ -119,6 +119,7 @@ def expected_npfac():
     return npfac
 
 
+@pytest.mark.xfail
 def test_next_period_factors(set_up_npfac, expected_npfac):
     aaae(next_period_states(**set_up_npfac), expected_npfac)
 

@@ -4,7 +4,7 @@ Below the signature and purpose of a transition function and its helper
 functions is explained with a transition function called example_func:
 
 
-**example_func(** *flat_sigma_points, params**)**:
+**example_func(** *states, params**)**:
 
     The actual transition function.
 
@@ -54,7 +54,7 @@ def translog(states, params):
     interaction terms of the states.
 
     """
-    nfac = states.shape[-1]
+    nfac = len(states)
     constant = params[-1]
     lin_beta = params[:nfac]
     square_beta = params[nfac : 2 * nfac]
@@ -63,7 +63,7 @@ def translog(states, params):
     res = jnp.dot(states, lin_beta)
     res += jnp.dot(states ** 2, square_beta)
     for p, (a, b) in zip(inter_beta, combinations(range(nfac), 2)):
-        res += p * states[..., a] * states[..., b]
+        res += p * states[a] * states[b]
     res += constant
     return res
 
@@ -90,7 +90,7 @@ def log_ces(states, params):
 
     # the log step for gammas underflows for gamma = 0, but this is handled correctly
     # by logsumexp and does not raise a warning.
-    unscaled = jax.scipy.special.logsumexp(jnp.log(gammas) + states * phi, axis=-1)
+    unscaled = jax.scipy.special.logsumexp(jnp.log(gammas) + states * phi)
     result = unscaled * scaling_factor
     return result
 
