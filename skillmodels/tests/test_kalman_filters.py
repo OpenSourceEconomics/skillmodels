@@ -175,8 +175,8 @@ def test_sigma_scaling_factor_and_weights(seed):
 def test_transformation_of_sigma_points():
     sp = jnp.arange(10).reshape(1, 1, 5, 2) + 1
 
-    def f(sigma_points, fac2, params):
-        out = jnp.column_stack([(sigma_points * params["fac1"][0]).sum(axis=1), fac2])
+    def f(states, fac2, params):
+        out = jnp.column_stack([(states * params["fac1"][0]).sum(axis=1), fac2])
         return out
 
     transition_info = {"func": f, "columns": {"fac2": 1}}
@@ -223,13 +223,11 @@ def test_predict_against_linear_filterpy(seed):
     expected_state = fp_filter.x
     expected_cov = fp_filter.P
 
-    def linear(sigma_points, params):
-        return np.dot(sigma_points, params)
+    def linear(states, params):
+        return np.dot(states, params)
 
-    def transition_function(sigma_points, params):
-        out = jnp.column_stack(
-            [linear(sigma_points, params[f"fac{i}"]) for i in range(dim)]
-        )
+    def transition_function(states, params):
+        out = jnp.column_stack([linear(states, params[f"fac{i}"]) for i in range(dim)])
         return out
 
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)

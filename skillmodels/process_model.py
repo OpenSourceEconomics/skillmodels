@@ -184,7 +184,7 @@ def _get_transition_info(transition_names, factors):
         func = extract_params(getattr(tf, name), key=factor)
         if name == "constant":
             extracted_columns[factor] = i
-            func = rename_arguments(func, mapper={"sigma_point": factor})
+            func = rename_arguments(func, mapper={"state": factor})
         functions[f"next_{factor}"] = func
 
     transition_function = concatenate_functions(

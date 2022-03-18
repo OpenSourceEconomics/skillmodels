@@ -22,7 +22,7 @@ def setup_linear():
     sigma_points[:, :, 0, :] = 3
 
     args = {
-        "sigma_points": jnp.array(sigma_points),
+        "states": jnp.array(sigma_points),
         "params": jnp.array([0.5, 1.0, 1.5, 0.5]),
     }
     return args
@@ -79,7 +79,7 @@ def setup_translog():
         ]
     )
 
-    args = {"sigma_points": sigma_points, "params": params}
+    args = {"states": sigma_points, "params": params}
     return args
 
 
@@ -116,7 +116,7 @@ def setup_log_ces():
     nsigma = 5
     sigma_points = np.array([[3, 7.5]] * nsigma)
 
-    args = {"sigma_points": jnp.array(sigma_points), "params": jnp.array([0.4, 0.6, 2])}
+    args = {"states": jnp.array(sigma_points), "params": jnp.array([0.4, 0.6, 2])}
     return args
 
 

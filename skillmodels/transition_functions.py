@@ -9,12 +9,11 @@ functions is explained with a transition function called example_func:
     The actual transition function.
 
     Args:
-        * flat_sigma_points: 2d numpy array where each row is a sigma point to be
-            transformed. The shape is (n_obs * n_mixtures * n_sigma, n_fac).
+        * states: 1d numpy array of length n_all_factors
         * params: 1d numpy array with coefficients specific to this transition function
 
     Returns
-        * np.ndarray: 1d Numpy array of length n_obs * n_mixtures * n_sigma
+        * float
 
 
 **names_example_func(** *factors* **)**:
@@ -35,11 +34,11 @@ import jax
 import jax.numpy as jnp
 
 
-def linear(sigma_points, params):
+def linear(states, params):
     """Linear production function where the constant is the last parameter."""
     constant = params[-1]
     betas = params[:-1]
-    return jnp.dot(sigma_points, betas) + constant
+    return jnp.dot(states, betas) + constant
 
 
 def names_linear(factors):
@@ -47,7 +46,7 @@ def names_linear(factors):
     return factors + ["constant"]
 
 
-def translog(sigma_points, params):
+def translog(states, params):
     """Translog transition function.
 
     The name is a convention in the skill formation literature even though the function
@@ -55,16 +54,16 @@ def translog(sigma_points, params):
     interaction terms of the states.
 
     """
-    nfac = sigma_points.shape[-1]
+    nfac = states.shape[-1]
     constant = params[-1]
     lin_beta = params[:nfac]
     square_beta = params[nfac : 2 * nfac]
     inter_beta = params[2 * nfac : -1]
 
-    res = jnp.dot(sigma_points, lin_beta)
-    res += jnp.dot(sigma_points ** 2, square_beta)
+    res = jnp.dot(states, lin_beta)
+    res += jnp.dot(states ** 2, square_beta)
     for p, (a, b) in zip(inter_beta, combinations(range(nfac), 2)):
-        res += p * sigma_points[..., a] * sigma_points[..., b]
+        res += p * states[..., a] * states[..., b]
     res += constant
     return res
 
@@ -80,7 +79,7 @@ def names_translog(factors):
     return names
 
 
-def log_ces(sigma_points, params):
+def log_ces(states, params):
     """Log CES production function (KLS version)."""
     phi = params[-1]
     gammas = params[:-1]
@@ -91,9 +90,7 @@ def log_ces(sigma_points, params):
 
     # the log step for gammas underflows for gamma = 0, but this is handled correctly
     # by logsumexp and does not raise a warning.
-    unscaled = jax.scipy.special.logsumexp(
-        jnp.log(gammas) + sigma_points * phi, axis=-1
-    )
+    unscaled = jax.scipy.special.logsumexp(jnp.log(gammas) + states * phi, axis=-1)
     result = unscaled * scaling_factor
     return result
 
@@ -109,9 +106,9 @@ def constraints_log_ces(factor, factors, period):
     return {"loc": loc, "type": "probability"}
 
 
-def constant(sigma_point, params):
+def constant(state, params):
     """Constant production function should never be called."""
-    return sigma_point
+    return state
 
 
 def names_constant(factors):

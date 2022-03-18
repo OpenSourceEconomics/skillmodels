@@ -301,7 +301,7 @@ def _transform_sigma_points(
 
     anchored = flat_sigma_points * anchoring_scaling_factors[0] + anchoring_constants[0]
 
-    kwargs = {"sigma_points": anchored, "params": trans_coeffs}
+    kwargs = {"states": anchored, "params": trans_coeffs}
 
     for factor_name, position in transition_info["columns"].items():
         kwargs[factor_name] = anchored[:, position]
