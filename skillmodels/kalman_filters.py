@@ -164,7 +164,7 @@ def kalman_predict(
     upper_chols,
     sigma_scaling_factor,
     sigma_weights,
-    transition_functions,
+    transition_info,
     trans_coeffs,
     shock_sds,
     anchoring_scaling_factors,
@@ -184,10 +184,9 @@ def kalman_predict(
             the sigma_point algorithm chosen.
         sigma_weights (jax.numpy.array): 1d array of length n_sigma with non-negative
             sigma weights.
-        transition_functions (tuple): tuple of tuples where the first element is the
-            name of the transition function and the second the actual transition
-            function. Order is important and corresponds to the latent
-            factors in alphabetical order.
+        transition_info (dict): Dict with the entries "func" (the actual transition
+            function) and "columns" (a dictionary mapping factors that are needed
+            as individual columns to positions in the factor array).
         trans_coeffs (tuple): Tuple of 1d jax.numpy.arrays with transition parameters.
         anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_fac) with
             the scaling factors for anchoring. The first row corresponds to the input
@@ -208,7 +207,7 @@ def kalman_predict(
     )
     transformed = _transform_sigma_points(
         sigma_points,
-        transition_functions,
+        transition_info,
         trans_coeffs,
         anchoring_scaling_factors,
         anchoring_constants,
@@ -280,7 +279,9 @@ def _transform_sigma_points(
 
     Args:
         sigma_points (jax.numpy.array) of shape n_obs, n_mixtures, n_sigma, n_fac.
-        transition_info (dict): Dict with the entries "func", "columns".
+        transition_info (dict): Dict with the entries "func" (the actual transition
+            function) and "columns" (a dictionary mapping factors that are needed
+            as individual columns to positions in the factor array).
         trans_coeffs (tuple): Tuple of 1d jax.numpy.arrays with transition parameters.
         anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_states) with
             the scaling factors for anchoring. The first row corresponds to the input

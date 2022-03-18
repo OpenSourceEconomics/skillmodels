@@ -81,7 +81,7 @@ def get_maximization_inputs(model_dict, data):
         parsing_info=parsing_info,
         measurements=measurements,
         controls=controls,
-        transition_functions=model["transition_functions"],
+        transition_info=model["transition_info"],
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
         dimensions=model["dimensions"],
@@ -166,7 +166,7 @@ def _log_likelihood_jax(
     parsing_info,
     measurements,
     controls,
-    transition_functions,
+    transition_info,
     sigma_scaling_factor,
     sigma_weights,
     dimensions,
@@ -198,10 +198,9 @@ def _log_likelihood_jax(
             observed measurements. NaN if the measurement was not observed.
         controls (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
             with observed control variables for the measurement equations.
-        transition_functions (tuple): tuple of tuples where the first element is the
-            name of the transition function and the second the actual transition
-            function. Order is important and corresponds to the latent
-            factors in alphabetical order.
+        transition_info (dict): Dict with the entries "func" (the actual transition
+            function) and "columns" (a dictionary mapping factors that are needed
+            as individual columns to positions in the factor array).
         sigma_scaling_factor (float): A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
@@ -249,7 +248,7 @@ def _log_likelihood_jax(
         pardict=pardict,
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
-        transition_functions=transition_functions,
+        transition_info=transition_info,
         observed_factors=observed_factors,
         debug=debug,
     )
@@ -296,7 +295,7 @@ def _scan_body(
     pardict,
     sigma_scaling_factor,
     sigma_weights,
-    transition_functions,
+    transition_info,
     observed_factors,
     debug,
 ):
@@ -337,7 +336,7 @@ def _scan_body(
         "observed_factors": observed_factors[t],
     }
 
-    fixed_kwargs = {"transition_functions": transition_functions}
+    fixed_kwargs = {"transition_info": transition_info}
 
     states, upper_chols = lax.cond(
         loop_args["is_predict_iteration"],
@@ -375,12 +374,12 @@ def _one_arg_anchoring_update(kwargs, debug):
     return out
 
 
-def _one_arg_no_predict(kwargs, transition_functions):
+def _one_arg_no_predict(kwargs, transition_info):
     return kwargs["states"], kwargs["upper_chols"]
 
 
-def _one_arg_predict(kwargs, transition_functions):
-    out = kalman_predict(**kwargs, transition_functions=transition_functions)
+def _one_arg_predict(kwargs, transition_info):
+    out = kalman_predict(**kwargs, transition_info=transition_info)
     return out
 
 

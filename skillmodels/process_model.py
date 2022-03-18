@@ -27,8 +27,7 @@ def process_model(model_dict):
         - labels (dict): Dict of lists with labels for the model quantities like
         factors, periods, controls, stagemap and stages. See :ref:`labels`
         - anchoring (dict): Information about anchoring. See :ref:`anchoring`
-        - transition_functions (tuple): Tuple of tuples of length n_periods. Each inner
-        tuple has the following two entries: (name_of_transition_function, callable).
+        - transition_info (dict): Everything related to transition functions.
         - update_info (pandas.DataFrame): DataFrame with one row per Kalman update
         needed in the likelihood function. See :ref:`update_info`.
         - normalizations (dict): Nested dictionary with information on normalized factor
@@ -45,7 +44,7 @@ def process_model(model_dict):
         "labels": labels,
         "anchoring": anchoring,
         "estimation_options": _process_estimation_options(model_dict),
-        "transition_functions": _get_transition_info(
+        "transition_info": _get_transition_info(
             labels["transition_names"], labels["latent_factors"]
         ),
         "update_info": _get_update_info(model_dict, dims, labels, anchoring),

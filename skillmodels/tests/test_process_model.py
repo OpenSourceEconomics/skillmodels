@@ -60,7 +60,7 @@ def test_anchoring(model2):
 
 
 def test_transition_info(model2):
-    res = process_model(model2)["transition_functions"]
+    res = process_model(model2)["transition_info"]
 
     assert isinstance(res, dict)
     assert callable(res["func"])
