@@ -35,3 +35,14 @@ def jax_array_output(func):
         return out
 
     return wrapper_jax_array_output
+
+
+def register_params(func=None, *, params=None):
+    def decorator_register_params(func):
+        func.__registered_params__ = params
+        return func
+
+    if callable(func):
+        return decorator_register_params(func)
+    else:
+        return decorator_register_params

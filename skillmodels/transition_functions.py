@@ -41,7 +41,7 @@ def linear(states, params):
     return jnp.dot(states, betas) + constant
 
 
-def names_linear(factors):
+def params_linear(factors):
     """Index tuples for linear transition function."""
     return factors + ["constant"]
 
@@ -68,7 +68,7 @@ def translog(states, params):
     return res
 
 
-def names_translog(factors):
+def params_translog(factors):
     """Index tuples for the translog production function."""
     names = (
         factors
@@ -95,13 +95,13 @@ def log_ces(states, params):
     return result
 
 
-def names_log_ces(factors):
+def params_log_ces(factors):
     """Index tuples for the log_ces production function."""
     return factors + ["phi"]
 
 
 def constraints_log_ces(factor, factors, period):
-    names = names_log_ces(factors)
+    names = params_log_ces(factors)
     loc = [("transition", period, factor, name) for name in names[:-1]]
     return {"loc": loc, "type": "probability"}
 
@@ -111,6 +111,6 @@ def constant(state, params):
     return state
 
 
-def names_constant(factors):
+def params_constant(factors):
     """Index tuples for the constant production function."""
     return []

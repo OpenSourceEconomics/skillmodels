@@ -41,15 +41,15 @@ def process_model(model_dict):
     labels = _get_labels(model_dict, dims)
     anchoring = _process_anchoring(model_dict)
     check_model(model_dict, labels, dims, anchoring)
+    transition_info = _get_transition_info(model_dict, labels)
+    labels["transition_names"] = list(transition_info["raw_function_names"].values())
 
     processed = {
         "dimensions": dims,
         "labels": labels,
         "anchoring": anchoring,
         "estimation_options": _process_estimation_options(model_dict),
-        "transition_info": _get_transition_info(
-            labels["transition_names"], labels["latent_factors"]
-        ),
+        "transition_info": transition_info,
         "update_info": _get_update_info(model_dict, dims, labels, anchoring),
         "normalizations": _process_normalizations(model_dict, dims, labels),
     }
@@ -106,11 +106,6 @@ def _get_labels(model_dict, dimensions):
     }
 
     labels["all_factors"] = labels["latent_factors"] + labels["observed_factors"]
-
-    trans_names = []
-    for factor in labels["latent_factors"]:
-        trans_names.append(model_dict["factors"][factor]["transition_function"])
-    labels["transition_names"] = trans_names
 
     return labels
 
@@ -170,7 +165,7 @@ def _process_anchoring(model_dict):
     return anchinfo
 
 
-def _get_transition_info(transition_names, factors):
+def _get_transition_info(model_dict, labels):
     """Collect the transition functions in a nested tuple.
 
     Args:
@@ -181,12 +176,37 @@ def _get_transition_info(transition_names, factors):
             has the following two entries: (name_of_transition_function, callable).
 
     """
+
+    raw_functions, function_names, param_names = [], [], []
+    latent_factors = labels["latent_factors"]
+    all_factors = labels["all_factors"]
+
+    for factor in labels["latent_factors"]:
+        spec = model_dict["factors"][factor]["transition_function"]
+        if isinstance(spec, str):
+            raw_functions.append(getattr(tf, spec))
+            function_names.append(spec)
+            param_names.append(getattr(tf, f"params_{spec}")(all_factors))
+        elif callable(spec):
+            raw_functions.append(spec)
+            if hasattr(spec, "__name__"):
+                function_names.append(spec.__name__)
+            else:
+                raise AttributeError(
+                    "Custom transition functions must have a __name__ attribute."
+                )
+            if hasattr(spec, "__registered_params__"):
+                param_names.append(spec.__registered_params__)
+            else:
+                raise AttributeError(
+                    "Custom transition_functions must have a __registered_params__ "
+                    "attribute. You can set it via the register_params decorator."
+                )
+
     functions = {}
-    extracted_columns = {}
-    for i, (factor, name) in enumerate(zip(factors, transition_names)):
-        func = extract_params(getattr(tf, name), key=factor)
+    for factor, name, func in zip(latent_factors, function_names, raw_functions):
+        func = extract_params(func, key=factor)
         if name == "constant":
-            extracted_columns[factor] = i
             func = rename_arguments(func, mapper={"state": factor})
         functions[f"next_{factor}"] = func
 
@@ -195,8 +215,12 @@ def _get_transition_info(transition_names, factors):
     )
 
     transition_function = jax_array_output(transition_function)
-
     ordered_args = list(inspect.signature(transition_function).parameters)
+
+    extracted_columns = {
+        factor: i for i, factor in enumerate(all_factors) if factor in ordered_args
+    }
+
     in_axes = [0] * len(ordered_args)
     in_axes[ordered_args.index("params")] = None
     in_axes = tuple(in_axes)
@@ -206,6 +230,10 @@ def _get_transition_info(transition_names, factors):
         "func": transition_function,
         "columns": extracted_columns,
         "order": ordered_args,
+        "param_names": dict(zip(latent_factors, param_names)),
+        "raw_functions": dict(zip(latent_factors, raw_functions)),
+        "decorated_functions": dict(zip(latent_factors, list(functions.values()))),
+        "raw_function_names": dict(zip(latent_factors, function_names)),
     }
     return out
 

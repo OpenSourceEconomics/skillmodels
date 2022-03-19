@@ -1,9 +1,7 @@
 import pandas as pd
 
-import skillmodels.transition_functions as tf
 
-
-def get_params_index(update_info, labels, dimensions):
+def get_params_index(update_info, labels, dimensions, transition_info):
     """Generate index for the params_df for estimagic.
 
     The index has four levels. The first is the parameter category. The second is the
@@ -34,12 +32,7 @@ def get_params_index(update_info, labels, dimensions):
     ind_tups += get_initial_cholcovs_index_tuples(
         dimensions["n_mixtures"], labels["latent_factors"]
     )
-    ind_tups += get_transition_index_tuples(
-        labels["latent_factors"],
-        labels["all_factors"],
-        labels["periods"],
-        labels["transition_names"],
-    )
+    ind_tups += get_transition_index_tuples(transition_info, labels["periods"])
 
     index = pd.MultiIndex.from_tuples(
         ind_tups, names=["category", "period", "name1", "name2"]
@@ -178,7 +171,7 @@ def get_initial_cholcovs_index_tuples(n_mixtures, factors):
     return ind_tups
 
 
-def get_transition_index_tuples(latent_factors, all_factors, periods, transition_names):
+def get_transition_index_tuples(transition_info, periods):
     """Index tuples for transition equation coefficients.
 
     Args:
@@ -192,10 +185,8 @@ def get_transition_index_tuples(latent_factors, all_factors, periods, transition
 
     """
     ind_tups = []
-    for f, factor in enumerate(latent_factors):
+    for factor, names in transition_info["param_names"].items():
         for period in periods[:-1]:
-            func = getattr(tf, "names_{}".format(transition_names[f]))
-            names = func(all_factors)
             for name in names:
                 ind_tups.append(("transition", period, factor, name))
     return ind_tups
