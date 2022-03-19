@@ -67,7 +67,9 @@ def test_control_coeffs_index_tuples():
 
 def test_loading_index_tuples():
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
-    uinfo = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_tups))
+    uinfo = pd.DataFrame(
+        True, index=pd.MultiIndex.from_tuples(uinfo_tups), columns=["fac1", "fac2"]
+    )
     factors = ["fac1", "fac2"]
     expected = [
         ("loadings", 0, "m1", "fac1"),

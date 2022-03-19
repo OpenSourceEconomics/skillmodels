@@ -78,6 +78,9 @@ def test_likelihood_contributions_have_not_changed(model2, model2_data, model_na
     )
 
     func_dict = get_maximization_inputs(model, model2_data)
+
+    params = params.loc[func_dict["params_template"].index]
+
     debug_loglike = func_dict["debug_loglike"]
 
     new_loglikes = debug_loglike(params)["contributions"]

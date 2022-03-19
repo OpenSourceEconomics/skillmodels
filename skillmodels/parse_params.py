@@ -30,13 +30,24 @@ def create_parsing_info(params_index, update_info, labels, anchoring):
         "initial_cholcovs",
         "mixture_weights",
         "controls",
-        "loadings",
         "meas_sds",
         "shock_sds",
     ]
 
     for quantity in simple_ones:
         parsing_info[quantity] = _get_positional_selector_from_loc(range_sr, quantity)
+
+    # loadings:
+    mask = update_info[labels["latent_factors"]].to_numpy()
+    helper = np.arange(mask.size).reshape(mask.shape)
+    flat_indices = helper[mask]
+
+    parsing_info["loadings"] = {
+        "slice": _get_positional_selector_from_loc(range_sr, "loadings"),
+        "flat_indices": jnp.array(flat_indices),
+        "shape": mask.shape,
+        "size": mask.size,
+    }
 
     # "trans_coeffs"
     pos_dict = {}
@@ -114,7 +125,7 @@ def parse_params(params, parsing_info, dimensions, labels, n_obs):
     log_weights = _get_initial_log_mixture_weights(params, parsing_info, n_obs)
     pardict = {
         "controls": _get_control_params(params, parsing_info, dimensions),
-        "loadings": _get_loadings(params, parsing_info, dimensions),
+        "loadings": _get_loadings(params, parsing_info),
         "meas_sds": _get_meas_sds(params, parsing_info),
         "shock_sds": _get_shock_sds(params, parsing_info, dimensions),
         "transition": _get_transition_params(params, parsing_info, labels),
@@ -166,9 +177,13 @@ def _get_control_params(params, info, dimensions):
     return params[info["controls"]].reshape(-1, dimensions["n_controls"])
 
 
-def _get_loadings(params, info, dimensions):
+def _get_loadings(params, info):
     """Create the array of factor loadings."""
-    return params[info["loadings"]].reshape(-1, dimensions["n_latent_factors"])
+    info = info["loadings"]
+    free = params[info["slice"]]
+    extended = jnp.zeros(info["size"]).at[info["flat_indices"]].set(free)
+    out = extended.reshape(info["shape"])
+    return out
 
 
 def _get_meas_sds(params, info):

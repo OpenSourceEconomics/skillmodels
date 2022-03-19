@@ -24,6 +24,7 @@ def test_visualize_factor_distributions_runs_with_filtered_states():
     data.set_index(["caseid", "period"], inplace=True)
 
     max_inputs = get_maximization_inputs(model_dict, data)
+    params = params.loc[max_inputs["params_template"].index]
     debug_loglike = max_inputs["debug_loglike"]
     debug_data = debug_loglike(params)
     filtered_states = debug_data["filtered_states"]

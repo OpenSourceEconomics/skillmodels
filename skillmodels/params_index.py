@@ -68,10 +68,12 @@ def get_loadings_index_tuples(factors, update_info):
         ind_tups (list)
 
     """
+    mask = update_info[factors].to_numpy()
     ind_tups = []
-    for period, meas in update_info.index:
-        for factor in factors:
-            ind_tups.append(("loadings", period, meas, factor))
+    for i, (period, meas) in enumerate(update_info.index):
+        for f, factor in enumerate(factors):
+            if mask[i, f]:
+                ind_tups.append(("loadings", period, meas, factor))
     return ind_tups
 
 

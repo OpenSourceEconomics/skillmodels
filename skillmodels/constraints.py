@@ -4,7 +4,6 @@ import warnings
 import numpy as np
 
 import skillmodels.transition_functions as tf
-from skillmodels.params_index import get_loadings_index_tuples
 
 
 def get_constraints(dimensions, labels, anchoring_info, update_info, normalizations):
@@ -29,7 +28,6 @@ def get_constraints(dimensions, labels, anchoring_info, update_info, normalizati
     constr = []
 
     constr += _get_normalization_constraints(normalizations, labels["latent_factors"])
-    constr += _get_not_measured_constraints(update_info, labels)
     constr += _get_mixture_weights_constraints(dimensions["n_mixtures"])
     constr += _get_stage_constraints(labels["stagemap"], labels["stages"])
     constr += _get_constant_factors_constraints(labels)
@@ -129,39 +127,6 @@ def _get_normalization_constraints(normalizations, factors):
                 "description": msg,
             }
         ]
-    else:
-        constraints = []
-
-    return constraints
-
-
-def _get_not_measured_constraints(update_info, labels):
-    """Fix all loadings for non-measured factors to 0.
-
-    Args:
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
-            in the likelihood function. See :ref:`update_info`.
-        labels (dict): Dict of lists with labels for the model quantities like
-            factors, periods, controls, stagemap and stages. See :ref:`labels`
-
-
-    Returns:
-        constraints (list)
-
-    """
-
-    msg = (
-        "This constraint sets the loadings of those factors that are not measured by "
-        "a measurement to 0."
-    )
-
-    factors = labels["latent_factors"]
-    all_loading_indices = get_loadings_index_tuples(factors, update_info)
-    to_fix = ~update_info[factors].to_numpy().flatten().astype(bool)
-    locs = [tup for i, tup in enumerate(all_loading_indices) if to_fix[i]]
-
-    if locs:
-        constraints = [{"loc": locs, "type": "fixed", "value": 0, "description": msg}]
     else:
         constraints = []
 
