@@ -184,7 +184,10 @@ def _get_transition_info(model_dict, labels):
     for factor in labels["latent_factors"]:
         spec = model_dict["factors"][factor]["transition_function"]
         if isinstance(spec, str):
-            raw_functions.append(getattr(tf, spec))
+            func = getattr(tf, spec)
+            if spec == "constant":
+                func = rename_arguments(func, mapper={"state": factor})
+            raw_functions.append(func)
             function_names.append(spec)
             param_names.append(getattr(tf, f"params_{spec}")(all_factors))
         elif callable(spec):
@@ -204,10 +207,8 @@ def _get_transition_info(model_dict, labels):
                 )
 
     functions = {}
-    for factor, name, func in zip(latent_factors, function_names, raw_functions):
+    for factor, func in zip(latent_factors, raw_functions):
         func = extract_params(func, key=factor)
-        if name == "constant":
-            func = rename_arguments(func, mapper={"state": factor})
         functions[f"next_{factor}"] = func
 
     transition_function = concatenate_functions(

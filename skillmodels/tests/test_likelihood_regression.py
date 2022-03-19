@@ -8,6 +8,7 @@ import yaml
 from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
 
+from skillmodels.decorators import register_params
 from skillmodels.likelihood_function import get_maximization_inputs
 from skillmodels.utilities import reduce_n_periods
 
@@ -18,6 +19,7 @@ model_names = [
     "one_stage",
     "one_stage_anchoring",
     "two_stages_anchoring",
+    "one_stage_anchoring_custom_functions",
 ]
 
 # importing the TEST_DIR from config does not work for test run in conda build
@@ -48,6 +50,25 @@ def _convert_model(base_model, model_name):
         pass
     elif model_name == "two_stages_anchoring":
         model["stagemap"] = [0, 0, 0, 0, 1, 1, 1]
+    elif model_name == "one_stage_anchoring_custom_functions":
+
+        @register_params(params=[])
+        def constant(fac3, params):
+            return fac3
+
+        @register_params(params=["fac1", "fac2", "fac3", "constant"])
+        def linear(fac1, fac2, fac3, params):
+            p = {
+                "fac1": params[0],
+                "fac2": params[1],
+                "fac3": params[2],
+                "constant": params[3],
+            }
+            out = p["constant"] + fac1 * p["fac1"] + fac2 * p["fac2"] + fac3 * p["fac3"]
+            return out
+
+        model["factors"]["fac2"]["transition_function"] = linear
+        model["factors"]["fac3"]["transition_function"] = constant
     else:
         raise ValueError("Invalid model name.")
     return model
