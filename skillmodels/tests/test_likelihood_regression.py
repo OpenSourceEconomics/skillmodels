@@ -58,12 +58,7 @@ def _convert_model(base_model, model_name):
 
         @register_params(params=["fac1", "fac2", "fac3", "constant"])
         def linear(fac1, fac2, fac3, params):
-            p = {
-                "fac1": params[0],
-                "fac2": params[1],
-                "fac3": params[2],
-                "constant": params[3],
-            }
+            p = params
             out = p["constant"] + fac1 * p["fac1"] + fac2 * p["fac2"] + fac3 * p["fac3"]
             return out
 

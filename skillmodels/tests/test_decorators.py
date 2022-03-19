@@ -5,7 +5,7 @@ from skillmodels.decorators import jax_array_output
 from skillmodels.decorators import register_params
 
 
-def test_extract_params_decorator():
+def test_extract_params_decorator_only_key():
     @extract_params(key="a")
     def f(x, params):
         return x * params
@@ -13,13 +13,45 @@ def test_extract_params_decorator():
     assert f(x=3, params={"a": 4, "b": 5}) == 12
 
 
-def test_extract_params_direct_call():
+def test_extract_params_direct_call_only_key():
     def f(x, params):
         return x * params
 
     g = extract_params(f, key="a")
 
     assert g(x=3, params={"a": 4, "b": 5}) == 12
+
+
+def test_extract_params_decorator_only_names():
+    @extract_params(names=["c", "d"])
+    def f(x, params):
+        return x * params["c"]
+
+    assert f(x=3, params=[4, 5]) == 12
+
+
+def test_extract_params_direct_call_only_names():
+    def f(x, params):
+        return x * params["c"]
+
+    g = extract_params(f, names=["c", "d"])
+    assert g(x=3, params=[4, 5]) == 12
+
+
+def test_extract_params_decorator_key_and_names():
+    @extract_params(key="a", names=["c", "d"])
+    def f(x, params):
+        return x * params["c"]
+
+    assert f(x=3, params={"a": [4, 5], "b": [5, 6]}) == 12
+
+
+def test_extract_params_direct_call_key_and_names():
+    def f(x, params):
+        return x * params["c"]
+
+    g = extract_params(f, key="a", names=["c", "d"])
+    assert g(x=3, params={"a": [4, 5], "b": [5, 6]}) == 12
 
 
 def test_jax_array_output_decorator():

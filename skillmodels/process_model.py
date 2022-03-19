@@ -42,7 +42,9 @@ def process_model(model_dict):
     anchoring = _process_anchoring(model_dict)
     check_model(model_dict, labels, dims, anchoring)
     transition_info = _get_transition_info(model_dict, labels)
-    labels["transition_names"] = list(transition_info["raw_function_names"].values())
+    labels["transition_names"] = list(
+        transition_info["individual_function_names"].values()
+    )
 
     processed = {
         "dimensions": dims,
@@ -166,51 +168,36 @@ def _process_anchoring(model_dict):
 
 
 def _get_transition_info(model_dict, labels):
-    """Collect the transition functions in a nested tuple.
+    """Collect information about transition functions."""
 
-    Args:
-        transition_names (list): Names of transition functions for each factor.
-
-    Returns:
-        tuple: Tuple of tuples of length n_periods. Each inner tuple
-            has the following two entries: (name_of_transition_function, callable).
-
-    """
-
-    raw_functions, function_names, param_names = [], [], []
+    func_list, param_names = [], []
     latent_factors = labels["latent_factors"]
     all_factors = labels["all_factors"]
 
-    for factor in labels["latent_factors"]:
+    for factor in latent_factors:
         spec = model_dict["factors"][factor]["transition_function"]
         if isinstance(spec, str):
             func = getattr(tf, spec)
             if spec == "constant":
                 func = rename_arguments(func, mapper={"state": factor})
-            raw_functions.append(func)
-            function_names.append(spec)
+            func_list.append(extract_params(func, key=factor))
             param_names.append(getattr(tf, f"params_{spec}")(all_factors))
         elif callable(spec):
-            raw_functions.append(spec)
-            if hasattr(spec, "__name__"):
-                function_names.append(spec.__name__)
-            else:
+            if not hasattr(spec, "__name__"):
                 raise AttributeError(
                     "Custom transition functions must have a __name__ attribute."
                 )
             if hasattr(spec, "__registered_params__"):
-                param_names.append(spec.__registered_params__)
+                names = spec.__registered_params__
+                param_names.append(names)
             else:
                 raise AttributeError(
                     "Custom transition_functions must have a __registered_params__ "
                     "attribute. You can set it via the register_params decorator."
                 )
+            func_list.append(extract_params(spec, key=factor, names=names))
 
-    functions = {}
-    for factor, func in zip(latent_factors, raw_functions):
-        func = extract_params(func, key=factor)
-        functions[f"next_{factor}"] = func
-
+    functions = {f"next_{fac}": func for fac, func in zip(latent_factors, func_list)}
     transition_function = concatenate_functions(
         functions=functions, targets=list(functions)
     )
@@ -218,23 +205,23 @@ def _get_transition_info(model_dict, labels):
     transition_function = jax_array_output(transition_function)
     ordered_args = list(inspect.signature(transition_function).parameters)
 
-    extracted_columns = {
-        factor: i for i, factor in enumerate(all_factors) if factor in ordered_args
-    }
-
     in_axes = [0] * len(ordered_args)
     in_axes[ordered_args.index("params")] = None
     in_axes = tuple(in_axes)
     transition_function = vmap(transition_function, in_axes=in_axes)
+
+    function_names = [f.__name__ for f in func_list]
+    extracted_columns = {
+        factor: i for i, factor in enumerate(all_factors) if factor in ordered_args
+    }
 
     out = {
         "func": transition_function,
         "columns": extracted_columns,
         "order": ordered_args,
         "param_names": dict(zip(latent_factors, param_names)),
-        "raw_functions": dict(zip(latent_factors, raw_functions)),
-        "decorated_functions": dict(zip(latent_factors, list(functions.values()))),
-        "raw_function_names": dict(zip(latent_factors, function_names)),
+        "individual_functions": dict(zip(latent_factors, func_list)),
+        "individual_function_names": dict(zip(latent_factors, function_names)),
     }
     return out
 

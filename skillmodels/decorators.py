@@ -3,19 +3,47 @@ import functools
 import jax.numpy as jnp
 
 
-def extract_params(func=None, *, key=None):
-    """Extract the ``key`` entry from params before passing it to func.
+def extract_params(func=None, *, key=None, names=None):
+    """Process params before passing them to func.
 
     Note: The resulting function is keyword only!
+
+    Args:
+        key (str or None): If key is not None, we assume params is a dictionary of which
+            only the params[key] should be passed into func.
+        names (list or None): If names is provided, we assume that params
+            (or params[key]) should be converted to a dictionary with names as keys
+            before passing them to func.
 
     """
 
     def decorator_extract_params(func):
-        @functools.wraps(func)
-        def wrapper_extract_params(**kwargs):
-            internal_kwargs = kwargs.copy()
-            internal_kwargs["params"] = kwargs["params"][key]
-            return func(**internal_kwargs)
+        if key is not None and names is None:
+
+            @functools.wraps(func)
+            def wrapper_extract_params(**kwargs):
+                internal_kwargs = kwargs.copy()
+                internal_kwargs["params"] = kwargs["params"][key]
+                return func(**internal_kwargs)
+
+        elif key is None and names is not None:
+
+            @functools.wraps(func)
+            def wrapper_extract_params(**kwargs):
+                internal_kwargs = kwargs.copy()
+                internal_kwargs["params"] = dict(zip(names, kwargs["params"]))
+                return func(**internal_kwargs)
+
+        elif key is not None and names is not None:
+
+            @functools.wraps(func)
+            def wrapper_extract_params(**kwargs):
+                internal_kwargs = kwargs.copy()
+                internal_kwargs["params"] = dict(zip(names, kwargs["params"][key]))
+                return func(**internal_kwargs)
+
+        else:
+            raise ValueError("key and names cannot both be None.")
 
         return wrapper_extract_params
 
