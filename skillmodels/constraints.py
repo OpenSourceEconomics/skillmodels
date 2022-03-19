@@ -28,7 +28,7 @@ def get_constraints(dimensions, labels, anchoring_info, update_info, normalizati
     """
     constr = []
 
-    constr += _get_normalization_constraints(normalizations)
+    constr += _get_normalization_constraints(normalizations, labels["latent_factors"])
     constr += _get_not_measured_constraints(update_info, labels)
     constr += _get_mixture_weights_constraints(dimensions["n_mixtures"])
     constr += _get_stage_constraints(labels["stagemap"], labels["stages"])
@@ -89,7 +89,7 @@ def _is_diagonal_entry(ind_tup):
     return is_diag
 
 
-def _get_normalization_constraints(normalizations):
+def _get_normalization_constraints(normalizations, factors):
     """List of constraints to enforce normalizations.
 
     Args:
@@ -101,7 +101,6 @@ def _get_normalization_constraints(normalizations):
 
     """
     msg = "This constraint was generated because of an explicit normalization."
-    factors = sorted(normalizations.keys())
     periods = range(len(normalizations[factors[0]]["loadings"]))
 
     index_tuples = []

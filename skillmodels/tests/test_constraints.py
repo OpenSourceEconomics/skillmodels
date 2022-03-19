@@ -60,7 +60,7 @@ def test_normalization_constraints():
         }
     ]
 
-    calculated = _get_normalization_constraints(norm)
+    calculated = _get_normalization_constraints(norm, factors=["fac1", "fac2"])
     for c in calculated:
         del c["description"]
 

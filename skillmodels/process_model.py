@@ -99,9 +99,9 @@ def _get_labels(model_dict, dimensions):
     stagemap = model_dict.get("stagemap", list(range(dimensions["n_periods"] - 1)))
 
     labels = {
-        "latent_factors": sorted(model_dict["factors"]),
-        "observed_factors": sorted(model_dict.get("observed_factors", [])),
-        "controls": ["constant"] + sorted(model_dict.get("controls", [])),
+        "latent_factors": list(model_dict["factors"]),
+        "observed_factors": list(model_dict.get("observed_factors", [])),
+        "controls": ["constant"] + list(model_dict.get("controls", [])),
         "periods": list(range(dimensions["n_periods"])),
         "stagemap": stagemap,
         "stages": sorted(np.unique(stagemap)),
@@ -162,7 +162,7 @@ def _process_anchoring(model_dict):
     if "anchoring" in model_dict:
         anchinfo.update(model_dict["anchoring"])
         anchinfo["anchoring"] = True
-        anchinfo["factors"] = sorted(anchinfo["outcomes"].keys())
+        anchinfo["factors"] = list(anchinfo["outcomes"])
 
     return anchinfo
 
