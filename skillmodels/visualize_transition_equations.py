@@ -114,6 +114,7 @@ def visualize_transition_equations(
         update_info=model["update_info"],
         labels=model["labels"],
         dimensions=model["dimensions"],
+        transition_info=model["transition_info"],
     )
 
     params = params.reindex(params_index)
@@ -148,8 +149,12 @@ def visualize_transition_equations(
     for (output_factor, input_factor), ax in zip(
         itertools.product(latent_factors, all_factors), axes.flatten()
     ):
-        transition_function = model["transition_functions"][output_factor]
-        transition_params = pardict["transition"][output_factor][period]
+        transition_function = model["transition_info"]["individual_functions"][
+            output_factor
+        ]
+        transition_params = {
+            output_factor: pardict["transition"][output_factor][period]
+        }
 
         if quantiles_of_other_factors is not None:
             plot_data = _prepare_data_for_one_plot_fixed_quantile_2d(
@@ -225,7 +230,6 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
 ):
 
     period_data = states_data.query(f"period == {period}")[all_factors]
-    transition_name = transition_function.__name__
     input_min = state_ranges[input_factor].loc[period]["minimum"]
     input_max = state_ranges[input_factor].loc[period]["maximum"]
     to_concat = []
@@ -235,11 +239,7 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
         fixed_quantiles = period_data.drop(columns=input_factor).quantile(quantile)
         input_data[fixed_quantiles.index] = fixed_quantiles
         input_arr = jnp.array(input_data[all_factors].to_numpy())
-        if transition_name != "constant":
-            output_arr = transition_function(input_arr, transition_params)
-        else:
-            output_arr = input_data[output_factor].to_numpy()
-
+        output_arr = transition_function(transition_params, input_arr)
         quantile_data = pd.DataFrame()
         quantile_data[f"{input_factor} in period {period}"] = input_data[input_factor]
         quantile_data[f"{output_factor} in period {period + 1}"] = np.array(output_arr)
@@ -263,7 +263,6 @@ def _prepare_data_for_one_plot_average_2d(
     all_factors,
 ):
 
-    transition_name = transition_function.__name__
     period_data = states_data.query(f"period == {period}")[all_factors].reset_index()
 
     sampled_factors = [factor for factor in all_factors if factor != input_factor]
@@ -277,11 +276,7 @@ def _prepare_data_for_one_plot_average_2d(
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
         input_data[draw.index] = draw
         input_arr = jnp.array(input_data[all_factors].to_numpy())
-        if transition_name != "constant":
-            output_arr = transition_function(input_arr, transition_params)
-        else:
-            output_arr = input_data[output_factor].to_numpy()
-
+        output_arr = transition_function(transition_params, input_arr)
         draw_data = pd.DataFrame()
         draw_data[f"{input_factor} in period {period}"] = input_data[input_factor]
         draw_data[f"{output_factor} in period {period + 1}"] = np.array(output_arr)
