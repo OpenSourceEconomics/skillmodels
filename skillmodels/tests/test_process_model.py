@@ -1,3 +1,4 @@
+import inspect
 from pathlib import Path
 
 import pandas as pd
@@ -64,8 +65,8 @@ def test_transition_info(model2):
 
     assert isinstance(res, dict)
     assert callable(res["func"])
-    assert isinstance(res["columns"], dict)
-    assert res["columns"] == {"fac3": 2}
+
+    assert list(inspect.signature(res["func"]).parameters) == ["params", "states"]
 
 
 def test_update_info(model2):

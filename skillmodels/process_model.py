@@ -1,4 +1,4 @@
-import inspect
+from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -42,9 +42,7 @@ def process_model(model_dict):
     anchoring = _process_anchoring(model_dict)
     check_model(model_dict, labels, dims, anchoring)
     transition_info = _get_transition_info(model_dict, labels)
-    labels["transition_names"] = list(
-        transition_info["individual_function_names"].values()
-    )
+    labels["transition_names"] = list(transition_info["function_names"].values())
 
     processed = {
         "dimensions": dims,
@@ -197,31 +195,39 @@ def _get_transition_info(model_dict, labels):
                 )
             func_list.append(extract_params(spec, key=factor, names=names))
 
-    functions = {f"next_{fac}": func for fac, func in zip(latent_factors, func_list)}
+    function_names = [f.__name__ for f in func_list]
+
+    functions = {
+        f"__next_{fac}__": func for fac, func in zip(latent_factors, func_list)
+    }
+
+    # add functions to produce the individual factors out of the 1d states vector.
+    # The dag will automatically sort out what we don't need.
+    def _extract_factor(states, pos):
+        return states[pos]
+
+    for i, factor in enumerate(labels["all_factors"]):
+        functions[factor] = partial(_extract_factor, pos=i)
+
     transition_function = concatenate_functions(
-        functions=functions, targets=list(functions)
+        functions=functions, targets=[f"__next_{fac}__" for fac in latent_factors]
     )
 
     transition_function = jax_array_output(transition_function)
-    ordered_args = list(inspect.signature(transition_function).parameters)
 
-    in_axes = [0] * len(ordered_args)
-    in_axes[ordered_args.index("params")] = None
-    in_axes = tuple(in_axes)
-    transition_function = vmap(transition_function, in_axes=in_axes)
+    transition_function = vmap(transition_function, in_axes=(None, 0))
 
-    function_names = [f.__name__ for f in func_list]
-    extracted_columns = {
-        factor: i for i, factor in enumerate(all_factors) if factor in ordered_args
-    }
+    individual_functions = {}
+    for factor in latent_factors:
+        func = concatenate_functions(functions=functions, targets=f"__next_{factor}__")
+        func = vmap(func, in_axes=(None, 0))
+        individual_functions[factor] = func
 
     out = {
         "func": transition_function,
-        "columns": extracted_columns,
-        "order": ordered_args,
         "param_names": dict(zip(latent_factors, param_names)),
-        "individual_functions": dict(zip(latent_factors, func_list)),
-        "individual_function_names": dict(zip(latent_factors, function_names)),
+        "individual_functions": individual_functions,
+        "function_names": dict(zip(latent_factors, function_names)),
     }
     return out
 
