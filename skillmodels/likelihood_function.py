@@ -107,7 +107,7 @@ def get_maximization_inputs(model_dict, data):
     _loglike = functools.partial(_base_loglike, debug=False)
 
     _jitted_loglike = jax.jit(_loglike)
-    _gradient = jax.grad(_jitted_loglike, has_aux=True)
+    _gradient = jax.jit(jax.grad(_loglike, has_aux=True))
 
     def debug_loglike(params):
         params_vec = partialed_get_jnp_params_vec(params)
