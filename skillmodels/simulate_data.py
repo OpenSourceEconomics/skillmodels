@@ -2,7 +2,6 @@
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-from numpy.random import binomial
 from numpy.random import choice
 from numpy.random import multivariate_normal
 
@@ -11,45 +10,6 @@ from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
 from skillmodels.process_model import process_model
-
-
-def add_missings(data, meas_names, p_b, p_r):
-    """Add np.nans to data.
-
-    nans are only added to measurements, not to control variables or factors.
-
-    Note that p is NOT the marginal probability of a measurement being missing.
-    The marginal probability is given by: p_m = p/(1-serial_corr), where
-    serial_corr = (p_r-p_b) in general != 0, since p_r != p_b. This means that in
-    average the share of missing values (in the entire dataset) will be larger
-    than p. Thus, p and q should be set accordingly given the desired share
-    of missing values.
-
-    Args:
-        data (pd.DataFrame): contains the observable part of a simulated dataset
-        meas_names (list): list of strings of names of each measurement variable
-        p_b (float): probability of a measurement to become missing
-        p_r (float): probability of a measurement to remain missing in the next period
-
-    Returns:
-        data_with_missings (pd.DataFrame): Dataset with a share of measurements
-        replaced by np.nan values
-
-    """
-    n_meas = len(meas_names)
-    data_with_missings = data.copy(deep=True)
-    for i in set(data_with_missings.index):
-        ind_data = data_with_missings.loc[i][meas_names].to_numpy()
-        s_0 = binomial(1, p_b, n_meas)
-        ind_data[0, np.where(s_0 == 1)] = np.nan
-        for t in range(1, len(ind_data)):
-            indc_nan = np.isnan(ind_data[t - 1])
-            prob = p_r * indc_nan + p_b * (1 - indc_nan)
-            s_m = binomial(1, prob)
-            ind_data[t, np.where(s_m == 1)] = np.nan
-        data_with_missings.loc[i, meas_names] = ind_data
-
-    return data_with_missings
 
 
 def simulate_dataset(

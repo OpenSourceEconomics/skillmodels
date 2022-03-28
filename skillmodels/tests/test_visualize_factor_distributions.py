@@ -34,7 +34,7 @@ def test_visualize_factor_distributions_runs_with_filtered_states():
     )
 
 
-@pytest.mark.xfail(reason="Not yet updated to observed factors.")
+@pytest.mark.xfail(reason="Simulate is not yet updated to observed factors.")
 def test_visualize_factor_distributions_runs_with_simulated_states():
     with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
