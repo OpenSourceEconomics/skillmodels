@@ -11,6 +11,7 @@ from skillmodels.process_model import process_model
 
 def get_filtered_states(model_dict, data, params):
     max_inputs = get_maximization_inputs(model_dict=model_dict, data=data)
+    params = params.loc[max_inputs["params_template"].index]
     debug_loglike = max_inputs["debug_loglike"]
     debug_data = debug_loglike(params)
     unanchored_states_df = debug_data["filtered_states"]
@@ -27,7 +28,7 @@ def get_filtered_states(model_dict, data, params):
 
     out = {
         "anchored_states": {
-            "states": anchor_states_df,
+            "states": anchored_states_df,
             "state_ranges": anchored_ranges,
         },
         "unanchored_states": {

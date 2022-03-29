@@ -181,6 +181,7 @@ def _process_data(states, period, factors):
             to_concat.append(df)
         data = pd.concat(to_concat)
         hue = "scenario"
+    data = data.reset_index()
     return data, hue
 
 
