@@ -26,8 +26,11 @@ def get_filtered_states(model_dict, data, params):
     )
 
     out = {
-        "anchored": {"states": anchor_states_df, "state_ranges": anchored_ranges},
-        "unanchored": {
+        "anchored_states": {
+            "states": anchor_states_df,
+            "state_ranges": anchored_ranges,
+        },
+        "unanchored_states": {
             "states": unanchored_states_df,
             "state_ranges": unanchored_ranges,
         },

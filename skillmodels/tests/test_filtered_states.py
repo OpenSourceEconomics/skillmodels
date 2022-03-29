@@ -39,7 +39,7 @@ def test_get_filtered_states(model2, model2_data):
     factors = ["fac1", "fac2", "fac3"]
     expected_ratios = [1.187757, 1, 1]
     for factor, expected_ratio in zip(factors, expected_ratios):
-        anch_ranges = calculated["anchored"]["state_ranges"][factor]
-        unanch_ranges = calculated["unanchored"]["state_ranges"][factor]
+        anch_ranges = calculated["anchored_states"]["state_ranges"][factor]
+        unanch_ranges = calculated["unanchored_states"]["state_ranges"][factor]
         ratio = (anch_ranges / unanch_ranges).to_numpy()
         assert np.allclose(ratio, expected_ratio)
