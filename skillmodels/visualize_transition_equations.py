@@ -96,7 +96,7 @@ def visualize_transition_equations(
             anchoring_info=model["anchoring"],
         )
         observed_data = pd.DataFrame(
-            data=_observed_arr[period], columns=observed_factors
+            data=np.array(_observed_arr[period]), columns=observed_factors
         )
         observed_data["id"] = observed_data.index
         observed_data["period"] = period
