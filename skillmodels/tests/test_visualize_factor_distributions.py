@@ -46,7 +46,9 @@ def test_visualize_factor_distributions_runs_with_simulated_states():
     max_inputs = get_maximization_inputs(model_dict, data)
     params = params.loc[max_inputs["params_template"].index]
 
-    _, latent_data = simulate_dataset(model_dict, params, data=data, policies=None)
+    latent_data = simulate_dataset(model_dict, params, data=data, policies=None)[
+        "unanchored_states"
+    ]["states"]
 
     plot_factor_distributions(
         states=latent_data, model_dict=model_dict, add_3d_plots=False, period=1

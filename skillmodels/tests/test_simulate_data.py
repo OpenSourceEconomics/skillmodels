@@ -29,17 +29,22 @@ def model2_data():
     return data
 
 
-# =======================================================
-# test that simulate_dataset works with the example model
-# =======================================================
-
-
 def test_simulate_dataset(model2, model2_data):
     model_dict = model2
     params = pd.read_csv(TEST_DIR / "regression_vault" / f"one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
 
-    simulate_dataset(model_dict=model_dict, params=params, data=model2_data)
+    calculated = simulate_dataset(
+        model_dict=model_dict, params=params, data=model2_data
+    )
+
+    factors = ["fac1", "fac2", "fac3"]
+    expected_ratios = [1.187757, 1, 1]
+    for factor, expected_ratio in zip(factors, expected_ratios):
+        anch_ranges = calculated["anchored_states"]["state_ranges"][factor]
+        unanch_ranges = calculated["unanchored_states"]["state_ranges"][factor]
+        ratio = (anch_ranges / unanch_ranges).to_numpy()
+        assert np.allclose(ratio, expected_ratio)
 
 
 def test_measurements_from_factors():

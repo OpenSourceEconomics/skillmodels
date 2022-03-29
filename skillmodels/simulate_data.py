@@ -7,11 +7,13 @@ import pandas as pd
 from numpy.random import choice
 from numpy.random import multivariate_normal
 
+from skillmodels.filtered_states import anchor_states_df
 from skillmodels.kalman_filters import transform_sigma_points
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
 from skillmodels.process_data import process_data
+from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
 
 
@@ -95,7 +97,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         n_obs=n_obs,
     )
 
-    out = _simulate_dataset(
+    observed_data, latent_data = _simulate_dataset(
         latent_states=states,
         covs=covs,
         log_weights=log_weights,
@@ -109,6 +111,26 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         policies=policies,
         transition_info=model["transition_info"],
     )
+
+    anchored_latent_data = anchor_states_df(
+        states_df=latent_data, model_dict=model_dict, params=params
+    )
+
+    out = {
+        "unanchored_states": {
+            "states": latent_data,
+            "state_ranges": create_state_ranges(
+                latent_data, model["labels"]["latent_factors"]
+            ),
+        },
+        "anchored_states": {
+            "states": anchored_latent_data,
+            "state_ranges": create_state_ranges(
+                anchored_latent_data, model["labels"]["latent_factors"]
+            ),
+        },
+        "measurements": observed_data,
+    }
 
     return out
 
@@ -231,7 +253,6 @@ def _simulate_dataset(
     observed_data = pd.concat(observed_data_by_period, axis=0, sort=True)
     observed_data["id"] = observed_data.index
     observed_data.sort_values(["id", "period"], inplace=True)
-    observed_data.set_index(["id", "period"], inplace=True)
 
     latent_data_by_period = []
     for t in range(n_periods):
@@ -242,7 +263,6 @@ def _simulate_dataset(
     latent_data = pd.concat(latent_data_by_period, axis=0, sort=True)
     latent_data["id"] = latent_data.index
     latent_data.sort_values(["id", "period"], inplace=True)
-    latent_data.set_index(["id", "period"], inplace=True)
 
     return observed_data, latent_data
 
