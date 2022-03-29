@@ -10,10 +10,10 @@ from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.kalman_filters import _calculate_sigma_points
-from skillmodels.kalman_filters import _transform_sigma_points
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.kalman_filters import kalman_predict
 from skillmodels.kalman_filters import kalman_update
+from skillmodels.kalman_filters import transform_sigma_points
 
 config.update("jax_enable_x64", True)
 
@@ -195,7 +195,7 @@ def test_transformation_of_sigma_points():
 
     expected = jnp.array([[[[3, 2], [7, 4], [11, 6], [15, 8], [19, 10]]]])
 
-    calculated = _transform_sigma_points(
+    calculated = transform_sigma_points(
         sp, transition_info, trans_coeffs, anch_scaling, anch_constants
     )
 

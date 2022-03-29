@@ -205,7 +205,7 @@ def kalman_predict(
     sigma_points = _calculate_sigma_points(
         states, upper_chols, sigma_scaling_factor, observed_factors
     )
-    transformed = _transform_sigma_points(
+    transformed = transform_sigma_points(
         sigma_points,
         transition_info,
         trans_coeffs,
@@ -268,7 +268,7 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factor
     return sigma_points
 
 
-def _transform_sigma_points(
+def transform_sigma_points(
     sigma_points,
     transition_info,
     trans_coeffs,
