@@ -122,6 +122,7 @@ def kalman_update(
             not_missing.reshape(n_obs, 1), _abs_root_sigmas, jnp.nan
         )
         debug_info["residual_sds"] = residual_sds
+        debug_info["log_mixture_weights"] = new_log_mixture_weights
 
     return (
         new_states,

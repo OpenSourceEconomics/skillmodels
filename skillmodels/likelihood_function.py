@@ -281,12 +281,14 @@ def _log_likelihood_jax(
         additional_data["residuals"] = static_out["residuals"]
         additional_data["residual_sds"] = static_out["residual_sds"]
 
-        initial_states, *_ = parse_params(
+        initial_states, _, initial_log_mixture_weights, _ = parse_params(
             params, parsing_info, dimensions, labels, n_obs
         )
         additional_data["initial_states"] = initial_states
+        additional_data["initial_log_mixture_weights"] = initial_log_mixture_weights
 
         additional_data["filtered_states"] = static_out["states"]
+        additional_data["log_mixture_weights"] = static_out["log_mixture_weights"]
 
     return value, additional_data
 

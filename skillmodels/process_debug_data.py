@@ -8,19 +8,22 @@ def process_debug_data(debug_data, model):
     Args:
         debug_data (dict): Dictionary containing the following entries (
         and potentially others which are not modified):
-        - filtered_states (list): List of arrays. Each array has shape (n_obs,
-            n_mixtures, n_states) and contains the filtered states after each Kalman
-            update. The list has length n_updates.
+        - filtered_states (jax.numpy.array): Array of shape (n_updates, n_obs,
+            n_mixtures, n_states) containing the filtered states after each Kalman
+            update.
         - initial_states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states)
             with the state estimates before the first Kalman update.
-        - residuals (list): List of arrays. Each array has shape (n_obs, n_mixtures)
-            and contains the residuals of a Kalman update. The list has length
-            n_updates.
-        - residual_sds (list): List of arrays. Each array has shape (n_obs, n_mixtures)
-            and contains the theoretical standard deviation of the residuals. The list
-                has length n_updates.
+        - residuals (jax.numpy.array): Array of shape (n_updates, n_obs, n_mixtures)
+            containing the residuals of a Kalman update.
+        - residual_sds (jax.numpy.ndarray): Array of shape (n_updates, n_obs,
+            n_mixtures) containing the theoretical standard deviation of the residuals.
         - all_contributions (jax.numpy.array): Array of shape (n_updates, n_obs) with
             the likelihood contributions per update and individual.
+        - log_mixture_weights (jax.numpy.array): Array of shape (n_updates, n_obs,
+            n_mixtures) containing the log mixture weights after each update.
+        - initial_log_mixture_weights (jax.numpy.array): Array of shape (n_obs,
+            n_mixtures) containing the log mixture weights before the first
+            kalman update.
 
         model (dict): Processed model dictionary.
 
@@ -35,7 +38,8 @@ def process_debug_data(debug_data, model):
             "measurement" identify the last measurement that was incorporated.
         - filtered_states (pd.DataFrame). Tidy DataFrame with filtered states
             after the last update of each period. The columns are the factor names,
-            "period" and "id"
+            "period" and "id". The filtered states are already aggregated over
+            mixture distributions.
         - state_ranges (dict): The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
             Note that this aggregates over mixture distributions.
@@ -65,7 +69,12 @@ def process_debug_data(debug_data, model):
         debug_data["filtered_states"], factors, update_info
     )
 
-    filtered_states = _create_filtered_states(post_update_states, update_info)
+    filtered_states = _create_filtered_states(
+        filtered_states=debug_data["filtered_states"],
+        log_mixture_weights=debug_data["log_mixture_weights"],
+        update_info=update_info,
+        factors=factors,
+    )
 
     state_ranges = create_state_ranges(filtered_states, factors)
 
@@ -159,21 +168,32 @@ def _convert_state_array_to_df(arr, factor_names):
     return df
 
 
-def _create_filtered_states(post_update_states, update_info):
-    periods = sorted(update_info.index.get_level_values("period").unique())
-    to_concat = []
-    for period in periods:
+def _create_filtered_states(filtered_states, log_mixture_weights, update_info, factors):
+
+    filtered_states = np.array(filtered_states)
+    log_mixture_weights = np.array(log_mixture_weights)
+    weights = np.exp(log_mixture_weights)
+
+    agg_states = (filtered_states * weights.reshape(*weights.shape, 1)).sum(axis=-2)
+
+    keep = []
+    for i, (period, measurement) in enumerate(update_info.index):
         last_measurement = update_info.query(
             f"purpose == 'measurement' & period == {period}"
         ).index[-1][1]
-        to_concat.append(
-            post_update_states.query(
-                f"period == {period} & measurement == '{last_measurement}'"
-            )
-        )
+
+        if measurement == last_measurement:
+            keep.append(i)
+
+    to_concat = []
+    for period, i in enumerate(keep):
+        df = pd.DataFrame(data=agg_states[i], columns=factors)
+        df["period"] = period
+        df["id"] = np.arange(len(df))
+        to_concat.append(df)
 
     filtered_states = pd.concat(to_concat)
-    filtered_states.drop(columns=["measurement"], inplace=True)
+
     return filtered_states
 
 
