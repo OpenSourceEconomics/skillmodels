@@ -23,11 +23,8 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         model_dict (dict): The model specification. See: :ref:`model_specs`
         params (pandas.DataFrame): DataFrame with model parameters.
         n_obs (int): Number of simulated individuals
-        control_means (pd.Series): Series with means of the control variables. The index
-            are the names of the control variables. Control variables are assumed to
-            be time constant for the simulation.
-        control_sds (pd.Series): Series with standard deviations of the control
-            variables. The index are the names of the control variables.
+        data (pd.DataFrame): Dataset in the same format as for estimation, containing
+            information about observed factors and control variables.
         policies (list): list of dictionaries. Each dictionary specifies a
             a stochastic shock to a latent factor AT THE END of "period" for "factor"
             with mean "effect_size" and "standard deviation"
