@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - opensourceeconomics
 dependencies:
-  - python=3.8
+  - python=3.9
   - jax>=0.1.7
   - jaxlib>=0.1.51
   - pip

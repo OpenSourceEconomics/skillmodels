@@ -95,6 +95,8 @@ def visualize_transition_equations(
             update_info=model["update_info"],
             anchoring_info=model["anchoring"],
         )
+        # convert from jax to numpy
+        _observed_arr = np.array(_observed_arr)
         observed_data = pd.DataFrame(
             data=_observed_arr[period], columns=observed_factors
         )
@@ -237,11 +239,10 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
         input_data = pd.DataFrame()
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
         fixed_quantiles = period_data.drop(columns=input_factor).quantile(quantile)
-        print("before", input_data.columns, "\n\n")
         input_data[fixed_quantiles.index] = fixed_quantiles
-        print("after", input_data.columns, "\n\n")
         input_arr = jnp.array(input_data[all_factors].to_numpy())
-        output_arr = transition_function(transition_params, input_arr)
+        # convert from jax to numpy array
+        output_arr = np.array(transition_function(transition_params, input_arr))
         quantile_data = pd.DataFrame()
         quantile_data[f"{input_factor} in period {period}"] = input_data[input_factor]
         quantile_data[f"{output_factor} in period {period + 1}"] = np.array(output_arr)
@@ -278,7 +279,8 @@ def _prepare_data_for_one_plot_average_2d(
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
         input_data[draw.index] = draw
         input_arr = jnp.array(input_data[all_factors].to_numpy())
-        output_arr = transition_function(transition_params, input_arr)
+        # convert from jax to numpy array
+        output_arr = np.array(transition_function(transition_params, input_arr))
         draw_data = pd.DataFrame()
         draw_data[f"{input_factor} in period {period}"] = input_data[input_factor]
         draw_data[f"{output_factor} in period {period + 1}"] = np.array(output_arr)
