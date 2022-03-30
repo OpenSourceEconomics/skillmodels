@@ -9,6 +9,7 @@ from numpy.testing import assert_array_equal as aae
 
 from skillmodels.process_data import _generate_controls_array
 from skillmodels.process_data import _generate_measurements_array
+from skillmodels.process_data import _generate_observed_factor_array
 from skillmodels.process_data import _handle_controls_with_missings
 from skillmodels.process_data import _pre_process_data
 
@@ -82,6 +83,23 @@ def test_generate_controls_array():
     labels = {"controls": ["c1", "c2"], "periods": [0, 1]}
 
     calculated = _generate_controls_array(data, labels, 2)
+    expected = jnp.array([[[1, 2], [5, 8]], [[3, 4], [7, 8]]])
+    aae(calculated, expected)
+
+
+def test_generate_observed_factor_array():
+    csv = """
+    id,period,v1,v2
+    0, 0, 1, 2
+    0, 1, 3, 4
+    1, 0, 5, 8
+    1, 1, 7, 8
+    """
+    data = _read_csv_string(csv, ["id", "period"])
+
+    labels = {"observed_factors": ["v1", "v2"], "periods": [0, 1]}
+
+    calculated = _generate_observed_factor_array(data, labels, 2)
     expected = jnp.array([[[1, 2], [5, 8]], [[3, 4], [7, 8]]])
     aae(calculated, expected)
 

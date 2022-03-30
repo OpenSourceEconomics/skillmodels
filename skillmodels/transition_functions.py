@@ -4,30 +4,25 @@ Below the signature and purpose of a transition function and its helper
 functions is explained with a transition function called example_func:
 
 
-**example_func(** *sigma_points, params**)**:
+**example_func(** *states, params**)**:
 
     The actual transition function.
 
     Args:
-        * sigma_points: 4d numpy array of sigma_points or states being transformed.
-            The shape is n_obs, n_mixtures, n_sigma, n_fac.
+        * states: 1d numpy array of length n_all_factors
         * params: 1d numpy array with coefficients specific to this transition function
 
     Returns
-        * np.ndarray: Shape is n_obs, n_mixtures, n_sigma
+        * float
 
 
-**index_tuples_example_func(** *factor, factors, period* **)**:
+**names_example_func(** *factors* **)**:
 
-    Generate a list of index tuples for the params of the transition function.
+    Generate a list of names for the params of the transition function.
 
-    Each index tuple contains four entries
+    The names will be used to construct index tuples in the following way:
 
-    - 'transition' (fix)
-    - period
-    - factor
-    - 'some-name'
-
+    ('transition', period, factor, NAME)
 
 The transition functions have to be JAX jittable and differentiable. However, they
 should not be jitted yet.
@@ -39,20 +34,19 @@ import jax
 import jax.numpy as jnp
 
 
-def linear(sigma_points, params):
+def linear(states, params):
     """Linear production function where the constant is the last parameter."""
     constant = params[-1]
     betas = params[:-1]
-    return jnp.dot(sigma_points, betas) + constant
+    return jnp.dot(states, betas) + constant
 
 
-def index_tuples_linear(factor, factors, period):
+def params_linear(factors):
     """Index tuples for linear transition function."""
-    ind_tups = [("transition", period, factor, rhs_fac) for rhs_fac in factors]
-    return ind_tups + [("transition", period, factor, "constant")]
+    return factors + ["constant"]
 
 
-def translog(sigma_points, params):
+def translog(states, params):
     """Translog transition function.
 
     The name is a convention in the skill formation literature even though the function
@@ -60,35 +54,32 @@ def translog(sigma_points, params):
     interaction terms of the states.
 
     """
-    nfac = sigma_points.shape[-1]
+    nfac = len(states)
     constant = params[-1]
     lin_beta = params[:nfac]
     square_beta = params[nfac : 2 * nfac]
     inter_beta = params[2 * nfac : -1]
 
-    res = jnp.dot(sigma_points, lin_beta)
-    res += jnp.dot(sigma_points ** 2, square_beta)
+    res = jnp.dot(states, lin_beta)
+    res += jnp.dot(states**2, square_beta)
     for p, (a, b) in zip(inter_beta, combinations(range(nfac), 2)):
-        res += p * sigma_points[..., a] * sigma_points[..., b]
+        res += p * states[a] * states[b]
     res += constant
     return res
 
 
-def index_tuples_translog(factor, factors, period):
+def params_translog(factors):
     """Index tuples for the translog production function."""
-    ind_tups = [("transition", period, factor, rhs_fac) for rhs_fac in factors]
-    ind_tups += [
-        ("transition", period, factor, f"{rhs_fac} ** 2") for rhs_fac in factors
-    ]
-    ind_tups += [
-        ("transition", period, factor, f"{a} * {b}")
-        for a, b in combinations(factors, 2)
-    ]
-    ind_tups += [("transition", period, factor, "constant")]
-    return ind_tups
+    names = (
+        factors
+        + [f"{factor} ** 2" for factor in factors]
+        + [f"{a} * {b}" for a, b in combinations(factors, 2)]
+        + ["constant"]
+    )
+    return names
 
 
-def log_ces(sigma_points, params):
+def log_ces(states, params):
     """Log CES production function (KLS version)."""
     phi = params[-1]
     gammas = params[:-1]
@@ -99,30 +90,27 @@ def log_ces(sigma_points, params):
 
     # the log step for gammas underflows for gamma = 0, but this is handled correctly
     # by logsumexp and does not raise a warning.
-    unscaled = jax.scipy.special.logsumexp(
-        jnp.log(gammas) + sigma_points * phi, axis=-1
-    )
+    unscaled = jax.scipy.special.logsumexp(jnp.log(gammas) + states * phi)
     result = unscaled * scaling_factor
     return result
 
 
-def index_tuples_log_ces(factor, factors, period):
+def params_log_ces(factors):
     """Index tuples for the log_ces production function."""
-    ind_tups = [("transition", period, factor, rhs_fac) for rhs_fac in factors]
-    return ind_tups + [("transition", period, factor, "phi")]
+    return factors + ["phi"]
 
 
 def constraints_log_ces(factor, factors, period):
-    ind_tups = index_tuples_log_ces(factor, factors, period)
-    loc = ind_tups[:-1]
+    names = params_log_ces(factors)
+    loc = [("transition", period, factor, name) for name in names[:-1]]
     return {"loc": loc, "type": "probability"}
 
 
-def constant(sigma_points, params):
+def constant(state, params):
     """Constant production function should never be called."""
-    raise NotImplementedError
+    return state
 
 
-def index_tuples_constant(factor, factors, period):
+def params_constant(factors):
     """Index tuples for the constant production function."""
     return []

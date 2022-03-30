@@ -16,14 +16,15 @@ requirements:
     - python {{ python }}
     - setuptools
   host:
-    python >=3.6
+    python >=3.8
   run:
-    - python >=3.6
+    - python >=3.8
     - numpy
     - pandas >=1.2
     - seaborn
     - scipy
     - pyyaml
+    - dags
 
 test:
   requires:

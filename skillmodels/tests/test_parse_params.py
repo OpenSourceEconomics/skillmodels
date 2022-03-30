@@ -54,28 +54,30 @@ def test_controls(parsed_parameters):
 
 
 def test_loadings(parsed_parameters):
-    expected = jnp.arange(118, 295).reshape(-1, 3)
-    aae(parsed_parameters["pardict"]["loadings"], expected)
+    expected_values = jnp.arange(118, 177)
+    calculated = parsed_parameters["pardict"]["loadings"]
+    calculated_values = calculated[calculated != 0]
+    aae(expected_values, calculated_values)
 
 
 def test_meas_sds(parsed_parameters):
-    expected = jnp.arange(295, 354)
+    expected = jnp.arange(177, 236)
     aae(parsed_parameters["pardict"]["meas_sds"], expected)
 
 
 def test_shock_sds(parsed_parameters):
-    expected = jnp.arange(354, 375).reshape(7, 3)
+    expected = jnp.arange(236, 257).reshape(7, 3)
     aae(parsed_parameters["pardict"]["shock_sds"], expected)
 
 
 def test_initial_states(parsed_parameters):
-    expected = jnp.arange(375, 378).reshape(1, 3).repeat(5, axis=0).reshape(5, 1, 3)
+    expected = jnp.arange(257, 260).reshape(1, 3).repeat(5, axis=0).reshape(5, 1, 3)
     aae(parsed_parameters["states"], expected)
 
 
 def test_initial_upper_chols(parsed_parameters):
     expected = (
-        jnp.array([[[379, 380, 382], [0, 381, 383], [0, 0, 384]]])
+        jnp.array([[[261, 262, 264], [0, 263, 265], [0, 0, 266]]])
         .repeat(5, axis=0)
         .reshape(5, 1, 3, 3)
     )
@@ -86,22 +88,22 @@ def test_transition_parameters(parsed_parameters):
 
     calculated = parsed_parameters["pardict"]["transition"]
 
-    aae(calculated[0], jnp.arange(385, 413).reshape(7, 4))
-    aae(calculated[1], jnp.arange(413, 441).reshape(7, 4))
-    aae(calculated[2], jnp.zeros((7, 0)))
+    aae(calculated["fac1"], jnp.arange(385, 413).reshape(7, 4) - 118)
+    aae(calculated["fac2"], jnp.arange(413, 441).reshape(7, 4) - 118)
+    aae(calculated["fac3"], jnp.zeros((7, 0)))
 
-    assert isinstance(calculated, tuple)
+    assert isinstance(calculated, dict)
 
 
 def test_anchoring_scaling_factors(parsed_parameters):
     calculated = parsed_parameters["pardict"]["anchoring_scaling_factors"]
     expected = np.ones((8, 3))
-    expected[:, 0] = [145 + 21 * i for i in range(8)]
+    expected[:, 0] = jnp.array([127 + 7 * i for i in range(8)])
     aae(calculated, expected)
 
 
 def test_anchoring_constants(parsed_parameters):
     calculated = parsed_parameters["pardict"]["anchoring_constants"]
     expected = np.zeros((8, 3))
-    expected[:, 0] = [18 + i * 14 for i in range(8)]
+    expected[:, 0] = jnp.array([18 + i * 14 for i in range(8)])
     aae(calculated, expected)

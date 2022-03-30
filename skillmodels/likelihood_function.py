@@ -15,7 +15,7 @@ from skillmodels.kalman_filters import kalman_update
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
-from skillmodels.process_data import process_data_for_estimation
+from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
 
@@ -50,18 +50,21 @@ def get_maximization_inputs(model_dict, data):
     """
     model = process_model(model_dict)
     p_index = get_params_index(
-        model["update_info"], model["labels"], model["dimensions"]
+        model["update_info"],
+        model["labels"],
+        model["dimensions"],
+        model["transition_info"],
     )
 
     parsing_info = create_parsing_info(
         p_index, model["update_info"], model["labels"], model["anchoring"]
     )
-    measurements, controls, = process_data_for_estimation(
+    measurements, controls, observed_factors = process_data(
         data, model["labels"], model["update_info"], model["anchoring"]
     )
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
-        model["dimensions"]["n_states"],
+        model["dimensions"]["n_latent_factors"],
         model["estimation_options"]["sigma_points_scale"],
     )
 
@@ -70,19 +73,18 @@ def get_maximization_inputs(model_dict, data):
     _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
     is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
     last_period = model["labels"]["periods"][-1]
-    # The last period is replaced by zero. Periods are only used for things that are
-    # related to the predict step. Since there is no predict step in the last period,
-    # it does not matter which entry is there. However, leaving it at the last period
-    # would cause an index error in the dummy predict function (that does nothing)
-    # during the jax tracing.
-    iteration_to_period = _periods.replace(last_period, 0).to_numpy()
+    # iteration_to_period is used as an indexer to loop over arrays of different lengths
+    # in a lax.scan. It needs to work for arrays of length n_periods and not raise
+    # IndexErrors on tracer arrays of length n_periods - 1 (i.e. n_transitions).
+    # To achieve that, we replace the last period by -1.
+    iteration_to_period = _periods.replace(last_period, -1).to_numpy()
 
     _base_loglike = functools.partial(
         _log_likelihood_jax,
         parsing_info=parsing_info,
         measurements=measurements,
         controls=controls,
-        transition_functions=model["transition_functions"],
+        transition_info=model["transition_info"],
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
         dimensions=model["dimensions"],
@@ -91,6 +93,7 @@ def get_maximization_inputs(model_dict, data):
         is_measurement_iteration=is_measurement_iteration,
         is_predict_iteration=is_predict_iteration,
         iteration_to_period=iteration_to_period,
+        observed_factors=observed_factors,
     )
 
     partialed_process_debug_data = functools.partial(process_debug_data, model=model)
@@ -104,7 +107,7 @@ def get_maximization_inputs(model_dict, data):
     _loglike = functools.partial(_base_loglike, debug=False)
 
     _jitted_loglike = jax.jit(_loglike)
-    _gradient = jax.grad(_jitted_loglike, has_aux=True)
+    _gradient = jax.jit(jax.grad(_loglike, has_aux=True))
 
     def debug_loglike(params):
         params_vec = partialed_get_jnp_params_vec(params)
@@ -166,7 +169,7 @@ def _log_likelihood_jax(
     parsing_info,
     measurements,
     controls,
-    transition_functions,
+    transition_info,
     sigma_scaling_factor,
     sigma_weights,
     dimensions,
@@ -176,6 +179,7 @@ def _log_likelihood_jax(
     is_predict_iteration,
     iteration_to_period,
     debug,
+    observed_factors,
 ):
     """Log likelihood of a skill formation model.
 
@@ -197,10 +201,9 @@ def _log_likelihood_jax(
             observed measurements. NaN if the measurement was not observed.
         controls (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
             with observed control variables for the measurement equations.
-        transition_functions (tuple): tuple of tuples where the first element is the
-            name of the transition function and the second the actual transition
-            function. Order is important and corresponds to the latent
-            factors in alphabetical order.
+        transition_info (dict): Dict with the entries "func" (the actual transition
+            function) and "columns" (a dictionary mapping factors that are needed
+            as individual columns to positions in the factor array).
         sigma_scaling_factor (float): A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
@@ -211,6 +214,8 @@ def _log_likelihood_jax(
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
         debug (bool): Boolean flag. If True, more intermediate results are returned
+        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
+            n_observed_factors) with data on the observed factors.
 
     Returns:
         jnp.array: 1d array of length 1, the aggregated log likelihood.
@@ -246,7 +251,8 @@ def _log_likelihood_jax(
         pardict=pardict,
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
-        transition_functions=transition_functions,
+        transition_info=transition_info,
+        observed_factors=observed_factors,
         debug=debug,
     )
 
@@ -275,12 +281,14 @@ def _log_likelihood_jax(
         additional_data["residuals"] = static_out["residuals"]
         additional_data["residual_sds"] = static_out["residual_sds"]
 
-        initial_states, *_ = parse_params(
+        initial_states, _, initial_log_mixture_weights, _ = parse_params(
             params, parsing_info, dimensions, labels, n_obs
         )
         additional_data["initial_states"] = initial_states
+        additional_data["initial_log_mixture_weights"] = initial_log_mixture_weights
 
         additional_data["filtered_states"] = static_out["states"]
+        additional_data["log_mixture_weights"] = static_out["log_mixture_weights"]
 
     return value, additional_data
 
@@ -292,7 +300,8 @@ def _scan_body(
     pardict,
     sigma_scaling_factor,
     sigma_weights,
-    transition_functions,
+    transition_info,
+    observed_factors,
     debug,
 ):
     t = loop_args["period"]
@@ -323,15 +332,16 @@ def _scan_body(
         "upper_chols": upper_chols,
         "sigma_scaling_factor": sigma_scaling_factor,
         "sigma_weights": sigma_weights,
-        "trans_coeffs": tuple(arr[t] for arr in pardict["transition"]),
+        "trans_coeffs": {k: arr[t] for k, arr in pardict["transition"].items()},
         "shock_sds": pardict["shock_sds"][t],
         "anchoring_scaling_factors": pardict["anchoring_scaling_factors"][
             jnp.array([t, t + 1])
         ],
         "anchoring_constants": pardict["anchoring_constants"][jnp.array([t, t + 1])],
+        "observed_factors": observed_factors[t],
     }
 
-    fixed_kwargs = {"transition_functions": transition_functions}
+    fixed_kwargs = {"transition_info": transition_info}
 
     states, upper_chols = lax.cond(
         loop_args["is_predict_iteration"],
@@ -369,12 +379,12 @@ def _one_arg_anchoring_update(kwargs, debug):
     return out
 
 
-def _one_arg_no_predict(kwargs, transition_functions):
+def _one_arg_no_predict(kwargs, transition_info):
     return kwargs["states"], kwargs["upper_chols"]
 
 
-def _one_arg_predict(kwargs, transition_functions):
-    out = kalman_predict(**kwargs, transition_functions=transition_functions)
+def _one_arg_predict(kwargs, transition_info):
+    out = kalman_predict(**kwargs, transition_info=transition_info)
     return out
 
 

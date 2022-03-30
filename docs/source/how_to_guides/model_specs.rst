@@ -69,6 +69,7 @@ general latent factor model:
     #. If development stages are used: Which periods belong to which stage?
     #. If anchoring is used: Which factors are anchored and what is the anchoring
        outcome?
+    #. Are there any observed factors?
 
 Translating the model to a dictionary
 *************************************
@@ -103,10 +104,6 @@ entries:
   some period, you still have to specify the empty lists for all periods before that
   period.
 
-- transition_equation: A string with the name of a transition equation. For a list of
-  all possible values see :ref:`transition_functions`. The list might seem a bit short
-  but not that many other transition equations can be expressed with parameter
-  constraints on the existing transition equations.
 
 - normalizations: This entry is optional. It is a dictionary that can have the keys
   ``"loadings"`` and ``"intercepts"``. The values are lists of dictionaries. The list
@@ -114,10 +111,50 @@ entries:
   are names of measurements. The values are the value they are normalized to. Note that
   loadings cannot be normalized to zero.
 
+- transition_equation: A string with the name of a pre-implemented transition equation
+  or a custom transition equation. Pre-implemented transition equations are
+  linear, log_ces (in the known location and scale version), constant and translog.
+  The example model dictionary only uses pre-implement transition functions.
 
-Note that we could not express the constraint that ``"fac2"`` only depends on its own
-past values in the model dictionary. This has to be expressed as an additional
-constraint during optimization. Fortunately, this is very easy with estimagic.
+  To see how to use custom transition functions, assume that the yaml file shown above
+  has been loaded into a python dictionary called ``model`` and look at the following
+  code:
+
+  .. code-block::
+
+      from skillmodels.decorators import register_params
+
+      @register_params(params=[])
+      def constant(fac3, params):
+          return fac3
+
+      @register_params(params=["fac1", "fac2", "fac3", "constant"])
+      def linear(fac1, fac2, fac3, params):
+          p = params
+          out = p["constant"] + fac1 * p["fac1"] + fac2 * p["fac2"] + fac3 * p["fac3"]
+          return out
+
+      model["factors"]["fac2"]["transition_function"] = linear
+      model["factors"]["fac3"]["transition_function"] = constant
+
+  The modified model_dict describes the exact same model but this time it is expressed
+  in terms of custom transition functions.
+
+  The ``@register_params`` decorator is necessary to tell skillmodels which parameters
+  are required for the transition function. Custom transition functions can take the
+  following arguments:
+
+  - **params** (mandatory): A dictionary with the parameters described in the decorator.
+  - The observed and unobserved factors as floats
+  - **states**: A 1d jax array with states in the factor order specified in the
+    model dictionary.
+
+  The order of arguments is irrelevant. All functions need to return a float.
+  The functions need to be jax jit and vmap compatible. We vmap over all arguments
+  except for params.
+
+
+
 
 ``"anchoring"``
 ---------------
@@ -158,6 +195,20 @@ to zero.
 A list that has one entry less than the number of periods of the model. It maps periods
 to development stages. See :ref:`stages_vs_periods` for the meaning of development
 stages.
+
+
+``"observed_factors"``
+----------------------
+
+A list with variable names. Those variable names must be present in the dataset and
+contain information about observed factors. An example of an observed factor could
+be income, a treatment assignment or age.
+
+
+Observed factors do not have transition equations, do not require multiple measurements
+per period and are not part of the covariance matrix of the latent factors. As such,
+adding an observed factor is computationally much less demanding than adding an
+unobserved factor.
 
 
 ``"estimation_options"``

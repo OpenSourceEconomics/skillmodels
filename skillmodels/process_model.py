@@ -1,9 +1,16 @@
+from functools import partial
+
 import numpy as np
 import pandas as pd
+from dags import concatenate_functions
+from dags.signature import rename_arguments
+from jax import vmap
 from pandas import DataFrame
 
 import skillmodels.transition_functions as tf
 from skillmodels.check_model import check_model
+from skillmodels.decorators import extract_params
+from skillmodels.decorators import jax_array_output
 
 
 def process_model(model_dict):
@@ -23,8 +30,7 @@ def process_model(model_dict):
         - labels (dict): Dict of lists with labels for the model quantities like
         factors, periods, controls, stagemap and stages. See :ref:`labels`
         - anchoring (dict): Information about anchoring. See :ref:`anchoring`
-        - transition_functions (tuple): Tuple of tuples of length n_periods. Each inner
-        tuple has the following two entries: (name_of_transition_function, callable).
+        - transition_info (dict): Everything related to transition functions.
         - update_info (pandas.DataFrame): DataFrame with one row per Kalman update
         needed in the likelihood function. See :ref:`update_info`.
         - normalizations (dict): Nested dictionary with information on normalized factor
@@ -35,13 +41,15 @@ def process_model(model_dict):
     labels = _get_labels(model_dict, dims)
     anchoring = _process_anchoring(model_dict)
     check_model(model_dict, labels, dims, anchoring)
+    transition_info = _get_transition_info(model_dict, labels)
+    labels["transition_names"] = list(transition_info["function_names"].values())
 
     processed = {
         "dimensions": dims,
         "labels": labels,
         "anchoring": anchoring,
         "estimation_options": _process_estimation_options(model_dict),
-        "transition_functions": _get_transition_functions(labels["transition_names"]),
+        "transition_info": transition_info,
         "update_info": _get_update_info(model_dict, dims, labels, anchoring),
         "normalizations": _process_normalizations(model_dict, dims, labels),
     }
@@ -60,13 +68,16 @@ def get_dimensions(model_dict):
 
     """
     all_n_periods = [len(d["measurements"]) for d in model_dict["factors"].values()]
+
     dims = {
-        "n_states": len(model_dict["factors"]),
+        "n_latent_factors": len(model_dict["factors"]),
+        "n_observed_factors": len(model_dict.get("observed_factors", [])),
         "n_periods": max(all_n_periods),
         # plus 1 for the constant
         "n_controls": len(model_dict.get("controls", [])) + 1,
         "n_mixtures": model_dict["estimation_options"].get("n_mixtures", 1),
     }
+    dims["n_all_factors"] = dims["n_latent_factors"] + dims["n_observed_factors"]
     return dims
 
 
@@ -86,17 +97,15 @@ def _get_labels(model_dict, dimensions):
     stagemap = model_dict.get("stagemap", list(range(dimensions["n_periods"] - 1)))
 
     labels = {
-        "factors": sorted(model_dict["factors"]),
-        "controls": ["constant"] + sorted(model_dict.get("controls", [])),
+        "latent_factors": list(model_dict["factors"]),
+        "observed_factors": list(model_dict.get("observed_factors", [])),
+        "controls": ["constant"] + list(model_dict.get("controls", [])),
         "periods": list(range(dimensions["n_periods"])),
         "stagemap": stagemap,
         "stages": sorted(np.unique(stagemap)),
     }
 
-    trans_names = []
-    for factor in labels["factors"]:
-        trans_names.append(model_dict["factors"][factor]["transition_function"])
-    labels["transition_names"] = trans_names
+    labels["all_factors"] = labels["latent_factors"] + labels["observed_factors"]
 
     return labels
 
@@ -151,23 +160,76 @@ def _process_anchoring(model_dict):
     if "anchoring" in model_dict:
         anchinfo.update(model_dict["anchoring"])
         anchinfo["anchoring"] = True
-        anchinfo["factors"] = sorted(anchinfo["outcomes"].keys())
+        anchinfo["factors"] = list(anchinfo["outcomes"])
 
     return anchinfo
 
 
-def _get_transition_functions(transition_names):
-    """Collect the transition functions in a nested tuple.
+def _get_transition_info(model_dict, labels):
+    """Collect information about transition functions."""
 
-    Args:
-        transition_names (list): Names of transition functions for each factor.
+    func_list, param_names = [], []
+    latent_factors = labels["latent_factors"]
+    all_factors = labels["all_factors"]
 
-    Returns:
-        tuple: Tuple of tuples of length n_periods. Each inner tuple
-            has the following two entries: (name_of_transition_function, callable).
+    for factor in latent_factors:
+        spec = model_dict["factors"][factor]["transition_function"]
+        if isinstance(spec, str):
+            func = getattr(tf, spec)
+            if spec == "constant":
+                func = rename_arguments(func, mapper={"state": factor})
+            func_list.append(extract_params(func, key=factor))
+            param_names.append(getattr(tf, f"params_{spec}")(all_factors))
+        elif callable(spec):
+            if not hasattr(spec, "__name__"):
+                raise AttributeError(
+                    "Custom transition functions must have a __name__ attribute."
+                )
+            if hasattr(spec, "__registered_params__"):
+                names = spec.__registered_params__
+                param_names.append(names)
+            else:
+                raise AttributeError(
+                    "Custom transition_functions must have a __registered_params__ "
+                    "attribute. You can set it via the register_params decorator."
+                )
+            func_list.append(extract_params(spec, key=factor, names=names))
 
-    """
-    return tuple((name, getattr(tf, name)) for name in transition_names)
+    function_names = [f.__name__ for f in func_list]
+
+    functions = {
+        f"__next_{fac}__": func for fac, func in zip(latent_factors, func_list)
+    }
+
+    # add functions to produce the individual factors out of the 1d states vector.
+    # The dag will automatically sort out what we don't need.
+    def _extract_factor(states, pos):
+        return states[pos]
+
+    for i, factor in enumerate(labels["all_factors"]):
+        functions[factor] = partial(_extract_factor, pos=i)
+
+    transition_function = concatenate_functions(
+        functions=functions, targets=[f"__next_{fac}__" for fac in latent_factors]
+    )
+
+    transition_function = jax_array_output(transition_function)
+
+    transition_function = vmap(transition_function, in_axes=(None, 0))
+
+    individual_functions = {}
+    for factor in latent_factors:
+        func = concatenate_functions(functions=functions, targets=f"__next_{factor}__")
+        func = vmap(func, in_axes=(None, 0))
+        individual_functions[factor] = func
+
+    out = {
+        "func": transition_function,
+        "param_names": dict(zip(latent_factors, param_names)),
+        "individual_functions": individual_functions,
+        "function_names": dict(zip(latent_factors, function_names)),
+    }
+    return out
 
 
 def _get_update_info(model_dict, dimensions, labels, anchoring_info):
@@ -187,16 +249,16 @@ def _get_update_info(model_dict, dimensions, labels, anchoring_info):
 
     """
     index = pd.MultiIndex(levels=[[], []], codes=[[], []], names=["period", "variable"])
-    uinfo = DataFrame(index=index, columns=labels["factors"] + ["purpose"])
+    uinfo = DataFrame(index=index, columns=labels["latent_factors"] + ["purpose"])
 
     measurements = {}
-    for factor in labels["factors"]:
+    for factor in labels["latent_factors"]:
         measurements[factor] = fill_list(
             model_dict["factors"][factor]["measurements"], [], dimensions["n_periods"]
         )
 
     for period in labels["periods"]:
-        for factor in labels["factors"]:
+        for factor in labels["latent_factors"]:
             for meas in measurements[factor][period]:
                 uinfo.loc[(period, meas), factor] = True
                 uinfo.loc[(period, meas), "purpose"] = "measurement"
@@ -226,7 +288,7 @@ def _process_normalizations(model_dict, dimensions, labels):
 
     """
     normalizations = {}
-    for factor in labels["factors"]:
+    for factor in labels["latent_factors"]:
         normalizations[factor] = {}
         norminfo = model_dict["factors"][factor].get("normalizations", {})
         for norm_type in ["loadings", "intercepts"]:

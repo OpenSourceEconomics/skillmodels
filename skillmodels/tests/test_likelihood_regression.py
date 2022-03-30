@@ -8,6 +8,7 @@ import yaml
 from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
 
+from skillmodels.decorators import register_params
 from skillmodels.likelihood_function import get_maximization_inputs
 from skillmodels.utilities import reduce_n_periods
 
@@ -18,6 +19,7 @@ model_names = [
     "one_stage",
     "one_stage_anchoring",
     "two_stages_anchoring",
+    "one_stage_anchoring_custom_functions",
 ]
 
 # importing the TEST_DIR from config does not work for test run in conda build
@@ -48,6 +50,20 @@ def _convert_model(base_model, model_name):
         pass
     elif model_name == "two_stages_anchoring":
         model["stagemap"] = [0, 0, 0, 0, 1, 1, 1]
+    elif model_name == "one_stage_anchoring_custom_functions":
+
+        @register_params(params=[])
+        def constant(fac3, params):
+            return fac3
+
+        @register_params(params=["fac1", "fac2", "fac3", "constant"])
+        def linear(fac1, fac2, fac3, params):
+            p = params
+            out = p["constant"] + fac1 * p["fac1"] + fac2 * p["fac2"] + fac3 * p["fac3"]
+            return out
+
+        model["factors"]["fac2"]["transition_function"] = linear
+        model["factors"]["fac3"]["transition_function"] = constant
     else:
         raise ValueError("Invalid model name.")
     return model
@@ -62,9 +78,14 @@ def test_likelihood_contributions_have_not_changed(model2, model2_data, model_na
     )
 
     func_dict = get_maximization_inputs(model, model2_data)
+
+    params = params.loc[func_dict["params_template"].index]
+
     debug_loglike = func_dict["debug_loglike"]
 
     new_loglikes = debug_loglike(params)["contributions"]
+
+    func_dict["loglike"](params)
 
     with open(regvault / f"{model_name}_result.json") as j:
         old_loglikes = np.array(json.load(j))
@@ -84,7 +105,7 @@ def test_likelihood_runs_with_empty_periods(model2, model2_data):
     params["value"] = 0.1
 
     debug_loglike = func_dict["debug_loglike"]
-    debug_loglike(params)["contributions"]
+    debug_loglike(params)
 
 
 def test_likelihood_runs_with_too_long_data(model2, model2_data):
@@ -95,4 +116,17 @@ def test_likelihood_runs_with_too_long_data(model2, model2_data):
     params["value"] = 0.1
 
     debug_loglike = func_dict["debug_loglike"]
-    debug_loglike(params)["contributions"]
+    debug_loglike(params)
+
+
+def test_likelihood_runs_with_observed_factors(model2, model2_data):
+    model2["observed_factors"] = ["ob1", "ob2"]
+    model2_data["ob1"] = np.arange(len(model2_data))
+    model2_data["ob2"] = np.ones(len(model2_data))
+    func_dict = get_maximization_inputs(model2, model2_data)
+
+    params = func_dict["params_template"]
+    params["value"] = 0.1
+
+    debug_loglike = func_dict["debug_loglike"]
+    debug_loglike(params)

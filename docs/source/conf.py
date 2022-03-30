@@ -46,6 +46,7 @@ autodoc_mock_imports = [
     "seaborn",
     "statsmodels",
     "filterpy",
+    "dags",
 ]
 
 # Add any paths that contain templates here, relative to this directory.

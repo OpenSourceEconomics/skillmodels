@@ -1,8 +1,5 @@
 import jax
 import jax.numpy as jnp
-from jax.ops import index
-from jax.ops import index_add
-from jax.ops import index_update
 
 
 array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
@@ -58,29 +55,31 @@ def kalman_update(
 
     not_missing = jnp.isfinite(measurements)
 
-    _expected_measurements = jnp.dot(states, loadings) + jnp.dot(
-        controls, control_params
-    ).reshape(n_obs, 1)
-
-    # replace missing measurements by average expected measurements to avoid NaNs in the
-    # gradient calculation. Note that all values that are influenced by that are
-    # replaced by other values later (using jnp.where). Choosing the average expected
-    # expected measurements as fill value just ensures that all numbers are well
-    # defined because the fill values have a reasonable order of magnitude.
+    # replace missing measurements and controls by reasonable fill values to avoid NaNs
+    # in the gradient calculation. All values that are influenced by this, are
+    # replaced by other values later. Choosing the average expected
+    # expected measurements without controls as fill value ensures that all numbers
+    # are well defined because the fill values have a reasonable order of magnitude.
     # See https://github.com/tensorflow/probability/blob/main/discussion/where-nan.pdf
     # and https://jax.readthedocs.io/en/latest/faq.html
     # for more details on the issue of NaNs in gradient calculations.
+    _safe_controls = jnp.where(not_missing.reshape(n_obs, 1), controls, 0)
+
+    _safe_expected_measurements = jnp.dot(states, loadings) + jnp.dot(
+        _safe_controls, control_params
+    ).reshape(n_obs, 1)
+
     _safe_measurements = jnp.where(
-        not_missing, measurements, _expected_measurements.mean(axis=1)
+        not_missing, measurements, _safe_expected_measurements.mean(axis=1)
     )
 
-    _residuals = _safe_measurements.reshape(n_obs, 1) - _expected_measurements
+    _residuals = _safe_measurements.reshape(n_obs, 1) - _safe_expected_measurements
     _f_stars = jnp.dot(upper_chols, loadings.reshape(n_states, 1))
 
     _m = jnp.zeros((n_obs, n_mixtures, n_states + 1, n_states + 1))
-    _m = index_update(_m, index[..., 0, 0], meas_sd)
-    _m = index_update(_m, index[..., 1:, :1], _f_stars)
-    _m = index_update(_m, index[..., 1:, 1:], upper_chols)
+    _m = _m.at[..., 0, 0].set(meas_sd)
+    _m = _m.at[..., 1:, :1].set(_f_stars)
+    _m = _m.at[..., 1:, 1:].set(upper_chols)
 
     _r = array_qr_jax(_m)[1]
 
@@ -123,6 +122,7 @@ def kalman_update(
             not_missing.reshape(n_obs, 1), _abs_root_sigmas, jnp.nan
         )
         debug_info["residual_sds"] = residual_sds
+        debug_info["log_mixture_weights"] = new_log_mixture_weights
 
     return (
         new_states,
@@ -156,7 +156,7 @@ def calculate_sigma_scaling_factor_and_weights(n_states, kappa=2):
     scaling_factor = jnp.sqrt(kappa + n_states)
     n_sigma = 2 * n_states + 1
     weights = 0.5 * jnp.ones(n_sigma) / (n_states + kappa)
-    weights = index_update(weights, index[0], kappa / (n_states + kappa))
+    weights = weights.at[0].set(kappa / (n_states + kappa))
     return scaling_factor, weights
 
 
@@ -165,11 +165,12 @@ def kalman_predict(
     upper_chols,
     sigma_scaling_factor,
     sigma_weights,
-    transition_functions,
+    transition_info,
     trans_coeffs,
     shock_sds,
     anchoring_scaling_factors,
     anchoring_constants,
+    observed_factors,
 ):
     """Make a unscented Kalman predict.
 
@@ -184,10 +185,9 @@ def kalman_predict(
             the sigma_point algorithm chosen.
         sigma_weights (jax.numpy.array): 1d array of length n_sigma with non-negative
             sigma weights.
-        transition_functions (tuple): tuple of tuples where the first element is the
-            name of the transition function and the second the actual transition
-            function. Order is important and corresponds to the latent
-            factors in alphabetical order.
+        transition_info (dict): Dict with the entries "func" (the actual transition
+            function) and "columns" (a dictionary mapping factors that are needed
+            as individual columns to positions in the factor array).
         trans_coeffs (tuple): Tuple of 1d jax.numpy.arrays with transition parameters.
         anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_fac) with
             the scaling factors for anchoring. The first row corresponds to the input
@@ -195,22 +195,27 @@ def kalman_predict(
         anchoring_constants (jax.numpy.array): Array of shape (2, n_states) with the
             constants for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
+        observed_factors (jax.numpy.array): Array of shape (n_obs, n_observed_factors)
+            with data on the observed factors in period t.
 
     Returns:
         jax.numpy.array: Predicted states, same shape as states.
         jax.numpy.array: Predicted upper_chols, same shape as upper_chols.
 
     """
-    sigma_points = _calculate_sigma_points(states, upper_chols, sigma_scaling_factor)
-    transformed = _transform_sigma_points(
+    sigma_points = _calculate_sigma_points(
+        states, upper_chols, sigma_scaling_factor, observed_factors
+    )
+    transformed = transform_sigma_points(
         sigma_points,
-        transition_functions,
+        transition_info,
         trans_coeffs,
         anchoring_scaling_factors,
         anchoring_constants,
     )
 
-    n_obs, n_mixtures, n_sigma, n_fac = sigma_points.shape
+    # do not use sigma_points.shape because sigma_points contain observed factors
+    n_obs, n_mixtures, n_sigma, n_fac = transformed.shape
 
     predicted_states = jnp.dot(sigma_weights, transformed)
 
@@ -218,14 +223,14 @@ def kalman_predict(
 
     qr_weights = jnp.sqrt(sigma_weights).reshape(n_sigma, 1)
     qr_points = jnp.zeros((n_obs, n_mixtures, n_sigma + n_fac, n_fac))
-    qr_points = index_update(qr_points, index[:, :, 0:n_sigma], devs * qr_weights)
-    qr_points = index_update(qr_points, index[:, :, n_sigma:], jnp.diag(shock_sds))
+    qr_points = qr_points.at[:, :, 0:n_sigma].set(devs * qr_weights)
+    qr_points = qr_points.at[:, :, n_sigma:].set(jnp.diag(shock_sds))
     predicted_covs = array_qr_jax(qr_points)[1][:, :, :n_fac]
 
     return predicted_states, predicted_covs
 
 
-def _calculate_sigma_points(states, upper_chols, scaling_factor):
+def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factors):
     """Calculate the array of sigma_points for the unscented transform.
 
     Args:
@@ -237,6 +242,8 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor):
         scaling_factor (float): A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
+        observed_factors (jax.numpy.array): Array of shape (n_obs, n_observed_factors)
+            with data on the observed factors in period t.
 
     Returns:
         jax.numpy.array: Array of shape n_obs, n_mixtures, n_sigma, n_fac (where n_sigma
@@ -245,23 +252,26 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor):
     """
     n_obs, n_mixtures, n_fac = states.shape
     n_sigma = 2 * n_fac + 1
+    n_observed = observed_factors.shape[1]
 
     scaled_upper_chols = upper_chols * scaling_factor
     sigma_points = jnp.repeat(states, n_sigma, axis=1).reshape(
         n_obs, n_mixtures, n_sigma, n_fac
     )
-    sigma_points = index_add(
-        sigma_points, index[:, :, 1 : n_fac + 1], scaled_upper_chols
+    sigma_points = sigma_points.at[:, :, 1 : n_fac + 1].add(scaled_upper_chols)
+    sigma_points = sigma_points.at[:, :, n_fac + 1 :].add(-scaled_upper_chols)
+
+    observed_part = observed_factors.repeat(n_sigma, axis=0).reshape(
+        n_obs, n_mixtures, n_sigma, n_observed
     )
-    sigma_points = index_add(
-        sigma_points, index[:, :, n_fac + 1 :], -scaled_upper_chols
-    )
+
+    sigma_points = jnp.concatenate([sigma_points, observed_part], axis=-1)
     return sigma_points
 
 
-def _transform_sigma_points(
+def transform_sigma_points(
     sigma_points,
-    transition_functions,
+    transition_info,
     trans_coeffs,
     anchoring_scaling_factors,
     anchoring_constants,
@@ -270,10 +280,9 @@ def _transform_sigma_points(
 
     Args:
         sigma_points (jax.numpy.array) of shape n_obs, n_mixtures, n_sigma, n_fac.
-        transition_functions (tuple): tuple of tuples where the first element is the
-            name of the transition function and the second the actual transition
-            function. Order is important and corresponds to the latent
-            factors in alphabetical order.
+        transition_info (dict): Dict with the entries "func" (the actual transition
+            function) and "columns" (a dictionary mapping factors that are needed
+            as individual columns to positions in the factor array).
         trans_coeffs (tuple): Tuple of 1d jax.numpy.arrays with transition parameters.
         anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_states) with
             the scaling factors for anchoring. The first row corresponds to the input
@@ -287,19 +296,23 @@ def _transform_sigma_points(
         equals 2 * n_fac + 1) with transformed sigma points.
 
     """
-    n_obs, n_mixtures, n_sigma, n_states = sigma_points.shape
-    anchored = sigma_points * anchoring_scaling_factors[0] + anchoring_constants[0]
+    n_obs, n_mixtures, n_sigma, n_fac = sigma_points.shape
 
-    transformed_anchored = anchored
-    for i, ((name, func), coeffs) in enumerate(zip(transition_functions, trans_coeffs)):
-        if name != "constant":
-            output = func(anchored, coeffs)
-            transformed_anchored = index_update(
-                transformed_anchored, index[..., i], output
-            )
+    flat_sigma_points = sigma_points.reshape(-1, n_fac)
+
+    anchored = flat_sigma_points * anchoring_scaling_factors[0] + anchoring_constants[0]
+
+    transition_function = transition_info["func"]
+
+    transformed_anchored = transition_function(trans_coeffs, anchored)
+
+    n_observed = transformed_anchored.shape[-1]
 
     transformed_unanchored = (
-        transformed_anchored - anchoring_constants[1]
-    ) / anchoring_scaling_factors[1]
+        transformed_anchored - anchoring_constants[1][:n_observed]
+    ) / anchoring_scaling_factors[1][:n_observed]
 
-    return transformed_unanchored
+    out_shape = (n_obs, n_mixtures, n_sigma, -1)
+    out = transformed_unanchored.reshape(out_shape)
+
+    return out
