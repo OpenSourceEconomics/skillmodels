@@ -4,7 +4,6 @@ import warnings
 import numpy as np
 
 import skillmodels.transition_functions as tf
-from skillmodels.params_index import get_loadings_index_tuples
 
 
 def get_constraints(dimensions, labels, anchoring_info, update_info, normalizations):
@@ -28,13 +27,12 @@ def get_constraints(dimensions, labels, anchoring_info, update_info, normalizati
     """
     constr = []
 
-    constr += _get_normalization_constraints(normalizations)
-    constr += _get_not_measured_constraints(update_info, labels)
+    constr += _get_normalization_constraints(normalizations, labels["latent_factors"])
     constr += _get_mixture_weights_constraints(dimensions["n_mixtures"])
     constr += _get_stage_constraints(labels["stagemap"], labels["stages"])
     constr += _get_constant_factors_constraints(labels)
     constr += _get_initial_states_constraints(
-        dimensions["n_mixtures"], labels["factors"]
+        dimensions["n_mixtures"], labels["latent_factors"]
     )
     constr += _get_transition_constraints(labels)
     constr += _get_anchoring_constraints(
@@ -89,7 +87,7 @@ def _is_diagonal_entry(ind_tup):
     return is_diag
 
 
-def _get_normalization_constraints(normalizations):
+def _get_normalization_constraints(normalizations, factors):
     """List of constraints to enforce normalizations.
 
     Args:
@@ -101,7 +99,6 @@ def _get_normalization_constraints(normalizations):
 
     """
     msg = "This constraint was generated because of an explicit normalization."
-    factors = sorted(normalizations.keys())
     periods = range(len(normalizations[factors[0]]["loadings"]))
 
     index_tuples = []
@@ -130,39 +127,6 @@ def _get_normalization_constraints(normalizations):
                 "description": msg,
             }
         ]
-    else:
-        constraints = []
-
-    return constraints
-
-
-def _get_not_measured_constraints(update_info, labels):
-    """Fix all loadings for non-measured factors to 0.
-
-    Args:
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
-            in the likelihood function. See :ref:`update_info`.
-        labels (dict): Dict of lists with labels for the model quantities like
-            factors, periods, controls, stagemap and stages. See :ref:`labels`
-
-
-    Returns:
-        constraints (list)
-
-    """
-
-    msg = (
-        "This constraint sets the loadings of those factors that are not measured by "
-        "a measurement to 0."
-    )
-
-    factors = labels["factors"]
-    all_loading_indices = get_loadings_index_tuples(factors, update_info)
-    to_fix = ~update_info[factors].to_numpy().flatten().astype(bool)
-    locs = [tup for i, tup in enumerate(all_loading_indices) if to_fix[i]]
-
-    if locs:
-        constraints = [{"loc": locs, "type": "fixed", "value": 0, "description": msg}]
     else:
         constraints = []
 
@@ -239,7 +203,7 @@ def _get_constant_factors_constraints(labels):
 
     """
     constraints = []
-    for f, factor in enumerate(labels["factors"]):
+    for f, factor in enumerate(labels["latent_factors"]):
         if labels["transition_names"][f] == "constant":
             msg = f"This constraint was generated because {factor} is constant."
             for period in labels["periods"][:-1]:
@@ -297,14 +261,14 @@ def _get_transition_constraints(labels):
 
     """
     constraints = []
-    for f, factor in enumerate(labels["factors"]):
+    for f, factor in enumerate(labels["latent_factors"]):
         tname = labels["transition_names"][f]
         msg = f"This constraint is inherent to the {tname} production function."
         for period in labels["periods"][:-1]:
             funcname = f"constraints_{tname}"
             if hasattr(tf, funcname):
                 func = getattr(tf, funcname)
-                constr = func(factor, labels["factors"], period)
+                constr = func(factor, labels["all_factors"], period)
                 if "description" not in constr:
                     constr["description"] = msg
                 constraints.append(constr)

@@ -313,6 +313,7 @@ def _get_params_index_from_model_dict(model_dict):
         update_info=mod["update_info"],
         labels=mod["labels"],
         dimensions=mod["dimensions"],
+        transition_info=mod["transition_info"],
     )
     return index
 

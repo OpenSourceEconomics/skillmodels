@@ -8,7 +8,6 @@ from skillmodels.constraints import _get_constant_factors_constraints
 from skillmodels.constraints import _get_initial_states_constraints
 from skillmodels.constraints import _get_mixture_weights_constraints
 from skillmodels.constraints import _get_normalization_constraints
-from skillmodels.constraints import _get_not_measured_constraints
 from skillmodels.constraints import _get_stage_constraints
 from skillmodels.constraints import _get_transition_constraints
 from skillmodels.constraints import add_bounds
@@ -60,41 +59,7 @@ def test_normalization_constraints():
         }
     ]
 
-    calculated = _get_normalization_constraints(norm)
-    for c in calculated:
-        del c["description"]
-
-    assert_list_equal_except_for_order(calculated, expected)
-
-
-# ======================================================================================
-# constraints the set the loadings of factors that are not measured to zero
-# ======================================================================================
-
-
-def test_not_measured_constraints():
-    ind_tups = [(0, "m1"), (0, "m2"), (0, "m3"), (1, "m1"), (1, "m3")]
-    data = [[True, False], [True, True], [False, True], [True, False], [False, True]]
-    columns = ["fac1", "fac2"]
-    uinfo = pd.DataFrame(
-        data, columns=columns, index=pd.MultiIndex.from_tuples(ind_tups)
-    )
-    labels = {"factors": columns}
-
-    expected = [
-        {
-            "loc": [
-                ("loadings", 0, "m1", "fac2"),
-                ("loadings", 0, "m3", "fac1"),
-                ("loadings", 1, "m1", "fac2"),
-                ("loadings", 1, "m3", "fac1"),
-            ],
-            "type": "fixed",
-            "value": 0.0,
-        }
-    ]
-
-    calculated = _get_not_measured_constraints(uinfo, labels)
+    calculated = _get_normalization_constraints(norm, factors=["fac1", "fac2"])
     for c in calculated:
         del c["description"]
 
@@ -155,7 +120,7 @@ def test_stage_constraints():
 
 def test_constant_factor_constraints():
     labels = {
-        "factors": ["fac1", "fac2"],
+        "latent_factors": ["fac1", "fac2"],
         "periods": [0, 1, 2],
         "transition_names": ["bla", "constant"],
     }
@@ -200,10 +165,11 @@ def test_initial_mean_constraints():
 
 def test_trans_coeff_constraints():
     labels = {
-        "factors": ["fac1", "fac2", "fac3"],
+        "latent_factors": ["fac1", "fac2", "fac3"],
         "transition_names": ["log_ces", "bla", "blubb"],
         "periods": [0, 1, 2],
     }
+    labels["all_factors"] = labels["latent_factors"]
 
     expected = [
         {

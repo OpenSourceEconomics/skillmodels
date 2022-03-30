@@ -12,8 +12,8 @@ from skillmodels.process_model import process_model
 
 
 def plot_factor_distributions(
-    states,
     model_dict,
+    states,
     period,
     combine_plots_in_grid=True,
     add_3d_plots=False,
@@ -25,20 +25,18 @@ def plot_factor_distributions(
     """Visualize pairwise_factor_distributions in certain period.
 
     Args:
+        model_dict (dict): The model specification. See: :ref:'model_specs'
         states (list, pandas.DataFrame): list of tidy DataFrames with filtered
             or simulated states or only one DataFrame with filtered or
             simulated states.They are used to estimate the state ranges in
             each period (if state_ranges are not given explicitly) and to
             estimate the distribution of the latent factors.
-        model_dict (dict): The model specification. See: :ref:'model_specs'
         period (int): The selected period of the filtered states that are plotted.
-        combine_plots_in_grid (boolen): decide whether to retrun a one figure
-            containing subplots for each factor pair or a dictionary of
-            individual plots. Default True.
-        add_3d_plots (boolen):decide whether to add 3D plots in grid of plots
-            or in the dict of individual plots. Default False.
-        n_points (int): Number of grid points per plot. For 3d plots this is per
-            dimension. Default 50.
+        combine_plots_in_grid (boolen): Return a figure containing subplots for each
+            pair of factors or a dictionary of individual plots. Default True.
+        add_3d_plots (boolen): Draw and return 3D plots or not. Default False.
+        add_contour_plots (boolen): Draw and return contour plots or not. Default True.
+        n_points (int): Number of grid points per axis and plot. Default 50.
         lower_kde_kws (dict): Keyword arguments for seaborn.kdeplot, used to generate
             the plots in the lower triangle of the grid, i.e. the two dimensional
             kdeplot for each factor pair.
@@ -61,7 +59,7 @@ def plot_factor_distributions(
     surface_kws = {} if surface_kws is None else surface_kws
 
     model = process_model(model_dict)
-    factors = model["labels"]["factors"]
+    factors = model["labels"]["latent_factors"]
 
     data, hue = _process_data(states, period, factors)
 
@@ -183,6 +181,7 @@ def _process_data(states, period, factors):
             to_concat.append(df)
         data = pd.concat(to_concat)
         hue = "scenario"
+    data = data.reset_index()
     return data, hue
 
 

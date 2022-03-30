@@ -7,7 +7,7 @@ import pandas as pd
 from skillmodels.process_model import get_period_measurements
 
 
-def process_data_for_estimation(df, labels, update_info, anchoring_info):
+def process_data(df, labels, update_info, anchoring_info, purpose="estimation"):
     """Process the data for estimation.
 
     Args:
@@ -25,18 +25,26 @@ def process_data_for_estimation(df, labels, update_info, anchoring_info):
             observed measurements. NaN if the measurement was not observed.
         control_data (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
             with observed control variables for the measurement equations.
+        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
+            n_observed_factors) with data on the observed factors.
 
     """
     df = _pre_process_data(df, labels["periods"])
     df["constant"] = 1
     df = _add_copies_of_anchoring_outcome(df, anchoring_info)
-    _check_data(df, labels["controls"], update_info, labels)
+    _check_data(df, update_info, labels, purpose=purpose)
     n_obs = int(len(df) / len(labels["periods"]))
     df = _handle_controls_with_missings(df, labels["controls"], update_info)
-    meas_data = _generate_measurements_array(df, update_info, n_obs)
+    if purpose == "estimation":
+        meas_data = _generate_measurements_array(df, update_info, n_obs)
     control_data = _generate_controls_array(df, labels, n_obs)
+    observed_data = _generate_observed_factor_array(df, labels, n_obs)
 
-    return meas_data, control_data
+    if purpose == "estimation":
+        out = (meas_data, control_data, observed_data)
+    else:
+        out = (control_data, observed_data)
+    return out
 
 
 def _pre_process_data(df, periods):
@@ -79,19 +87,28 @@ def _add_copies_of_anchoring_outcome(df, anchoring_info):
     return df
 
 
-def _check_data(df, controls, update_info, labels):
+def _check_data(df, update_info, labels, purpose):
     var_report = pd.DataFrame(index=update_info.index[:0], columns=["problem"])
     for period in labels["periods"]:
         period_data = df.query(f"period == {period}")
-        for cont in controls:
+        for cont in labels["controls"]:
             if cont not in period_data.columns or period_data[cont].isnull().all():
                 var_report.loc[(period, cont), "problem"] = "Variable is missing"
 
-        for meas in get_period_measurements(update_info, period):
-            if meas not in period_data.columns:
-                var_report.loc[(period, meas), "problem"] = "Variable is missing"
-            elif len(period_data[meas].dropna().unique()) == 1:
-                var_report.loc[(period, meas), "problem"] = "Variable has no variance"
+        if purpose == "estimation":
+            for meas in get_period_measurements(update_info, period):
+                if meas not in period_data.columns:
+                    var_report.loc[(period, meas), "problem"] = "Variable is missing"
+                elif len(period_data[meas].dropna().unique()) == 1:
+                    var_report.loc[
+                        (period, meas), "problem"
+                    ] = "Variable has no variance"
+
+        for factor in labels["observed_factors"]:
+            if factor not in period_data.columns:
+                var_report.loc[(period, factor), "problem"] = "Variable is missing"
+            elif period_data[factor].isnull().any():
+                var_report.loc[(period, factor), "problem"] = "Variable has missings"
 
     var_report = var_report.to_string() if len(var_report) > 0 else ""
 
@@ -130,4 +147,13 @@ def _generate_controls_array(df, labels, n_obs):
     arr = np.zeros((len(labels["periods"]), n_obs, len(labels["controls"])))
     for period in labels["periods"]:
         arr[period] = df.query(f"period == {period}")[labels["controls"]].to_numpy()
+    return jnp.array(arr)
+
+
+def _generate_observed_factor_array(df, labels, n_obs):
+    arr = np.zeros((len(labels["periods"]), n_obs, len(labels["observed_factors"])))
+    for period in labels["periods"]:
+        arr[period] = df.query(f"period == {period}")[
+            labels["observed_factors"]
+        ].to_numpy()
     return jnp.array(arr)

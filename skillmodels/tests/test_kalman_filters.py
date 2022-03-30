@@ -10,10 +10,10 @@ from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.kalman_filters import _calculate_sigma_points
-from skillmodels.kalman_filters import _transform_sigma_points
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.kalman_filters import kalman_predict
 from skillmodels.kalman_filters import kalman_update
+from skillmodels.kalman_filters import transform_sigma_points
 
 config.update("jax_enable_x64", True)
 
@@ -51,7 +51,7 @@ def test_kalman_update(seed, update_func):
             fp_filter.F = np.eye(dim)
             fp_filter.H = loadings.reshape(1, dim)
             fp_filter.P = covs[i, j]
-            fp_filter.R = meas_sd ** 2
+            fp_filter.R = meas_sd**2
 
             fp_filter.update(measurements[i])
 
@@ -100,6 +100,10 @@ def test_kalman_update_with_missing():
     measurements = jnp.array([13, jnp.nan, jnp.nan])
     weights = jnp.log(jnp.ones((n_obs, n_mixtures)) * 0.5)
 
+    controls = np.ones((n_obs, 2)) * 0.5
+    controls[1:] = np.nan
+    controls = jnp.array(controls)
+
     calc_states, calc_chols, calc_weights, calc_loglikes, _ = kalman_update(
         states=states,
         upper_chols=chols,
@@ -107,7 +111,7 @@ def test_kalman_update_with_missing():
         control_params=jnp.ones(2),
         meas_sd=1,
         measurements=measurements,
-        controls=jnp.ones((n_obs, 2)) * 0.5,
+        controls=controls,
         log_mixture_weights=jnp.log(jnp.ones((n_obs, 2)) * 0.5),
         debug=False,
     )
@@ -131,10 +135,15 @@ def test_kalman_update_with_missing():
 def test_sigma_points(seed):
     np.random.seed(seed)
     state, cov = _random_state_and_covariance()
+    observed_factors = np.arange(2).reshape(1, 2)
     expected = JulierSigmaPoints(n=len(state), kappa=2).sigma_points(state, cov)
+    observed_part = np.tile(observed_factors, len(expected)).reshape(-1, 2)
+    expected = np.hstack([expected, observed_part])
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor = np.sqrt(len(state) + 2)
-    calculated = _calculate_sigma_points(sm_state, sm_chol, scaling_factor)
+    calculated = _calculate_sigma_points(
+        sm_state, sm_chol, scaling_factor, observed_factors
+    )
     aaae(calculated.reshape(expected.shape), expected)
 
 
@@ -166,15 +175,19 @@ def test_sigma_scaling_factor_and_weights(seed):
 def test_transformation_of_sigma_points():
     sp = jnp.arange(10).reshape(1, 1, 5, 2) + 1
 
-    def scale_and_sum(sigma_points, params):
-        return (sigma_points * params[0]).sum(axis=-1)
+    def f(params, states):
+        out = jnp.column_stack(
+            [(states * params["fac1"][0]).sum(axis=1), states[..., 1]]
+        )
+        return out
 
-    def constant(sigma_points, params):
-        raise NotImplementedError
+    transition_info = {
+        "func": f,
+        "columns": {"fac2": 1},
+        "order": ["states", "fac2", "params"],
+    }
 
-    transition_functions = (("scale_and_sum", scale_and_sum), ("constant", constant))
-
-    trans_coeffs = (jnp.array([2]), jnp.array([]))
+    trans_coeffs = {"fac1": jnp.array([2]), "fac2": jnp.array([])}
 
     anch_scaling = jnp.array([[1, 1], [2, 1]])
 
@@ -182,8 +195,8 @@ def test_transformation_of_sigma_points():
 
     expected = jnp.array([[[[3, 2], [7, 4], [11, 6], [15, 8], [19, 10]]]])
 
-    calculated = _transform_sigma_points(
-        sp, transition_functions, trans_coeffs, anch_scaling, anch_constants
+    calculated = transform_sigma_points(
+        sp, transition_info, trans_coeffs, anch_scaling, anch_constants
     )
 
     aaae(calculated, expected)
@@ -210,32 +223,42 @@ def test_predict_against_linear_filterpy(seed):
     fp_filter.x = state.reshape(dim, 1)
     fp_filter.F = trans_mat
     fp_filter.P = cov
-    fp_filter.Q = np.diag(shock_sds ** 2)
+    fp_filter.Q = np.diag(shock_sds**2)
 
     fp_filter.predict()
     expected_state = fp_filter.x
     expected_cov = fp_filter.P
 
-    def linear(sigma_points, params):
-        return np.dot(sigma_points, params)
+    def linear(params, states):
+        return np.dot(states, params)
+
+    def transition_function(params, states):
+        out = jnp.column_stack([linear(params[f"fac{i}"], states) for i in range(dim)])
+        return out
 
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)
-    transition_functions = (("linear", linear) for i in range(dim))
-    trans_coeffs = (jnp.array(trans_mat[i]) for i in range(dim))
+    transition_info = {
+        "func": transition_function,
+        "columns": {},
+        "order": ["states", "params"],
+    }
+    trans_coeffs = {f"fac{i}": jnp.array(trans_mat[i]) for i in range(dim)}
     anch_scaling = jnp.ones((2, dim))
     anch_constants = jnp.zeros((2, dim))
+    observed_factors = jnp.zeros((1, 0))
 
     calc_states, calc_chols = kalman_predict(
         sm_state,
         sm_chol,
         scaling_factor,
         weights,
-        transition_functions,
+        transition_info,
         trans_coeffs,
         jnp.array(shock_sds),
         anch_scaling,
         anch_constants,
+        observed_factors,
     )
 
     aaae(calc_states.flatten(), expected_state.flatten())

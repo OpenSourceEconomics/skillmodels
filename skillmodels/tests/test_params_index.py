@@ -22,12 +22,19 @@ def model2_inputs():
     with open(test_dir / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     processed = process_model(model_dict)
-    return processed["update_info"], processed["labels"], processed["dimensions"]
+
+    out = {
+        "update_info": processed["update_info"],
+        "labels": processed["labels"],
+        "dimensions": processed["dimensions"],
+        "transition_info": processed["transition_info"],
+    }
+    return out
 
 
 def test_params_index_with_model2(model2_inputs):
     test_dir = Path(__file__).parent.resolve()
-    calculated = get_params_index(*model2_inputs)
+    calculated = get_params_index(**model2_inputs)
     expected = pd.read_csv(
         test_dir / "model2_correct_params_index.csv",
         index_col=["category", "period", "name1", "name2"],
@@ -60,7 +67,9 @@ def test_control_coeffs_index_tuples():
 
 def test_loading_index_tuples():
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
-    uinfo = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_tups))
+    uinfo = pd.DataFrame(
+        True, index=pd.MultiIndex.from_tuples(uinfo_tups), columns=["fac1", "fac2"]
+    )
     factors = ["fac1", "fac2"]
     expected = [
         ("loadings", 0, "m1", "fac1"),
@@ -161,9 +170,14 @@ def test_initial_cov_index_tuples():
 
 
 def test_trans_coeffs_index_tuples():
-    factors = ["fac1", "fac2", "fac3"]
     periods = [0, 1, 2]
-    transition_names = ["linear", "constant", "log_ces"]
+
+    param_names = {
+        "fac1": ["fac1", "fac2", "fac3", "constant"],
+        "fac2": [],
+        "fac3": ["fac1", "fac2", "fac3", "phi"],
+    }
+    trans_info = {"param_names": param_names}
 
     expected = [
         ("transition", 0, "fac1", "fac1"),
@@ -184,6 +198,6 @@ def test_trans_coeffs_index_tuples():
         ("transition", 1, "fac3", "phi"),
     ]
 
-    calculated = get_transition_index_tuples(factors, periods, transition_names)
+    calculated = get_transition_index_tuples(trans_info, periods)
 
     assert calculated == expected
