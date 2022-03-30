@@ -21,6 +21,7 @@ def test_visualize_transition_equations_runs():
 
     data = pd.read_stata(TEST_DIR / "model2_simulated_data.dta")
     data.set_index(["caseid", "period"], inplace=True)
+    print(data.columns)
     data["ob1"] = 0
 
     max_inputs = get_maximization_inputs(model_dict, data)
