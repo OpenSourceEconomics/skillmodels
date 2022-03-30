@@ -237,7 +237,9 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
         input_data = pd.DataFrame()
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
         fixed_quantiles = period_data.drop(columns=input_factor).quantile(quantile)
+        print("before", input_data.columns, "\n\n")
         input_data[fixed_quantiles.index] = fixed_quantiles
+        print("after", input_data.columns, "\n\n")
         input_arr = jnp.array(input_data[all_factors].to_numpy())
         output_arr = transition_function(transition_params, input_arr)
         quantile_data = pd.DataFrame()
