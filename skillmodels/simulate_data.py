@@ -337,7 +337,7 @@ def measurements_from_states(states, controls, loadings, control_params, sds):
     """
     n_meas = loadings.shape[0]
     n_obs = len(states)
-    epsilon = multivariate_normal([0] * n_meas, np.diag(sds ** 2), n_obs)
+    epsilon = multivariate_normal([0] * n_meas, np.diag(sds**2), n_obs)
     states_part = np.dot(states, loadings.T)
     control_part = np.dot(controls, control_params.T)
     meas = states_part + control_part + epsilon

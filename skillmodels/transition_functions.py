@@ -61,7 +61,7 @@ def translog(states, params):
     inter_beta = params[2 * nfac : -1]
 
     res = jnp.dot(states, lin_beta)
-    res += jnp.dot(states ** 2, square_beta)
+    res += jnp.dot(states**2, square_beta)
     for p, (a, b) in zip(inter_beta, combinations(range(nfac), 2)):
         res += p * states[a] * states[b]
     res += constant

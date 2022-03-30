@@ -51,7 +51,7 @@ def test_kalman_update(seed, update_func):
             fp_filter.F = np.eye(dim)
             fp_filter.H = loadings.reshape(1, dim)
             fp_filter.P = covs[i, j]
-            fp_filter.R = meas_sd ** 2
+            fp_filter.R = meas_sd**2
 
             fp_filter.update(measurements[i])
 
@@ -223,7 +223,7 @@ def test_predict_against_linear_filterpy(seed):
     fp_filter.x = state.reshape(dim, 1)
     fp_filter.F = trans_mat
     fp_filter.P = cov
-    fp_filter.Q = np.diag(shock_sds ** 2)
+    fp_filter.Q = np.diag(shock_sds**2)
 
     fp_filter.predict()
     expected_state = fp_filter.x
