@@ -32,45 +32,45 @@ def visualize_measurement_correlations(
 ):
     """Plot correlation heatmaps for factor measurements.
     Args:
-        periods(int,float or list): If int, the period within which to calculate
+        periods (int,float or list): If int, the period within which to calculate
             measurement correlations. If a list, calculate correlations over periods.
-        model_dict(dct): Dictionary of model attributes to be passed to process_model
+        model_dict (dct): Dictionary of model attributes to be passed to process_model
             and extract measurements for each period.
-        data(pd.DataFrame): DataFrame with observed measurements.
-        factors(list): List of factors, whose measurement correlation to calculate. If
+        data (pd.DataFrame): DataFrame with observed measurements.
+        factors (list): List of factors, whose measurement correlation to calculate. If
             the default value of None is passed, then calculate and plot correlations
             of all measurements.
-        heatmap_kwargs(dct): Dictionary of key word arguments to pass to go.Heatmap().
+        heatmap_kwargs (dct): Dictionary of key word arguments to pass to go.Heatmap ().
             If None, the default kwargs defined in the function will be used.
-        layout_kwargs(dct): Dictionary of key word arguments used to update layout of
+        layout_kwargs (dct): Dictionary of key word arguments used to update layout of
             go.Figure object. If None, the default kwargs defined in the function will
             be used.
-        rounding(int): Number of digits after the decimal point to round the
+        rounding (int): Number of digits after the decimal point to round the
             correlation values to. Default 2.
         zmin (float): Lower bound to set on correlation color map. Default -1.
         zmax (float): Upper bound to set on correlation color map. Default 1.
-        zmid(float): Midpoint to set on correlation color map. Default 0.
-        colorscale(str): Name of the color palette to use in the heatmap.
+        zmid (float): Midpoint to set on correlation color map. Default 0.
+        colorscale (str): Name of the color palette to use in the heatmap.
             Default 'RdBu_r'.
-        show_diagonal(bool): A boolean for displaying the correlations on the diagonal.
+        show_diagonal (bool): A boolean for displaying the correlations on the diagonal.
             Default False.
-        show_upper_triangle(bool): A boolean for displaying upper triangular part
+        show_upper_triangle (bool): A boolean for displaying upper triangular part
             of the correlation heatmap. Default False.
-        show_title(bool): if True, show figure title.
-        annotate(bool): If True, annotate the heatmap figure with correlation values.
+        show_title (bool): if True, show figure title.
+        annotate (bool): If True, annotate the heatmap figure with correlation values.
             Default False.
-        annotation_font_size(int): Font size of the annotation text. Default 13.
-        annotation_font_color(str): Collor of the annotation text. Default 'black'.
-        annotation_text_angle(float): The angle at which to rotate annotation text.
+        annotation_font_size (int): Font size of the annotation text. Default 13.
+        annotation_font_color (str): Collor of the annotation text. Default 'black'.
+        annotation_text_angle (float): The angle at which to rotate annotation text.
             Default 0.
-        axes_tick_fontsize(list, tuple, other iterable or dict): Fontsize of axes
+        axes_tick_fontsize (list, tuple, other iterable or dict): Fontsize of axes
             ticks. Default (12,12)
-        axes_tick_label_angle(list, tuple, other iterable or dict): Rotation angles of
+        axes_tick_label_angle (list, tuple, other iterable or dict): Rotation angles of
             axes tick labels. Default (0,0).
-        axes_tick_label_color(list, tuple, other iterable or dict): Colors of the axes
+        axes_tick_label_color (list, tuple, other iterable or dict): Colors of the axes
             tick labels. Default ('black', 'black').
     Returns:
-        fig(plotly graph object): The figure with correlaiton heatmap.
+        fig (plotly graph object): The figure with correlaiton heatmap.
 
 
     """
@@ -126,21 +126,21 @@ def _get_correlation_matrix(
     """Get correlation data frame to plot heatmap for.
     Process data, calculate correlations and process correlation DataFrame.
     Args:
-        data(pd.DataFrame): DataFrame with observed measurements.
-        model_dict(dct): Dictionary of model attributes to be passed to process_model
+        data (pd.DataFrame): DataFrame with observed measurements.
+        model_dict (dct): Dictionary of model attributes to be passed to process_model
             and extract measurements for each period.
-        periods(int,float or list): If int, the period within which to calculate
+        periods (int,float or list): If int, the period within which to calculate
             measurement correlations. If a list, calculate correlations over periods.
-        period_name(str): Name of the period variable in the data.
-        factors(list): List of factors, whose measurement correlation to calculate. If
+        period_name (str): Name of the period variable in the data.
+        factors (list): List of factors, whose measurement correlation to calculate. If
             the default value of None is passed, then calculate and plot correlations
             of all measurements.
-        rounding(int): Number of digits after the decimal point to round the.
-        show_diagonal(bool): A boolean for displaying the correlations on the diagonal.
-        show_upper_triangle(bool): A boolean for displaying upper triangular part
+        rounding (int): Number of digits after the decimal point to round the.
+        show_diagonal (bool): A boolean for displaying the correlations on the diagonal.
+        show_upper_triangle (bool): A boolean for displaying upper triangular part
             of the correlation heatmap.
     Returns:
-        corr(pd.DataFrame): Processed correlation dataframe.
+        corr (pd.DataFrame): Processed correlation dataframe.
 
     """
     data = _get_plotting_input_data(data, model, periods, period_name, factors)
@@ -163,16 +163,16 @@ def _get_mask(corr, show_upper_triangle, show_diagonal):
 def _get_plotting_input_data(data, model, periods, period_name, factors):
     """Process data for passing to heatmap plot.
     Args:
-        data(pd.DataFrame): Data with observable variables.
-        model(dict): Processed model_dict that contains information on measurements for
+        data (pd.DataFrame): Data with observable variables.
+        model (dict): Processed model_dict that contains information on measurements for
             each period.
-        periods(int or list): The period or list of periods that correlations are
+        periods (int or list): The period or list of periods that correlations are
             calculated for.
-        period_name(str): Name of the period variable in the data.
-        factors(list or str): List of or a single factor the measurements of which
+        period_name (str): Name of the period variable in the data.
+        factors (list or str): List of or a single factor the measurements of which
             correlations are calculated for.
     Returns:
-        df(pd.DataFrame): Processed DataFrame to calculate correlations over.
+        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
 
     """
     if isinstance(periods, list) and len(periods) == 1:
@@ -191,15 +191,15 @@ def _get_plotting_input_data(data, model, periods, period_name, factors):
 def _process_data_with_single_period(data, model, period, period_name, factors):
     """Extract measurements of factors for the given period.
     Args:
-        data(pd.DataFrame): Data with observable variables.
-        model(dict): Processed model_dict that contains information on measurements
+        data (pd.DataFrame): Data with observable variables.
+        model (dict): Processed model_dict that contains information on measurements
             for each period.
-        periods(int or float): The period to extract measurements for.
-        period_name(str): Name of the period variable in the data.
-        factors(list or str): List of or a single factor the measurements of which
+        periods (int or float): The period to extract measurements for.
+        period_name (str): Name of the period variable in the data.
+        factors (list or str): List of or a single factor the measurements of which
             correlations are calculated for.
     Returns:
-        df(pd.DataFrame): DataFrame with measurements of factors for period 'period'.
+        df (pd.DataFrame): DataFrame with measurements of factors for period 'period'.
 
     """
 
@@ -223,15 +223,15 @@ def _process_data_with_single_period(data, model, period, period_name, factors):
 def _process_data_with_multiple_periods(data, model, periods, period_name, factors):
     """Extract measurements for factors for given periods.
     Args:
-        data(pd.DataFrame): Data with observable variables.
-        model(dict): Processed model_dict that contains information on measurements for
+        data (pd.DataFrame): Data with observable variables.
+        model (dict): Processed model_dict that contains information on measurements for
             each period.
-        periods(list): The periods to extract measurements for.
-        period_name(str): Name of the period variable in the data.
-        factors(list or str): List of or a single factor the measurements of which
+        periods (list): The periods to extract measurements for.
+        period_name (str): Name of the period variable in the data.
+        factors (list or str): List of or a single factor the measurements of which
             correlations are calculated for.
     Returns:
-        df(pd.DataFrame): DataFrame with measurements of factors in each period as
+        df (pd.DataFrame): DataFrame with measurements of factors in each period as
             columns.
 
     """
@@ -262,15 +262,15 @@ def _get_layout_kwargs(
 ):
     """Get kwargs to update figure layout.
     Args:
-        periods(list): The periods to extract measurements for.
-        period_name(str): Name of the period variable in the data.
-        layout_kwargs(dct): Dictionary of keyword arguments used to update layout of
+        periods (list): The periods to extract measurements for.
+        period_name (str): Name of the period variable in the data.
+        layout_kwargs (dct): Dictionary of keyword arguments used to update layout of
             go.Figure object.
-        show_title(bool): Show figure titel if True.
-        annotate(bool): Add annotations to the figure if True.
-        annotation_font_size(int): Fontsize of the annotation text.
-        annotation_font_color(str): Color of the annotation text.
-        annotation_text_angle(float): The angle at which to rotate annotation text.
+        show_title (bool): Show figure titel if True.
+        annotate (bool): Add annotations to the figure if True.
+        annotation_font_size (int): Fontsize of the annotation text.
+        annotation_font_color (str): Color of the annotation text.
+        annotation_text_angle (float): The angle at which to rotate annotation text.
         axes_tick_fontsize(tuple,list or dict): Fontsizes of axes tick labels.
             Default (11,11).
         axes_tick_label_angle(tuple,list or dict): The angle at which to rotate axes
@@ -278,7 +278,7 @@ def _get_layout_kwargs(
         axes_tick_label_color(tuple,list or dict): Collor of axes labels.
             Default ('black', 'black').
     Returns:
-        default_layout_kwargs(dict): Dictionary to update figure layout.
+        default_layout_kwargs (dict): Dictionary to update figure layout.
 
     """
     default_layout_kwargs = {
@@ -359,11 +359,11 @@ def _get_annotations(
 def _get_fig_title(periods, period_name):
     """Get title of correlation heatmap.
     Args:
-        periods(int or list): The period or list of periods that correlations
+        periods (int or list): The period or list of periods that correlations
             are calculated for.
-        period_name(str): Name of the period variable in the data.
+        period_name (str): Name of the period variable in the data.
     Returns:
-        title(str): Title for the correlation heatmap that describes which periods
+        title (str): Title for the correlation heatmap that describes which periods
             the correlations have been calculated for.
     """
     if isinstance(periods, list) and len(periods) == 1:
@@ -378,15 +378,15 @@ def _get_fig_title(periods, period_name):
 def _get_heatmap_kwargs(heatmap_kwargs, colorscale, zmin, zmax, zmid):
     """Get kwargs to instantiate Heatmap object.
     Args:
-        heatmap_kwargs(dct): Dictionary of key word arguments to pass to go.Heatmap().
-        colorscale(str): Name of the color palette to use in the heatmap.
+        heatmap_kwargs (dct): Dictionary of key word arguments to pass to go.Heatmap().
+        colorscale (str): Name of the color palette to use in the heatmap.
             Default 'RdBu_r'.
         zmin (float): Lower bound to set on correlation color map. Default -1.
         zmax (float): Upper bound to set on correlation color map. Default 1.
-        zmid(float): Midpoint to set on correlation color map. Default 0.
+        zmid (float): Midpoint to set on correlation color map. Default 0.
 
     Returns:
-        default_heatmap_kwargs(dict): Dictionary to instantiate go.Heatmap.
+        default_heatmap_kwargs (dict): Dictionary to instantiate go.Heatmap.
 
     """
     default_heatmap_kwargs = {
