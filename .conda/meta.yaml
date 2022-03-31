@@ -25,6 +25,8 @@ requirements:
     - scipy
     - pyyaml
     - dags
+    - plotly
+    - kaleido
 
 test:
   requires:
