@@ -369,7 +369,7 @@ def _get_fig_title(periods, period_name):
     if isinstance(periods, list) and len(periods) == 1:
         periods = periods[0]
     if isinstance(periods, list):
-        title = f"{period_name}: {periods[0]}-{periods[-1]}"
+        title = f"{period_name}s: {periods[0]}-{periods[-1]}"
     elif isinstance(periods, (int, float)):
         title = f"{period_name}: {periods}"
     return title
