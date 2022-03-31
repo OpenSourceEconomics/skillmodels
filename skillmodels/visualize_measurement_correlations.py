@@ -11,7 +11,6 @@ def visualize_measurement_correlations(
     model_dict,
     data,
     *,
-    return_type=None,
     factors=None,
     heatmap_kwargs=None,
     layout_kwargs=None,
@@ -27,13 +26,11 @@ def visualize_measurement_correlations(
 ):
     """Plot correlation heatmaps for factor measurements.
     Args:
-        period(int,float or list): If int, the period within which to calculate
+        periods(int,float or list): If int, the period within which to calculate
             measurement correlations. If a list, calculate correlations over periods.
         model_dict(dct): Dictionary of model attributes to be passed to process_model
             and extract measurements for each period.
         data(pd.DataFrame): DataFrame with observed measurements.
-        return_type(None, str or pathlib.Path): If None, return the figure object.
-            Else, must be a path to save the figure to.
         factors(list): List of factors, whose measurement correlation to calculate. If
             the default value of None is passed, then calculate and plot correlations
             of all measurements.
@@ -51,12 +48,14 @@ def visualize_measurement_correlations(
             Default 'RdBu_r'.
         show_diagonal(bool): A boolean for displaying the correlations on the diagonal.
             Default False.
-        show_upper_triangular(bool): A boolean for displaying upper triangular part
+        show_upper_triangle(bool): A boolean for displaying upper triangular part
             of the correlation heatmap. Default False.
         annotate(bool): if True, annotate the heatmap figure with correlation values.
         show_title(bool): if True, show figure title.
     Returns:
-        fig(plotly figure): The figure with correlaiton heatmap.
+        fig(plotly graph object): The figure with correlaiton heatmap.
+        goh(plotly graph object): Heatmap object which is a dictionary with correlation
+            matrix and heatmap kwargs.
 
     """
     data = data.copy(deep=True)
@@ -89,10 +88,7 @@ def visualize_measurement_correlations(
     )
     fig = go.Figure(goh)
     fig.layout.update(**layout_kwargs)
-    if not return_type:
-        return fig
-    else:
-        fig.write_image(return_type)
+    return fig
 
 
 def _get_correlation_matrix(
@@ -105,6 +101,26 @@ def _get_correlation_matrix(
     show_diagonal,
     show_upper_triangle,
 ):
+    """Get correlation data frame to plot heatmap for.
+    Process data, calculate correlations and process correlation DataFrame.
+    Args:
+        data(pd.DataFrame): DataFrame with observed measurements.
+        model_dict(dct): Dictionary of model attributes to be passed to process_model
+            and extract measurements for each period.
+        periods(int,float or list): If int, the period within which to calculate
+            measurement correlations. If a list, calculate correlations over periods.
+        period_name(str): Name of the period variable in the data.
+        factors(list): List of factors, whose measurement correlation to calculate. If
+            the default value of None is passed, then calculate and plot correlations
+            of all measurements.
+        rounding(int): Number of digits after the decimal point to round the.
+        show_diagonal(bool): A boolean for displaying the correlations on the diagonal.
+        show_upper_triangle(bool): A boolean for displaying upper triangular part
+            of the correlation heatmap.
+    Returns:
+        corr(pd.DataFrame): Processed correlation dataframe.
+
+    """
     data = _process_data_for_plotting(data, model, periods, period_name, factors)
     corr = data.corr().round(rounding)
     mask = _get_mask(corr, show_upper_triangle, show_diagonal)
@@ -113,6 +129,7 @@ def _get_correlation_matrix(
 
 
 def _get_mask(corr, show_upper_triangle, show_diagonal):
+    """Get array to mask the correlation DataFrame."""
     if not show_upper_triangle:
         mask = np.triu(np.ones_like(corr, dtype=bool))
         if show_diagonal:
@@ -219,13 +236,13 @@ def _get_layout_kwargs(corr, layout_kwargs, annotate, show_title, periods, perio
 
     if annotate:
         annotations = []
-        for n, row in enumerate(corr.values):
-            for m in range(len(row)):
+        for n in corr.index:
+            for m in corr.columns:
                 annotations.append(
                     {
-                        "text": str(corr.values[n][m]).replace("nan", ""),
-                        "x": corr.index[m],
-                        "y": corr.columns[n],
+                        "text": str(corr.loc[n, m]).replace("nan", ""),
+                        "x": m,
+                        "y": n,
                         "xref": "x1",
                         "yref": "y1",
                         "showarrow": False,
