@@ -22,6 +22,8 @@ def visualize_measurement_correlations(
     show_diagonal=False,
     show_upper_triangle=False,
     annotate=False,
+    annotation_font_size=14,
+    annotation_font_color="black",
     show_title=True,
 ):
     """Plot correlation heatmaps for factor measurements.
@@ -50,7 +52,9 @@ def visualize_measurement_correlations(
             Default False.
         show_upper_triangle(bool): A boolean for displaying upper triangular part
             of the correlation heatmap. Default False.
-        annotate(bool): if True, annotate the heatmap figure with correlation values.
+        annotate(bool): If True, annotate the heatmap figure with correlation values.
+        annotate_font_size(int): Font size of the annotation text.
+        annotate_font_color(str): Collor of the annotation text.
         show_title(bool): if True, show figure title.
     Returns:
         fig(plotly graph object): The figure with correlaiton heatmap.
@@ -74,11 +78,13 @@ def visualize_measurement_correlations(
     heatmap_kwargs = _get_heatmap_kwargs(heatmap_kwargs, colorscale, zmin, zmax, zmid)
     layout_kwargs = _get_layout_kwargs(
         corr,
-        layout_kwargs,
-        annotate,
-        show_title,
         periods,
         period_name,
+        layout_kwargs,
+        annotate,
+        annotation_font_size,
+        annotation_font_color,
+        show_title,
     )
     goh = go.Heatmap(
         z=corr,
@@ -226,7 +232,30 @@ def _process_data_with_multiple_periods(data, model, periods, period_name, facto
     return df
 
 
-def _get_layout_kwargs(corr, layout_kwargs, annotate, show_title, periods, period_name):
+def _get_layout_kwargs(
+    corr,
+    periods,
+    period_name,
+    layout_kwargs,
+    annotate,
+    annotation_font_size,
+    annotation_font_color,
+    show_title,
+):
+    """Get kwargs to update figure layout.
+    Args:
+        periods(list): The periods to extract measurements for.
+        period_name(str): Name of the period variable in the data.
+        layout_kwargs(dct): Dictionary of keyword arguments used to update layout of
+            go.Figure object.
+        annotate(bool): Add annotations to the figure if True.
+        annotation_font_size(int): Fontsize of the annotation text.
+        annotation_font_color(str): Color of the annotation text.
+        show_title(bool): Show figure titel if True.
+    Returns:
+        default_layout_kwargs(dict): Dictionary to update figure layout.
+
+    """
     default_layout_kwargs = {
         "xaxis_showgrid": False,
         "yaxis_showgrid": False,
@@ -246,6 +275,10 @@ def _get_layout_kwargs(corr, layout_kwargs, annotate, show_title, periods, perio
                         "xref": "x1",
                         "yref": "y1",
                         "showarrow": False,
+                        "font": {
+                            "color": annotation_font_color,
+                            "size": annotation_font_size,
+                        },
                     }
                 )
         default_layout_kwargs["annotations"] = annotations
@@ -277,6 +310,19 @@ def _get_fig_title(periods, period_name):
 
 
 def _get_heatmap_kwargs(heatmap_kwargs, colorscale, zmin, zmax, zmid):
+    """Get kwargs to instantiate Heatmap object.
+    Args:
+        heatmap_kwargs(dct): Dictionary of key word arguments to pass to go.Heatmap().
+        colorscale(str): Name of the color palette to use in the heatmap.
+            Default 'RdBu_r'.
+        zmin (float): Lower bound to set on correlation color map. Default -1.
+        zmax (float): Upper bound to set on correlation color map. Default 1.
+        zmid(float): Midpoint to set on correlation color map. Default 0.
+
+    Returns:
+        default_heatmap_kwargs(dict): Dictionary to instantiate go.Heatmap.
+
+    """
     default_heatmap_kwargs = {
         "colorscale": colorscale,
         "zmin": zmin,
