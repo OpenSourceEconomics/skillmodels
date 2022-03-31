@@ -143,7 +143,7 @@ def _get_correlation_matrix(
         corr (pd.DataFrame): Processed correlation dataframe.
 
     """
-    data = _get_plotting_input_data(data, model, periods, period_name, factors)
+    data = _process_data_for_plotting(data, model, periods, period_name, factors)
     corr = data.corr().round(rounding)
     mask = _get_mask(corr, show_upper_triangle, show_diagonal)
     corr = corr.where(mask)
@@ -162,7 +162,7 @@ def _get_mask(corr, show_upper_triangle, show_diagonal):
     return mask
 
 
-def _get_plotting_input_data(data, model, periods, period_name, factors):
+def _process_data_for_plotting(data, model, periods, period_name, factors):
     """Process data for passing to heatmap plot.
     Args:
         data (pd.DataFrame): Data with observable variables.
@@ -180,17 +180,17 @@ def _get_plotting_input_data(data, model, periods, period_name, factors):
     if isinstance(periods, list) and len(periods) == 1:
         periods = periods[0]
     if isinstance(periods, (int, float)):
-        df = _get_plotting_input_data_with_single_period(
+        df = _process_data_for_plotting_with_single_period(
             data, model, periods, period_name, factors
         )
     elif isinstance(periods, list):
-        df = _get_plotting_input_data_with_multiple_periods(
+        df = _process_data_for_plotting_with_multiple_periods(
             data, model, periods, period_name, factors
         )
     return df
 
 
-def _get_plotting_input_data_with_single_period(
+def _process_data_for_plotting_with_single_period(
     data, model, period, period_name, factors
 ):
     """Extract measurements of factors for the given period.
@@ -224,7 +224,7 @@ def _get_plotting_input_data_with_single_period(
     return df
 
 
-def _get_plotting_input_data_with_multiple_periods(
+def _process_data_for_plotting_with_multiple_periods(
     data, model, periods, period_name, factors
 ):
     """Extract measurements for factors for given periods.
@@ -244,7 +244,7 @@ def _get_plotting_input_data_with_multiple_periods(
     to_concat = []
     for period in periods:
         to_concat.append(
-            _get_plotting_input_data_with_single_period(
+            _process_data_for_plotting_with_single_period(
                 data, model, period, period_name, factors
             )
             .add_suffix(f"_{period}")
