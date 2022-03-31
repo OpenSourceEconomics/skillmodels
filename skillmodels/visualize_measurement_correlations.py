@@ -143,7 +143,7 @@ def _get_correlation_matrix(
         corr(pd.DataFrame): Processed correlation dataframe.
 
     """
-    data = _process_data_for_plotting(data, model, periods, period_name, factors)
+    data = _get_plotting_input_data(data, model, periods, period_name, factors)
     corr = data.corr().round(rounding)
     mask = _get_mask(corr, show_upper_triangle, show_diagonal)
     corr = corr.mask(mask)
@@ -162,7 +162,7 @@ def _get_mask(corr, show_upper_triangle, show_diagonal):
     return mask
 
 
-def _process_data_for_plotting(data, model, periods, period_name, factors):
+def _get_plotting_input_data(data, model, periods, period_name, factors):
     """Process data for passing to heatmap plot.
     Args:
         data(pd.DataFrame): Data with observable variables.
