@@ -146,17 +146,19 @@ def _get_correlation_matrix(
     data = _get_plotting_input_data(data, model, periods, period_name, factors)
     corr = data.corr().round(rounding)
     mask = _get_mask(corr, show_upper_triangle, show_diagonal)
-    corr = corr.mask(mask)
+    corr = corr.where(mask)
     return corr
 
 
 def _get_mask(corr, show_upper_triangle, show_diagonal):
     """Get array to mask the correlation DataFrame."""
     mask = np.zeros_like(corr, dtype=bool)
-    fill_upper_triangle = bool(1 - bool(show_upper_triangle))
-    fill_diagonal = bool(1 - bool(show_diagonal))
-    mask[np.triu_indices(mask.shape[0])] = fill_upper_triangle
-    np.fill_diagonal(mask, fill_diagonal)
+    dim = mask.shape[0]
+    mask[np.tril_indices(dim)] = True
+    if show_upper_triangle:
+        mask[np.triu_indices(dim)] = True
+    if not show_diagonal:
+        np.fill_diagonal(mask, False)
     return mask
 
 
