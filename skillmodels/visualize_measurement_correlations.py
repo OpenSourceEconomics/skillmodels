@@ -403,7 +403,7 @@ def _get_heatmap_kwargs(heatmap_kwargs, colorscale, zmin, zmax, zmid):
 
 
 def _process_axes_tick_args(args):
-    if isinstance(args, (tuple, list, set)):
+    if isinstance(args, (tuple, list)):
         args = {"x": args[0], "y": args[1]}
     elif isinstance(args, dict):
         if not set(args.keys()) == {"x", "y"}:
