@@ -23,10 +23,10 @@ def visualize_measurement_correlations(
     show_upper_triangle=False,
     show_title=True,
     annotate=False,
-    annotation_fontsize=14,
+    annotation_fontsize=13,
     annotation_text_color="black",
     annotation_text_angle=0,
-    axes_tick_fontsize=(11, 11),
+    axes_tick_fontsize=(12, 12),
     axes_tick_label_angle=(0, 0),
     axes_tick_label_color=("black", "black"),
 ):
@@ -59,12 +59,12 @@ def visualize_measurement_correlations(
         show_title(bool): if True, show figure title.
         annotate(bool): If True, annotate the heatmap figure with correlation values.
             Default False.
-        annotation_font_size(int): Font size of the annotation text. Default 14.
+        annotation_font_size(int): Font size of the annotation text. Default 13.
         annotation_font_color(str): Collor of the annotation text. Default 'black'.
         annotation_text_angle(float): The angle at which to rotate annotation text.
             Default 0.
         axes_tick_fontsize(list, tuple, other iterable or dict): Fontsize of axes
-            ticks. Default (11,11)
+            ticks. Default (12,12)
         axes_tick_label_angle(list, tuple, other iterable or dict): Rotation angles of
             axes tick labels. Default (0,0).
         axes_tick_label_color(list, tuple, other iterable or dict): Colors of the axes
