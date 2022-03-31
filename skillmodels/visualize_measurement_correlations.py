@@ -178,17 +178,19 @@ def _get_plotting_input_data(data, model, periods, period_name, factors):
     if isinstance(periods, list) and len(periods) == 1:
         periods = periods[0]
     if isinstance(periods, (int, float)):
-        df = _process_data_with_single_period(
+        df = _get_plotting_input_data_with_single_period(
             data, model, periods, period_name, factors
         )
     elif isinstance(periods, list):
-        df = _process_data_with_multiple_periods(
+        df = _get_plotting_input_data_with_multiple_periods(
             data, model, periods, period_name, factors
         )
     return df
 
 
-def _process_data_with_single_period(data, model, period, period_name, factors):
+def _get_plotting_input_data_with_single_period(
+    data, model, period, period_name, factors
+):
     """Extract measurements of factors for the given period.
     Args:
         data (pd.DataFrame): Data with observable variables.
@@ -220,7 +222,9 @@ def _process_data_with_single_period(data, model, period, period_name, factors):
     return df
 
 
-def _process_data_with_multiple_periods(data, model, periods, period_name, factors):
+def _get_plotting_input_data_with_multiple_periods(
+    data, model, periods, period_name, factors
+):
     """Extract measurements for factors for given periods.
     Args:
         data (pd.DataFrame): Data with observable variables.
@@ -238,7 +242,9 @@ def _process_data_with_multiple_periods(data, model, periods, period_name, facto
     to_concat = []
     for period in periods:
         to_concat.append(
-            _process_data_with_single_period(data, model, period, period_name, factors)
+            _get_plotting_input_data_with_single_period(
+                data, model, period, period_name, factors
+            )
             .add_suffix(f"_{period}")
             .reset_index(drop=True)
         )
