@@ -153,10 +153,10 @@ def _get_correlation_matrix(
 def _get_mask(corr, show_upper_triangle, show_diagonal):
     """Get array to mask the correlation DataFrame."""
     mask = np.zeros_like(corr, dtype=bool)
-    if not show_upper_triangle:
-        mask[np.triu_indices(mask.shape)] = True
-    if not show_diagonal:
-        np.fill_diagonal(mask, False)
+    fill_upper_triangle = bool(1 - bool(show_upper_triangle))
+    fill_diagonal = bool(1 - bool(show_diagonal))
+    mask[np.triu_indices(mask.shape[0])] = fill_upper_triangle
+    np.fill_diagonal(mask, fill_diagonal)
     return mask
 
 
