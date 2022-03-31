@@ -21,10 +21,14 @@ def visualize_measurement_correlations(
     colorscale="RdBu_r",
     show_diagonal=False,
     show_upper_triangle=False,
-    annotate=False,
-    annotation_font_size=14,
-    annotation_font_color="black",
     show_title=True,
+    annotate=False,
+    annotation_fontsize=14,
+    annotation_text_color="black",
+    annotation_text_angle=0,
+    axes_tick_fontsize=(11, 11),
+    axes_tick_label_angle=(0, 0),
+    axes_tick_label_color=("black", "black"),
 ):
     """Plot correlation heatmaps for factor measurements.
     Args:
@@ -52,14 +56,22 @@ def visualize_measurement_correlations(
             Default False.
         show_upper_triangle(bool): A boolean for displaying upper triangular part
             of the correlation heatmap. Default False.
-        annotate(bool): If True, annotate the heatmap figure with correlation values.
-        annotate_font_size(int): Font size of the annotation text.
-        annotate_font_color(str): Collor of the annotation text.
         show_title(bool): if True, show figure title.
+        annotate(bool): If True, annotate the heatmap figure with correlation values.
+            Default False.
+        annotation_font_size(int): Font size of the annotation text. Default 14.
+        annotation_font_color(str): Collor of the annotation text. Default 'black'.
+        annotation_text_angle(float): The angle at which to rotate annotation text.
+            Default 0.
+        axes_tick_fontsize(list, tuple, other iterable or dict): Fontsize of axes
+            ticks. Default (11,11)
+        axes_tick_label_angle(list, tuple, other iterable or dict): Rotation angles of
+            axes tick labels. Default (0,0).
+        axes_tick_label_color(list, tuple, other iterable or dict): Colors of the axes
+            tick labels. Default ('black', 'black').
     Returns:
         fig(plotly graph object): The figure with correlaiton heatmap.
-        goh(plotly graph object): Heatmap object which is a dictionary with correlation
-            matrix and heatmap kwargs.
+
 
     """
     data = data.copy(deep=True)
@@ -80,11 +92,15 @@ def visualize_measurement_correlations(
         corr,
         periods,
         period_name,
-        layout_kwargs,
-        annotate,
-        annotation_font_size,
-        annotation_font_color,
-        show_title,
+        layout_kwargs=layout_kwargs,
+        show_title=show_title,
+        annotate=annotate,
+        annotation_fontsize=annotation_fontsize,
+        annotation_text_color=annotation_text_color,
+        annotation_text_angle=annotation_text_angle,
+        axes_tick_fontsize=axes_tick_fontsize,
+        axes_tick_label_angle=axes_tick_label_angle,
+        axes_tick_label_color=axes_tick_label_color,
     )
     goh = go.Heatmap(
         z=corr,
@@ -237,10 +253,14 @@ def _get_layout_kwargs(
     periods,
     period_name,
     layout_kwargs,
-    annotate,
-    annotation_font_size,
-    annotation_font_color,
     show_title,
+    annotate,
+    annotation_fontsize,
+    annotation_text_color,
+    annotation_text_angle,
+    axes_tick_fontsize,
+    axes_tick_label_angle,
+    axes_tick_label_color,
 ):
     """Get kwargs to update figure layout.
     Args:
@@ -248,10 +268,17 @@ def _get_layout_kwargs(
         period_name(str): Name of the period variable in the data.
         layout_kwargs(dct): Dictionary of keyword arguments used to update layout of
             go.Figure object.
+        show_title(bool): Show figure titel if True.
         annotate(bool): Add annotations to the figure if True.
         annotation_font_size(int): Fontsize of the annotation text.
         annotation_font_color(str): Color of the annotation text.
-        show_title(bool): Show figure titel if True.
+        annotation_text_angle(float): The angle at which to rotate annotation text.
+        axes_tick_fontsize(tuple,list or dict): Fontsizes of axes tick labels.
+            Default (11,11).
+        axes_tick_label_angle(tuple,list or dict): The angle at which to rotate axes
+            tick labels. Default (0,0).
+        axes_tick_label_color(tuple,list or dict): Collor of axes labels.
+            Default ('black', 'black').
     Returns:
         default_layout_kwargs(dict): Dictionary to update figure layout.
 
@@ -262,32 +289,73 @@ def _get_layout_kwargs(
         "yaxis_autorange": "reversed",
         "template": "plotly_white",
     }
-
-    if annotate:
-        annotations = []
-        for n in corr.index:
-            for m in corr.columns:
-                annotations.append(
-                    {
-                        "text": str(corr.loc[n, m]).replace("nan", ""),
-                        "x": m,
-                        "y": n,
-                        "xref": "x1",
-                        "yref": "y1",
-                        "showarrow": False,
-                        "font": {
-                            "color": annotation_font_color,
-                            "size": annotation_font_size,
-                        },
-                    }
-                )
-        default_layout_kwargs["annotations"] = annotations
+    default_layout_kwargs.update(
+        _get_annotations(
+            corr,
+            annotate,
+            annotation_fontsize,
+            annotation_text_color,
+            annotation_text_angle,
+        )
+    )
+    default_layout_kwargs.update(
+        _get_axes_ticks_kwargs(
+            axes_tick_fontsize, axes_tick_label_angle, axes_tick_label_color
+        )
+    )
     if show_title:
         title = _get_fig_title(periods, period_name)
         default_layout_kwargs["title"] = title
     if layout_kwargs:
         default_layout_kwargs.update(layout_kwargs)
     return default_layout_kwargs
+
+
+def _get_axes_ticks_kwargs(
+    axes_tick_fontsize, axes_tick_label_angle, axes_tick_label_color
+):
+    """Get kwargs for axes ticks label formating."""
+    axes_tick_fontsize = _process_axes_tick_args(axes_tick_fontsize)
+    axes_tick_label_angle = _process_axes_tick_args(axes_tick_label_angle)
+    axes_tick_label_color = _process_axes_tick_args(axes_tick_label_color)
+    out = {}
+    for ax in ["x", "y"]:
+        out[f"{ax}axis"] = {
+            "tickangle": axes_tick_label_angle[ax],
+            "tickfont": {
+                "color": axes_tick_label_color[ax],
+                "size": axes_tick_fontsize[ax],
+            },
+        }
+    return out
+
+
+def _get_annotations(
+    df, annotate, annotation_fontsize, annotation_text_color, annotation_text_angle
+):
+    """Get annotations and formatting kwargs."""
+    annotation_kwargs = {}
+    if annotate:
+        annotations = []
+        for n in df.index:
+            for m in df.columns:
+                annotations.append(
+                    {
+                        "text": str(df.loc[n, m]).replace("nan", ""),
+                        "x": m,
+                        "y": n,
+                        "xref": "x1",
+                        "yref": "y1",
+                        "showarrow": False,
+                        "font": {
+                            "color": annotation_text_color,
+                            "size": annotation_fontsize,
+                        },
+                        "textangle": annotation_text_angle,
+                    }
+                )
+        annotation_kwargs["annotations"] = annotations
+    return annotation_kwargs
 
 
 def _get_fig_title(periods, period_name):
@@ -332,3 +400,15 @@ def _get_heatmap_kwargs(heatmap_kwargs, colorscale, zmin, zmax, zmid):
     if heatmap_kwargs:
         default_heatmap_kwargs.update(heatmap_kwargs)
     return default_heatmap_kwargs
+
+
+def _process_axes_tick_args(args):
+    if isinstance(args, (tuple, list, set)):
+        args = {"x": args[0], "y": args[1]}
+    elif isinstance(args, dict):
+        if not set(args.keys()) == {"x", "y"}:
+            raise ValueError(
+                f"""If given as dictionry, axes tick relevant arguments should have
+                 keys 'x', and 'y'. You provided dictionary with keys {args.keys()}"""
+            )
+    return args
