@@ -101,7 +101,7 @@ def test_process_data_with_multiple_periods():
 
 
 def test_get_factors():
-    model = {"labels": {"latent_factors": list("abcd")}}
+    model = {"labels": {"all_factors": list("abcd")}}
     factor = "c"
     factors = ["b", "d"]
     all_factors = None

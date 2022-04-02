@@ -246,7 +246,7 @@ def _process_data_for_plotting_with_multiple_periods(
 def _get_factors(model, factors):
     "Get list of factors."
     if not factors:
-        factors = model["labels"]["latent_factors"]
+        factors = model["labels"]["all_factors"]
     elif isinstance(factors, str):
         factors = [factors]
     return factors
