@@ -63,14 +63,13 @@ def visualize_transition_equations(
         matplotlib.Figure: The plot
         pandas.DataFrame: The data from which the plot was generated.
     """
-    if isinstance(quantiles_of_other_factors, float):
-        quantiles_of_other_factors = [quantiles_of_other_factors]
-    elif isinstance(quantiles_of_other_factors, tuple):
-        quantiles_of_other_factors = list(quantiles_of_other_factors)
 
     if plot_marginal_effects:
         raise NotImplementedError()
 
+    quantiles_of_other_factors = _process_quantiles_of_other_factors(
+        quantiles_of_other_factors
+    )
     model = process_model(model_dict)
 
     if period >= model["labels"]["periods"][-1]:
@@ -251,6 +250,14 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
 
     out = pd.concat(to_concat).reset_index()
     return out
+
+
+def _process_quantiles_of_other_factors(quantiles_of_other_factors):
+    if isinstance(quantiles_of_other_factors, (float, int)):
+        quantiles_of_other_factors = [quantiles_of_other_factors]
+    elif isinstance(quantiles_of_other_factors, (tuple, list)):
+        quantiles_of_other_factors = list(quantiles_of_other_factors)
+    return quantiles_of_other_factors
 
 
 def _prepare_data_for_one_plot_average_2d(
