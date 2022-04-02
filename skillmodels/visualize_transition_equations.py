@@ -87,8 +87,9 @@ def visualize_transition_equations(
 
     nlatent = len(latent_factors)
     nall = len(all_factors)
-    fig = make_subplots(rows=nlatent, cols=nall, start_cell="bottom-left")
-
+    fig = make_subplots(
+        rows=nlatent, cols=nall, start_cell="top-left", print_grid=False
+    )
     for (output_factor, input_factor), (row, col) in zip(
         itertools.product(latent_factors, all_factors),
         itertools.product(np.arange(nlatent), np.arange(nall)),
@@ -131,17 +132,34 @@ def visualize_transition_equations(
             isinstance(quantiles_of_other_factors, list)
             and len(quantiles_of_other_factors) > 1
         ):
-            for _, df in plot_data.groupby("quantile"):
-                fig.add_trace(
-                    go.Scatter(
-                        y=df[f"{output_factor} in period {period + 1}"],
-                        x=df[f"{input_factor} in period {period}"],
-                        line_shape="linear",
-                    ),
-                    col=col + 1,
-                    row=row + 1,
-                )
-    return fig, plot_data
+            for q, df in plot_data.groupby("quantile"):
+                if row == 0 and col == 0:
+                    fig.add_trace(
+                        go.Scatter(
+                            y=df[f"{output_factor} in period {period + 1}"],
+                            x=df[f"{input_factor} in period {period}"],
+                            line_shape="linear",
+                            showlegend=True,
+                            name=q,
+                        ),
+                        col=col + 1,
+                        row=row + 1,
+                    )
+                else:
+                    fig.add_trace(
+                        go.Scatter(
+                            y=df[f"{output_factor} in period {period + 1}"],
+                            x=df[f"{input_factor} in period {period}"],
+                            line_shape="linear",
+                            showlegend=False,
+                        ),
+                        col=col + 1,
+                        row=row + 1,
+                    )
+    fig.update_layout(template="simple_white")
+    fig.update_layout(xaxis_showgrid=False, yaxis_showgrid=False)
+    fig.update_layout(showlegend=True)
+    return fig
 
 
 def _get_state_ranges(state_ranges, states_data, all_factors):
