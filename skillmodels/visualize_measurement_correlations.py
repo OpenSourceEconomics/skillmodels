@@ -76,12 +76,12 @@ def visualize_measurement_correlations(
     """
     data = data.copy(deep=True)
     model = process_model(model_dict)
-    period_name = model["update_info"].index.names[0]
+    factors = _get_factors(model, model)
+    update_info = model["update_info"]
     corr = _get_correlation_matrix(
         data,
-        model,
+        update_info,
         periods,
-        period_name,
         factors,
         rounding,
         show_diagonal,
@@ -91,7 +91,7 @@ def visualize_measurement_correlations(
     layout_kwargs = _get_layout_kwargs(
         corr,
         periods,
-        period_name,
+        period_name=update_info.index.names[0],
         layout_kwargs=layout_kwargs,
         show_title=show_title,
         annotate=annotate,
@@ -115,9 +115,8 @@ def visualize_measurement_correlations(
 
 def _get_correlation_matrix(
     data,
-    model,
+    update_info,
     periods,
-    period_name,
     factors,
     rounding,
     show_diagonal,
@@ -127,11 +126,10 @@ def _get_correlation_matrix(
     Process data, calculate correlations and process correlation DataFrame.
     Args:
         data (pd.DataFrame): DataFrame with observed measurements.
-        model_dict (dct): Dictionary of model attributes to be passed to process_model
-            and extract measurements for each period.
+        update_info (pd.DataFrame): DataFrame with information on measurements
+            for each factor in each model period.
         periods (int,float or list): If int, the period within which to calculate
             measurement correlations. If a list, calculate correlations over periods.
-        period_name (str): Name of the period variable in the data.
         factors (list): List of factors, whose measurement correlation to calculate. If
             the default value of None is passed, then calculate and plot correlations
             of all measurements.
@@ -143,7 +141,7 @@ def _get_correlation_matrix(
         corr (pd.DataFrame): Processed correlation dataframe.
 
     """
-    data = _process_data_for_plotting(data, model, periods, period_name, factors)
+    data = _process_data_for_plotting(data, update_info, periods, factors)
     corr = data.corr().round(rounding)
     mask = _get_mask(corr, show_upper_triangle, show_diagonal)
     corr = corr.where(mask)
@@ -162,16 +160,15 @@ def _get_mask(corr, show_upper_triangle, show_diagonal):
     return mask
 
 
-def _process_data_for_plotting(data, model, periods, period_name, factors):
+def _process_data_for_plotting(data, update_info, periods, factors):
     """Process data for passing to heatmap plot.
     Args:
         data (pd.DataFrame): Data with observable variables.
-        model (dict): Processed model_dict that contains information on measurements for
-            each period.
+        update_info (pd.DataFrame): DataFrame with information on measurements
+            for each factor in each model period.
         periods (int or list): The period or list of periods that correlations are
             calculated for.
-        period_name (str): Name of the period variable in the data.
-        factors (list or str): List of or a single factor the measurements of which
+        factors (list or tuple): List of factors the measurements of which
             correlations are calculated for.
     Returns:
         df (pd.DataFrame): Processed DataFrame to calculate correlations over.
@@ -181,59 +178,51 @@ def _process_data_for_plotting(data, model, periods, period_name, factors):
         periods = periods[0]
     if isinstance(periods, (int, float)):
         df = _process_data_for_plotting_with_single_period(
-            data, model, periods, period_name, factors
+            data, update_info, periods, factors
         )
     elif isinstance(periods, list):
         df = _process_data_for_plotting_with_multiple_periods(
-            data, model, periods, period_name, factors
+            data, update_info, periods, factors
         )
     return df
 
 
-def _process_data_for_plotting_with_single_period(
-    data, model, period, period_name, factors
-):
+def _process_data_for_plotting_with_single_period(data, update_info, period, factors):
     """Extract measurements of factors for the given period.
     Args:
         data (pd.DataFrame): Data with observable variables.
-        model (dict): Processed model_dict that contains information on measurements
-            for each period.
+        update_info (pd.DataFrame): DataFrame with information on measurements
+            for each factor in each model period.
         periods (int or float): The period to extract measurements for.
         period_name (str): Name of the period variable in the data.
-        factors (list or str): List of or a single factor the measurements of which
+        factors (list or tuple): List factors the measurements of which
             correlations are calculated for.
     Returns:
         df (pd.DataFrame): DataFrame with measurements of factors for period 'period'.
 
     """
 
-    period_info = model["update_info"].loc[period].reset_index()
+    period_info = update_info.loc[period].reset_index()
     measurements = []
-    if factors:
-        if isinstance(factors, str):
-            factors = [factors]
-        for fac in factors:
-            measurements += period_info.query(
-                f"{fac} == True and purpose == 'measurement'"
-            )["variable"].to_list()
-    else:
-        measurements = period_info.query(f"purpose == 'measurement'")[
-            "variable"
-        ].to_list()
-    df = data.query(f"{period_name}=={period}")[measurements]
+
+    for fac in factors:
+        measurements += period_info.query(
+            f"{fac} == True and purpose == 'measurement'"
+        )["variable"].to_list()
+
+    df = data.query(f"{update_info.index.names[0]}=={period}")[measurements]
     return df
 
 
 def _process_data_for_plotting_with_multiple_periods(
-    data, model, periods, period_name, factors
+    data, update_info, periods, factors
 ):
     """Extract measurements for factors for given periods.
     Args:
         data (pd.DataFrame): Data with observable variables.
-        model (dict): Processed model_dict that contains information on measurements for
-            each period.
+        update_info (pd.DataFrame): DataFrame with information on measurements
+            for each factor in each model period.
         periods (list): The periods to extract measurements for.
-        period_name (str): Name of the period variable in the data.
         factors (list or str): List of or a single factor the measurements of which
             correlations are calculated for.
     Returns:
@@ -245,13 +234,22 @@ def _process_data_for_plotting_with_multiple_periods(
     for period in periods:
         to_concat.append(
             _process_data_for_plotting_with_single_period(
-                data, model, period, period_name, factors
+                data, update_info, period, factors
             )
             .add_suffix(f"_{period}")
             .reset_index(drop=True)
         )
     df = pd.concat(to_concat, axis=1)
     return df
+
+
+def _get_factors(model, factors):
+    "Get list of factors."
+    if not factors:
+        factors = model["labels"]["latent_factors"]
+    elif isinstance(factors, "str"):
+        factors = [factors]
+    return factors
 
 
 def _get_layout_kwargs(
