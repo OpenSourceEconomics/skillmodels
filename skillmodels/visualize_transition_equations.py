@@ -1,10 +1,10 @@
 import itertools
 
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
+from plotly import graph_objects as go
+from plotly.subplots import make_subplots
 
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
@@ -80,75 +80,18 @@ def visualize_transition_equations(
     latent_factors = model["labels"]["latent_factors"]
     observed_factors = model["labels"]["observed_factors"]
     all_factors = model["labels"]["all_factors"]
+    states_data = _get_states_data(model, period, data, states, observed_factors)
+    params = _set_index_params(model, params)
+    pardict = _get_pardict(model, params)
+    state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
 
-    if observed_factors and data is None:
-        raise ValueError(
-            "The model has observed factors. You must pass the empirical data to "
-            "'visualize_transition_equations' via the keyword *data*."
-        )
+    nlatent = len(latent_factors)
+    nall = len(all_factors)
+    fig = make_subplots(rows=nlatent, cols=nall, start_cell="bottom-left")
 
-    if observed_factors:
-        _, _, _observed_arr = process_data(
-            df=data,
-            labels=model["labels"],
-            update_info=model["update_info"],
-            anchoring_info=model["anchoring"],
-        )
-        # convert from jax to numpy
-        _observed_arr = np.array(_observed_arr)
-        observed_data = pd.DataFrame(
-            data=_observed_arr[period], columns=observed_factors
-        )
-        observed_data["id"] = observed_data.index
-        observed_data["period"] = period
-        states_data = pd.merge(
-            left=states,
-            right=observed_data,
-            left_on=["id", "period"],
-            right_on=["id", "period"],
-            how="left",
-        )
-    else:
-        states_data = states.copy()
-
-    params_index = get_params_index(
-        update_info=model["update_info"],
-        labels=model["labels"],
-        dimensions=model["dimensions"],
-        transition_info=model["transition_info"],
-    )
-
-    params = params.reindex(params_index)
-
-    parsing_info = create_parsing_info(
-        params_index=params.index,
-        update_info=model["update_info"],
-        labels=model["labels"],
-        anchoring=model["anchoring"],
-    )
-
-    _, _, _, pardict = parse_params(
-        params=jnp.array(params["value"].to_numpy()),
-        parsing_info=parsing_info,
-        dimensions=model["dimensions"],
-        labels=model["labels"],
-        n_obs=1,
-    )
-
-    if state_ranges is None:
-        state_ranges = create_state_ranges(states_data, all_factors)
-
-    figsize = (2.5 * len(all_factors), 2 * len(latent_factors))
-    fig, axes = plt.subplots(
-        nrows=len(latent_factors),
-        ncols=len(all_factors),
-        figsize=figsize,
-        sharex=sharex,
-        sharey=sharey,
-    )
-
-    for (output_factor, input_factor), ax in zip(
-        itertools.product(latent_factors, all_factors), axes.flatten()
+    for (output_factor, input_factor), (row, col) in zip(
+        itertools.product(latent_factors, all_factors),
+        itertools.product(np.arange(nlatent), np.arange(nall)),
     ):
         transition_function = model["transition_info"]["individual_functions"][
             output_factor
@@ -188,33 +131,86 @@ def visualize_transition_equations(
             isinstance(quantiles_of_other_factors, list)
             and len(quantiles_of_other_factors) > 1
         ):
-            hue = "quantile"
-        else:
-            hue = None
+            for _, df in plot_data.groupby("quantile"):
+                fig.add_trace(
+                    go.Scatter(
+                        y=df[f"{output_factor} in period {period + 1}"],
+                        x=df[f"{input_factor} in period {period}"],
+                        line_shape="linear",
+                    ),
+                    col=col + 1,
+                    row=row + 1,
+                )
+    return fig, plot_data
 
-        sns.lineplot(
-            data=plot_data,
-            x=f"{input_factor} in period {period}",
-            y=f"{output_factor} in period {period + 1}",
-            hue=hue,
-            ax=ax,
+
+def _get_state_ranges(state_ranges, states_data, all_factors):
+    if state_ranges is None:
+        state_ranges = create_state_ranges(states_data, all_factors)
+    return state_ranges
+
+
+def _get_pardict(model, params):
+    parsing_info = create_parsing_info(
+        params_index=params.index,
+        update_info=model["update_info"],
+        labels=model["labels"],
+        anchoring=model["anchoring"],
+    )
+
+    _, _, _, pardict = parse_params(
+        params=jnp.array(params["value"].to_numpy()),
+        parsing_info=parsing_info,
+        dimensions=model["dimensions"],
+        labels=model["labels"],
+        n_obs=1,
+    )
+    return pardict
+
+
+def _set_index_params(model, params):
+    params_index = get_params_index(
+        update_info=model["update_info"],
+        labels=model["labels"],
+        dimensions=model["dimensions"],
+        transition_info=model["transition_info"],
+    )
+
+    params = params.reindex(params_index)
+    return params
+
+
+def _get_states_data(model, period, data, states, observed_factors):
+    if observed_factors and data is None:
+        raise ValueError(
+            """The model has observed factors. You must pass the empirical data to
+        'visualize_transition_equations' via the keyword *data*."""
         )
-        handles, labels = ax.get_legend_handles_labels()
-        if ax.get_legend() is not None:
-            ax.get_legend().remove()
 
-    if hue is not None:
-        fig.legend(
-            handles=handles,
-            labels=labels,
-            bbox_to_anchor=(0.5, -0.05),
-            loc="lower center",
-            ncol=len(quantiles_of_other_factors),
+    if observed_factors:
+        _, _, _observed_arr = process_data(
+            df=data,
+            labels=model["labels"],
+            update_info=model["update_info"],
+            anchoring_info=model["anchoring"],
         )
-
-    fig.tight_layout()
-    sns.despine()
-    return fig
+        # convert from jax to numpy
+        _observed_arr = np.array(_observed_arr)
+        observed_data = pd.DataFrame(
+            data=_observed_arr[period], columns=observed_factors
+        )
+        observed_data["id"] = observed_data.index
+        observed_data["period"] = period
+        states_data = pd.merge(
+            left=states,
+            right=observed_data,
+            left_on=["id", "period"],
+            right_on=["id", "period"],
+            how="left",
+        )
+    else:
+        states_data = states.copy(deep=True)
+    return states_data
 
 
 def _prepare_data_for_one_plot_fixed_quantile_2d(
