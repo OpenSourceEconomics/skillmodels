@@ -247,7 +247,7 @@ def _get_factors(model, factors):
     "Get list of factors."
     if not factors:
         factors = model["labels"]["latent_factors"]
-    elif isinstance(factors, "str"):
+    elif isinstance(factors, str):
         factors = [factors]
     return factors
 
