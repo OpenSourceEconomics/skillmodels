@@ -88,7 +88,13 @@ def visualize_transition_equations(
     nlatent = len(latent_factors)
     nall = len(all_factors)
     fig = make_subplots(
-        rows=nlatent, cols=nall, start_cell="top-left", print_grid=False
+        rows=nlatent,
+        cols=nall,
+        start_cell="top-left",
+        print_grid=False,
+        shared_xaxes=False,
+        shared_yaxes=True,
+        vertical_spacing=0.2,
     )
     for (output_factor, input_factor), (row, col) in zip(
         itertools.product(latent_factors, all_factors),
@@ -156,9 +162,18 @@ def visualize_transition_equations(
                         col=col + 1,
                         row=row + 1,
                     )
+        fig.update_xaxes(
+            title_text=f"{input_factor} in period {period}", row=row + 1, col=col + 1
+        )
+        if col == 0:
+            fig.update_yaxes(
+                title_text=f"{output_factor} in period {period+1}",
+                row=row + 1,
+                col=col + 1,
+            )
+
     fig.update_layout(template="simple_white")
     fig.update_layout(xaxis_showgrid=False, yaxis_showgrid=False)
-    fig.update_layout(showlegend=True)
     return fig
 
 
