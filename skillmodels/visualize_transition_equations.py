@@ -27,10 +27,10 @@ def visualize_transition_equations(
     n_draws=50,
     data=None,
     colorscale="Magenta_r",
-    figure_layout_kwargs=None,
+    layout_kwargs=None,
     legend_kwargs=None,
     title_kwargs=None,
-    make_subplot_kwargs=None,
+    subplot_kwargs=None,
 ):
     """Visualize transition equations.
 
@@ -62,6 +62,21 @@ def visualize_transition_equations(
         data (pd.DataFrame): Empirical dataset that is used to estimate the model. Only
             needed if the model has observed factors. Those factors are directly taken
             from the data to calculate their quantiles or averages.
+        colorscale (str): The color scale to use for line legends. Must be a valid
+            plotly.express.colors.sequential attribute. Default 'Magenta_r'.
+        layout_kwargs (dct or NoneType): Dictionary of key word arguments used to
+            update layout of plotly Figure object. If None, the default kwargs defined
+            in the function will be used.
+        legend_kwargs (dct or NoneType): Dictionary of key word arguments used to
+            update position, orientation and title of figure legend. If None, default
+            position and orientation will be used with no title.
+        title_kwargs (dct or NoneType): Dictionary of key word arguments used to
+            update properties of the figure title. Default None.
+        subplot_kwargs (dct or NoneType): Dictionary of keyword arguments used
+            to instantiate plotly Figure with multiple subplots. Is used to define
+            properties such as, for example, the spacing between subplots. If None,
+            default arguments defined in the function are used.
+
 
     Returns:
         matplotlib.Figure: The plot
@@ -88,10 +103,10 @@ def visualize_transition_equations(
     params = _set_index_params(model, params)
     pardict = _get_pardict(model, params)
     state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
-    make_subplot_kwargs = _get_make_subplot_kwargs(
-        make_subplot_kwargs, latent_factors, all_factors
+    subplot_kwargs = _get_make_subplot_kwargs(
+        subplot_kwargs, latent_factors, all_factors
     )
-    fig = make_subplots(**make_subplot_kwargs)
+    fig = make_subplots(**subplot_kwargs)
     subplot_dict = {}
     for (output_factor, input_factor), (row, col) in zip(
         itertools.product(latent_factors, all_factors),
@@ -166,16 +181,20 @@ def visualize_transition_equations(
                 row=row + 1,
                 col=col + 1,
             )
-    figure_layout_kwargs = _get_layout_kwargs(
-        figure_layout_kwargs, legend_kwargs, title_kwargs, quantiles_of_other_factors
+    layout_kwargs = _get_layout_kwargs(
+        layout_kwargs, legend_kwargs, title_kwargs, quantiles_of_other_factors
     )
-    fig.update_layout(**figure_layout_kwargs)
+    fig.update_layout(**layout_kwargs)
     return fig, subplot_dict
 
 
 def _get_layout_kwargs(
     layout_kwargs, legend_kwargs, title_kwargs, quantiles_of_other_factors
 ):
+    """Define and update default kwargs for update_layout.
+    Defines some default keyword arguments to update figure layout, such as
+    title and legend.
+    """
     default_kwargs = {
         "template": "simple_white",
         "xaxis_showgrid": False,
@@ -207,7 +226,7 @@ def _get_layout_kwargs(
 
 
 def _get_make_subplot_kwargs(subplot_kwargs, latent_factors, all_factors):
-
+    """Define and update keywargs for instantiating figure with subplots."""
     default_kwargs = {
         "rows": len(latent_factors),
         "cols": len(all_factors),
