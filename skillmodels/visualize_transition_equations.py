@@ -3,7 +3,7 @@ import itertools
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-from plotly import graph_objects as go
+from plotly import express as px
 from plotly.subplots import make_subplots
 
 from skillmodels.params_index import get_params_index
@@ -24,9 +24,9 @@ def visualize_transition_equations(
     plot_marginal_effects=False,
     n_points=50,
     n_draws=50,
-    sharex=False,
-    sharey="row",
     data=None,
+    layout_kwargs=None,
+    subplot_kwargs=None,
 ):
     """Visualize transition equations.
 
@@ -84,21 +84,13 @@ def visualize_transition_equations(
     params = _set_index_params(model, params)
     pardict = _get_pardict(model, params)
     state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
-
-    nlatent = len(latent_factors)
-    nall = len(all_factors)
-    fig = make_subplots(
-        rows=nlatent,
-        cols=nall,
-        start_cell="top-left",
-        print_grid=False,
-        shared_xaxes=False,
-        shared_yaxes=True,
-        vertical_spacing=0.2,
-    )
+    subplot_kwargs = _get_subplot_kwargs(subplot_kwargs, latent_factors, all_factors)
+    layout_kwargs = _get_layout_kwargs(layout_kwargs)
+    fig = make_subplots(**subplot_kwargs)
+    all_figs = {}
     for (output_factor, input_factor), (row, col) in zip(
         itertools.product(latent_factors, all_factors),
-        itertools.product(np.arange(nlatent), np.arange(nall)),
+        itertools.product(np.arange(len(latent_factors)), np.arange(len(all_factors))),
     ):
         transition_function = model["transition_info"]["individual_functions"][
             output_factor
@@ -138,31 +130,22 @@ def visualize_transition_equations(
             isinstance(quantiles_of_other_factors, list)
             and len(quantiles_of_other_factors) > 1
         ):
-            for q, df in plot_data.groupby("quantile"):
-                if row == 0 and col == 0:
+            subfig = px.line(
+                plot_data,
+                y=f"{output_factor} in period {period + 1}",
+                x=f"{input_factor} in period {period}",
+                color="quantile",
+                color_discrete_sequence=px.colors.sequential.Magenta_r,
+            )
+            all_figs[f"{input_factor}_{output_factor}_{period}"] = subfig
+            if not (row == 0 and col == 0):
+                for d in subfig.data:
+                    d.update({"showlegend": False})
+                    fig.add_trace(d, col=col + 1, row=row + 1)
+            else:
+                for d in subfig.data:
                     fig.add_trace(
-                        go.Scatter(
-                            y=df[f"{output_factor} in period {period + 1}"],
-                            x=df[f"{input_factor} in period {period}"],
-                            line_shape="linear",
-                            legendgroup=f"{q}",
-                            name=q,
-                            line={"color": "Viridis"},
-                        ),
-                        col=col + 1,
-                        row=row + 1,
-                    )
-                else:
-                    fig.add_trace(
-                        go.Scatter(
-                            y=df[f"{output_factor} in period {period + 1}"],
-                            x=df[f"{input_factor} in period {period}"],
-                            line_shape="linear",
-                            showlegend=False,
-                            legendgroup=f"{q}",
-                            name=q,
-                            line={"color": "Viridis"},
-                        ),
+                        d,
                         col=col + 1,
                         row=row + 1,
                     )
@@ -175,10 +158,45 @@ def visualize_transition_equations(
                 row=row + 1,
                 col=col + 1,
             )
+    fig.update_layout(**layout_kwargs)
+    return fig, all_figs
 
-    fig.update_layout(template="simple_white")
-    fig.update_layout(xaxis_showgrid=False, yaxis_showgrid=False)
-    return fig
+
+def _get_layout_kwargs(layout_kwargs, legend_kwargs):
+    default_kwargs = {
+        "template": "simple_white",
+        "xaxis_showgrid": False,
+        "yaxis_showgrid": False,
+        "legend": {
+            "yanchor": "bottom",
+            "xanchor": "center",
+            "y": -0.3,
+            "x": 0.5,
+            "orientation": "h",
+        },
+    }
+    if legend_kwargs:
+        default_kwargs["legend"] = default_kwargs["legend"].update(legend_kwargs)
+    if layout_kwargs:
+        default_kwargs.update(layout_kwargs)
+    return default_kwargs
+
+
+def _get_subplot_kwargs(subplot_kwargs, latent_factors, all_factors):
+
+    default_kwargs = {
+        "rows": len(latent_factors),
+        "cols": len(all_factors),
+        "start_cell": "top-left",
+        "print_grid": False,
+        "shared_xaxes": False,
+        "shared_yaxes": True,
+        "vertical_spacing": 0.2,
+        "horizontal_spacing": 0.2,
+    }
+    if subplot_kwargs:
+        default_kwargs.update(subplot_kwargs)
+    return default_kwargs
 
 
 def _get_state_ranges(state_ranges, states_data, all_factors):
