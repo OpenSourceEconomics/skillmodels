@@ -1,4 +1,5 @@
 import itertools
+from copy import deepcopy
 
 import jax.numpy as jnp
 import numpy as np
@@ -25,9 +26,11 @@ def visualize_transition_equations(
     n_points=50,
     n_draws=50,
     data=None,
-    layout_kwargs=None,
+    colorscale="Magenta_r",
+    figure_layout_kwargs=None,
     legend_kwargs=None,
-    subplot_kwargs=None,
+    title_kwargs=None,
+    make_subplot_kwargs=None,
 ):
     """Visualize transition equations.
 
@@ -85,11 +88,10 @@ def visualize_transition_equations(
     params = _set_index_params(model, params)
     pardict = _get_pardict(model, params)
     state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
-    subplot_kwargs = _get_subplot_kwargs(subplot_kwargs, latent_factors, all_factors)
-    layout_kwargs = _get_layout_kwargs(
-        layout_kwargs, legend_kwargs, quantiles_of_other_factors
+    make_subplot_kwargs = _get_make_subplot_kwargs(
+        make_subplot_kwargs, latent_factors, all_factors
     )
-    fig = make_subplots(**subplot_kwargs)
+    fig = make_subplots(**make_subplot_kwargs)
     subplot_dict = {}
     for (output_factor, input_factor), (row, col) in zip(
         itertools.product(latent_factors, all_factors),
@@ -141,9 +143,9 @@ def visualize_transition_equations(
             y=f"{output_factor} in period {period + 1}",
             x=f"{input_factor} in period {period}",
             color=color,
-            color_discrete_sequence=px.colors.sequential.Magenta_r,
+            color_discrete_sequence=getattr(px.colors.sequential, colorscale),
         )
-        subplot_dict[f"{input_factor}_{output_factor}_{period}"] = subfig
+        subplot_dict[f"{input_factor}_{output_factor}_{period}"] = deepcopy(subfig)
         if not (row == 0 and col == 0):
             for d in subfig.data:
                 d.update({"showlegend": False})
@@ -164,11 +166,16 @@ def visualize_transition_equations(
                 row=row + 1,
                 col=col + 1,
             )
-    fig.update_layout(**layout_kwargs)
+    figure_layout_kwargs = _get_layout_kwargs(
+        figure_layout_kwargs, legend_kwargs, title_kwargs, quantiles_of_other_factors
+    )
+    fig.update_layout(**figure_layout_kwargs)
     return fig, subplot_dict
 
 
-def _get_layout_kwargs(layout_kwargs, legend_kwargs, quantiles_of_other_factors):
+def _get_layout_kwargs(
+    layout_kwargs, legend_kwargs, title_kwargs, quantiles_of_other_factors
+):
     default_kwargs = {
         "template": "simple_white",
         "xaxis_showgrid": False,
@@ -190,14 +197,16 @@ def _get_layout_kwargs(layout_kwargs, legend_kwargs, quantiles_of_other_factors)
         ] = f"Other factors at {quantiles_of_other_factors[0]} quantile"
     else:
         default_kwargs["title"]["text"] = "Other factors at different quantiles"
+    if title_kwargs:
+        default_kwargs["title"].update(title_kwargs)
     if legend_kwargs:
-        default_kwargs["legend"] = default_kwargs["legend"].update(legend_kwargs)
+        default_kwargs["legend"].update(legend_kwargs)
     if layout_kwargs:
         default_kwargs.update(layout_kwargs)
     return default_kwargs
 
 
-def _get_subplot_kwargs(subplot_kwargs, latent_factors, all_factors):
+def _get_make_subplot_kwargs(subplot_kwargs, latent_factors, all_factors):
 
     default_kwargs = {
         "rows": len(latent_factors),
