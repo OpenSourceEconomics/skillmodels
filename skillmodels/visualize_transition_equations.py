@@ -64,17 +64,17 @@ def visualize_transition_equations(
             from the data to calculate their quantiles or averages.
         colorscale (str): The color scale to use for line legends. Must be a valid
             plotly.express.colors.sequential attribute. Default 'Magenta_r'.
-        layout_kwargs (dct or NoneType): Dictionary of key word arguments used to
+        layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
             update layout of plotly Figure object. If None, the default kwargs defined
             in the function will be used.
-        legend_kwargs (dct or NoneType): Dictionary of key word arguments used to
+        legend_kwargs (dict or NoneType): Dictionary of key word arguments used to
             update position, orientation and title of figure legend. If None, default
             position and orientation will be used with no title.
-        title_kwargs (dct or NoneType): Dictionary of key word arguments used to
+        title_kwargs (dict or NoneType): Dictionary of key word arguments used to
             update properties of the figure title. Use {'text': '<desired title>'}
-            to set figure title. If None, infers title based on value of
+            to set figure title. If None, infers title based on the value of
             `quntiles_of_other_factors`.
-        subplot_kwargs (dct or NoneType): Dictionary of keyword arguments used
+        subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
             to instantiate plotly Figure with multiple subplots. Is used to define
             properties such as, for example, the spacing between subplots. If None,
             default arguments defined in the function are used.
