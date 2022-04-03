@@ -71,7 +71,9 @@ def visualize_transition_equations(
             update position, orientation and title of figure legend. If None, default
             position and orientation will be used with no title.
         title_kwargs (dct or NoneType): Dictionary of key word arguments used to
-            update properties of the figure title. Default None.
+            update properties of the figure title. Use {'text': '<desired title>'}
+            to set figure title. If None, infers title based on value of
+            `quntiles_of_other_factors`.
         subplot_kwargs (dct or NoneType): Dictionary of keyword arguments used
             to instantiate plotly Figure with multiple subplots. Is used to define
             properties such as, for example, the spacing between subplots. If None,
