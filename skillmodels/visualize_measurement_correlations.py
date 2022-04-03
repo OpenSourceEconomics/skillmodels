@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from plotly import graph_objects as go
 
+from skillmodels.process_data import _pre_process_data
 from skillmodels.process_model import process_model
 
 
@@ -75,6 +76,7 @@ def visualize_measurement_correlations(
 
     """
     data = data.copy(deep=True)
+    data = _pre_process_data(data)
     model = process_model(model_dict)
     factors = _get_factors(model, model)
     update_info = model["update_info"]
@@ -91,7 +93,6 @@ def visualize_measurement_correlations(
     layout_kwargs = _get_layout_kwargs(
         corr,
         periods,
-        period_name=update_info.index.names[0],
         layout_kwargs=layout_kwargs,
         show_title=show_title,
         annotate=annotate,
@@ -194,7 +195,6 @@ def _process_data_for_plotting_with_single_period(data, update_info, period, fac
         update_info (pd.DataFrame): DataFrame with information on measurements
             for each factor in each model period.
         periods (int or float): The period to extract measurements for.
-        period_name (str): Name of the period variable in the data.
         factors (list or tuple): List factors the measurements of which
             correlations are calculated for.
     Returns:
@@ -255,7 +255,6 @@ def _get_factors(model, factors):
 def _get_layout_kwargs(
     corr,
     periods,
-    period_name,
     layout_kwargs,
     show_title,
     annotate,
@@ -269,7 +268,6 @@ def _get_layout_kwargs(
     """Get kwargs to update figure layout.
     Args:
         periods (list): The periods to extract measurements for.
-        period_name (str): Name of the period variable in the data.
         layout_kwargs (dct): Dictionary of keyword arguments used to update layout of
             go.Figure object.
         show_title (bool): Show figure titel if True.
@@ -308,7 +306,7 @@ def _get_layout_kwargs(
         )
     )
     if show_title:
-        title = _get_fig_title(periods, period_name)
+        title = _get_fig_title(periods)
         default_layout_kwargs["title"] = title
     if layout_kwargs:
         default_layout_kwargs.update(layout_kwargs)
@@ -362,12 +360,11 @@ def _get_annotations(
     return annotation_kwargs
 
 
-def _get_fig_title(periods, period_name):
+def _get_fig_title(periods):
     """Get title of correlation heatmap.
     Args:
         periods (int or list): The period or list of periods that correlations
             are calculated for.
-        period_name (str): Name of the period variable in the data.
     Returns:
         title (str): Title for the correlation heatmap that describes which periods
             the correlations have been calculated for.
@@ -375,9 +372,9 @@ def _get_fig_title(periods, period_name):
     if isinstance(periods, list) and len(periods) == 1:
         periods = periods[0]
     if isinstance(periods, list):
-        title = f"{period_name}s: {periods[0]}-{periods[-1]}"
+        title = f"Periods: {periods[0]}-{periods[-1]}"
     elif isinstance(periods, (int, float)):
-        title = f"{period_name}: {periods}"
+        title = f"Period: {periods}"
     return title
 
 
