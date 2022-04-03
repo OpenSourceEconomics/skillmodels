@@ -26,6 +26,7 @@ def visualize_transition_equations(
     n_draws=50,
     data=None,
     layout_kwargs=None,
+    legend_kwargs=None,
     subplot_kwargs=None,
 ):
     """Visualize transition equations.
@@ -85,9 +86,11 @@ def visualize_transition_equations(
     pardict = _get_pardict(model, params)
     state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
     subplot_kwargs = _get_subplot_kwargs(subplot_kwargs, latent_factors, all_factors)
-    layout_kwargs = _get_layout_kwargs(layout_kwargs)
+    layout_kwargs = _get_layout_kwargs(
+        layout_kwargs, legend_kwargs, quantiles_of_other_factors
+    )
     fig = make_subplots(**subplot_kwargs)
-    all_figs = {}
+    subplot_dict = {}
     for (output_factor, input_factor), (row, col) in zip(
         itertools.product(latent_factors, all_factors),
         itertools.product(np.arange(len(latent_factors)), np.arange(len(all_factors))),
@@ -130,25 +133,28 @@ def visualize_transition_equations(
             isinstance(quantiles_of_other_factors, list)
             and len(quantiles_of_other_factors) > 1
         ):
-            subfig = px.line(
-                plot_data,
-                y=f"{output_factor} in period {period + 1}",
-                x=f"{input_factor} in period {period}",
-                color="quantile",
-                color_discrete_sequence=px.colors.sequential.Magenta_r,
-            )
-            all_figs[f"{input_factor}_{output_factor}_{period}"] = subfig
-            if not (row == 0 and col == 0):
-                for d in subfig.data:
-                    d.update({"showlegend": False})
-                    fig.add_trace(d, col=col + 1, row=row + 1)
-            else:
-                for d in subfig.data:
-                    fig.add_trace(
-                        d,
-                        col=col + 1,
-                        row=row + 1,
-                    )
+            color = "quantile"
+        else:
+            color = None
+        subfig = px.line(
+            plot_data,
+            y=f"{output_factor} in period {period + 1}",
+            x=f"{input_factor} in period {period}",
+            color=color,
+            color_discrete_sequence=px.colors.sequential.Magenta_r,
+        )
+        subplot_dict[f"{input_factor}_{output_factor}_{period}"] = subfig
+        if not (row == 0 and col == 0):
+            for d in subfig.data:
+                d.update({"showlegend": False})
+                fig.add_trace(d, col=col + 1, row=row + 1)
+        else:
+            for d in subfig.data:
+                fig.add_trace(
+                    d,
+                    col=col + 1,
+                    row=row + 1,
+                )
         fig.update_xaxes(
             title_text=f"{input_factor} in period {period}", row=row + 1, col=col + 1
         )
@@ -159,10 +165,10 @@ def visualize_transition_equations(
                 col=col + 1,
             )
     fig.update_layout(**layout_kwargs)
-    return fig, all_figs
+    return fig, subplot_dict
 
 
-def _get_layout_kwargs(layout_kwargs, legend_kwargs):
+def _get_layout_kwargs(layout_kwargs, legend_kwargs, quantiles_of_other_factors):
     default_kwargs = {
         "template": "simple_white",
         "xaxis_showgrid": False,
@@ -174,7 +180,16 @@ def _get_layout_kwargs(layout_kwargs, legend_kwargs):
             "x": 0.5,
             "orientation": "h",
         },
+        "title": {"y": 0.9, "x": 0.5, "xanchor": "center", "yanchor": "top"},
     }
+    if not quantiles_of_other_factors:
+        default_kwargs["title"]["text"] = "Other factors integrated out"
+    elif len(quantiles_of_other_factors) == 1:
+        default_kwargs["title"][
+            "text"
+        ] = f"Other factors at {quantiles_of_other_factors[0]} quantile"
+    else:
+        default_kwargs["title"]["text"] = "Other factors at different quantiles"
     if legend_kwargs:
         default_kwargs["legend"] = default_kwargs["legend"].update(legend_kwargs)
     if layout_kwargs:
@@ -192,7 +207,6 @@ def _get_subplot_kwargs(subplot_kwargs, latent_factors, all_factors):
         "shared_xaxes": False,
         "shared_yaxes": True,
         "vertical_spacing": 0.2,
-        "horizontal_spacing": 0.2,
     }
     if subplot_kwargs:
         default_kwargs.update(subplot_kwargs)
