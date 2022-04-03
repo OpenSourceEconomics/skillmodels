@@ -76,7 +76,9 @@ def visualize_measurement_correlations(
 
     """
     data = data.copy(deep=True)
-    data = _pre_process_data(data)
+    if isinstance(periods, (int, float)):
+        periods = [periods]
+    data = _pre_process_data(data, periods)
     model = process_model(model_dict)
     factors = _get_factors(model, model)
     update_info = model["update_info"]
@@ -167,7 +169,7 @@ def _process_data_for_plotting(data, update_info, periods, factors):
         data (pd.DataFrame): Data with observable variables.
         update_info (pd.DataFrame): DataFrame with information on measurements
             for each factor in each model period.
-        periods (int or list): The period or list of periods that correlations are
+        periods (list): The list of periods that correlations are
             calculated for.
         factors (list or tuple): List of factors the measurements of which
             correlations are calculated for.
@@ -175,13 +177,12 @@ def _process_data_for_plotting(data, update_info, periods, factors):
         df (pd.DataFrame): Processed DataFrame to calculate correlations over.
 
     """
-    if isinstance(periods, list) and len(periods) == 1:
+    if len(periods) == 1:
         periods = periods[0]
-    if isinstance(periods, (int, float)):
         df = _process_data_for_plotting_with_single_period(
             data, update_info, periods, factors
         )
-    elif isinstance(periods, list):
+    else:
         df = _process_data_for_plotting_with_multiple_periods(
             data, update_info, periods, factors
         )
@@ -209,7 +210,6 @@ def _process_data_for_plotting_with_single_period(data, update_info, period, fac
         measurements += period_info.query(
             f"{fac} == True and purpose == 'measurement'"
         )["variable"].to_list()
-
     df = data.query(f"{update_info.index.names[0]}=={period}")[measurements]
     return df
 
