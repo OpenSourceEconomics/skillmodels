@@ -85,13 +85,13 @@ def visualize_transition_equations(
             defined in the function will be used.
 
     Returns:
-        fig (plotly.Figure) or dictionary with kward arguments for combine_subplots()
-            function. If combine_plots is True, the figure with combined subplots will
-            be returned. Else, will return dictionary with combine_subplots() specific.
-            keyword arguments, including the dictionary with individual subplots that
-            can be used to modify layout of individual plots and then passed to
-            combine_subplots(). Other keyword arguments include latent_factors,
-            all_factors, period and quantiles_of_other_factors.
+        out (Figure or dict): plortly figure or dictionary with kwargs for
+            combine_subplots() function. If combine_plots is True, the figure with
+            combined subplots will be returned. Else, will return dictionary with
+            combine_subplots() specific keyword arguments, including the dictionary
+            with individual subplots that can be used to modify layout of individual
+            plots and then passed to combine_subplots(). Other keyword arguments
+            include latent_factors, all_factors, period and quantiles_of_other_factors.
     """
 
     if plot_marginal_effects:
