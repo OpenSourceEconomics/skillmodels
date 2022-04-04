@@ -57,7 +57,6 @@ def visualize_transition_equations(
         n_points (int): Number of grid points per input. Default 50.
         n_draws (int): Number of randomly drawn values of the factors that are averaged
             out. Only relevant if quantiles_of_other_factors is *None*. Default 50.
-
         data (pd.DataFrame): Empirical dataset that is used to estimate the model. Only
             needed if the model has observed factors. Those factors are directly taken
             from the data to calculate their quantiles or averages.
@@ -84,7 +83,6 @@ def visualize_transition_equations(
         subfig_kwargs (dict or NoneType): Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs
             defined in the function will be used.
-
 
     Returns:
         fig (plotly.Figure) or dictionary with kward arguments for combine_subplots()
@@ -198,6 +196,7 @@ def combine_subplots(
             update properties of the figure title. Use {'text': '<desired title>'}
             to set figure title. If None, infers title based on the value of
             `quntiles_of_other_factors`.
+
     Returns:
         fig (plotly.Figure): Plotly figure with subplots that combines individual
             transition functions.
