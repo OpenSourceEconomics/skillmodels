@@ -125,7 +125,7 @@ def visualize_transition_equations(
         subfig_kwargs,
     )
     if combine_plots:
-        fig = combine_subplots(
+        out = combine_subplots(
             plots_dict,
             period,
             latent_factors,
@@ -139,7 +139,6 @@ def visualize_transition_equations(
             title_kwargs,
         )
 
-        out = fig
     else:
         out = {
             "plots_dict": plots_dict,
