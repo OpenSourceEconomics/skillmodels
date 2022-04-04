@@ -20,7 +20,7 @@ def visualize_transition_equations(
     params,
     states,
     period,
-    conmbined_plots=True,
+    combine_plots=True,
     state_ranges=None,
     quantiles_of_other_factors=(0.25, 0.5, 0.75),
     plot_marginal_effects=False,
@@ -34,6 +34,7 @@ def visualize_transition_equations(
     legend_kwargs=None,
     title_kwargs=None,
     subplot_kwargs=None,
+    subfig_kwargs=None,
 ):
     """Visualize transition equations.
 
@@ -45,7 +46,7 @@ def visualize_transition_equations(
             are not given explicitly) and to estimate the distribution of the factors
             that are not visualized.
         period (int): The start period of the transition equations that are plotted.
-        combined_plots (bool): Return a figure containing subplots for each
+        combine_plots (bool): Return a figure containing subplots for each
             pair of factors or a dictionary of individual plots. Default True.
         state_ranges (dict): The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
@@ -80,11 +81,14 @@ def visualize_transition_equations(
             to instantiate plotly Figure with multiple subplots. Is used to define
             properties such as, for example, the spacing between subplots. If None,
             default arguments defined in the function are used.
+        subfig_kwargs (dict or NoneType): Dictionary of key word arguments used to
+            update layout of plotly image object. If None, the default kwargs
+            defined in the function will be used.
 
 
     Returns:
-        matplotlib.Figure: The plot
-        pandas.DataFrame: The data from which the plot was generated.
+        fig (plotly.Figure) or subplots_dict (dict): If combine_plots is True, the
+            figure with combined subplots. Else, the dictionary with individual plots.
     """
 
     if plot_marginal_effects:
@@ -115,8 +119,9 @@ def visualize_transition_equations(
         n_points,
         n_draws,
         colorscale,
+        subfig_kwargs,
     )
-    if conmbined_plots:
+    if combine_plots:
         fig = combine_subplots(
             plots_dict,
             period,
@@ -239,6 +244,7 @@ def _get_plots_dict(
     n_points,
     n_draws,
     colorscale,
+    subfig_kwargs,
 ):
     """Get plots of transition functions for each input and output combination.
     Returns a dictionary with individual plots of transition fanctions for each input
@@ -268,6 +274,9 @@ def _get_plots_dict(
             out. Only relevant if quantiles_of_other_factors is *None*. Default 50.
         colorscale (str): The color scale to use for line legends. Must be a valid
             plotly.express.colors.sequential attribute. Default 'Magenta_r'.
+        subfig_kwargs (dict or NoneType): Dictionary of key word arguments used to
+            update layout of plotly image object. If None, the default kwargs defined
+            in the function will be used.
 
     Returns:
         plots_dict (dict): Dictionary with individual plots of transition functions
@@ -279,6 +288,7 @@ def _get_plots_dict(
     params = _set_index_params(model, params)
     pardict = _get_pardict(model, params)
     state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
+    subfig_kwargs = _get_subfig_kwargs(subfig_kwargs)
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
         transition_function = model["transition_info"]["individual_functions"][
@@ -329,8 +339,26 @@ def _get_plots_dict(
             color=color,
             color_discrete_sequence=getattr(px.colors.sequential, colorscale),
         )
+        subfig.update_layout(**subfig_kwargs)
         plots_dict[f"{input_factor}_{output_factor}_{period}"] = deepcopy(subfig)
     return plots_dict
+
+
+def _get_subfig_kwargs(subfig_kwargs):
+    """Define and update default kwargs for update_layout.
+    Defines some default keyword arguments to update figure layout, such as
+    title and legend.
+
+    """
+    default_kwargs = {
+        "template": "simple_white",
+        "template": "simple_white",
+        "xaxis_showgrid": False,
+        "yaxis_showgrid": False,
+    }
+    if subfig_kwargs:
+        default_kwargs.update(subfig_kwargs)
+    return default_kwargs
 
 
 def _get_layout_kwargs(
