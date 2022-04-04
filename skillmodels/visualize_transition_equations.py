@@ -20,6 +20,7 @@ def visualize_transition_equations(
     params,
     states,
     period,
+    conmbined_plots=True,
     state_ranges=None,
     quantiles_of_other_factors=(0.25, 0.5, 0.75),
     plot_marginal_effects=False,
@@ -27,6 +28,8 @@ def visualize_transition_equations(
     n_draws=50,
     data=None,
     colorscale="Magenta_r",
+    sharex=False,
+    sharey=True,
     layout_kwargs=None,
     legend_kwargs=None,
     title_kwargs=None,
@@ -42,7 +45,7 @@ def visualize_transition_equations(
             are not given explicitly) and to estimate the distribution of the factors
             that are not visualized.
         period (int): The start period of the transition equations that are plotted.
-        combine_plots_in_grid (boolen): Return a figure containing subplots for each
+        combined_plots (bool): Return a figure containing subplots for each
             pair of factors or a dictionary of individual plots. Default True.
         state_ranges (dict): The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
@@ -53,17 +56,16 @@ def visualize_transition_equations(
         n_points (int): Number of grid points per input. Default 50.
         n_draws (int): Number of randomly drawn values of the factors that are averaged
             out. Only relevant if quantiles_of_other_factors is *None*. Default 50.
-        sharex (bool or {'none', 'all', 'col'}): Whether to share the properties of
-            x-axis across subplots. See API docs of matplotlib.pyplot.subplots.
-            Default False.
-        sharey (bool or {'none', 'all', 'row'}): : Whether to share the properties of
-            y-axis across subplots. See API docs of matplotlib.pyplot.subplots.
-            Default 'row'.
+
         data (pd.DataFrame): Empirical dataset that is used to estimate the model. Only
             needed if the model has observed factors. Those factors are directly taken
             from the data to calculate their quantiles or averages.
         colorscale (str): The color scale to use for line legends. Must be a valid
             plotly.express.colors.sequential attribute. Default 'Magenta_r'.
+        sharex (bool): Whether to share the properties of x-axis across subplots.
+            Default False.
+        sharey (bool): : Whether to share the properties ofy-axis across subplots.
+            Default True.
         layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
             update layout of plotly Figure object. If None, the default kwargs defined
             in the function will be used.
@@ -99,21 +101,186 @@ def visualize_transition_equations(
         )
 
     latent_factors = model["labels"]["latent_factors"]
-    observed_factors = model["labels"]["observed_factors"]
     all_factors = model["labels"]["all_factors"]
-    states_data = _get_states_data(model, period, data, states, observed_factors)
-    params = _set_index_params(model, params)
-    pardict = _get_pardict(model, params)
-    state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
+    plots_dict = _get_plots_dict(
+        model,
+        data,
+        params,
+        states,
+        state_ranges,
+        latent_factors,
+        all_factors,
+        quantiles_of_other_factors,
+        period,
+        n_points,
+        n_draws,
+        colorscale,
+    )
+    if conmbined_plots:
+        fig = combine_subplots(
+            plots_dict,
+            period,
+            latent_factors,
+            all_factors,
+            quantiles_of_other_factors,
+            subplot_kwargs,
+            sharex,
+            sharey,
+            layout_kwargs,
+            legend_kwargs,
+            title_kwargs,
+        )
+
+        out = fig
+    else:
+        out = plots_dict
+    return out
+
+
+def combine_subplots(
+    plots_dict,
+    period,
+    latent_factors,
+    all_factors,
+    quantiles_of_other_factors,
+    subplot_kwargs=None,
+    sharex=False,
+    sharey=True,
+    layout_kwargs=None,
+    legend_kwargs=None,
+    title_kwargs=None,
+):
+    """Combine individual plots into figure with subplots.
+    Uses dictionary with plotly images as values to build plotly Figure with subplots.
+
+    Args:
+        plots_dict (dict): Dictionary with plots of transition functions for each
+            factor.
+        period (int): The start period of the transition equations that are plotted.
+        latent_factors (list): Latent factors of the model that are outputs of
+            transition factors.
+        all_factors (list): All factors of the model that are the inuts of transition
+            functions.
+        quantiles_of_other_factors (float, list or None): Quantiles at which the factors
+            that are not varied in a given plot are fixed. If None, those factors are
+            not fixed but integrated out.
+        subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
+            to instantiate plotly Figure with multiple subplots. Is used to define
+            properties such as, for example, the spacing between subplots. If None,
+            default arguments defined in the function are used.
+        sharex (bool): Whether to share the properties of x-axis across subplots.
+            Default False.
+        sharey (bool): : Whether to share the properties ofy-axis across subplots.
+            Default True.
+        layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
+            update layout of plotly Figure object. If None, the default kwargs defined
+            in the function will be used.
+        legend_kwargs (dict or NoneType): Dictionary of key word arguments used to
+            update position, orientation and title of figure legend. If None, default
+            position and orientation will be used with no title.
+        title_kwargs (dict or NoneType): Dictionary of key word arguments used to
+            update properties of the figure title. Use {'text': '<desired title>'}
+            to set figure title. If None, infers title based on the value of
+            `quntiles_of_other_factors`.
+    Returns:
+        fig (plotly.Figure): Plotly figure with subplots that combines individual
+            transition functions.
+
+    """
+    plots_dict = deepcopy(plots_dict)
     subplot_kwargs = _get_make_subplot_kwargs(
-        subplot_kwargs, latent_factors, all_factors
+        sharex, sharey, subplot_kwargs, latent_factors, all_factors
     )
     fig = make_subplots(**subplot_kwargs)
-    subplot_dict = {}
     for (output_factor, input_factor), (row, col) in zip(
         itertools.product(latent_factors, all_factors),
         itertools.product(np.arange(len(latent_factors)), np.arange(len(all_factors))),
     ):
+        subfig = plots_dict[f"{input_factor}_{output_factor}_{period}"]
+        if not (row == 0 and col == 0):
+            for d in subfig.data:
+                d.update({"showlegend": False})
+                fig.add_trace(d, col=col + 1, row=row + 1)
+        else:
+            for d in subfig.data:
+                fig.add_trace(
+                    d,
+                    col=col + 1,
+                    row=row + 1,
+                )
+        fig.update_xaxes(
+            title_text=f"{input_factor} in period {period}", row=row + 1, col=col + 1
+        )
+        if col == 0:
+            fig.update_yaxes(
+                title_text=f"{output_factor} in period {period+1}",
+                row=row + 1,
+                col=col + 1,
+            )
+
+    layout_kwargs = _get_layout_kwargs(
+        layout_kwargs, legend_kwargs, title_kwargs, quantiles_of_other_factors
+    )
+    fig.update_layout(**layout_kwargs)
+
+    return fig
+
+
+def _get_plots_dict(
+    model,
+    data,
+    params,
+    states,
+    state_ranges,
+    latent_factors,
+    all_factors,
+    quantiles_of_other_factors,
+    period,
+    n_points,
+    n_draws,
+    colorscale,
+):
+    """Get plots of transition functions for each input and output combination.
+    Returns a dictionary with individual plots of transition fanctions for each input
+    and output factors.
+
+    Args:
+        model_dict (dict): The model specification. See: :ref:`model_specs`
+        params (pandas.DataFrame): DataFrame with model parameters.
+        states (pandas.DataFrame): Tidy DataFrame with filtered or simulated states.
+            They are used to estimate the state ranges in each period (if state_ranges
+            are not given explicitly) and to estimate the distribution of the factors
+            that are not visualized.
+        state_ranges (dict): The keys are the names of the latent factors.
+            The values are DataFrames with the columns "period", "minimum", "maximum".
+            The state_ranges are used to define the axis limits of the plots.
+
+        latent_factors (list): Latent factors of the model that are outputs of
+            transition factors.
+        all_factors (list): All factors of the model that are the inuts of transition
+            functions.
+        quantiles_of_other_factors (float, list or None): Quantiles at which the factors
+            that are not varied in a given plot are fixed. If None, those factors are
+            not fixed but integrated out.
+        period (int): The start period of the transition equations that are plotted.
+        n_points (int): Number of grid points per input. Default 50.
+        n_draws (int): Number of randomly drawn values of the factors that are averaged
+            out. Only relevant if quantiles_of_other_factors is *None*. Default 50.
+        colorscale (str): The color scale to use for line legends. Must be a valid
+            plotly.express.colors.sequential attribute. Default 'Magenta_r'.
+
+    Returns:
+        plots_dict (dict): Dictionary with individual plots of transition functions
+            for each input and output factors.
+
+    """
+    observed_factors = model["labels"]["observed_factors"]
+    states_data = _get_states_data(model, period, data, states, observed_factors)
+    params = _set_index_params(model, params)
+    pardict = _get_pardict(model, params)
+    state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
+    plots_dict = {}
+    for output_factor, input_factor in itertools.product(latent_factors, all_factors):
         transition_function = model["transition_info"]["individual_functions"][
             output_factor
         ]
@@ -162,32 +329,8 @@ def visualize_transition_equations(
             color=color,
             color_discrete_sequence=getattr(px.colors.sequential, colorscale),
         )
-        subplot_dict[f"{input_factor}_{output_factor}_{period}"] = deepcopy(subfig)
-        if not (row == 0 and col == 0):
-            for d in subfig.data:
-                d.update({"showlegend": False})
-                fig.add_trace(d, col=col + 1, row=row + 1)
-        else:
-            for d in subfig.data:
-                fig.add_trace(
-                    d,
-                    col=col + 1,
-                    row=row + 1,
-                )
-        fig.update_xaxes(
-            title_text=f"{input_factor} in period {period}", row=row + 1, col=col + 1
-        )
-        if col == 0:
-            fig.update_yaxes(
-                title_text=f"{output_factor} in period {period+1}",
-                row=row + 1,
-                col=col + 1,
-            )
-    layout_kwargs = _get_layout_kwargs(
-        layout_kwargs, legend_kwargs, title_kwargs, quantiles_of_other_factors
-    )
-    fig.update_layout(**layout_kwargs)
-    return fig, subplot_dict
+        plots_dict[f"{input_factor}_{output_factor}_{period}"] = deepcopy(subfig)
+    return plots_dict
 
 
 def _get_layout_kwargs(
@@ -196,6 +339,7 @@ def _get_layout_kwargs(
     """Define and update default kwargs for update_layout.
     Defines some default keyword arguments to update figure layout, such as
     title and legend.
+
     """
     default_kwargs = {
         "template": "simple_white",
@@ -227,15 +371,17 @@ def _get_layout_kwargs(
     return default_kwargs
 
 
-def _get_make_subplot_kwargs(subplot_kwargs, latent_factors, all_factors):
+def _get_make_subplot_kwargs(
+    sharex, sharey, subplot_kwargs, latent_factors, all_factors
+):
     """Define and update keywargs for instantiating figure with subplots."""
     default_kwargs = {
         "rows": len(latent_factors),
         "cols": len(all_factors),
         "start_cell": "top-left",
         "print_grid": False,
-        "shared_xaxes": False,
-        "shared_yaxes": True,
+        "shared_xaxes": sharex,
+        "shared_yaxes": sharey,
         "vertical_spacing": 0.2,
     }
     if subplot_kwargs:
@@ -244,12 +390,14 @@ def _get_make_subplot_kwargs(subplot_kwargs, latent_factors, all_factors):
 
 
 def _get_state_ranges(state_ranges, states_data, all_factors):
+    """Create state ranges if none is given"""
     if state_ranges is None:
         state_ranges = create_state_ranges(states_data, all_factors)
     return state_ranges
 
 
 def _get_pardict(model, params):
+    """Get parsed params dictionary."""
     parsing_info = create_parsing_info(
         params_index=params.index,
         update_info=model["update_info"],
@@ -268,6 +416,7 @@ def _get_pardict(model, params):
 
 
 def _set_index_params(model, params):
+    """Reset index of params data frame to model implied values."""
     params_index = get_params_index(
         update_info=model["update_info"],
         labels=model["labels"],
@@ -280,6 +429,7 @@ def _set_index_params(model, params):
 
 
 def _get_states_data(model, period, data, states, observed_factors):
+
     if observed_factors and data is None:
         raise ValueError(
             """The model has observed factors. You must pass the empirical data to
@@ -348,6 +498,7 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
 
 
 def _process_quantiles_of_other_factors(quantiles_of_other_factors):
+    """Process quantiles of other factors to always have list as type."""
     if isinstance(quantiles_of_other_factors, (float, int)):
         quantiles_of_other_factors = [quantiles_of_other_factors]
     elif isinstance(quantiles_of_other_factors, (tuple, list)):
