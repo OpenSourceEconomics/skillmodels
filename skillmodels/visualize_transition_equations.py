@@ -362,7 +362,6 @@ def _get_subfig_kwargs(subfig_kwargs):
     """
     default_kwargs = {
         "template": "simple_white",
-        "template": "simple_white",
         "xaxis_showgrid": False,
         "yaxis_showgrid": False,
     }
