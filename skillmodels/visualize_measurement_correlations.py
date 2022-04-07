@@ -80,16 +80,16 @@ def visualize_measurement_correlations(
         periods = [periods]
     data = _pre_process_data(data, periods)
     model = process_model(model_dict)
-    factors = _get_factors(model, model)
+    factors = _get_factors(model, factors)
     update_info = model["update_info"]
     corr = _get_correlation_matrix(
-        data,
-        update_info,
-        periods,
-        factors,
-        rounding,
-        show_diagonal,
-        show_upper_triangle,
+        data=data,
+        update_info=update_info,
+        periods=periods,
+        factors=factors,
+        rounding=rounding,
+        show_diagonal=show_diagonal,
+        show_upper_triangle=show_upper_triangle,
     )
     heatmap_kwargs = _get_heatmap_kwargs(heatmap_kwargs, colorscale, zmin, zmax, zmid)
     layout_kwargs = _get_layout_kwargs(
@@ -336,6 +336,7 @@ def _get_annotations(
     df, annotate, annotation_fontsize, annotation_text_color, annotation_text_angle
 ):
     """Get annotations and formatting kwargs."""
+
     annotation_kwargs = {}
     if annotate:
         annotations = []
