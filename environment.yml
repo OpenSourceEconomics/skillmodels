@@ -25,6 +25,7 @@ dependencies:
   - pdbpp
   - filterpy
   - dags
+  - plotly
   - pip:
     - pre-commit
     - black
