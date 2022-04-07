@@ -45,7 +45,10 @@ def visualize_measurement_correlations(
             If None, the default kwargs defined in the function will be used.
         layout_kwargs (dct): Dictionary of key word arguments used to update layout of
             go.Figure object. If None, the default kwargs defined in the function will
-            be used.
+            be used. Through layout_kwargs, you can edit figure properties such as
+            - template
+            - title
+            - figsize
         rounding (int): Number of digits after the decimal point to round the
             correlation values to. Default 2.
         zmin (float): Lower bound to set on correlation color map. Default -1.
@@ -58,6 +61,17 @@ def visualize_measurement_correlations(
         show_upper_triangle (bool): A boolean for displaying upper triangular part
             of the correlation heatmap. Default False.
         show_title (bool): if True, show figure title.
+
+        The following arguments are processed into dictionaries or special plotly
+        objects and passed to layout_kwargs. Defining them as additional arguments
+        allows the user to pass values of desired properties without having to know
+        how exactly plotly needs to be passed as (as a nested dicitonary in case of
+        axes tick relevant arguments or as Annotation object in case of annotations).
+
+        Same properties can be set via the argument layout_kwargs. In this case, values
+        defined in layout_kwargs will overwrite values passed via the individual
+        arguments.
+
         annotate (bool): If True, annotate the heatmap figure with correlation values.
             Default False.
         annotation_font_size (int): Font size of the annotation text. Default 13.
