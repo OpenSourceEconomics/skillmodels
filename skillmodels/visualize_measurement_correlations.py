@@ -12,6 +12,7 @@ def visualize_measurement_correlations(
     model_dict,
     data,
     *,
+    plot_heatmap=True,
     factors=None,
     heatmap_kwargs=None,
     layout_kwargs=None,
@@ -125,9 +126,12 @@ def visualize_measurement_correlations(
         y=corr.columns.values,
         **heatmap_kwargs,
     )
-    fig = go.Figure(goh)
-    fig.layout.update(**layout_kwargs)
-    return fig
+    if plot_heatmap:
+        fig = go.Figure(goh)
+        fig.layout.update(**layout_kwargs)
+        return fig
+    else:
+        return goh
 
 
 def _get_correlation_matrix(
