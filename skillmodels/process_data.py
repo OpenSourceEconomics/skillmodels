@@ -29,7 +29,7 @@ def process_data(df, labels, update_info, anchoring_info, purpose="estimation"):
             n_observed_factors) with data on the observed factors.
 
     """
-    df = _pre_process_data(df, labels["periods"])
+    df = pre_process_data(df, labels["periods"])
     df["constant"] = 1
     df = _add_copies_of_anchoring_outcome(df, anchoring_info)
     _check_data(df, update_info, labels, purpose=purpose)
@@ -47,7 +47,7 @@ def process_data(df, labels, update_info, anchoring_info, purpose="estimation"):
     return out
 
 
-def _pre_process_data(df, periods):
+def pre_process_data(df, periods):
     """Balance panel data in long format, drop unnecessary periods and set index.
 
     Args:

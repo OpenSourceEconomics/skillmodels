@@ -11,7 +11,7 @@ from skillmodels.process_data import _generate_controls_array
 from skillmodels.process_data import _generate_measurements_array
 from skillmodels.process_data import _generate_observed_factor_array
 from skillmodels.process_data import _handle_controls_with_missings
-from skillmodels.process_data import _pre_process_data
+from skillmodels.process_data import pre_process_data
 
 
 def test_pre_process_data():
@@ -29,7 +29,7 @@ def test_pre_process_data():
     exp = pd.DataFrame(data=data, columns=["__period__", "__id__", "var"])
     exp.set_index(["__id__", "__period__"], inplace=True)
 
-    res = _pre_process_data(df, [0, 1, 2, 3])
+    res = pre_process_data(df, [0, 1, 2, 3])
 
     assert res["var"].equals(exp["var"])
 

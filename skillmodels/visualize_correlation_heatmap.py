@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from plotly import graph_objects as go
 
-from skillmodels.process_data import _pre_process_data
+from skillmodels.process_data import pre_process_data
 from skillmodels.process_model import process_model
 
 
@@ -127,7 +127,7 @@ def get_measurements_corr(data, model_dict, factors, periods):
     data = data.copy(deep=True)
     if isinstance(periods, (int, float)):
         periods = [periods]
-    data = _pre_process_data(data, periods)
+    data = pre_process_data(data, periods)
     model = process_model(model_dict)
     factors = _get_factors(model, factors)
     update_info = model["update_info"]
@@ -161,7 +161,7 @@ def get_scores_corr(data, model_dict, factors, periods):
     data = data.copy(deep=True)
     if isinstance(periods, (int, float)):
         periods = [periods]
-    data = _pre_process_data(data, periods)
+    data = pre_process_data(data, periods)
     model = process_model(model_dict)
     factors = _get_factors(model, factors)
     update_info = model["update_info"]
