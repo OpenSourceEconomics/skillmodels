@@ -33,6 +33,8 @@ from itertools import combinations
 import jax
 import jax.numpy as jnp
 
+from skillmodels.clipping import soft_clipping
+
 
 def linear(states, params):
     """Linear production function where the constant is the last parameter."""
@@ -114,3 +116,19 @@ def constant(state, params):
 def params_constant(factors):
     """Index tuples for the constant production function."""
     return []
+
+
+def robust_translog(states, params):
+    """Numerically robust version of the translog transition function.
+
+    This function does a soft clipping of the state vector at +- 1e50 before calling
+    the standard translog function. It has a negligible effect on the results if the
+    states do not get close to the clipping values and prevents overflows otherwise.
+
+    The name is a convention in the skill formation literature even though the function
+    is better described as a linear in parameters transition function with squares and
+    interaction terms of the states.
+
+    """
+    clipped_states = soft_clipping(states, lower=-1e50, upper=1e50)
+    return translog(clipped_states, params)
