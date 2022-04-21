@@ -2,20 +2,20 @@ import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal as afe
 
-from skillmodels.visualize_correlation_heatmap import _get_factors
-from skillmodels.visualize_correlation_heatmap import _get_mask
-from skillmodels.visualize_correlation_heatmap import (
+from skillmodels.correlation_heatmap import _get_mask
+from skillmodels.correlation_heatmap import (
     _get_measurement_data_for_multiple_periods,
 )
-from skillmodels.visualize_correlation_heatmap import (
+from skillmodels.correlation_heatmap import (
     _get_measurement_data_for_single_period,
 )
-from skillmodels.visualize_correlation_heatmap import (
+from skillmodels.correlation_heatmap import (
     _get_quasi_factor_scores_data_for_multiple_periods,
 )
-from skillmodels.visualize_correlation_heatmap import (
+from skillmodels.correlation_heatmap import (
     _get_quasi_factor_scores_data_for_single_period,
 )
+from skillmodels.correlation_heatmap import _process_factors
 
 
 def test_get_measurement_data_with_single_period():
@@ -211,14 +211,14 @@ def test_get_factor_scores_data_with_multiple_period():
     afe(expected, result)
 
 
-def test_get_factors():
+def test_process_factors():
     model = {"labels": {"all_factors": list("abcd")}}
     factor = "c"
     factors = ["b", "d"]
     all_factors = None
-    assert list("abcd") == _get_factors(model, all_factors)
-    assert [factor] == _get_factors(model, factor)
-    assert factors == _get_factors(model, factors)
+    assert list("abcd") == _process_factors(model, all_factors)
+    assert [factor] == _process_factors(model, factor)
+    assert factors == _process_factors(model, factors)
 
 
 def test_get_mask_lower_triangle_only():

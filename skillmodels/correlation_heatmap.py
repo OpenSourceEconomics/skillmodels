@@ -17,7 +17,7 @@ def plot_correlation_heatmap(
     colorscale="RdBu_r",
     show_diagonal=False,
     show_upper_triangle=False,
-    annotate=False,
+    annotate=True,
     annotation_fontsize=13,
     annotation_text_color="black",
     annotation_text_angle=0,
@@ -118,18 +118,18 @@ def get_measurements_corr(data, model_dict, factors, periods):
             and extract measurements for each period.
         factors (list, str or NoneType): List of factors, to retrieve measurements for.
             If None, then calculate correlations of measurements of all factors.
-        periods (int,float or list): If int, the period within which to calculate
-            measurement correlations. If a list, calculate correlations over periods.
+        periods (int,float, list or NoneType): If int, the period within which to
+            calculate measurement correlations. If a list, calculate correlations over
+            periods. If None, calculate correlations across all periods.
     Returns:
         corr (DataFrame): DataFrame with measurement correlations.
 
     """
     data = data.copy(deep=True)
-    if isinstance(periods, (int, float)):
-        periods = [periods]
-    data = pre_process_data(data, periods)
     model = process_model(model_dict)
-    factors = _get_factors(model, factors)
+    periods = _process_periods(periods, model)
+    data = pre_process_data(data, periods)
+    factors = _process_factors(model, factors)
     update_info = model["update_info"]
     df = _get_measurement_data(data, update_info, periods, factors)
     corr = df.corr()
@@ -152,18 +152,18 @@ def get_scores_corr(data, model_dict, factors, periods):
             and extract measurements for each period.
         factors (list, str or NoneType): List of factors, to retrieve measurements for.
             If None, then calculate correlations of measurements of all factors.
-        periods (int,float or list): If int, the period within which to calculate
-            measurement correlations. If a list, calculate correlations over periods.
+        periods (int,float, list or NoneType): If int, the period within which to
+            calculate measurement correlations. If a list, calculate correlations over
+            periods. If None, calculate correlations across all periods.
     Returns:
         corr (DataFrame): DataFrame with score correlations.
 
     """
     data = data.copy(deep=True)
-    if isinstance(periods, (int, float)):
-        periods = [periods]
-    data = pre_process_data(data, periods)
     model = process_model(model_dict)
-    factors = _get_factors(model, factors)
+    periods = _process_periods(periods, model)
+    data = pre_process_data(data, periods)
+    factors = _process_factors(model, factors)
     update_info = model["update_info"]
     df = _get_quasi_factor_scores_data(data, update_info, periods, factors)
     corr = df.corr()
@@ -363,13 +363,22 @@ def _get_quasi_factor_scores_data_for_multiple_periods(
     return df
 
 
-def _get_factors(model, factors):
-    "Get list of factors."
+def _process_factors(model, factors):
+    "Process factors to get a list."
     if not factors:
         factors = model["labels"]["all_factors"]
     elif isinstance(factors, str):
         factors = [factors]
     return factors
+
+
+def _process_periods(periods, model):
+    """Process periods to get a list."""
+    if periods is None:
+        periods = list(range(model["dimensions"]["n_periods"]))
+    elif isinstance(periods, (int, float)):
+        periods = [periods]
+    return periods
 
 
 def _get_layout_kwargs(
@@ -489,7 +498,7 @@ def _get_heatmap_kwargs(corr, heatmap_kwargs, colorscale, zmax, zmin, zmid):
 
     """
     if not zmax:
-        zmax = np.abs(corr).values[np.tril_indices_from(corr, k=-1)].max()
+        zmax = np.abs(corr.to_numpy())[np.tril_indices_from(corr, k=-1)].max()
     if not zmin:
         zmin = -zmax
     if not zmid:
