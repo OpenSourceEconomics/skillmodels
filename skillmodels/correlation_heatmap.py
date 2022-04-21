@@ -497,11 +497,11 @@ def _get_heatmap_kwargs(corr, heatmap_kwargs, colorscale, zmax, zmin, zmid):
         default_heatmap_kwargs (dict): Dictionary of kwargs to instantiate go.Heatmap.
 
     """
-    if not zmax:
+    if zmax is None:
         zmax = np.abs(corr.to_numpy())[np.tril_indices_from(corr, k=-1)].max()
-    if not zmin:
+    if zmin is None:
         zmin = -zmax
-    if not zmid:
+    if zmid is None:
         zmid = 0
     default_heatmap_kwargs = {
         "colorscale": colorscale,
