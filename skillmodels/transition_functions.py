@@ -2,7 +2,7 @@
 
 Below the signature and purpose of a transition function and its helper
 functions is explained with a transition function called example_func:
-
+>
 
 **example_func(** *states, params**)**:
 
@@ -32,8 +32,6 @@ from itertools import combinations
 
 import jax
 import jax.numpy as jnp
-
-from skillmodels.clipping import soft_clipping
 
 
 def linear(states, params):
@@ -109,7 +107,7 @@ def constraints_log_ces(factor, factors, period):
 
 
 def constant(state, params):
-    """Constant production function should never be called."""
+    """Constant production function."""
     return state
 
 
@@ -121,8 +119,8 @@ def params_constant(factors):
 def robust_translog(states, params):
     """Numerically robust version of the translog transition function.
 
-    This function does a soft clipping of the state vector at +- 1e50 before calling
-    the standard translog function. It has a negligible effect on the results if the
+    This function does a clipping of the state vector at +- 1e12 before calling
+    the standard translog function. It has a no effect on the results if the
     states do not get close to the clipping values and prevents overflows otherwise.
 
     The name is a convention in the skill formation literature even though the function
@@ -130,5 +128,9 @@ def robust_translog(states, params):
     interaction terms of the states.
 
     """
-    clipped_states = soft_clipping(states, lower=-1e50, upper=1e50)
+    clipped_states = jnp.clip(states, -1e12, 1e12)
     return translog(clipped_states, params)
+
+
+def params_robust_translog(factors):
+    return params_translog(factors)
