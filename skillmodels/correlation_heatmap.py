@@ -28,6 +28,7 @@ def plot_correlation_heatmap(
     """Plot correlation heatmaps for factor measurements.
 
     Args:
+        corr (DataFrame): Data frame of measurement or factor score correlations.
         heatmap_kwargs (dct): Dictionary of key word arguments to pass to go.Heatmap ().
             If None, the default kwargs defined in the function will be used.
         layout_kwargs (dct): Dictionary of key word arguments used to update layout of
@@ -345,7 +346,6 @@ def _get_quasi_factor_scores_data_for_single_period(
         to_concat.append(sr)
     for factor in observed_factors:
         df = data.query(f"{update_info.index.names[0]}=={period}")[factor]
-        df = (df - df.mean()) / df.std()
         to_concat.append(df)
     df = pd.concat(to_concat, axis=1)
     return df
@@ -427,7 +427,7 @@ def _get_layout_kwargs(
     """Get kwargs to update figure layout.
 
     Args:
-        corr (ndarray): The processed array with correlation coefficients.
+        corr (DataFrame): The processed data frame with correlation coefficients.
         layout_kwargs (dct): Dictionary of keyword arguments used to update layout of
             go.Figure object.
         annotate (bool): Add annotations to the figure if True.
