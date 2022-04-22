@@ -47,6 +47,7 @@ autodoc_mock_imports = [
     "statsmodels",
     "filterpy",
     "dags",
+    "plotly",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
