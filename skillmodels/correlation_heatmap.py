@@ -130,9 +130,11 @@ def get_measurements_corr(data, model_dict, factors, periods):
     model = process_model(model_dict)
     periods = _process_periods(periods, model)
     data = pre_process_data(data, periods)
-    factors = _process_factors(model, factors)
+    latent_factors, observed_factors = _process_factors(model, factors)
     update_info = model["update_info"]
-    df = _get_measurement_data(data, update_info, periods, factors)
+    df = _get_measurement_data(
+        data, update_info, periods, latent_factors, observed_factors
+    )
     corr = df.corr()
     return corr
 
@@ -164,9 +166,11 @@ def get_scores_corr(data, model_dict, factors, periods):
     model = process_model(model_dict)
     periods = _process_periods(periods, model)
     data = pre_process_data(data, periods)
-    factors = _process_factors(model, factors)
+    latent_factors, observed_factors = _process_factors(model, factors)
     update_info = model["update_info"]
-    df = _get_quasi_factor_scores_data(data, update_info, periods, factors)
+    df = _get_quasi_factor_scores_data(
+        data, update_info, periods, latent_factors, observed_factors
+    )
     corr = df.corr()
     return corr
 
@@ -201,7 +205,9 @@ def _get_measurement_data(data, update_info, periods, latent_factors, observed_f
             for each factor in each model period.
         periods (list): The list of periods that correlations are
             calculated for.
-        factors (list or tuple): List of factors the measurements of which
+        latent_factors (list): List of latent factors the measurements of which
+            correlations are calculated for.
+        observed_factors (list): List of observed factors the measurements of which
             correlations are calculated for.
     Returns:
         df (pd.DataFrame): Processed DataFrame to calculate correlations over.
@@ -229,7 +235,9 @@ def _get_measurement_data_for_single_period(
         update_info (pd.DataFrame): DataFrame with information on measurements
             for each factor in each model period.
         periods (int or float): The period to extract measurements for.
-        factors (list or tuple): List factors the measurements of which
+        latent_factors (list): List of latent factors the measurements of which
+            correlations are calculated for.
+        observed_factors (list): List of observed factors the measurements of which
             correlations are calculated for.
     Returns:
         df (pd.DataFrame): DataFrame with measurements of factors for period 'period'.
@@ -259,7 +267,9 @@ def _get_measurement_data_for_multiple_periods(
         update_info (pd.DataFrame): DataFrame with information on measurements
             for each factor in each model period.
         periods (list): The periods to extract measurements for.
-        factors (list or str): List of or a single factor the measurements of which
+        latent_factors (list): List of latent factors the measurements of which
+            correlations are calculated for.
+        observed_factors (list): List of observed factors the measurements of which
             correlations are calculated for.
     Returns:
         df (pd.DataFrame): DataFrame with measurements of factors in each period as
@@ -295,7 +305,9 @@ def _get_quasi_factor_scores_data(
             for each factor in each model period.
         periods (list): The list of periods that correlations are
             calculated for.
-        factors (list or tuple): List of factors the measurements of which
+        latent_factors (list): List of latent factors the scores of which
+            correlations are calculated for.
+        observed_factors (list): List of observed factors the scores of which
             correlations are calculated for.
     Returns:
         df (pd.DataFrame): Processed DataFrame to calculate correlations over.
@@ -325,7 +337,9 @@ def _get_quasi_factor_scores_data_for_single_period(
             for each factor in each model period.
         periods (list): The list of periods that correlations are
             calculated for.
-        factors (list or tuple): List of factors the measurements of which
+        latent_factors (list): List of latent factors the scores of which
+            correlations are calculated for.
+        observed_factors (list): List of observed factors the scores of which
             correlations are calculated for.
     Returns:
         df (pd.DataFrame): Processed DataFrame to calculate correlations over.
@@ -362,7 +376,9 @@ def _get_quasi_factor_scores_data_for_multiple_periods(
             for each factor in each model period.
         periods (list): The list of periods that correlations are
             calculated for.
-        factors (list or tuple): List of factors the measurements of which
+        latent_factors (list): List of latent factors the scores of which
+            correlations are calculated for.
+        observed_factors (list): List of observed factors the scores of which
             correlations are calculated for.
     Returns:
         df (pd.DataFrame): Processed DataFrame to calculate correlations over.
