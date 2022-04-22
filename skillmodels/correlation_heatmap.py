@@ -282,7 +282,7 @@ def _get_measurement_data_for_multiple_periods(
             _get_measurement_data_for_single_period(
                 data, update_info, period, latent_factors, observed_factors
             )
-            .add_suffix(f"_{period}")
+            .add_suffix(f", {period}")
             .reset_index(drop=True)
         )
     df = pd.concat(to_concat, axis=1)
@@ -390,7 +390,7 @@ def _get_quasi_factor_scores_data_for_multiple_periods(
             _get_quasi_factor_scores_data_for_single_period(
                 data, update_info, period, latent_factors, observed_factors
             )
-            .add_suffix(f"_{period}")
+            .add_suffix(f", {period}")
             .reset_index(drop=True)
         )
     df = pd.concat(to_concat, axis=1)
