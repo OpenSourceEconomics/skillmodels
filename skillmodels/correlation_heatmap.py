@@ -188,7 +188,7 @@ def _get_mask(corr, show_upper_triangle, show_diagonal):
     return mask
 
 
-def _get_measurement_data(data, update_info, periods, factors):
+def _get_measurement_data(data, update_info, periods, latent_factors, observed_factors):
     """Get data frame with factor measurements in each period, in wide format.
 
     For each factor, retrieve the data on measurements in each period and stack
@@ -208,15 +208,19 @@ def _get_measurement_data(data, update_info, periods, factors):
     """
     if len(periods) == 1:
         period = periods[0]
-        df = _get_measurement_data_for_single_period(data, update_info, period, factors)
+        df = _get_measurement_data_for_single_period(
+            data, update_info, period, latent_factors, observed_factors
+        )
     else:
         df = _get_measurement_data_for_multiple_periods(
-            data, update_info, periods, factors
+            data, update_info, periods, latent_factors, observed_factors
         )
     return df
 
 
-def _get_measurement_data_for_single_period(data, update_info, period, factors):
+def _get_measurement_data_for_single_period(
+    data, update_info, period, latent_factors, observed_factors
+):
     """Extract measurements of factors for the given period.
 
     Args:
@@ -234,15 +238,19 @@ def _get_measurement_data_for_single_period(data, update_info, period, factors):
     period_info = update_info.loc[period].reset_index()
     measurements = []
 
-    for fac in factors:
+    for fac in latent_factors:
         measurements += period_info.query(
             f"{fac} == True and purpose == 'measurement'"
         )["variable"].to_list()
+    for fac in observed_factors:
+        measurements.append(fac)
     df = data.query(f"{update_info.index.names[0]}=={period}")[measurements]
     return df
 
 
-def _get_measurement_data_for_multiple_periods(data, update_info, periods, factors):
+def _get_measurement_data_for_multiple_periods(
+    data, update_info, periods, latent_factors, observed_factors
+):
     """Extract measurements for factors for given periods.
 
     Args:
@@ -260,7 +268,9 @@ def _get_measurement_data_for_multiple_periods(data, update_info, periods, facto
     to_concat = []
     for period in periods:
         to_concat.append(
-            _get_measurement_data_for_single_period(data, update_info, period, factors)
+            _get_measurement_data_for_single_period(
+                data, update_info, period, latent_factors, observed_factors
+            )
             .add_suffix(f"_{period}")
             .reset_index(drop=True)
         )
@@ -268,7 +278,9 @@ def _get_measurement_data_for_multiple_periods(data, update_info, periods, facto
     return df
 
 
-def _get_quasi_factor_scores_data(data, update_info, periods, factors):
+def _get_quasi_factor_scores_data(
+    data, update_info, periods, latent_factors, observed_factors
+):
     """Get data frame with summary information on factor measurements in each period.
 
     In each period, standardize factor measurements to zero mean and unit standard
@@ -291,17 +303,19 @@ def _get_quasi_factor_scores_data(data, update_info, periods, factors):
     if len(periods) == 1:
         period = periods[0]
         df = _get_quasi_factor_scores_data_for_single_period(
-            data, update_info, period, factors
+            data, update_info, period, latent_factors, observed_factors
         )
     else:
         df = _get_quasi_factor_scores_data_for_multiple_periods(
-            data, update_info, periods, factors
+            data, update_info, periods, latent_factors, observed_factors
         )
 
     return df
 
 
-def _get_quasi_factor_scores_data_for_single_period(data, update_info, period, factors):
+def _get_quasi_factor_scores_data_for_single_period(
+    data, update_info, period, latent_factors, observed_factors
+):
     """Get frame with summary scores on factor measurements in a given period.
 
     Args:
@@ -318,7 +332,7 @@ def _get_quasi_factor_scores_data_for_single_period(data, update_info, period, f
     """
     period_info = update_info.loc[period].reset_index()
     to_concat = []
-    for factor in factors:
+    for factor in latent_factors:
         period_factor_measurements = period_info.query(
             f"{factor} == True and purpose == 'measurement'"
         )["variable"].to_list()
@@ -329,12 +343,16 @@ def _get_quasi_factor_scores_data_for_single_period(data, update_info, period, f
         sr = df.mean(axis=1)
         sr.name = f"{factor}"
         to_concat.append(sr)
+    for factor in observed_factors:
+        df = data.query(f"{update_info.index.names[0]}=={period}")[factor]
+        df = (df - df.mean()) / df.std()
+        to_concat.append(df)
     df = pd.concat(to_concat, axis=1)
     return df
 
 
 def _get_quasi_factor_scores_data_for_multiple_periods(
-    data, update_info, periods, factors
+    data, update_info, periods, latent_factors, observed_factors
 ):
     """Get frame with summary scores of factor measurements in a given period.
 
@@ -354,7 +372,7 @@ def _get_quasi_factor_scores_data_for_multiple_periods(
     for period in periods:
         to_concat.append(
             _get_quasi_factor_scores_data_for_single_period(
-                data, update_info, period, factors
+                data, update_info, period, latent_factors, observed_factors
             )
             .add_suffix(f"_{period}")
             .reset_index(drop=True)
@@ -364,12 +382,26 @@ def _get_quasi_factor_scores_data_for_multiple_periods(
 
 
 def _process_factors(model, factors):
-    "Process factors to get a list."
+    "Process factors to get a tuple of lists."
     if not factors:
-        factors = model["labels"]["all_factors"]
+        latent_factors = model["labels"]["latent_factors"]
+        observed_factors = model["labels"]["observed_factors"]
     elif isinstance(factors, str):
-        factors = [factors]
-    return factors
+        if factors in model["labels"]["latent_factors"]:
+            latent_factors = [factors]
+            observed_factors = []
+        elif factors in model["labels"]["observed_factors"]:
+            observed_factors = [factors]
+            latent_factors = []
+    else:
+        observed_factors = []
+        latent_factors = []
+        for factor in factors:
+            if factor in model["labels"]["latent_factors"]:
+                latent_factors.append(factor)
+            elif factor in model["labels"]["observed_factors"]:
+                observed_factors.append(factor)
+    return latent_factors, observed_factors
 
 
 def _process_periods(periods, model):
