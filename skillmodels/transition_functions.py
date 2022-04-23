@@ -134,3 +134,22 @@ def robust_translog(states, params):
 
 def params_robust_translog(factors):
     return params_translog(factors)
+
+
+def linear_and_squares(states, params):
+    """linear_and_squares transition function."""
+    nfac = len(states)
+    constant = params[-1]
+    lin_beta = params[:nfac]
+    square_beta = params[nfac : 2 * nfac]
+
+    res = jnp.dot(states, lin_beta)
+    res += jnp.dot(states**2, square_beta)
+    res += constant
+    return res
+
+
+def params_linear_and_squares(factors):
+    """Index tuples for the linear_and_squares production function."""
+    names = factors + [f"{factor} ** 2" for factor in factors] + ["constant"]
+    return names
