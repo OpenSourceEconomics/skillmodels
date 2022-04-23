@@ -15,8 +15,10 @@ def plot_correlation_heatmap(
     zmin=None,
     zmid=None,
     colorscale="RdBu_r",
+    show_color_bar=True,
     show_diagonal=False,
     show_upper_triangle=False,
+    trim_heatmap=False,
     annotate=True,
     annotation_fontsize=13,
     annotation_text_color="black",
@@ -47,6 +49,8 @@ def plot_correlation_heatmap(
             is set to 0.
         colorscale (str): Name of the color palette to use in the heatmap.
             Default 'RdBu_r'.
+        show_color_bar (bool): A boolean variable for displayin heatmap colorbar.
+            Default True.
         show_diagonal (bool): A boolean for displaying the correlations on the diagonal.
             Default False.
         show_upper_triangle (bool): A boolean for displaying upper triangular part
@@ -80,10 +84,10 @@ def plot_correlation_heatmap(
 
     """
     corr = _process_corr_data_for_plotting(
-        corr, rounding, show_upper_triangle, show_diagonal
+        corr, rounding, show_upper_triangle, show_diagonal, trim_heatmap
     )
     heatmap_kwargs = _get_heatmap_kwargs(
-        corr, heatmap_kwargs, colorscale, zmax, zmin, zmid
+        corr, heatmap_kwargs, colorscale, show_color_bar, zmax, zmin, zmid
     )
     layout_kwargs = _get_layout_kwargs(
         corr=corr,
@@ -98,8 +102,8 @@ def plot_correlation_heatmap(
     )
     goh = go.Heatmap(
         z=corr,
-        x=corr.index.values,
-        y=corr.columns.values,
+        x=corr.columns.values,
+        y=corr.index.values,
         **heatmap_kwargs,
     )
     fig = go.Figure(goh)
@@ -175,10 +179,14 @@ def get_scores_corr(data, model_dict, factors, periods):
     return corr
 
 
-def _process_corr_data_for_plotting(corr, rounding, show_upper_triangle, show_diagonal):
+def _process_corr_data_for_plotting(
+    corr, rounding, show_upper_triangle, show_diagonal, trim_heatmap
+):
     """Apply mask and rounding to correlation DataFrame."""
     mask = _get_mask(corr, show_upper_triangle, show_diagonal)
     corr = corr.where(mask).round(rounding)
+    if trim_heatmap:
+        corr = corr.iloc[1:, :-1]
     return corr
 
 
@@ -461,8 +469,8 @@ def _get_layout_kwargs(
     default_layout_kwargs = {
         "xaxis_showgrid": False,
         "yaxis_showgrid": False,
-        "yaxis_autorange": "reversed",
         "template": "plotly_white",
+        "yaxis_autorange": "reversed",
     }
     default_layout_kwargs.update(
         _get_annotations(
@@ -509,13 +517,13 @@ def _get_annotations(
     annotation_kwargs = {}
     if annotate:
         annotations = []
-        for n in df.index:
-            for m in df.columns:
+        for n in df.columns[::-1]:
+            for m in df.index[::-1]:
                 annotations.append(
                     {
-                        "text": str(df.loc[n, m]).replace("nan", ""),
-                        "x": m,
-                        "y": n,
+                        "text": str(df.loc[m, n]).replace("nan", ""),
+                        "x": n,
+                        "y": m,
                         "xref": "x1",
                         "yref": "y1",
                         "showarrow": False,
@@ -530,13 +538,16 @@ def _get_annotations(
     return annotation_kwargs
 
 
-def _get_heatmap_kwargs(corr, heatmap_kwargs, colorscale, zmax, zmin, zmid):
+def _get_heatmap_kwargs(
+    corr, heatmap_kwargs, colorscale, show_color_bar, zmax, zmin, zmid
+):
     """Get kwargs to instantiate Heatmap object.
 
     Args:
         heatmap_kwargs (dct): Dictionary of key word arguments to pass to go.Heatmap().
         colorscale (str): Name of the color palette to use in the heatmap.
             Default 'RdBu_r'.
+        show_color_bar (bool): A boolean variable for displayin heatmap colorbar.
         zmax (float or None): Upper bound to set on correlation color map.
         zmin (float or None): Lower bound to set on correlation color map.
         zmid (float or None): Midpoint to set on correlation color map.
@@ -553,6 +564,7 @@ def _get_heatmap_kwargs(corr, heatmap_kwargs, colorscale, zmax, zmin, zmid):
         zmid = 0
     default_heatmap_kwargs = {
         "colorscale": colorscale,
+        "showscale": show_color_bar,
         "zmin": zmin,
         "zmax": zmax,
         "zmid": zmid,
