@@ -2,7 +2,7 @@
 
 Below the signature and purpose of a transition function and its helper
 functions is explained with a transition function called example_func:
-
+>
 
 **example_func(** *states, params**)**:
 
@@ -107,10 +107,49 @@ def constraints_log_ces(factor, factors, period):
 
 
 def constant(state, params):
-    """Constant production function should never be called."""
+    """Constant production function."""
     return state
 
 
 def params_constant(factors):
     """Index tuples for the constant production function."""
     return []
+
+
+def robust_translog(states, params):
+    """Numerically robust version of the translog transition function.
+
+    This function does a clipping of the state vector at +- 1e12 before calling
+    the standard translog function. It has a no effect on the results if the
+    states do not get close to the clipping values and prevents overflows otherwise.
+
+    The name is a convention in the skill formation literature even though the function
+    is better described as a linear in parameters transition function with squares and
+    interaction terms of the states.
+
+    """
+    clipped_states = jnp.clip(states, -1e12, 1e12)
+    return translog(clipped_states, params)
+
+
+def params_robust_translog(factors):
+    return params_translog(factors)
+
+
+def linear_and_squares(states, params):
+    """linear_and_squares transition function."""
+    nfac = len(states)
+    constant = params[-1]
+    lin_beta = params[:nfac]
+    square_beta = params[nfac : 2 * nfac]
+
+    res = jnp.dot(states, lin_beta)
+    res += jnp.dot(states**2, square_beta)
+    res += constant
+    return res
+
+
+def params_linear_and_squares(factors):
+    """Index tuples for the linear_and_squares production function."""
+    names = factors + [f"{factor} ** 2" for factor in factors] + ["constant"]
+    return names
