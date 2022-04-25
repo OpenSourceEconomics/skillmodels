@@ -19,7 +19,6 @@ def plot_correlation_heatmap(
     show_diagonal=True,
     show_upper_triangle=True,
     trim_heatmap=False,
-    trim_size=None,
     annotate=True,
     annotation_fontsize=13,
     annotation_text_color="black",
@@ -85,7 +84,7 @@ def plot_correlation_heatmap(
 
     """
     corr = _process_corr_data_for_plotting(
-        corr, rounding, show_upper_triangle, show_diagonal, trim_heatmap, trim_size
+        corr, rounding, show_upper_triangle, show_diagonal, trim_heatmap
     )
     heatmap_kwargs = _get_heatmap_kwargs(
         corr, heatmap_kwargs, colorscale, show_color_bar, zmax, zmin, zmid
@@ -181,15 +180,18 @@ def get_scores_corr(data, model_dict, factors, periods):
 
 
 def _process_corr_data_for_plotting(
-    corr, rounding, show_upper_triangle, show_diagonal, trim_heatmap, trim_size
+    corr, rounding, show_upper_triangle, show_diagonal, trim_heatmap
 ):
     """Apply mask and rounding to correlation DataFrame."""
     mask = _get_mask(corr, show_upper_triangle, show_diagonal)
     corr = corr.where(mask).round(rounding)
     if trim_heatmap:
-        if trim_size is None:
-            trim_size = 1
-        corr = corr.iloc[trim_size:, :-trim_size]
+        keeprows = mask.any(axis=1) & corr.notnull().any(axis="columns").to_numpy()
+        mask = mask[keeprows]
+        corr = corr[keeprows]
+        keepcols = mask.any(axis=0) & corr.notnull().any(axis="index").to_numpy()
+        mask = mask.T[keepcols].T
+        corr = corr.T[keepcols].T
     return corr
 
 
