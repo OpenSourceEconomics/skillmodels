@@ -109,7 +109,7 @@ def visualize_transition_equations(
 
     latent_factors = model["labels"]["latent_factors"]
     all_factors = model["labels"]["all_factors"]
-    plots_dict = _get_plots_dict(
+    plots_dict = _get_dictionary_with_plots(
         model,
         data,
         params,
@@ -141,7 +141,7 @@ def visualize_transition_equations(
 
     else:
         out = {
-            "plots_dict": plots_dict,
+            "subplots": plots_dict,
             "period": period,
             "latent_factors": latent_factors,
             "all_factors": all_factors,
@@ -151,7 +151,7 @@ def visualize_transition_equations(
 
 
 def combine_subplots(
-    plots_dict,
+    subplots,
     period,
     latent_factors,
     all_factors,
@@ -201,7 +201,7 @@ def combine_subplots(
             transition functions.
 
     """
-    plots_dict = deepcopy(plots_dict)
+    subplots = deepcopy(subplots)
     subplot_kwargs = _get_make_subplot_kwargs(
         sharex, sharey, subplot_kwargs, latent_factors, all_factors
     )
@@ -210,7 +210,7 @@ def combine_subplots(
         itertools.product(latent_factors, all_factors),
         itertools.product(np.arange(len(latent_factors)), np.arange(len(all_factors))),
     ):
-        subfig = plots_dict[f"{input_factor}_{output_factor}_{period}"]
+        subfig = subplots[f"{input_factor}_{output_factor}_{period}"]
         if not (row == 0 and col == 0):
             for d in subfig.data:
                 d.update({"showlegend": False})
@@ -222,12 +222,10 @@ def combine_subplots(
                     col=col + 1,
                     row=row + 1,
                 )
-        fig.update_xaxes(
-            title_text=f"{input_factor} in period {period}", row=row + 1, col=col + 1
-        )
+        fig.update_xaxes(title_text=f"{input_factor}", row=row + 1, col=col + 1)
         if col == 0:
             fig.update_yaxes(
-                title_text=f"{output_factor} in period {period+1}",
+                title_text=f"{output_factor}",
                 row=row + 1,
                 col=col + 1,
             )
@@ -240,7 +238,7 @@ def combine_subplots(
     return fig
 
 
-def _get_plots_dict(
+def _get_dictionary_with_plots(
     model,
     data,
     params,
@@ -582,3 +580,21 @@ def _prepare_data_for_one_plot_average_2d(
         .reset_index()
     )
     return out
+
+
+def _process_period_mapper(period, period_mapper):
+    if period_mapper is None:
+        period_mapper = {period: period, period + 1: period + 1}
+    else:
+        if len(period_mapper[period]) == 1:
+            period_mapper = {
+                period: period_mapper[period],
+                period + 1: period_mapper[period + 1],
+            }
+        else:
+            period_mapper = {
+                period: f"{period_mapper[period][0]}-{period_mapper[period][1]}",
+                period
+                + 1: f"{period_mapper[period+1][0]}-{period_mapper[period+1][1]}",
+            }
+    return period_mapper
