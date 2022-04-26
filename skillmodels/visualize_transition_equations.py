@@ -30,6 +30,7 @@ def visualize_transition_equations(
     colorscale="Magenta_r",
     sharex=False,
     sharey=True,
+    title=None,
     layout_kwargs=None,
     legend_kwargs=None,
     title_kwargs=None,
