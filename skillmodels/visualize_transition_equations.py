@@ -30,7 +30,6 @@ def visualize_transition_equations(
     colorscale="Magenta_r",
     sharex=False,
     sharey=True,
-    title=None,
     layout_kwargs=None,
     legend_kwargs=None,
     title_kwargs=None,
@@ -154,8 +153,8 @@ def visualize_transition_equations(
 def combine_subplots(
     subplots,
     period,
-    latent_factors,
-    all_factors,
+    output_factors,
+    input_factors,
     quantiles_of_other_factors,
     subplot_kwargs=None,
     sharex=False,
@@ -171,9 +170,9 @@ def combine_subplots(
         plots_dict (dict): Dictionary with plots of transition functions for each
             factor.
         period (int): The start period of the transition equations that are plotted.
-        latent_factors (list): Latent factors of the model that are outputs of
+        output_factors (list): Latent factors of the model that are outputs of
             transition factors.
-        all_factors (list): All factors of the model that are the inuts of transition
+        input_factors (list): All factors of the model that are the inuts of transition
             functions.
         quantiles_of_other_factors (float, list or None): Quantiles at which the factors
             that are not varied in a given plot are fixed. If None, those factors are
@@ -204,12 +203,14 @@ def combine_subplots(
     """
     subplots = deepcopy(subplots)
     subplot_kwargs = _get_make_subplot_kwargs(
-        sharex, sharey, subplot_kwargs, latent_factors, all_factors
+        sharex, sharey, subplot_kwargs, output_factors, input_factors
     )
     fig = make_subplots(**subplot_kwargs)
     for (output_factor, input_factor), (row, col) in zip(
-        itertools.product(latent_factors, all_factors),
-        itertools.product(np.arange(len(latent_factors)), np.arange(len(all_factors))),
+        itertools.product(output_factors, input_factors),
+        itertools.product(
+            np.arange(len(output_factors)), np.arange(len(input_factors))
+        ),
     ):
         subfig = subplots[f"{input_factor}_{output_factor}_{period}"]
         if not (row == 0 and col == 0):
@@ -407,12 +408,12 @@ def _get_layout_kwargs(
 
 
 def _get_make_subplot_kwargs(
-    sharex, sharey, subplot_kwargs, latent_factors, all_factors
+    sharex, sharey, subplot_kwargs, output_factors, input_factors
 ):
     """Define and update keywargs for instantiating figure with subplots."""
     default_kwargs = {
-        "rows": len(latent_factors),
-        "cols": len(all_factors),
+        "rows": len(output_factors),
+        "cols": len(input_factors),
         "start_cell": "top-left",
         "print_grid": False,
         "shared_xaxes": sharex,
