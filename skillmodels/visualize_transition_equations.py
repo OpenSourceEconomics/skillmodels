@@ -35,9 +35,7 @@ def get_transition_plots(
         params (pandas.DataFrame): DataFrame with model parameters.
         data (pd.DataFrame): Empirical dataset that is used to estimate the model.
         period (int): The start period of the transition equations that are plotted.
-        combine_plots (bool): Return a figure containing subplots for each
-            pair of factors or a dictionary of individual plots. Default True.
-        state_ranges (dict): The keys are the names of the latent factors.
+        state_ranges (dict or NoneType): The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
             The state_ranges are used to define the axis limits of the plots.
         quantiles_of_other_factors (float, list or None): Quantiles at which the factors
@@ -55,8 +53,8 @@ def get_transition_plots(
     Returns:
         plots dict (dict): Dictionary with individual plots of transition equations
             for each combination of input and output factors.
-    """
 
+    """
     quantiles_of_other_factors = _process_quantiles_of_other_factors(
         quantiles_of_other_factors
     )
@@ -70,7 +68,7 @@ def get_transition_plots(
 
     latent_factors = model["labels"]["latent_factors"]
     all_factors = model["labels"]["all_factors"]
-    states = get_filtered_states(model_dict=model_dict, data=data, params=params,)[
+    states = get_filtered_states(model_dict=model_dict, data=data, params=params)[
         "anchored_states"
     ]["states"]
     plots_dict = _get_dictionary_with_plots(
@@ -94,11 +92,10 @@ def get_transition_plots(
 
 def combine_subplots(
     plots_dict,
-    output_factors,
-    input_factors,
-    quantiles_of_other_factors,
+    output_factors=None,
+    input_factors=None,
     factor_mapping=None,
-    subplot_kwargs=None,
+    make_subplot_kwargs=None,
     sharex=False,
     sharey=True,
     layout_kwargs=None,
@@ -117,10 +114,7 @@ def combine_subplots(
             functions.
         factor_mapping (dict or NoneType): A dictionary with custom factor names to
             display as axes labels.
-        quantiles_of_other_factors (float, list or None): Quantiles at which the factors
-            that are not varied in a given plot are fixed. If None, those factors are
-            not fixed but integrated out.
-        subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
+        make_subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
             to instantiate plotly Figure with multiple subplots. Is used to define
             properties such as, for example, the spacing between subplots. If None,
             default arguments defined in the function are used.
@@ -145,13 +139,17 @@ def combine_subplots(
 
     """
     plots_dict = deepcopy(plots_dict)
-    subplot_kwargs = _get_make_subplot_kwargs(
-        sharex, sharey, subplot_kwargs, output_factors, input_factors
+
+    input_factors, output_factors = _process_factors(
+        input_factors, output_factors, plots_dict
+    )
+    make_subplot_kwargs = _get_make_subplot_kwargs(
+        sharex, sharey, make_subplot_kwargs, output_factors, input_factors
     )
     factor_mapping = _process_factor_mapping(
         factor_mapping, input_factors, output_factors
     )
-    fig = make_subplots(**subplot_kwargs)
+    fig = make_subplots(**make_subplot_kwargs)
     for (output_factor, input_factor), (row, col) in zip(
         itertools.product(output_factors, input_factors),
         itertools.product(
@@ -180,9 +178,7 @@ def combine_subplots(
                 col=col + 1,
             )
 
-    layout_kwargs = _get_layout_kwargs(
-        layout_kwargs, legend_kwargs, title_kwargs, quantiles_of_other_factors
-    )
+    layout_kwargs = _get_layout_kwargs(layout_kwargs, legend_kwargs, title_kwargs)
     fig.update_layout(**layout_kwargs)
 
     return fig
@@ -245,7 +241,9 @@ def _get_dictionary_with_plots(
     params = _set_index_params(model, params)
     pardict = _get_pardict(model, params)
     state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
-    layout_kwargs = _get_subfig_kwargs(layout_kwargs)
+    layout_kwargs = _get_layout_kwargs(
+        layout_kwargs, legend_kwargs=None, title_kwargs=None
+    )
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
         transition_function = model["transition_info"]["individual_functions"][
@@ -268,6 +266,7 @@ def _get_dictionary_with_plots(
                 transition_params=transition_params,
                 all_factors=all_factors,
             )
+
         else:
             plot_data = _prepare_data_for_one_plot_average_2d(
                 states_data=states_data,
@@ -291,34 +290,23 @@ def _get_dictionary_with_plots(
             color = None
         subfig = px.line(
             plot_data,
-            y=f"{output_factor}",
-            x=f"{input_factor}",
+            y=f"output_{output_factor}",
+            x=f"input_{input_factor}",
             color=color,
             color_discrete_sequence=getattr(px.colors.sequential, colorscale),
         )
+        subfig.update_xaxes(title={"text": input_factor})
+        subfig.update_yaxes(title={"text": output_factor})
         subfig.update_layout(**layout_kwargs)
         plots_dict[f"{input_factor}_{output_factor}"] = deepcopy(subfig)
+
     return plots_dict
 
 
-def _get_subfig_kwargs(subfig_kwargs):
-    """Define and update default kwargs for update_layout.
-    Defines some default keyword arguments to update figure layout, such as
-    title and legend.
-
-    """
-    default_kwargs = {
-        "template": "simple_white",
-        "xaxis_showgrid": False,
-        "yaxis_showgrid": False,
-    }
-    if subfig_kwargs:
-        default_kwargs.update(subfig_kwargs)
-    return default_kwargs
-
-
 def _get_layout_kwargs(
-    layout_kwargs, legend_kwargs, title_kwargs, quantiles_of_other_factors
+    layout_kwargs,
+    legend_kwargs,
+    title_kwargs,
 ):
     """Define and update default kwargs for update_layout.
     Defines some default keyword arguments to update figure layout, such as
@@ -332,14 +320,6 @@ def _get_layout_kwargs(
         "legend": {},
         "title": {},
     }
-    if not quantiles_of_other_factors:
-        default_kwargs["title"]["text"] = "Other factors integrated out"
-    elif len(quantiles_of_other_factors) == 1:
-        default_kwargs["title"][
-            "text"
-        ] = f"Other factors at {quantiles_of_other_factors[0]} quantile"
-    else:
-        default_kwargs["title"]["text"] = "Other factors at different quantiles"
     if title_kwargs:
         default_kwargs["title"] = title_kwargs
     if legend_kwargs:
@@ -466,8 +446,8 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
         # convert from jax to numpy array
         output_arr = np.array(transition_function(transition_params, input_arr))
         quantile_data = pd.DataFrame()
-        quantile_data[f"{input_factor} in period {period}"] = input_data[input_factor]
-        quantile_data[f"{output_factor} in period {period + 1}"] = np.array(output_arr)
+        quantile_data[f"input_{input_factor}"] = input_data[input_factor]
+        quantile_data[f"output_{output_factor}"] = np.array(output_arr)
         quantile_data["quantile"] = quantile
         to_concat.append(quantile_data)
 
@@ -513,16 +493,11 @@ def _prepare_data_for_one_plot_average_2d(
         # convert from jax to numpy array
         output_arr = np.array(transition_function(transition_params, input_arr))
         draw_data = pd.DataFrame()
-        draw_data[f"{input_factor} in period {period}"] = input_data[input_factor]
-        draw_data[f"{output_factor} in period {period + 1}"] = np.array(output_arr)
+        draw_data[f"input_{input_factor}"] = input_data[input_factor]
+        draw_data[f"output_{output_factor}"] = np.array(output_arr)
         to_concat.append(draw_data)
 
-    out = (
-        pd.concat(to_concat)
-        .groupby(f"{input_factor} in period {period}")
-        .mean()
-        .reset_index()
-    )
+    out = pd.concat(to_concat).groupby(f"input_{input_factor}").mean().reset_index()
     return out
 
 
@@ -536,3 +511,20 @@ def _process_factor_mapping(factor_mapper, input_factors, output_factors):
             if fac not in factor_mapper:
                 factor_mapper[fac] = fac
     return factor_mapper
+
+
+def _process_factors(inputs, outputs, plots_dict):
+    """Process factor names to return list of strings."""
+    if inputs is None:
+        inputs = sorted(
+            {f.layout["xaxis"]["title"]["text"] for f in plots_dict.values()}
+        )
+    elif isinstance(inputs, str):
+        inputs = [inputs]
+    if outputs is None:
+        outputs = sorted(
+            {f.layout["yaxis"]["title"]["text"] for f in plots_dict.values()}
+        )
+    elif isinstance(outputs, str):
+        outputs = [outputs]
+    return inputs, outputs
