@@ -51,7 +51,7 @@ def get_transition_plots(
             defined in the function will be used.
 
     Returns:
-        plots dict (dict): Dictionary with individual plots of transition equations
+        plots_dict (dict): Dictionary with individual plots of transition equations
             for each combination of input and output factors.
 
     """
@@ -86,7 +86,6 @@ def get_transition_plots(
         colorscale,
         layout_kwargs,
     )
-
     return plots_dict
 
 
@@ -109,8 +108,8 @@ def combine_subplots(
         plots_dict (dict): Dictionary with plots of transition functions for each
             factor.
         output_factors (list): Latent factors of the model that are outputs of
-            transition factors.
-        input_factors (list): All factors of the model that are the inuts of transition
+            transition functions.
+        input_factors (list): All factors of the model that are the inputs of transition
             functions.
         factor_mapping (dict or NoneType): A dictionary with custom factor names to
             display as axes labels.
@@ -120,7 +119,7 @@ def combine_subplots(
             default arguments defined in the function are used.
         sharex (bool): Whether to share the properties of x-axis across subplots.
             Default False.
-        sharey (bool): : Whether to share the properties ofy-axis across subplots.
+        sharey (bool): Whether to share the properties ofy-axis across subplots.
             Default True.
         layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
             update layout of plotly Figure object. If None, the default kwargs defined
@@ -204,7 +203,7 @@ def _get_dictionary_with_plots(
     and output factors.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
+        model (dict): The model specification. See: :ref:`model_specs`
         params (pandas.DataFrame): DataFrame with model parameters.
         states (pandas.DataFrame): Tidy DataFrame with filtered or simulated states.
             They are used to estimate the state ranges in each period (if state_ranges
