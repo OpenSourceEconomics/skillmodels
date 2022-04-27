@@ -7,6 +7,7 @@ import pandas as pd
 from plotly import express as px
 from plotly.subplots import make_subplots
 
+from skillmodels.filtered_states import get_filtered_states
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.parse_params import parse_params
@@ -15,36 +16,24 @@ from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
 
 
-def visualize_transition_equations(
+def get_transition_plots(
     model_dict,
     params,
-    states,
+    data,
     period,
-    combine_plots=True,
     state_ranges=None,
     quantiles_of_other_factors=(0.25, 0.5, 0.75),
-    plot_marginal_effects=False,
     n_points=50,
     n_draws=50,
-    data=None,
     colorscale="Magenta_r",
-    sharex=False,
-    sharey=True,
     layout_kwargs=None,
-    legend_kwargs=None,
-    title_kwargs=None,
-    subplot_kwargs=None,
-    subfig_kwargs=None,
 ):
-    """Visualize transition equations.
+    """Get dictionary with individual plots of transition equations for each factor.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
         params (pandas.DataFrame): DataFrame with model parameters.
-        states (pandas.DataFrame): Tidy DataFrame with filtered or simulated states.
-            They are used to estimate the state ranges in each period (if state_ranges
-            are not given explicitly) and to estimate the distribution of the factors
-            that are not visualized.
+        data (pd.DataFrame): Empirical dataset that is used to estimate the model.
         period (int): The start period of the transition equations that are plotted.
         combine_plots (bool): Return a figure containing subplots for each
             pair of factors or a dictionary of individual plots. Default True.
@@ -57,49 +46,21 @@ def visualize_transition_equations(
         n_points (int): Number of grid points per input. Default 50.
         n_draws (int): Number of randomly drawn values of the factors that are averaged
             out. Only relevant if quantiles_of_other_factors is *None*. Default 50.
-        data (pd.DataFrame): Empirical dataset that is used to estimate the model. Only
-            needed if the model has observed factors. Those factors are directly taken
-            from the data to calculate their quantiles or averages.
         colorscale (str): The color scale to use for line legends. Must be a valid
             plotly.express.colors.sequential attribute. Default 'Magenta_r'.
-        sharex (bool): Whether to share the properties of x-axis across subplots.
-            Default False.
-        sharey (bool): : Whether to share the properties ofy-axis across subplots.
-            Default True.
         layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
-            update layout of plotly Figure object. If None, the default kwargs defined
-            in the function will be used.
-        legend_kwargs (dict or NoneType): Dictionary of key word arguments used to
-            update position, orientation and title of figure legend. If None, default
-            position and orientation will be used with no title.
-        title_kwargs (dict or NoneType): Dictionary of key word arguments used to
-            update properties of the figure title. Use {'text': '<desired title>'}
-            to set figure title. If None, infers title based on the value of
-            `quntiles_of_other_factors`.
-        subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
-            to instantiate plotly Figure with multiple subplots. Is used to define
-            properties such as, for example, the spacing between subplots. If None,
-            default arguments defined in the function are used.
-        subfig_kwargs (dict or NoneType): Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs
             defined in the function will be used.
 
     Returns:
-        out (Figure or dict): plortly figure or dictionary with kwargs for
-            combine_subplots() function. If combine_plots is True, the figure with
-            combined subplots will be returned. Else, will return dictionary with
-            combine_subplots() specific keyword arguments, including the dictionary
-            with individual subplots that can be used to modify layout of individual
-            plots and then passed to combine_subplots(). Other keyword arguments
-            include latent_factors, all_factors, period and quantiles_of_other_factors.
+        plots dict (dict): Dictionary with individual plots of transition equations
+            for each combination of input and output factors.
     """
-
-    if plot_marginal_effects:
-        raise NotImplementedError()
 
     quantiles_of_other_factors = _process_quantiles_of_other_factors(
         quantiles_of_other_factors
     )
+
     model = process_model(model_dict)
 
     if period >= model["labels"]["periods"][-1]:
@@ -109,6 +70,9 @@ def visualize_transition_equations(
 
     latent_factors = model["labels"]["latent_factors"]
     all_factors = model["labels"]["all_factors"]
+    states = get_filtered_states(model_dict=model_dict, data=data, params=params,)[
+        "anchored_states"
+    ]["states"]
     plots_dict = _get_dictionary_with_plots(
         model,
         data,
@@ -122,40 +86,18 @@ def visualize_transition_equations(
         n_points,
         n_draws,
         colorscale,
-        subfig_kwargs,
+        layout_kwargs,
     )
-    if combine_plots:
-        out = combine_subplots(
-            plots_dict,
-            period,
-            latent_factors,
-            all_factors,
-            quantiles_of_other_factors,
-            subplot_kwargs,
-            sharex,
-            sharey,
-            layout_kwargs,
-            legend_kwargs,
-            title_kwargs,
-        )
 
-    else:
-        out = {
-            "subplots": plots_dict,
-            "period": period,
-            "latent_factors": latent_factors,
-            "all_factors": all_factors,
-            "quantiles_of_other_factors": quantiles_of_other_factors,
-        }
-    return out
+    return plots_dict
 
 
 def combine_subplots(
-    subplots,
-    period,
+    plots_dict,
     output_factors,
     input_factors,
     quantiles_of_other_factors,
+    factor_mapping=None,
     subplot_kwargs=None,
     sharex=False,
     sharey=True,
@@ -169,11 +111,12 @@ def combine_subplots(
     Args:
         plots_dict (dict): Dictionary with plots of transition functions for each
             factor.
-        period (int): The start period of the transition equations that are plotted.
         output_factors (list): Latent factors of the model that are outputs of
             transition factors.
         input_factors (list): All factors of the model that are the inuts of transition
             functions.
+        factor_mapping (dict or NoneType): A dictionary with custom factor names to
+            display as axes labels.
         quantiles_of_other_factors (float, list or None): Quantiles at which the factors
             that are not varied in a given plot are fixed. If None, those factors are
             not fixed but integrated out.
@@ -201,9 +144,12 @@ def combine_subplots(
             transition functions.
 
     """
-    subplots = deepcopy(subplots)
+    plots_dict = deepcopy(plots_dict)
     subplot_kwargs = _get_make_subplot_kwargs(
         sharex, sharey, subplot_kwargs, output_factors, input_factors
+    )
+    factor_mapping = _process_factor_mapping(
+        factor_mapping, input_factors, output_factors
     )
     fig = make_subplots(**subplot_kwargs)
     for (output_factor, input_factor), (row, col) in zip(
@@ -212,7 +158,7 @@ def combine_subplots(
             np.arange(len(output_factors)), np.arange(len(input_factors))
         ),
     ):
-        subfig = subplots[f"{input_factor}_{output_factor}_{period}"]
+        subfig = plots_dict[f"{input_factor}_{output_factor}"]
         if not (row == 0 and col == 0):
             for d in subfig.data:
                 d.update({"showlegend": False})
@@ -224,10 +170,12 @@ def combine_subplots(
                     col=col + 1,
                     row=row + 1,
                 )
-        fig.update_xaxes(title_text=f"{input_factor}", row=row + 1, col=col + 1)
+        fig.update_xaxes(
+            title_text=f"{factor_mapping[input_factor]}", row=row + 1, col=col + 1
+        )
         if col == 0:
             fig.update_yaxes(
-                title_text=f"{output_factor}",
+                title_text=f"{factor_mapping[output_factor]}",
                 row=row + 1,
                 col=col + 1,
             )
@@ -253,7 +201,7 @@ def _get_dictionary_with_plots(
     n_points,
     n_draws,
     colorscale,
-    subfig_kwargs,
+    layout_kwargs,
 ):
     """Get plots of transition functions for each input and output combination.
     Returns a dictionary with individual plots of transition fanctions for each input
@@ -297,7 +245,7 @@ def _get_dictionary_with_plots(
     params = _set_index_params(model, params)
     pardict = _get_pardict(model, params)
     state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
-    subfig_kwargs = _get_subfig_kwargs(subfig_kwargs)
+    layout_kwargs = _get_subfig_kwargs(layout_kwargs)
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
         transition_function = model["transition_info"]["individual_functions"][
@@ -343,13 +291,13 @@ def _get_dictionary_with_plots(
             color = None
         subfig = px.line(
             plot_data,
-            y=f"{output_factor} in period {period + 1}",
-            x=f"{input_factor} in period {period}",
+            y=f"{output_factor}",
+            x=f"{input_factor}",
             color=color,
             color_discrete_sequence=getattr(px.colors.sequential, colorscale),
         )
-        subfig.update_layout(**subfig_kwargs)
-        plots_dict[f"{input_factor}_{output_factor}_{period}"] = deepcopy(subfig)
+        subfig.update_layout(**layout_kwargs)
+        plots_dict[f"{input_factor}_{output_factor}"] = deepcopy(subfig)
     return plots_dict
 
 
@@ -381,14 +329,8 @@ def _get_layout_kwargs(
         "template": "simple_white",
         "xaxis_showgrid": False,
         "yaxis_showgrid": False,
-        "legend": {
-            "yanchor": "bottom",
-            "xanchor": "center",
-            "y": -0.3,
-            "x": 0.5,
-            "orientation": "h",
-        },
-        "title": {"y": 0.9, "x": 0.5, "xanchor": "center", "yanchor": "top"},
+        "legend": {},
+        "title": {},
     }
     if not quantiles_of_other_factors:
         default_kwargs["title"]["text"] = "Other factors integrated out"
@@ -399,7 +341,7 @@ def _get_layout_kwargs(
     else:
         default_kwargs["title"]["text"] = "Other factors at different quantiles"
     if title_kwargs:
-        default_kwargs["title"].update(title_kwargs)
+        default_kwargs["title"] = title_kwargs
     if legend_kwargs:
         default_kwargs["legend"].update(legend_kwargs)
     if layout_kwargs:
@@ -416,8 +358,8 @@ def _get_make_subplot_kwargs(
         "cols": len(input_factors),
         "start_cell": "top-left",
         "print_grid": False,
-        "shared_xaxes": sharex,
         "shared_yaxes": sharey,
+        "shared_xaxes": sharex,
         "vertical_spacing": 0.2,
     }
     if subplot_kwargs:
@@ -584,19 +526,13 @@ def _prepare_data_for_one_plot_average_2d(
     return out
 
 
-def _process_period_mapper(period, period_mapper):
-    if period_mapper is None:
-        period_mapper = {period: period, period + 1: period + 1}
+def _process_factor_mapping(factor_mapper, input_factors, output_factors):
+    """Process mapper to return dictionary with old and new factor names"""
+    all_factors = input_factors + output_factors
+    if factor_mapper is None:
+        factor_mapper = {fac: fac for fac in all_factors}
     else:
-        if len(period_mapper[period]) == 1:
-            period_mapper = {
-                period: period_mapper[period],
-                period + 1: period_mapper[period + 1],
-            }
-        else:
-            period_mapper = {
-                period: f"{period_mapper[period][0]}-{period_mapper[period][1]}",
-                period
-                + 1: f"{period_mapper[period+1][0]}-{period_mapper[period+1][1]}",
-            }
-    return period_mapper
+        for fac in all_factors:
+            if fac not in factor_mapper:
+                factor_mapper[fac] = fac
+    return factor_mapper
