@@ -49,7 +49,7 @@ def plot_correlation_heatmap(
             is set to 0.
         colorscale (str): Name of the color palette to use in the heatmap.
             Default 'RdBu_r'.
-        show_color_bar (bool): A boolean variable for displayin heatmap colorbar.
+        show_color_bar (bool): A boolean variable for displaying heatmap colorbar.
             Default True.
         show_diagonal (bool): A boolean for displaying the correlations on the diagonal.
             Default False.

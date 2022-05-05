@@ -5,7 +5,10 @@ import yaml
 
 from skillmodels.likelihood_function import get_maximization_inputs
 from skillmodels.simulate_data import simulate_dataset
-from skillmodels.visualize_factor_distributions import plot_factor_distributions
+from skillmodels.visualize_factor_distributions import bivariate_density_contours
+from skillmodels.visualize_factor_distributions import bivariate_density_surfaces
+from skillmodels.visualize_factor_distributions import combine_distribution_plots
+from skillmodels.visualize_factor_distributions import univariate_densities
 
 
 # importing the TEST_DIR from config does not work for test run in conda build
@@ -24,12 +27,17 @@ def test_visualize_factor_distributions_runs_with_filtered_states():
 
     max_inputs = get_maximization_inputs(model_dict, data)
     params = params.loc[max_inputs["params_template"].index]
-    debug_loglike = max_inputs["debug_loglike"]
-    debug_data = debug_loglike(params)
-    filtered_states = debug_data["filtered_states"]
-
-    plot_factor_distributions(
-        states=filtered_states, model_dict=model_dict, add_3d_plots=False, period=1
+    kde = univariate_densities(
+        data=data, model_dict=model_dict, params=params, period=1
+    )
+    contours = bivariate_density_contours(
+        data=data, model_dict=model_dict, params=params, period=1
+    )
+    surfaces = bivariate_density_surfaces(
+        data=data, model_dict=model_dict, params=params, period=1
+    )
+    combine_distribution_plots(
+        kde_plots=kde, contour_plots=contours, surface_plots=surfaces
     )
 
 
@@ -50,6 +58,12 @@ def test_visualize_factor_distributions_runs_with_simulated_states():
         "unanchored_states"
     ]["states"]
 
-    plot_factor_distributions(
-        states=latent_data, model_dict=model_dict, add_3d_plots=False, period=1
+    kde = univariate_densities(
+        data=data, states=latent_data, model_dict=model_dict, params=params, period=1
+    )
+    contours = bivariate_density_contours(
+        data=data, states=latent_data, model_dict=model_dict, params=params, period=1
+    )
+    combine_distribution_plots(
+        kde_plots=kde, contour_plots=contours, surface_plots=None
     )

@@ -4,7 +4,7 @@ import pandas as pd
 import yaml
 
 from skillmodels.likelihood_function import get_maximization_inputs
-from skillmodels.visualize_transition_equations import combine_subplots
+from skillmodels.visualize_transition_equations import combine_transition_plots
 from skillmodels.visualize_transition_equations import get_transition_plots
 
 
@@ -35,7 +35,7 @@ def test_visualize_transition_equations_runs():
         quantiles_of_other_factors=[0.1, 0.25, 0.5, 0.75, 0.9],
         data=data,
     )
-    combine_subplots(subplots)
+    combine_transition_plots(subplots)
     subplots = get_transition_plots(
         model_dict=model_dict,
         params=params,
@@ -43,4 +43,4 @@ def test_visualize_transition_equations_runs():
         quantiles_of_other_factors=None,
         data=data,
     )
-    combine_subplots(subplots)
+    combine_transition_plots(subplots)

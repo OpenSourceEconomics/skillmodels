@@ -89,7 +89,7 @@ def get_transition_plots(
     return plots_dict
 
 
-def combine_subplots(
+def combine_transition_plots(
     plots_dict,
     output_factors=None,
     input_factors=None,
