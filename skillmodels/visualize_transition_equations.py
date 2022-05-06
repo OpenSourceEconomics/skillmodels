@@ -297,7 +297,7 @@ def _get_dictionary_with_plots(
         subfig.update_xaxes(title={"text": input_factor})
         subfig.update_yaxes(title={"text": output_factor})
         subfig.update_layout(**layout_kwargs)
-        plots_dict[({input_factor}, {output_factor})] = deepcopy(subfig)
+        plots_dict[(input_factor, output_factor)] = deepcopy(subfig)
 
     return plots_dict
 
