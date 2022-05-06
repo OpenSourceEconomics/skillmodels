@@ -155,7 +155,7 @@ def combine_transition_plots(
             np.arange(len(output_factors)), np.arange(len(input_factors))
         ),
     ):
-        subfig = plots_dict[f"{input_factor}_{output_factor}"]
+        subfig = plots_dict[(input_factor, output_factor)]
         if not (row == 0 and col == 0):
             for d in subfig.data:
                 d.update({"showlegend": False})
@@ -297,7 +297,7 @@ def _get_dictionary_with_plots(
         subfig.update_xaxes(title={"text": input_factor})
         subfig.update_yaxes(title={"text": output_factor})
         subfig.update_layout(**layout_kwargs)
-        plots_dict[f"{input_factor}_{output_factor}"] = deepcopy(subfig)
+        plots_dict[({input_factor}, {output_factor})] = deepcopy(subfig)
 
     return plots_dict
 

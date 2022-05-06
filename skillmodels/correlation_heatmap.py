@@ -143,7 +143,7 @@ def get_measurements_corr(data, model_dict, factors, periods):
     return corr
 
 
-def get_scores_corr(data, model_dict, factors, periods):
+def get_quasi_scores_corr(data, model_dict, factors, periods):
     """Get data frame with correlations of factor scores.
 
     Process data to retrieve measurements for each period, standardize measurements
@@ -174,6 +174,42 @@ def get_scores_corr(data, model_dict, factors, periods):
     update_info = model["update_info"]
     df = _get_quasi_factor_scores_data(
         data, update_info, periods, latent_factors, observed_factors
+    )
+    corr = df.corr()
+    return corr
+
+
+def get_scores_corr(data, params, model_dict, factors, periods):
+    """Get data frame with correlations of factor scores.
+
+    Process data to retrieve measurements for each period, standardize measurements
+    using intercept and loadings, take the mean of factor specific  measurements in
+    each period, and calculate correlations across those factor and period specific
+    scores.
+
+    Args:
+        data (pd.DataFrame): DataFrame with observed measurements.
+        params (pd.DataFrame): DataFrame with estimated model parameters
+        model_dict (dct): Dictionary of model attributes to be passed to process_model
+            and extract measurements for each period.
+        factors (list, str or NoneType): List of factors, to retrieve measurements for.
+            If None, then calculate correlations of measurements of all factors.
+        periods (int,float, list or NoneType): If int, the period within which to
+            calculate measurement correlations. If a list, calculate correlations over
+            periods. If None, calculate correlations across all periods.
+    Returns:
+        corr (DataFrame): DataFrame with score correlations.
+
+    """
+    data = data.copy(deep=True)
+    model = process_model(model_dict)
+    periods = _process_periods(periods, model)
+    data = pre_process_data(data, periods)
+    latent_factors, observed_factors = _process_factors(model, factors)
+    update_info = model["update_info"]
+    params = params.loc[["controls", "loadings"]]
+    df = _get_factor_scores_data(
+        data, params, update_info, periods, latent_factors, observed_factors
     )
     corr = df.corr()
     return corr
@@ -402,6 +438,131 @@ def _get_quasi_factor_scores_data_for_multiple_periods(
         to_concat.append(
             _get_quasi_factor_scores_data_for_single_period(
                 data, update_info, period, latent_factors, observed_factors
+            )
+            .add_suffix(f", {period}")
+            .reset_index(drop=True)
+        )
+    df = pd.concat(to_concat, axis=1)
+    return df
+
+
+def _get_factor_scores_data(
+    data, params, update_info, periods, latent_factors, observed_factors
+):
+    """Get data frame with factor scores in each period.
+
+    In each period, standardize factor measurements to with estimated intercepts and
+    loadings, and for each factor take the average of all measurements as
+    a summary statistics.
+
+    Args:
+        data (pd.DataFrame): Data with observable variables.
+        params (pd.DataFrame): Data frame with estimated measurement relevant
+            model parameters.
+        update_info (pd.DataFrame): DataFrame with information on measurements
+            for each factor in each model period.
+        periods (list): The list of periods that correlations are
+            calculated for.
+        latent_factors (list): List of latent factors the scores of which
+            correlations are calculated for.
+        observed_factors (list): List of observed factors the scores of which
+            correlations are calculated for.
+    Returns:
+        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
+
+    """
+    if len(periods) == 1:
+        period = periods[0]
+        df = _get_factor_scores_data_for_single_period(
+            data, params, update_info, period, latent_factors, observed_factors
+        )
+    else:
+        df = _get_factor_scores_data_for_multiple_periods(
+            data, params, update_info, periods, latent_factors, observed_factors
+        )
+
+    return df
+
+
+def _get_factor_scores_data_for_single_period(
+    data, params, update_info, period, latent_factors, observed_factors
+):
+    """Get frame with factor scores in a given period.
+
+    Args:
+        data (pd.DataFrame): Data with observable variables.
+        params (pd.DataFrame): Data frame with estimated measurement relevant
+            model parameters.
+        update_info (pd.DataFrame): DataFrame with information on measurements
+            for each factor in each model period.
+        periods (list): The list of periods that correlations are
+            calculated for.
+        latent_factors (list): List of latent factors the scores of which
+            correlations are calculated for.
+        observed_factors (list): List of observed factors the scores of which
+            correlations are calculated for.
+    Returns:
+        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
+
+    """
+    period_info = update_info.loc[period].reset_index()
+    params = params.query(f"period=={period}")
+    loadings = params.loc["loadings"]["value"]
+    intercetps = (
+        params.loc["controls"].query("name2 == 'constant'").droplevel(1)["value"]
+    )
+    loadings_count = loadings.astype(bool).groupby("name1").sum()
+    leave_out_meas = loadings_count[loadings_count > 1].index.to_list()
+    to_concat = []
+    for factor in latent_factors:
+        # get the list of measurements
+        period_factor_measurements = period_info.query(
+            f"{factor} == True and purpose == 'measurement'"
+        )["variable"].to_list()
+        # leave out measurements with multiple loadings:
+        period_factor_measurements = [
+            m for m in period_factor_measurements if m not in leave_out_meas
+        ]
+        df = data.query(f"{update_info.index.names[0]}=={period}")[
+            period_factor_measurements
+        ]
+        for m in period_factor_measurements:
+            df[m] = (df[m] - intercetps.loc[m]) / loadings.loc[(m, factor)]
+        sr = df.mean(axis=1)
+        sr.name = f"{factor}"
+        to_concat.append(sr)
+    for factor in observed_factors:
+        df = data.query(f"{update_info.index.names[0]}=={period}")[factor]
+        to_concat.append(df)
+    df = pd.concat(to_concat, axis=1)
+    return df
+
+
+def _get_factor_scores_data_for_multiple_periods(
+    data, params, update_info, periods, latent_factors, observed_factors
+):
+    """Get frame with factor scores in a given period.
+
+    Args:
+        data (pd.DataFrame): Data with observable variables.
+        params (pd.DataFrame): Data frame with estimated model parameters.
+        update_info (pd.DataFrame): DataFrame with information on measurements
+            for each factor in each model period.
+        periods (list): The list of periods that correlations are
+            calculated for.
+        latent_factors (list): List of latent factors the scores of which
+            correlations are calculated for.
+        observed_factors (list): List of observed factors the scores of which
+            correlations are calculated for.
+    Returns:
+        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
+
+    """
+    to_concat = []
+    for period in periods:
+        to_concat.append(
+            _get_quasi_factor_scores_data_for_single_period(
+                data, params, update_info, period, latent_factors, observed_factors
             )
             .add_suffix(f", {period}")
             .reset_index(drop=True)
