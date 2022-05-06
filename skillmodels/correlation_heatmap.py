@@ -506,20 +506,18 @@ def _get_factor_scores_data_for_single_period(
 
     """
     period_info = update_info.loc[period].reset_index()
-    params = params.query(f"period=={period}")
+    params = params.query(f"period=={period}").droplevel("period")
     loadings = params.loc["loadings"]["value"]
-    intercetps = (
+    intercepts = (
         params.loc["controls"].query("name2 == 'constant'").droplevel(1)["value"]
     )
     loadings_count = loadings.astype(bool).groupby("name1").sum()
     leave_out_meas = loadings_count[loadings_count > 1].index.to_list()
     to_concat = []
     for factor in latent_factors:
-        # get the list of measurements
         period_factor_measurements = period_info.query(
             f"{factor} == True and purpose == 'measurement'"
         )["variable"].to_list()
-        # leave out measurements with multiple loadings:
         period_factor_measurements = [
             m for m in period_factor_measurements if m not in leave_out_meas
         ]
@@ -527,7 +525,7 @@ def _get_factor_scores_data_for_single_period(
             period_factor_measurements
         ]
         for m in period_factor_measurements:
-            df[m] = (df[m] - intercetps.loc[m]) / loadings.loc[(m, factor)]
+            df[m] = (df[m] - intercepts.loc[m]) / loadings.loc[(m, factor)]
         sr = df.mean(axis=1)
         sr.name = f"{factor}"
         to_concat.append(sr)
@@ -561,7 +559,7 @@ def _get_factor_scores_data_for_multiple_periods(
     to_concat = []
     for period in periods:
         to_concat.append(
-            _get_quasi_factor_scores_data_for_single_period(
+            _get_factor_scores_data_for_single_period(
                 data, params, update_info, period, latent_factors, observed_factors
             )
             .add_suffix(f", {period}")
