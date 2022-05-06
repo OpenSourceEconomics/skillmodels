@@ -509,7 +509,7 @@ def _get_factor_scores_data_for_single_period(
     params = params.query(f"period=={period}").droplevel("period")
     loadings = params.loc["loadings"]["value"]
     intercepts = (
-        params.loc["controls"].query("name2 == 'constant'").droplevel(1)["value"]
+        params.loc["controls"].query("name2 == 'constant'").droplevel("name2")["value"]
     )
     loadings_count = loadings.astype(bool).groupby("name1").sum()
     leave_out_meas = loadings_count[loadings_count > 1].index.to_list()
