@@ -15,22 +15,20 @@ from skillmodels.process_model import process_model
 def combine_distribution_plots(
     kde_plots,
     contour_plots,
-    surface_plots,
-    factors=None,
+    surface_plots=None,
     make_subplot_kwargs=None,
     sharex=False,
     sharey=False,
     vertical_spacing=0.1,
     horizontal_spacing=0.1,
-    rotate_x=2.2,
-    rotate_y=2.2,
-    rotate_z=1,
-    height=900,
-    width=900,
     line_width=1.5,
     showlegend=False,
+    eye_x=2.2,
+    eye_y=2.2,
+    eye_z=1,
 ):
     """Combine individual plots into figure with subplots.
+
     Uses dictionary with plotly images as values to build plotly Figure with subplots.
 
     Args:
@@ -39,8 +37,7 @@ def combine_distribution_plots(
             contours.
         surface_plots (dict): Dictionary with plots of pairwise factor density
             3d plots.
-        factors (list or NoneType): List of factors for which to plot distributions.
-          make_subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
+        make_subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
             to instantiate plotly Figure with multiple subplots. Is used to define
             properties such as, for example, the spacing between subplots. If None,
             default arguments defined in the function are used.
@@ -48,25 +45,23 @@ def combine_distribution_plots(
             Default False.
         sharey (bool): Whether to share the properties ofy-axis across subplots.
             Default True.
-        layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
-            update layout of plotly Figure object. If None, the default kwargs defined
-            in the function will be used.
-        legend_kwargs (dict or NoneType): Dictionary of key word arguments used to
-            update position, orientation and title of figure legend. If None, default
-            position and orientation will be used with no title.
-        title_kwargs (dict or NoneType): Dictionary of key word arguments used to
-            update properties of the figure title. Use {'text': '<desired title>'}
-            to set figure title.
+        vertical_spacing (float): Vertical spacing between subplots.
+        horizaontal_spacing (float): Horizontal spacing between subplots.
+        line_width (float): A float used to set same line width across subplots.
+        showlegend (bool): A boolean for displaying plots' legend.
+        eye_x, eye_y and eye_z (float): Control camera (view point) of the 3d plots.
+            Together they form the a norm, and the larger the norm, the more zoomed out
+            is the view. Setting eye_z to a lower value lowers the view point.
+
     Returns:
         fig (plotly.Figure): Plotly figure with subplots that combines pairwise
             distrubtion plots.
+
     """
     kde_plots = deepcopy(kde_plots)
     contour_plots = deepcopy(contour_plots)
     surface_plots = deepcopy(surface_plots)
-    if factors is None:
-        if kde_plots is not None:
-            factors = kde_plots.keys()
+    factors = list(kde_plots.keys())
     make_subplot_kwargs = _get_make_subplot_kwargs_with_scenes(
         sharex,
         sharey,
@@ -78,12 +73,17 @@ def combine_distribution_plots(
 
     fig = make_subplots(**make_subplot_kwargs)
     fig.update_layout(
-        height=height, width=width, template="simple_white", showlegend=showlegend
+        height=len(factors) * 300,
+        width=len(factors) * 300,
+        template="simple_white",
+        showlegend=showlegend,
     )
     for col, fac1 in enumerate(factors):
         for row, fac2 in enumerate(factors):
+
             if row > col:
                 for d in contour_plots[(fac1, fac2)].data:
+
                     d.update({"showlegend": False})
                     fig.add_trace(d, col=col + 1, row=row + 1)
                     fig.update_xaxes(title=fac1, col=col + 1, row=row + 1)
@@ -91,6 +91,7 @@ def combine_distribution_plots(
                     fig.update_traces(line_width=line_width, row=row + 1, col=col + 1)
             elif row == col:
                 for d in kde_plots[fac1].data:
+
                     if not row == 0:
                         d.update({"showlegend": False})
                     fig.add_trace(d, col=col + 1, row=row + 1)
@@ -100,7 +101,7 @@ def combine_distribution_plots(
 
             else:
                 if surface_plots is not None:
-                    camera = {"eye": {"x": rotate_x, "y": rotate_y, "z": rotate_z}}
+                    camera = {"eye": {"x": eye_x, "y": eye_y, "z": eye_z}}
                     fig.add_trace(
                         surface_plots[(fac2, fac1)].data[0], col=col + 1, row=row + 1
                     )
@@ -122,14 +123,15 @@ def univariate_densities(
     model_dict,
     params,
     period,
-    colorscale="D3",
+    factors=None,
     states=None,
-    distplot_kwargs=None,
     show_curve=True,
     show_hist=False,
     show_rug=False,
     curve_type="kde",
+    colorscale="D3",
     bin_size=1,
+    distplot_kwargs=None,
     layout_kwargs=None,
 ):
     """Get dictionary with kernel density estimate plots for each factor.
@@ -142,13 +144,23 @@ def univariate_densities(
         model_dict (dict): Dictionary with model specifications.
         params (DataFrame): DataFrame with estimated parameter values.
         period (int or float): Model period for which to plot the distributions for.
+        factors (list or NoneType): List of factors for which to plot the densities.
+            If None, plot pairwise distributions for all latent factors.
+        states (dict, list, pd.DataFrame or NoneType): List or dictionary with tidy
+            DataFrames with filtered or simulated states or only one DataFrame with
+            filtered or simulated states. If None, retrieve data frame with filtered
+            states using model_dict and data. States are used to estimate the state
+            ranges in each period (if state_ranges are not given explicitly) and to
+            estimate the distribution of the latent factors.
         show_hist (bool): Add histogram to the distplot.
         show_curve (bool): Add density curve to the displot.
         show_rug (bool): Add rug to the distplot.
         curve_type (str): Curve type, 'normal' or 'kde', to add to the distplot.
+        colorscale (str): The color palette used when plotting multiple data. Must be
+            a valid attribute of px.colors.qualitative.
         bin_size (float): Size of the histogram bins.
         distplot_kwargs (NoneType or dict): Dictionary with additional keyword
-            arguments (such as colors (list) passed to ff.create_distplot() to initiate
+            arguments passed to ff.create_distplot() to initiate
             the distplot.
         layout_kwargs (NoneType or dict): Dictionary of keyword arguments to update
             layout of the plot figures. Some essential layout kwargs are:
@@ -167,7 +179,8 @@ def univariate_densities(
             "anchored_states"
         ]["states"]
     model = process_model(model_dict)
-    factors = model["labels"]["latent_factors"]
+    if factors is None:
+        factors = model["labels"]["latent_factors"]
     df = _process_data(states, period, factors)
     scenarios = df["scenario"].unique()
     plots_dict = {}
@@ -199,8 +212,9 @@ def bivariate_density_contours(
     model_dict,
     params,
     period,
-    n_points=50,
+    factors=None,
     states=None,
+    n_points=50,
     contour_kwargs=None,
     layout_kwargs=None,
     contours_showlabels=False,
@@ -219,6 +233,16 @@ def bivariate_density_contours(
         model_dict (dict): Dictionary with model specifications.
         params (DataFrame): DataFrame with estimated parameter values.
         period (int or float): Model period for which to plot the distributions for.
+        factors (list or NoneType): List of factors for which to plot the densities.
+            If None, plot pairwise distributions for all latent factors.
+        states (dict, list, pd.DataFrame or NoneType): List or dictionary with tidy
+            DataFrames with filtered or simulated states or only one DataFrame with
+            filtered or simulated states. If None, retrieve data frame with filtered
+            states using model_dict and data. States are used to estimate the state
+            ranges in each period (if state_ranges are not given explicitly) and to
+            estimate the distribution of the latent factors.
+        n_points (int): Number of grid points used to create the mesh for calculation
+            of kernel densities.
         contour_kwargs (dict or NoneType): Dictionary with keyword arguments to set
             contour line properties (such as annotation, colorscale).
         layout_kwargs (dict or NoneType): Dictionary with keyword arguments to set
@@ -248,7 +272,8 @@ def bivariate_density_contours(
             "anchored_states"
         ]["states"]
     model = process_model(model_dict)
-    factors = model["labels"]["latent_factors"]
+    if factors is None:
+        factors = model["labels"]["latent_factors"]
     df = _process_data(states, period, factors)
     plots_dict = {}
     contour_kwargs = _process_contour_kwargs(
@@ -291,10 +316,12 @@ def bivariate_density_surfaces(
     model_dict,
     params,
     period,
-    n_points=50,
+    factors=None,
     states=None,
+    n_points=50,
     layout_kwargs=None,
     colorscale="RdBu_r",
+    opacity=0.9,
     showcolorbar=False,
     showgrids=True,
     showaxlines=True,
@@ -310,8 +337,16 @@ def bivariate_density_surfaces(
         model_dict (dict): Dictionary with model specifications.
         params (DataFrame): DataFrame with estimated parameter values.
         period (int or float): Model period for which to plot the distributions for.
-        n_points (int): Number of grid points per axis and plot. Default 50.
-
+        factors (list or NoneType): List of factors for which to plot the densities.
+            If None, plot pairwise distributions for all latent factors.
+        states (dict, list, pd.DataFrame or NoneType): List or dictionary with tidy
+            DataFrames with filtered or simulated states or only one DataFrame with
+            filtered or simulated states. If None, retrieve data frame with filtered
+            states using model_dict and data. States are used to estimate the state
+            ranges in each period (if state_ranges are not given explicitly) and to
+            estimate the distribution of the latent factors.
+        n_points (int): Number of grid points used to create the mesh for calculation
+            of kernel densities.
         The following are various essential keyword arguments defining various features
         of plots. All features can also be changed ex-post via 'update_layout' or
         'update_traces'. Some default figure layout properties (such as background
@@ -336,10 +371,11 @@ def bivariate_density_surfaces(
         states = get_filtered_states(model_dict=model_dict, data=data, params=params,)[
             "anchored_states"
         ]["states"]
-    elif not isinstance(states):
+    elif not isinstance(states, pd.DataFrame):
         raise ValueError("3d plots are only supported if states is a DataFrame")
     model = process_model(model_dict)
-    factors = model["labels"]["latent_factors"]
+    if factors is None:
+        factors = model["labels"]["latent_factors"]
     df = _process_data(states, period, factors)
     plots_dict = {}
     layout_kwargs = _process_layout_kwargs_3d(
@@ -354,7 +390,14 @@ def bivariate_density_surfaces(
     for pair in pairs:
         x, y, z = _calculate_kde_for_3d(df, pair, n_points)
         fig = go.Figure(
-            go.Surface(x=x, y=y, z=z, showscale=showcolorbar, colorscale=colorscale)
+            go.Surface(
+                x=x,
+                y=y,
+                z=z,
+                showscale=showcolorbar,
+                colorscale=colorscale,
+                opacity=opacity,
+            )
         )
         fig.update_layout(
             scene={
