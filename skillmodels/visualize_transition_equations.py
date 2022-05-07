@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from plotly import express as px
+from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 
 from skillmodels.filtered_states import get_filtered_states
@@ -91,8 +92,8 @@ def get_transition_plots(
 
 def combine_transition_plots(
     plots_dict,
-    output_factors=None,
-    input_factors=None,
+    column_order=None,
+    row_order=None,
     factor_mapping=None,
     make_subplot_kwargs=None,
     sharex=False,
@@ -107,10 +108,12 @@ def combine_transition_plots(
     Args:
         plots_dict (dict): Dictionary with plots of transition functions for each
             factor.
-        output_factors (list): Latent factors of the model that are outputs of
-            transition functions.
-        input_factors (list): All factors of the model that are the inputs of transition
-            functions.
+        column_order (list, str or NoneType): List of (output) factor names according
+            to which transition plots should be ordered horizontally. If None, infer
+            from the keys of of plots_dict
+        row_order (list, str or NoneType): List of (input) factor names according
+            to which transition plots should be ordered vertically. If None, infer
+            from the keys of of plots_dict
         factor_mapping (dict or NoneType): A dictionary with custom factor names to
             display as axes labels.
         make_subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
@@ -139,23 +142,20 @@ def combine_transition_plots(
     """
     plots_dict = deepcopy(plots_dict)
 
-    input_factors, output_factors = _process_factors(
-        input_factors, output_factors, plots_dict
-    )
+    column_order, row_order = _process_orders(column_order, row_order, plots_dict)
     make_subplot_kwargs = _get_make_subplot_kwargs(
-        sharex, sharey, make_subplot_kwargs, output_factors, input_factors
+        sharex, sharey, make_subplot_kwargs, column_order, row_order
     )
-    factor_mapping = _process_factor_mapping(
-        factor_mapping, input_factors, output_factors
-    )
+    factor_mapping = _process_factor_mapping(factor_mapping, row_order, column_order)
     fig = make_subplots(**make_subplot_kwargs)
     for (output_factor, input_factor), (row, col) in zip(
-        itertools.product(output_factors, input_factors),
-        itertools.product(
-            np.arange(len(output_factors)), np.arange(len(input_factors))
-        ),
+        itertools.product(row_order, column_order),
+        itertools.product(np.arange(len(row_order)), np.arange(len(column_order))),
     ):
-        subfig = plots_dict[(input_factor, output_factor)]
+        try:
+            subfig = plots_dict[(input_factor, output_factor)]
+        except KeyError:
+            subfig = go.Figure()
         if not (row == 0 and col == 0):
             for d in subfig.data:
                 d.update({"showlegend": False})
@@ -328,13 +328,11 @@ def _get_layout_kwargs(
     return default_kwargs
 
 
-def _get_make_subplot_kwargs(
-    sharex, sharey, subplot_kwargs, output_factors, input_factors
-):
+def _get_make_subplot_kwargs(sharex, sharey, subplot_kwargs, columns, rows):
     """Define and update keywargs for instantiating figure with subplots."""
     default_kwargs = {
-        "rows": len(output_factors),
-        "cols": len(input_factors),
+        "rows": len(rows),
+        "cols": len(columns),
         "start_cell": "top-left",
         "print_grid": False,
         "shared_yaxes": sharey,
@@ -500,7 +498,7 @@ def _prepare_data_for_one_plot_average_2d(
     return out
 
 
-def _process_factor_mapping(factor_mapper, input_factors, output_factors):
+def _process_factor_mapping(factor_mapper, output_factors, input_factors):
     """Process mapper to return dictionary with old and new factor names"""
     all_factors = input_factors + output_factors
     if factor_mapper is None:
@@ -512,18 +510,20 @@ def _process_factor_mapping(factor_mapper, input_factors, output_factors):
     return factor_mapper
 
 
-def _process_factors(inputs, outputs, plots_dict):
+def _process_orders(columns, rows, plots_dict):
     """Process factor names to return list of strings."""
-    if inputs is None:
-        inputs = sorted(
-            {f.layout["xaxis"]["title"]["text"] for f in plots_dict.values()}
-        )
-    elif isinstance(inputs, str):
-        inputs = [inputs]
-    if outputs is None:
-        outputs = sorted(
-            {f.layout["yaxis"]["title"]["text"] for f in plots_dict.values()}
-        )
-    elif isinstance(outputs, str):
-        outputs = [outputs]
-    return inputs, outputs
+    if columns is None:
+        columns = []
+        for f in plots_dict.keys():
+            if f[0] not in columns:
+                columns.append(f[0])
+    elif isinstance(columns, str):
+        columns = [columns]
+    if rows is None:
+        rows = []
+        for f in plots_dict.keys():
+            if f[1] not in rows:
+                rows.append(f[1])
+    elif isinstance(rows, str):
+        rows = [rows]
+    return columns, rows
