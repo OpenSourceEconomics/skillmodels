@@ -633,7 +633,7 @@ def _get_layout_kwargs(
     default_layout_kwargs = {
         "xaxis_showgrid": False,
         "yaxis_showgrid": False,
-        "template": "plotly_white",
+        "template": "simple_white",
         "yaxis_autorange": "reversed",
     }
     default_layout_kwargs.update(
