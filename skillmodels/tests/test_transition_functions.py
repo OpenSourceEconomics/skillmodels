@@ -6,6 +6,8 @@ from numpy.testing import assert_array_almost_equal as aaae
 from skillmodels.transition_functions import constant
 from skillmodels.transition_functions import linear
 from skillmodels.transition_functions import log_ces
+from skillmodels.transition_functions import log_ces_general
+from skillmodels.transition_functions import params_log_ces_general
 from skillmodels.transition_functions import robust_translog
 from skillmodels.transition_functions import translog
 
@@ -121,3 +123,27 @@ def test_robust_translog():
     for states, expected in zip(all_states, expected_translog):
         calculated = robust_translog(states, params)
         aaae(calculated, expected)
+
+
+def test_log_ces_general():
+    states = np.array([3, 7.5])
+    params = jnp.array([0.4, 0.6, 2, 2, 0.5])
+    expected = 7.244628323025
+    calculated = log_ces_general(states, params)
+    aaae(calculated, expected)
+
+
+def test_log_ces_general_where_all_but_one_gammas_are_zero():
+    """This has to be tested, becaus it leads to an underflow in the log step."""
+    states = jnp.ones(3)
+    params = jnp.array([0, 0, 1, -0.5, -0.5, -0.5, -2])
+    calculated = log_ces_general(states, params)
+    expected = 1.0
+    aaae(calculated, expected)
+
+
+def test_param_names_log_ces_general():
+    factors = ["a", "b"]
+    expected = ["a", "b", "sigma_a", "sigma_b", "tfp"]
+    calculated = params_log_ces_general(factors)
+    assert calculated == expected

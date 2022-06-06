@@ -153,3 +153,25 @@ def params_linear_and_squares(factors):
     """Index tuples for the linear_and_squares production function."""
     names = factors + [f"{factor} ** 2" for factor in factors] + ["constant"]
     return names
+
+
+def log_ces_general(states, params):
+    """Generalized log_ces production function without known location and scale."""
+    n = states.shape[-1]
+    tfp = params[-1]
+    gammas = params[:n]
+    sigmas = params[n : 2 * n]
+
+    # note: once the b argument is supported in jax.scipy.special.logsumexp, we can set
+    # b = gammas instead of adding the log of gammas to sigma_points * phi
+
+    # the log step for gammas underflows for gamma = 0, but this is handled correctly
+    # by logsumexp and does not raise a warning.
+    unscaled = jax.scipy.special.logsumexp(jnp.log(gammas) + states * sigmas)
+    result = unscaled * tfp
+    return result
+
+
+def params_log_ces_general(factors):
+    """Index tuples for the generalized log_ces production function."""
+    return factors + [f"sigma_{fac}" for fac in factors] + ["tfp"]

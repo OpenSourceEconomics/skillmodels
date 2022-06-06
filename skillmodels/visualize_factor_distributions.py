@@ -1,4 +1,5 @@
 from copy import deepcopy
+from logging import warnings
 
 import numpy as np
 import pandas as pd
@@ -198,12 +199,19 @@ def univariate_densities(
     layout_kwargs = _process_layout_kwargs(layout_kwargs)
     for fac in factors:
         hist_data = [df[fac][df["scenario"] == s] for s in scenarios]
-        fig = ff.create_distplot(hist_data, **distplot_kwargs)
-        fig.update_layout(showlegend=False)
-        fig.update_layout(xaxis_title=fac)
-        fig.update_layout(yaxis_title="Density")
-        fig.update_layout(**layout_kwargs)
-        plots_dict[fac] = fig
+        try:
+            fig = ff.create_distplot(hist_data, **distplot_kwargs)
+            fig.update_layout(showlegend=False)
+            fig.update_layout(xaxis_title=fac)
+            fig.update_layout(yaxis_title="Density")
+            fig.update_layout(**layout_kwargs)
+            plots_dict[fac] = fig
+        except Exception as e:
+            warnings.warn(
+                f"""Plotting univariate density failed for {fac} in
+                period {period} with error:\n\n{e}"""
+            )
+
     return plots_dict
 
 
@@ -291,23 +299,29 @@ def bivariate_density_contours(
                 pairs.append((fac1, fac2))
     pairs = list(set(pairs))
     for pair in pairs:
-        fig = go.Figure()
-        for i, scenario in enumerate(df["scenario"].unique()):
-            x, y, z = _calculate_kde_for_3d(
-                df[df["scenario"] == scenario], pair, n_points
+        try:
+            fig = go.Figure()
+            for i, scenario in enumerate(df["scenario"].unique()):
+                x, y, z = _calculate_kde_for_3d(
+                    df[df["scenario"] == scenario], pair, n_points
+                )
+                contour = go.Contour(
+                    x=x[:, 0],
+                    y=y[0, :],
+                    z=z,
+                    line={"color": getattr(px.colors.qualitative, lines_colorscale)[i]},
+                )
+                fig.add_trace(contour)
+                fig.update_traces(**contour_kwargs)
+            fig.update_xaxes(title={"text": pair[0]})
+            fig.update_yaxes(title={"text": pair[1]})
+            fig.update_layout(**layout_kwargs)
+            plots_dict[pair] = fig
+        except Exception as e:
+            warnings.warn(
+                f"Contour plot failed for {pair} in period {period} with error:\n\n{e}"
             )
-            contour = go.Contour(
-                x=x[:, 0],
-                y=y[0, :],
-                z=z,
-                line={"color": getattr(px.colors.qualitative, lines_colorscale)[i]},
-            )
-            fig.add_trace(contour)
-            fig.update_traces(**contour_kwargs)
-        fig.update_xaxes(title={"text": pair[0]})
-        fig.update_yaxes(title={"text": pair[1]})
-        fig.update_layout(**layout_kwargs)
-        plots_dict[pair] = fig
+
     return plots_dict
 
 
