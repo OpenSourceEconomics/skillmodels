@@ -146,7 +146,9 @@ def combine_transition_plots(
     make_subplot_kwargs = _get_make_subplot_kwargs(
         sharex, sharey, make_subplot_kwargs, column_order, row_order
     )
-    factor_mapping = _process_factor_mapping(factor_mapping, row_order, column_order)
+    factor_mapping = _process_factor_mapping_trans(
+        factor_mapping, row_order, column_order
+    )
     fig = make_subplots(**make_subplot_kwargs)
     for (output_factor, input_factor), (row, col) in zip(
         itertools.product(row_order, column_order),
@@ -498,7 +500,7 @@ def _prepare_data_for_one_plot_average_2d(
     return out
 
 
-def _process_factor_mapping(factor_mapper, output_factors, input_factors):
+def _process_factor_mapping_trans(factor_mapper, output_factors, input_factors):
     """Process mapper to return dictionary with old and new factor names"""
     all_factors = input_factors + output_factors
     if factor_mapper is None:
