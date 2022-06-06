@@ -18,6 +18,7 @@ def combine_distribution_plots(
     contour_plots,
     surface_plots=None,
     make_subplot_kwargs=None,
+    factor_mapping=None,
     sharex=False,
     sharey=False,
     vertical_spacing=0.1,
@@ -42,6 +43,7 @@ def combine_distribution_plots(
             to instantiate plotly Figure with multiple subplots. Is used to define
             properties such as, for example, the spacing between subplots. If None,
             default arguments defined in the function are used.
+        factor_mapping (dct): Dictionary to change displayed factor names.
         sharex (bool): Whether to share the properties of x-axis across subplots.
             Default False.
         sharey (bool): Whether to share the properties ofy-axis across subplots.
@@ -63,6 +65,7 @@ def combine_distribution_plots(
     contour_plots = deepcopy(contour_plots)
     surface_plots = deepcopy(surface_plots)
     factors = list(kde_plots.keys())
+    factor_names = _process_factor_mapping_dist(factor_mapping, factors)
     make_subplot_kwargs = _get_make_subplot_kwargs_with_scenes(
         sharex,
         sharey,
@@ -87,8 +90,8 @@ def combine_distribution_plots(
 
                     d.update({"showlegend": False})
                     fig.add_trace(d, col=col + 1, row=row + 1)
-                    fig.update_xaxes(title=fac1, col=col + 1, row=row + 1)
-                    fig.update_yaxes(title=fac2, col=col + 1, row=row + 1)
+                    fig.update_xaxes(title=factor_names[fac1], col=col + 1, row=row + 1)
+                    fig.update_yaxes(title=factor_names[fac2], col=col + 1, row=row + 1)
                     fig.update_traces(line_width=line_width, row=row + 1, col=col + 1)
             elif row == col:
                 for d in kde_plots[fac1].data:
@@ -96,7 +99,7 @@ def combine_distribution_plots(
                     if not row == 0:
                         d.update({"showlegend": False})
                     fig.add_trace(d, col=col + 1, row=row + 1)
-                    fig.update_xaxes(title=fac1, col=col + 1, row=row + 1)
+                    fig.update_xaxes(title=factor_names[fac1], col=col + 1, row=row + 1)
                     fig.update_yaxes(title="Density", col=col + 1, row=row + 1)
                     fig.update_traces(line_width=line_width, row=row + 1, col=col + 1)
 
@@ -560,3 +563,14 @@ def _get_make_subplot_kwargs_with_scenes(
     if make_subplot_kwargs is not None:
         default_kwargs.update(make_subplot_kwargs)
     return default_kwargs
+
+
+def _process_factor_mapping_dist(mapper, factors):
+    """Process mapper to return dictionary with old and new factor names"""
+    if mapper is None:
+        mapper = {fac: fac for fac in factors}
+    else:
+        for fac in factors:
+            if fac not in mapper:
+                mapper[fac] = fac
+    return mapper
