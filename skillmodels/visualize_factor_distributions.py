@@ -234,17 +234,17 @@ def univariate_densities(
         hist_data = [df[fac][df["scenario"] == s] for s in scenarios]
         try:
             fig = ff.create_distplot(hist_data, **distplot_kwargs)
-            fig.update_layout(showlegend=False)
-            fig.update_layout(xaxis_title=fac)
-            fig.update_layout(yaxis_title="Density")
-            fig.update_layout(**layout_kwargs)
-            plots_dict[fac] = fig
         except Exception as e:
             warnings.warn(
                 f"""Plotting univariate density failed for {fac} in
                 period {period} with error:\n\n{e}"""
             )
-
+            fig = go.Figure()
+        fig.update_layout(showlegend=False)
+        fig.update_layout(xaxis_title=fac)
+        fig.update_layout(yaxis_title="Density")
+        fig.update_layout(**layout_kwargs)
+        plots_dict[fac] = fig
     return plots_dict
 
 
@@ -332,9 +332,9 @@ def bivariate_density_contours(
                 pairs.append((fac1, fac2))
     pairs = list(set(pairs))
     for pair in pairs:
-        try:
-            fig = go.Figure()
-            for i, scenario in enumerate(df["scenario"].unique()):
+        fig = go.Figure()
+        for i, scenario in enumerate(df["scenario"].unique()):
+            try:
                 x, y, z = _calculate_kde_for_3d(
                     df[df["scenario"] == scenario], pair, n_points
                 )
@@ -346,14 +346,17 @@ def bivariate_density_contours(
                 )
                 fig.add_trace(contour)
                 fig.update_traces(**contour_kwargs)
-            fig.update_xaxes(title={"text": pair[0]})
-            fig.update_yaxes(title={"text": pair[1]})
-            fig.update_layout(**layout_kwargs)
-            plots_dict[pair] = fig
-        except Exception as e:
-            warnings.warn(
-                f"Contour plot failed for {pair} in period {period} with error:\n\n{e}"
-            )
+            except Exception as e:
+                warnings.warn(
+                    f"""
+                    Contour plot failed for {pair} in period {period}
+                    with error:\n\n{e}
+                    """
+                )
+        fig.update_xaxes(title={"text": pair[0]})
+        fig.update_yaxes(title={"text": pair[1]})
+        fig.update_layout(**layout_kwargs)
+        plots_dict[pair] = fig
 
     return plots_dict
 
@@ -435,17 +438,24 @@ def bivariate_density_surfaces(
                 pairs.append((fac1, fac2))
     pairs = list(set(pairs))
     for pair in pairs:
-        x, y, z = _calculate_kde_for_3d(df, pair, n_points)
-        fig = go.Figure(
-            go.Surface(
-                x=x,
-                y=y,
-                z=z,
-                showscale=showcolorbar,
-                colorscale=colorscale,
-                opacity=opacity,
+        try:
+            x, y, z = _calculate_kde_for_3d(df, pair, n_points)
+            fig = go.Figure(
+                go.Surface(
+                    x=x,
+                    y=y,
+                    z=z,
+                    showscale=showcolorbar,
+                    colorscale=colorscale,
+                    opacity=opacity,
+                )
             )
-        )
+        except Exception as e:
+            warnings.warn(
+                f"""Plotting bivariate density surfaces for {pair} in
+                period {period} with error:\n\n{e}"""
+            )
+            fig = go.Figure()
         fig.update_layout(
             scene={
                 "xaxis": {"title": pair[0]},
