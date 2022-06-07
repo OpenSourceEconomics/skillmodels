@@ -11,20 +11,24 @@ from scipy.stats import gaussian_kde
 
 from skillmodels.filtered_states import get_filtered_states
 from skillmodels.process_model import process_model
+from skillmodels.utils_plotting import get_layout_kwargs
+from skillmodels.utils_plotting import get_make_subplot_kwargs
 
 
 def combine_distribution_plots(
     kde_plots,
     contour_plots,
     surface_plots=None,
-    make_subplot_kwargs=None,
+    factor_order=None,
     factor_mapping=None,
+    make_subplot_kwargs=None,
     sharex=False,
     sharey=False,
-    vertical_spacing=0.1,
-    horizontal_spacing=0.1,
     line_width=1.5,
     showlegend=False,
+    layout_kwargs=None,
+    legend_kwargs=None,
+    title_kwargs=None,
     eye_x=2.2,
     eye_y=2.2,
     eye_z=1,
@@ -48,10 +52,18 @@ def combine_distribution_plots(
             Default False.
         sharey (bool): Whether to share the properties ofy-axis across subplots.
             Default True.
-        vertical_spacing (float): Vertical spacing between subplots.
-        horizaontal_spacing (float): Horizontal spacing between subplots.
         line_width (float): A float used to set same line width across subplots.
-        showlegend (bool): A boolean for displaying plots' legend.
+        showlegend (bool): Display legend if True.
+        layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
+            update layout of plotly Figure object. If None, the default kwargs defined
+            in the function will be used.
+        legend_kwargs (dict or NoneType): Dictionary of key word arguments used to
+            update position, orientation and title of figure legend. If None, default
+            position and orientation will be used with no title.
+        title_kwargs (dict or NoneType): Dictionary of key word arguments used to
+            update properties of the figure title. Use {'text': '<desired title>'}
+            to set figure title. If None, infers title based on the value of
+            `quntiles_of_other_factors`.
         eye_x, eye_y and eye_z (float): Control camera (view point) of the 3d plots.
             Together they form the a norm, and the larger the norm, the more zoomed out
             is the view. Setting eye_z to a lower value lowers the view point.
@@ -66,36 +78,52 @@ def combine_distribution_plots(
     surface_plots = deepcopy(surface_plots)
     factors = list(kde_plots.keys())
     factor_names = _process_factor_mapping_dist(factor_mapping, factors)
-    make_subplot_kwargs = _get_make_subplot_kwargs_with_scenes(
-        sharex,
-        sharey,
-        factors,
-        vertical_spacing,
-        horizontal_spacing,
-        make_subplot_kwargs,
+    ordered_factors = _get_ordered_factors(factor_order, factors)
+    make_subplot_kwargs = get_make_subplot_kwargs(
+        sharex=sharex,
+        sharey=sharey,
+        column_order=ordered_factors,
+        row_order=ordered_factors,
+        make_subplot_kwargs=make_subplot_kwargs,
+        add_scenes=True,
     )
 
     fig = make_subplots(**make_subplot_kwargs)
-    fig.update_layout(
-        height=len(factors) * 300,
-        width=len(factors) * 300,
-        template="simple_white",
+    layout_kwargs = get_layout_kwargs(
+        layout_kwargs=layout_kwargs,
+        legend_kwargs=legend_kwargs,
+        title_kwargs=title_kwargs,
         showlegend=showlegend,
+        columns=ordered_factors,
+        rows=ordered_factors,
     )
-    for col, fac1 in enumerate(factors):
-        for row, fac2 in enumerate(factors):
+    fig.update_layout(**layout_kwargs)
+
+    for col, fac1 in enumerate(ordered_factors):
+        for row, fac2 in enumerate(ordered_factors):
 
             if row > col:
-                for d in contour_plots[(fac1, fac2)].data:
+                try:
+                    plot = contour_plots[(fac1, fac2)]
+                except KeyError:
+                    plot = contour_plots[(fac2, fac1)]
+                for d in plot.data:
 
                     d.update({"showlegend": False})
                     fig.add_trace(d, col=col + 1, row=row + 1)
-                    fig.update_xaxes(title=factor_names[fac1], col=col + 1, row=row + 1)
-                    fig.update_yaxes(title=factor_names[fac2], col=col + 1, row=row + 1)
+                    fig.update_xaxes(
+                        title=factor_names[plot.layout.xaxis.title.text],
+                        col=col + 1,
+                        row=row + 1,
+                    )
+                    fig.update_yaxes(
+                        title=factor_names[plot.layout.yaxis.title.text],
+                        col=col + 1,
+                        row=row + 1,
+                    )
                     fig.update_traces(line_width=line_width, row=row + 1, col=col + 1)
             elif row == col:
                 for d in kde_plots[fac1].data:
-
                     if not row == 0:
                         d.update({"showlegend": False})
                     fig.add_trace(d, col=col + 1, row=row + 1)
@@ -105,10 +133,12 @@ def combine_distribution_plots(
 
             else:
                 if surface_plots is not None:
+                    try:
+                        plot = surface_plots[(fac1, fac2)]
+                    except KeyError:
+                        plot = surface_plots[(fac2, fac1)]
                     camera = {"eye": {"x": eye_x, "y": eye_y, "z": eye_z}}
-                    fig.add_trace(
-                        surface_plots[(fac2, fac1)].data[0], col=col + 1, row=row + 1
-                    )
+                    fig.add_trace(plot.data[0], col=col + 1, row=row + 1)
                     fig.update_scenes(camera=camera, row=row + 1, col=col + 1)
                     fig.update_scenes(
                         xaxis={"title": "", "showgrid": True}, row=row + 1, col=col + 1
@@ -199,7 +229,7 @@ def univariate_densities(
         distplot_kwargs,
     )
     plots_dict = {}
-    layout_kwargs = _process_layout_kwargs(layout_kwargs)
+    layout_kwargs = get_layout_kwargs(layout_kwargs)
     for fac in factors:
         hist_data = [df[fac][df["scenario"] == s] for s in scenarios]
         try:
@@ -538,33 +568,6 @@ def _process_layout_kwargs_3d(layout_kwargs, showgrids, showaxlines, showlabels)
     return default_kwargs
 
 
-def _get_make_subplot_kwargs_with_scenes(
-    sharex, sharey, factors, vertical_spacing, horizontal_spacing, make_subplot_kwargs
-):
-    """Define and update keywargs for instantiating figure with subplots."""
-    default_kwargs = {
-        "rows": len(factors),
-        "cols": len(factors),
-        "start_cell": "top-left",
-        "print_grid": False,
-        "shared_yaxes": sharey,
-        "shared_xaxes": sharex,
-        "vertical_spacing": vertical_spacing,
-        "horizontal_spacing": horizontal_spacing,
-    }
-
-    specs = np.array([[{}] * len(factors)] * len(factors))
-    for i in range(len(factors)):
-        for j in range(len(factors)):
-            if i < j:
-                specs[i, j] = {"type": "scene"}
-    default_kwargs["specs"] = specs.tolist()
-    default_kwargs["vertical_spacing"] = vertical_spacing
-    if make_subplot_kwargs is not None:
-        default_kwargs.update(make_subplot_kwargs)
-    return default_kwargs
-
-
 def _process_factor_mapping_dist(mapper, factors):
     """Process mapper to return dictionary with old and new factor names"""
     if mapper is None:
@@ -574,3 +577,14 @@ def _process_factor_mapping_dist(mapper, factors):
             if fac not in mapper:
                 mapper[fac] = fac
     return mapper
+
+
+def _get_ordered_factors(factor_order, factors):
+    """Process factor orders to return list of strings."""
+    if factor_order is None:
+        ordered_factors = factors
+    elif isinstance(factor_order, str):
+        ordered_factors = [factor_order]
+    else:
+        ordered_factors = factor_order
+    return ordered_factors

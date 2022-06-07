@@ -15,6 +15,106 @@ from skillmodels.parse_params import parse_params
 from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
+from skillmodels.utils_plotting import get_layout_kwargs
+from skillmodels.utils_plotting import get_make_subplot_kwargs
+
+
+def combine_transition_plots(
+    plots_dict,
+    column_order=None,
+    row_order=None,
+    factor_mapping=None,
+    make_subplot_kwargs=None,
+    sharex=False,
+    sharey=True,
+    showlegend=True,
+    layout_kwargs=None,
+    legend_kwargs=None,
+    title_kwargs=None,
+):
+    """Combine individual plots into figure with subplots.
+    Uses dictionary with plotly images as values to build plotly Figure with subplots.
+
+    Args:
+        plots_dict (dict): Dictionary with plots of transition functions for each
+            factor.
+        column_order (list, str or NoneType): List of (output) factor names according
+            to which transition plots should be ordered horizontally. If None, infer
+            from the keys of of plots_dict
+        row_order (list, str or NoneType): List of (input) factor names according
+            to which transition plots should be ordered vertically. If None, infer
+            from the keys of of plots_dict
+        factor_mapping (dict or NoneType): A dictionary with custom factor names to
+            display as axes labels.
+        make_subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
+            to instantiate plotly Figure with multiple subplots. Is used to define
+            properties such as, for example, the spacing between subplots. If None,
+            default arguments defined in the function are used.
+        sharex (bool): Whether to share the properties of x-axis across subplots.
+            Default False.
+        sharey (bool): Whether to share the properties ofy-axis across subplots.
+            Default True.
+        showlegend (bool): Display legend if True.
+        layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
+            update layout of plotly Figure object. If None, the default kwargs defined
+            in the function will be used.
+        legend_kwargs (dict or NoneType): Dictionary of key word arguments used to
+            update position, orientation and title of figure legend. If None, default
+            position and orientation will be used with no title.
+        title_kwargs (dict or NoneType): Dictionary of key word arguments used to
+            update properties of the figure title. Use {'text': '<desired title>'}
+            to set figure title. If None, infers title based on the value of
+            `quntiles_of_other_factors`.
+
+    Returns:
+        fig (plotly.Figure): Plotly figure with subplots that combines individual
+            transition functions.
+
+    """
+    plots_dict = deepcopy(plots_dict)
+
+    column_order, row_order = _process_orders(column_order, row_order, plots_dict)
+    make_subplot_kwargs = get_make_subplot_kwargs(
+        sharex, sharey, column_order, row_order, make_subplot_kwargs
+    )
+    factor_mapping = _process_factor_mapping_trans(
+        factor_mapping, row_order, column_order
+    )
+    fig = make_subplots(**make_subplot_kwargs)
+    for (output_factor, input_factor), (row, col) in zip(
+        itertools.product(row_order, column_order),
+        itertools.product(np.arange(len(row_order)), np.arange(len(column_order))),
+    ):
+        try:
+            subfig = plots_dict[(input_factor, output_factor)]
+        except KeyError:
+            subfig = go.Figure()
+        if not (row == 0 and col == 0):
+            for d in subfig.data:
+                d.update({"showlegend": False})
+                fig.add_trace(d, col=col + 1, row=row + 1)
+        else:
+            for d in subfig.data:
+                fig.add_trace(
+                    d,
+                    col=col + 1,
+                    row=row + 1,
+                )
+        fig.update_xaxes(
+            title_text=f"{factor_mapping[input_factor]}", row=row + 1, col=col + 1
+        )
+        if col == 0:
+            fig.update_yaxes(
+                title_text=f"{factor_mapping[output_factor]}",
+                row=row + 1,
+                col=col + 1,
+            )
+
+    layout_kwargs = get_layout_kwargs(
+        layout_kwargs, legend_kwargs, title_kwargs, showlegend, column_order, row_order
+    )
+    fig.update_layout(**layout_kwargs)
+    return fig
 
 
 def get_transition_plots(
@@ -90,101 +190,6 @@ def get_transition_plots(
     return plots_dict
 
 
-def combine_transition_plots(
-    plots_dict,
-    column_order=None,
-    row_order=None,
-    factor_mapping=None,
-    make_subplot_kwargs=None,
-    sharex=False,
-    sharey=True,
-    layout_kwargs=None,
-    legend_kwargs=None,
-    title_kwargs=None,
-):
-    """Combine individual plots into figure with subplots.
-    Uses dictionary with plotly images as values to build plotly Figure with subplots.
-
-    Args:
-        plots_dict (dict): Dictionary with plots of transition functions for each
-            factor.
-        column_order (list, str or NoneType): List of (output) factor names according
-            to which transition plots should be ordered horizontally. If None, infer
-            from the keys of of plots_dict
-        row_order (list, str or NoneType): List of (input) factor names according
-            to which transition plots should be ordered vertically. If None, infer
-            from the keys of of plots_dict
-        factor_mapping (dict or NoneType): A dictionary with custom factor names to
-            display as axes labels.
-        make_subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
-            to instantiate plotly Figure with multiple subplots. Is used to define
-            properties such as, for example, the spacing between subplots. If None,
-            default arguments defined in the function are used.
-        sharex (bool): Whether to share the properties of x-axis across subplots.
-            Default False.
-        sharey (bool): Whether to share the properties ofy-axis across subplots.
-            Default True.
-        layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
-            update layout of plotly Figure object. If None, the default kwargs defined
-            in the function will be used.
-        legend_kwargs (dict or NoneType): Dictionary of key word arguments used to
-            update position, orientation and title of figure legend. If None, default
-            position and orientation will be used with no title.
-        title_kwargs (dict or NoneType): Dictionary of key word arguments used to
-            update properties of the figure title. Use {'text': '<desired title>'}
-            to set figure title. If None, infers title based on the value of
-            `quntiles_of_other_factors`.
-
-    Returns:
-        fig (plotly.Figure): Plotly figure with subplots that combines individual
-            transition functions.
-
-    """
-    plots_dict = deepcopy(plots_dict)
-
-    column_order, row_order = _process_orders(column_order, row_order, plots_dict)
-    make_subplot_kwargs = _get_make_subplot_kwargs(
-        sharex, sharey, make_subplot_kwargs, column_order, row_order
-    )
-    factor_mapping = _process_factor_mapping_trans(
-        factor_mapping, row_order, column_order
-    )
-    fig = make_subplots(**make_subplot_kwargs)
-    for (output_factor, input_factor), (row, col) in zip(
-        itertools.product(row_order, column_order),
-        itertools.product(np.arange(len(row_order)), np.arange(len(column_order))),
-    ):
-        try:
-            subfig = plots_dict[(input_factor, output_factor)]
-        except KeyError:
-            subfig = go.Figure()
-        if not (row == 0 and col == 0):
-            for d in subfig.data:
-                d.update({"showlegend": False})
-                fig.add_trace(d, col=col + 1, row=row + 1)
-        else:
-            for d in subfig.data:
-                fig.add_trace(
-                    d,
-                    col=col + 1,
-                    row=row + 1,
-                )
-        fig.update_xaxes(
-            title_text=f"{factor_mapping[input_factor]}", row=row + 1, col=col + 1
-        )
-        if col == 0:
-            fig.update_yaxes(
-                title_text=f"{factor_mapping[output_factor]}",
-                row=row + 1,
-                col=col + 1,
-            )
-
-    layout_kwargs = _get_layout_kwargs(layout_kwargs, legend_kwargs, title_kwargs)
-    fig.update_layout(**layout_kwargs)
-
-    return fig
-
-
 def _get_dictionary_with_plots(
     model,
     data,
@@ -199,6 +204,7 @@ def _get_dictionary_with_plots(
     n_draws,
     colorscale,
     layout_kwargs,
+    showlegend=True,
 ):
     """Get plots of transition functions for each input and output combination.
     Returns a dictionary with individual plots of transition fanctions for each input
@@ -242,8 +248,11 @@ def _get_dictionary_with_plots(
     params = _set_index_params(model, params)
     pardict = _get_pardict(model, params)
     state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
-    layout_kwargs = _get_layout_kwargs(
-        layout_kwargs, legend_kwargs=None, title_kwargs=None
+    layout_kwargs = get_layout_kwargs(
+        layout_kwargs=layout_kwargs,
+        legend_kwargs=None,
+        title_kwargs=None,
+        showlegend=showlegend,
     )
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
@@ -302,48 +311,6 @@ def _get_dictionary_with_plots(
         plots_dict[(input_factor, output_factor)] = deepcopy(subfig)
 
     return plots_dict
-
-
-def _get_layout_kwargs(
-    layout_kwargs,
-    legend_kwargs,
-    title_kwargs,
-):
-    """Define and update default kwargs for update_layout.
-    Defines some default keyword arguments to update figure layout, such as
-    title and legend.
-
-    """
-    default_kwargs = {
-        "template": "simple_white",
-        "xaxis_showgrid": False,
-        "yaxis_showgrid": False,
-        "legend": {},
-        "title": {},
-    }
-    if title_kwargs:
-        default_kwargs["title"] = title_kwargs
-    if legend_kwargs:
-        default_kwargs["legend"].update(legend_kwargs)
-    if layout_kwargs:
-        default_kwargs.update(layout_kwargs)
-    return default_kwargs
-
-
-def _get_make_subplot_kwargs(sharex, sharey, subplot_kwargs, columns, rows):
-    """Define and update keywargs for instantiating figure with subplots."""
-    default_kwargs = {
-        "rows": len(rows),
-        "cols": len(columns),
-        "start_cell": "top-left",
-        "print_grid": False,
-        "shared_yaxes": sharey,
-        "shared_xaxes": sharex,
-        "vertical_spacing": 0.2,
-    }
-    if subplot_kwargs:
-        default_kwargs.update(subplot_kwargs)
-    return default_kwargs
 
 
 def _get_state_ranges(state_ranges, states_data, all_factors):
@@ -513,7 +480,7 @@ def _process_factor_mapping_trans(factor_mapper, output_factors, input_factors):
 
 
 def _process_orders(columns, rows, plots_dict):
-    """Process factor names to return list of strings."""
+    """Process axes orders to return list of strings."""
     if columns is None:
         columns = []
         for f in plots_dict.keys():
