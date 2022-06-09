@@ -490,7 +490,7 @@ def _process_data(states, period, factors, observed_states=None):
             to_concat.append(df)
         data = pd.concat(to_concat)
     data = data.reset_index()
-    if observed_states:
+    if observed_states is not None:
         data = pd.concat(
             [data, observed_states.query(f"period == {period}").reset_index()], axis=1
         )
@@ -629,7 +629,7 @@ def _get_data_observed_factors(data, factors):
         if fac in data:
             to_concat.append(data[fac])
     if len(to_concat) >= 1:
-        observed_states = pd.concat(to_concat)
+        observed_states = pd.concat(to_concat).to_frame()
     else:
         observed_states = None
     return observed_states
