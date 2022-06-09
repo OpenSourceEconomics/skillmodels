@@ -150,6 +150,7 @@ def univariate_densities(
     params,
     period,
     factors=None,
+    observed_factors=False,
     states=None,
     show_curve=True,
     show_hist=False,
@@ -172,6 +173,7 @@ def univariate_densities(
         period (int or float): Model period for which to plot the distributions for.
         factors (list or NoneType): List of factors for which to plot the densities.
             If None, plot pairwise distributions for all latent factors.
+        observed_factors (bool): If True, plot densities of observed factors too.
         states (dict, list, pd.DataFrame or NoneType): List or dictionary with tidy
             DataFrames with filtered or simulated states or only one DataFrame with
             filtered or simulated states. If None, retrieve data frame with filtered
@@ -205,9 +207,11 @@ def univariate_densities(
             "anchored_states"
         ]["states"]
     model = process_model(model_dict)
-    if factors is None:
-        factors = model["labels"]["latent_factors"]
-    df = _process_data(states, period, factors)
+    factors = _get_factors(
+        model=model, factors=factors, observed_factors=observed_factors
+    )
+    observed_states = _get_data_observed_factors(data, factors)
+    df = _process_data(states, period, factors, observed_states)
     scenarios = df["scenario"].unique()
     plots_dict = {}
     distplot_kwargs = _process_distplot_kwargs(
@@ -246,6 +250,7 @@ def bivariate_density_contours(
     params,
     period,
     factors=None,
+    observed_factors=False,
     states=None,
     n_points=50,
     contour_kwargs=None,
@@ -268,6 +273,7 @@ def bivariate_density_contours(
         period (int or float): Model period for which to plot the distributions for.
         factors (list or NoneType): List of factors for which to plot the densities.
             If None, plot pairwise distributions for all latent factors.
+        observed_factors (bool): If True, plot densities of observed factors too.
         states (dict, list, pd.DataFrame or NoneType): List or dictionary with tidy
             DataFrames with filtered or simulated states or only one DataFrame with
             filtered or simulated states. If None, retrieve data frame with filtered
@@ -305,9 +311,11 @@ def bivariate_density_contours(
             "anchored_states"
         ]["states"]
     model = process_model(model_dict)
-    if factors is None:
-        factors = model["labels"]["latent_factors"]
-    df = _process_data(states, period, factors)
+    factors = _get_factors(
+        model=model, factors=factors, observed_factors=observed_factors
+    )
+    observed_states = _get_data_observed_factors(data=data, factors=factors)
+    df = _process_data(states, period, factors, observed_states)
     plots_dict = {}
     contour_kwargs = _process_contour_kwargs(
         contour_kwargs,
@@ -359,6 +367,7 @@ def bivariate_density_surfaces(
     params,
     period,
     factors=None,
+    observed_factors=False,
     states=None,
     n_points=50,
     layout_kwargs=None,
@@ -381,6 +390,7 @@ def bivariate_density_surfaces(
         period (int or float): Model period for which to plot the distributions for.
         factors (list or NoneType): List of factors for which to plot the densities.
             If None, plot pairwise distributions for all latent factors.
+        observed_factors (bool): If True, plot densities of observed factors too.
         states (dict, list, pd.DataFrame or NoneType): List or dictionary with tidy
             DataFrames with filtered or simulated states or only one DataFrame with
             filtered or simulated states. If None, retrieve data frame with filtered
@@ -416,9 +426,11 @@ def bivariate_density_surfaces(
     elif not isinstance(states, pd.DataFrame):
         raise ValueError("3d plots are only supported if states is a DataFrame")
     model = process_model(model_dict)
-    if factors is None:
-        factors = model["labels"]["latent_factors"]
-    df = _process_data(states, period, factors)
+    factors = _get_factors(
+        model=model, factors=factors, observed_factors=observed_factors
+    )
+    observed_states = _get_data_observed_factors(data, factors)
+    df = _process_data(states, period, factors, observed_states)
     plots_dict = {}
     layout_kwargs = _process_layout_kwargs_3d(
         layout_kwargs, showgrids, showaxlines, showlabels
@@ -460,9 +472,13 @@ def bivariate_density_surfaces(
     return plots_dict
 
 
-def _process_data(states, period, factors):
+def _process_data(states, period, factors, observed_states=None):
     if isinstance(states, pd.DataFrame):
-        data = states.query(f"period == {period}")[factors]
+        to_concat = []
+        for fac in factors:
+            if fac in states:
+                to_concat.append(states.query(f"period == {period}")[fac])
+        data = pd.concat(to_concat, axis=1)
         data["scenario"] = "none"
     else:
         if not isinstance(states, dict):
@@ -474,6 +490,10 @@ def _process_data(states, period, factors):
             to_concat.append(df)
         data = pd.concat(to_concat)
     data = data.reset_index()
+    if observed_states:
+        data = pd.concat(
+            [data, observed_states.query(f"period == {period}").reset_index()], axis=1
+        )
     return data
 
 
@@ -590,3 +610,26 @@ def _get_ordered_factors(factor_order, factors):
     else:
         ordered_factors = factor_order
     return ordered_factors
+
+
+def _get_factors(factors, observed_factors, model):
+    """Proccess factor names to return list of strings."""
+    if factors is None:
+        if observed_factors:
+            factors = model["labels"]["all_factors"]
+        else:
+            factors = model["labels"]["latent_factors"]
+    return factors
+
+
+def _get_data_observed_factors(data, factors):
+    """Get data with observed factors if any."""
+    to_concat = []
+    for fac in factors:
+        if fac in data:
+            to_concat.append(data[fac])
+    if len(to_concat) >= 1:
+        observed_states = pd.concat(to_concat)
+    else:
+        observed_states = None
+    return observed_states
