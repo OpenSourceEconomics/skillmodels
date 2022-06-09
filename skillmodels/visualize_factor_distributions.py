@@ -101,14 +101,9 @@ def combine_distribution_plots(
 
     for col, fac1 in enumerate(ordered_factors):
         for row, fac2 in enumerate(ordered_factors):
-
             if row > col:
-                try:
-                    plot = contour_plots[(fac1, fac2)]
-                except KeyError:
-                    plot = contour_plots[(fac2, fac1)]
+                plot = contour_plots[(fac1, fac2)]
                 for d in plot.data:
-
                     d.update({"showlegend": False})
                     fig.add_trace(d, col=col + 1, row=row + 1)
                     fig.update_xaxes(
@@ -133,10 +128,7 @@ def combine_distribution_plots(
 
             else:
                 if surface_plots is not None:
-                    try:
-                        plot = surface_plots[(fac1, fac2)]
-                    except KeyError:
-                        plot = surface_plots[(fac2, fac1)]
+                    plot = surface_plots[(fac1, fac2)]
                     camera = {"eye": {"x": eye_x, "y": eye_y, "z": eye_z}}
                     fig.add_trace(plot.data[0], col=col + 1, row=row + 1)
                     fig.update_scenes(camera=camera, row=row + 1, col=col + 1)
