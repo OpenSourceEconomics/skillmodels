@@ -629,7 +629,7 @@ def _get_data_observed_factors(data, factors):
         if fac in data:
             to_concat.append(data[fac])
     if len(to_concat) >= 1:
-        observed_states = pd.concat(to_concat).to_frame()
+        observed_states = pd.DataFrame(pd.concat(to_concat))
     else:
         observed_states = None
     return observed_states
