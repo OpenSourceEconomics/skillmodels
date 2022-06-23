@@ -23,7 +23,7 @@ from skillmodels.process_model import process_model
 config.update("jax_enable_x64", True)
 
 
-def get_maximization_inputs(model_dict, data, jacobian_type="jacfwd"):
+def get_maximization_inputs(model_dict, data, jacobian_type="jacrev"):
     """Create inputs for estimagic's maximize function.
 
     Args:
