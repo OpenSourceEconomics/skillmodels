@@ -23,7 +23,7 @@ from skillmodels.process_model import process_model
 config.update("jax_enable_x64", True)
 
 
-def get_maximization_inputs(model_dict, data):
+def get_maximization_inputs(model_dict, data, jacobian_type="jacfwd"):
     """Create inputs for estimagic's maximize function.
 
     Args:
@@ -109,6 +109,7 @@ def get_maximization_inputs(model_dict, data):
 
     _jitted_loglike = jax.jit(_loglike)
     _gradient = jax.jit(jax.grad(_loglike, has_aux=True))
+    _jacobian = jax.jit(getattr(jax, jacobian_type)(_loglike, has_aux=True))
 
     def debug_loglike(params):
         params_vec = partialed_get_jnp_params_vec(params)
@@ -130,6 +131,11 @@ def get_maximization_inputs(model_dict, data):
     def gradient(params):
         params_vec = partialed_get_jnp_params_vec(params)
         jax_output = _gradient(params_vec)[0]
+        return _to_numpy(jax_output)
+
+    def jacobian(params):
+        params_vec = partialed_get_jnp_params_vec(params)
+        jax_output = _jacobian(params_vec)[0]
         return _to_numpy(jax_output)
 
     def loglike_and_gradient(params):
@@ -157,6 +163,7 @@ def get_maximization_inputs(model_dict, data):
         "loglike": loglike,
         "debug_loglike": debug_loglike,
         "gradient": gradient,
+        "jacobian": jacobian,
         "loglike_and_gradient": loglike_and_gradient,
         "constraints": constr,
         "params_template": params_template,
