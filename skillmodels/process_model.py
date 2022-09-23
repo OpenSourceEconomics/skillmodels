@@ -269,6 +269,9 @@ def _get_update_info(model_dict, dimensions, labels, anchoring_info):
             uinfo.loc[(period, name), "purpose"] = "anchoring"
 
     uinfo.fillna(False, inplace=True)
+    # fillna seems to convert objects to bool, but not consistently
+    for factor in labels["latent_factors"]:
+        uinfo[factor] = uinfo[factor].astype(np.bool)
     return uinfo
 
 
