@@ -30,10 +30,6 @@ def process_debug_data(debug_data, model):
     Returns:
         dict: Dictionary with processed debug data. It has the following entries:
 
-        - pre_update_states (pd.DataFrame): Tidy DataFrame with filtered states before
-            each update. Columns are factor names, "mixture", "period", "measurement".
-            and "id". "period" and "measurement" identify the next measurement that
-            will be incorporated.
         - post_update_states (pd.DataFrame). As pre_update_states but "period" and
             "measurement" identify the last measurement that was incorporated.
         - filtered_states (pd.DataFrame). Tidy DataFrame with filtered states
@@ -58,13 +54,6 @@ def process_debug_data(debug_data, model):
     update_info = model["update_info"]
     factors = model["labels"]["latent_factors"]
 
-    pre_update_states = _create_pre_update_states(
-        debug_data["initial_states"],
-        debug_data["filtered_states"],
-        factors,
-        update_info,
-    )
-
     post_update_states = _create_post_update_states(
         debug_data["filtered_states"], factors, update_info
     )
@@ -86,7 +75,6 @@ def process_debug_data(debug_data, model):
     )
 
     res = {
-        "pre_update_states": pre_update_states,
         "post_update_states": post_update_states,
         "filtered_states": filtered_states,
         "state_ranges": state_ranges,
@@ -102,35 +90,6 @@ def process_debug_data(debug_data, model):
     return res
 
 
-def _create_pre_update_states(initial_states, filtered_states, factors, update_info):
-    to_concat = []
-    df = _convert_state_array_to_df(initial_states, factors)
-    period, meas = update_info.index[0]
-    df["period"] = period
-    df["measurement"] = meas
-    df["id"] = np.arange(len(df))
-    to_concat.append(df)
-
-    for k, (period, meas) in enumerate(update_info.index[1:]):
-        purpose = update_info.loc[(period, meas), "purpose"]
-        # It is important to discard the states after anchoring updates and use the
-        # states after the last measurement update for all anchoring updates.
-        if purpose == "measurement":
-            pos = k
-        else:
-            pos = _get_position_of_last_measurement_in_period(update_info, period)
-
-        df = _convert_state_array_to_df(filtered_states[pos], factors)
-        df["period"] = period
-        df["measurement"] = meas
-        df["id"] = np.arange(len(df))
-        to_concat.append(df)
-
-    pre_states = pd.concat(to_concat)
-
-    return pre_states
-
-
 def _create_post_update_states(filtered_states, factors, update_info):
     to_concat = []
     for (period, meas), data in zip(update_info.index, filtered_states):
@@ -143,16 +102,6 @@ def _create_post_update_states(filtered_states, factors, update_info):
     post_states = pd.concat(to_concat)
 
     return post_states
-
-
-def _get_position_of_last_measurement_in_period(update_info, period):
-    """Return position of the row in update info of the last measurement in period"""
-    ind_tup = update_info.query(f"purpose == 'measurement' & period == {period}").index[
-        -1
-    ]
-    sr = pd.Series(data=np.arange(len(update_info)), index=update_info.index)
-    pos = sr.loc[ind_tup]
-    return pos
 
 
 def _convert_state_array_to_df(arr, factor_names):
