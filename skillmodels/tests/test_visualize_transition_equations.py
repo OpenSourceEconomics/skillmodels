@@ -4,7 +4,8 @@ import pandas as pd
 import yaml
 
 from skillmodels.likelihood_function import get_maximization_inputs
-from skillmodels.visualize_transition_equations import visualize_transition_equations
+from skillmodels.visualize_transition_equations import combine_transition_plots
+from skillmodels.visualize_transition_equations import get_transition_plots
 
 
 TEST_DIR = Path(__file__).parent.resolve()
@@ -27,23 +28,19 @@ def test_visualize_transition_equations_runs():
     full_index = max_inputs["params_template"].index
     params = params.reindex(full_index)
     params["value"] = params["value"].fillna(0)
-    debug_loglike = max_inputs["debug_loglike"]
-    debug_data = debug_loglike(params)
-    filtered_states = debug_data["filtered_states"]
-
-    visualize_transition_equations(
+    subplots = get_transition_plots(
         model_dict=model_dict,
         params=params,
-        states=filtered_states,
         period=0,
         quantiles_of_other_factors=[0.1, 0.25, 0.5, 0.75, 0.9],
         data=data,
     )
-    visualize_transition_equations(
+    combine_transition_plots(subplots)
+    subplots = get_transition_plots(
         model_dict=model_dict,
         params=params,
-        states=filtered_states,
         period=0,
         quantiles_of_other_factors=None,
         data=data,
     )
+    combine_transition_plots(subplots)

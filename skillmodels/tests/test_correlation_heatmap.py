@@ -52,10 +52,12 @@ def test_get_measurement_data_with_single_period():
         index=[0, 1] * 2,
     )
     expected = pd.DataFrame(
-        np.array([[4, 4], [5, 5], [2, 2], [3, 3]]).T,
-        columns=["y2", "y3", "y0", "y1"],
+        np.array([[4, 4], [5, 5], [2, 2], [3, 3], [7, 7]]).T,
+        columns=["y2", "y3", "y0", "y1", "y5"],
     )
-    result = _get_measurement_data_for_single_period(data, update_info, period, factors)
+    result = _get_measurement_data_for_single_period(
+        data, update_info, period, latent_factors=factors, observed_factors=["y5"]
+    )
     afe(result, expected)
 
 
@@ -83,25 +85,28 @@ def test_get_factor_scores_data_with_single_period():
                 [3, 0, 3, 0],
                 [4, 0, 4, 0],
                 [5, 0, 5, 0],
+                [6, 0, 6, 0],
             ]
         ).T,
-        columns=["period"] + [f"y{i}" for i in range(4)],
+        columns=["period"] + [f"y{i}" for i in range(5)],
         index=[0, 1] * 2,
     )
     data_std = data.iloc[:2][[f"y{i}" for i in range(4)]].copy(deep=True)
     for m in data_std.columns:
         data_std[m] = (data_std[m] - np.mean(data_std[m])) / np.std(data_std[m], ddof=1)
-    expected = (
-        pd.concat(
-            [data_std["y0"] + data_std["y2"], data_std["y1"] + data_std["y3"]], axis=1
-        )
-        / 2
+    expected = pd.concat(
+        [
+            data_std["y0"] / 2 + data_std["y2"] / 2,
+            data_std["y1"] / 2 + data_std["y3"] / 2,
+            data.iloc[:2]["y4"],
+        ],
+        axis=1,
     )
-    expected.columns = ["f1", "f2"]
+    expected.columns = ["f1", "f2", "y4"]
     result = _get_quasi_factor_scores_data_for_single_period(
-        data, update_info, period, factors
+        data, update_info, period, latent_factors=factors, observed_factors=["y4"]
     )
-    afe(expected, result)
+    afe(expected, result, check_dtype=False)
 
 
 def test_get_measurement_data_with_multiple_periods():
@@ -141,10 +146,19 @@ def test_get_measurement_data_with_multiple_periods():
         np.array(
             [[4, 4], [5, 5], [2, 2], [3, 3], [-4, -4], [-5, -5], [-2, -2], [-3, -3]]
         ).T,
-        columns=["y2_1", "y3_1", "y0_1", "y1_1", "y2_2", "y3_2", "y0_2", "y1_2"],
+        columns=[
+            "y2, 1",
+            "y3, 1",
+            "y0, 1",
+            "y1, 1",
+            "y2, 2",
+            "y3, 2",
+            "y0, 2",
+            "y1, 2",
+        ],
     )
     result = _get_measurement_data_for_multiple_periods(
-        data, update_info, period, factors
+        data, update_info, period, latent_factors=factors, observed_factors=[]
     )
     afe(result, expected)
 
@@ -189,7 +203,7 @@ def test_get_factor_scores_data_with_multiple_period():
         )
         / 2
     )
-    temp.columns = ["f1_0", "f2_0"]
+    temp.columns = ["f1, 0", "f2, 0"]
     to_concat.append(temp.reset_index(drop=True))
 
     data_std = data.iloc[2:][[f"y{i}" for i in range(4)]].copy(deep=True)
@@ -201,24 +215,30 @@ def test_get_factor_scores_data_with_multiple_period():
         )
         / 2
     )
-    temp.columns = ["f1_1", "f2_1"]
+    temp.columns = ["f1, 1", "f2, 1"]
     to_concat.append(temp.reset_index(drop=True))
 
     expected = pd.concat(to_concat, axis=1)
     result = _get_quasi_factor_scores_data_for_multiple_periods(
-        data, update_info, periods, factors
+        data, update_info, periods, latent_factors=factors, observed_factors=[]
     )
     afe(expected, result)
 
 
 def test_process_factors():
-    model = {"labels": {"all_factors": list("abcd")}}
-    factor = "c"
-    factors = ["b", "d"]
+    model = {
+        "labels": {"latent_factors": list("abcd"), "observed_factors": list("efg")}
+    }
+    latent_factor = "c"
+    observed_factor = "g"
+    factors = ["b", "d", "g"]
     all_factors = None
-    assert list("abcd") == _process_factors(model, all_factors)
-    assert [factor] == _process_factors(model, factor)
-    assert factors == _process_factors(model, factors)
+    assert list("abcd") == _process_factors(model, all_factors)[0]
+    assert list("efg") == _process_factors(model, all_factors)[1]
+    assert [latent_factor] == _process_factors(model, latent_factor)[0]
+    assert [observed_factor] == _process_factors(model, observed_factor)[1]
+    assert factors[:-1] == _process_factors(model, factors)[0]
+    assert [factors[-1] == _process_factors(model, factors)[1]]
 
 
 def test_get_mask_lower_triangle_only():

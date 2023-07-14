@@ -23,7 +23,7 @@ from skillmodels.process_model import process_model
 config.update("jax_enable_x64", True)
 
 
-def get_maximization_inputs(model_dict, data):
+def get_maximization_inputs(model_dict, data, jacobian_type="jacrev"):
     """Create inputs for estimagic's maximize function.
 
     Args:
@@ -109,6 +109,7 @@ def get_maximization_inputs(model_dict, data):
 
     _jitted_loglike = jax.jit(_loglike)
     _gradient = jax.jit(jax.grad(_loglike, has_aux=True))
+    _jacobian = jax.jit(getattr(jax, jacobian_type)(_loglike, has_aux=True))
 
     def debug_loglike(params):
         params_vec = partialed_get_jnp_params_vec(params)
@@ -130,6 +131,11 @@ def get_maximization_inputs(model_dict, data):
     def gradient(params):
         params_vec = partialed_get_jnp_params_vec(params)
         jax_output = _gradient(params_vec)[0]
+        return _to_numpy(jax_output)
+
+    def jacobian(params):
+        params_vec = partialed_get_jnp_params_vec(params)
+        jax_output = _jacobian(params_vec)[0]
         return _to_numpy(jax_output)
 
     def loglike_and_gradient(params):
@@ -157,6 +163,7 @@ def get_maximization_inputs(model_dict, data):
         "loglike": loglike,
         "debug_loglike": debug_loglike,
         "gradient": gradient,
+        "jacobian": jacobian,
         "loglike_and_gradient": loglike_and_gradient,
         "constraints": constr,
         "params_template": params_template,
@@ -307,6 +314,9 @@ def _scan_body(
     observed_factors,
     debug,
 ):
+    # ==================================================================================
+    # create arguments needed for update
+    # ==================================================================================
     t = loop_args["period"]
     states = carry["states"]
     upper_chols = carry["upper_chols"]
@@ -323,6 +333,9 @@ def _scan_body(
         "log_mixture_weights": log_mixture_weights,
     }
 
+    # ==================================================================================
+    # do a measurement or anchoring update
+    # ==================================================================================
     states, upper_chols, log_mixture_weights, loglikes, info = lax.cond(
         loop_args["is_measurement_iteration"],
         functools.partial(_one_arg_measurement_update, debug=debug),
@@ -330,6 +343,9 @@ def _scan_body(
         update_kwargs,
     )
 
+    # ==================================================================================
+    # create arguments needed for predict step
+    # ==================================================================================
     predict_kwargs = {
         "states": states,
         "upper_chols": upper_chols,
@@ -346,7 +362,10 @@ def _scan_body(
 
     fixed_kwargs = {"transition_info": transition_info}
 
-    states, upper_chols = lax.cond(
+    # ==================================================================================
+    # Do a predict step or a do-nothing fake predict step
+    # ==================================================================================
+    states, upper_chols, filtered_states = lax.cond(
         loop_args["is_predict_iteration"],
         functools.partial(_one_arg_predict, **fixed_kwargs),
         functools.partial(_one_arg_no_predict, **fixed_kwargs),
@@ -359,7 +378,7 @@ def _scan_body(
         "log_mixture_weights": log_mixture_weights,
     }
 
-    static_out = {"loglikes": loglikes, **info, "states": states}
+    static_out = {"loglikes": loglikes, **info, "states": filtered_states}
     return new_state, static_out
 
 
@@ -383,12 +402,16 @@ def _one_arg_anchoring_update(kwargs, debug):
 
 
 def _one_arg_no_predict(kwargs, transition_info):
-    return kwargs["states"], kwargs["upper_chols"]
+    """Just return the states cond chols without any changes."""
+    return kwargs["states"], kwargs["upper_chols"], kwargs["states"]
 
 
 def _one_arg_predict(kwargs, transition_info):
-    out = kalman_predict(**kwargs, transition_info=transition_info)
-    return out
+    """Do a predict step but also return the input states as filtered states."""
+    new_states, new_upper_chols = kalman_predict(
+        **kwargs, transition_info=transition_info
+    )
+    return new_states, new_upper_chols, kwargs["states"]
 
 
 def _to_numpy(obj):
