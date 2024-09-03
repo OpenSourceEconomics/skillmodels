@@ -17,7 +17,6 @@ dependencies:
   - restructuredtext_lint
   - tox-conda
   - scipy
-  - seaborn
   - sphinxcontrib-bibtex
   - pydata-sphinx-theme>=0.3
   - anaconda-client
