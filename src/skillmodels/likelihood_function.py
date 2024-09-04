@@ -122,22 +122,19 @@ def get_maximization_inputs(model_dict, data, jacobian_type="jacrev"):
         jax_output = _debug_loglike(params_vec)[1]
         if jax_output["contributions"].dtype != "float64":
             raise TypeError
-        numpy_output = _to_numpy(jax_output)
-        numpy_output["value"] = float(numpy_output["value"])
-        numpy_output = partialed_process_debug_data(numpy_output)
-        return numpy_output
+        tmp = _to_numpy(jax_output)
+        tmp["value"] = float(tmp["value"])
+        return partialed_process_debug_data(tmp)
 
     def loglike(params):
         params_vec = partialed_get_jnp_params_vec(params)
         jax_output = _jitted_loglike(params_vec)[1]
-        numpy_output = _to_numpy(jax_output)
-        numpy_output["value"] = float(numpy_output["value"])
-        return numpy_output["contributions"]
+        return float(jax_output['value'])
 
-    def gradient(params):
+    def loglikeobs(params):
         params_vec = partialed_get_jnp_params_vec(params)
-        jax_output = _gradient(params_vec)[0]
-        return _to_numpy(jax_output)
+        jax_output = _jitted_loglike(params_vec)[1]
+        return _to_numpy(jax_output)["contributions"]
 
     def jacobian(params):
         params_vec = partialed_get_jnp_params_vec(params)
@@ -147,9 +144,7 @@ def get_maximization_inputs(model_dict, data, jacobian_type="jacrev"):
     def loglike_and_gradient(params):
         params_vec = partialed_get_jnp_params_vec(params)
         jax_grad, jax_crit = _gradient(params_vec)
-        numpy_grad = _to_numpy(jax_grad)
-        crit = float(jax_crit["value"])
-        return crit, numpy_grad
+        return float(jax_crit["value"]), _to_numpy(jax_grad)
 
     constr = get_constraints(
         dimensions=model["dimensions"],
@@ -167,8 +162,8 @@ def get_maximization_inputs(model_dict, data, jacobian_type="jacrev"):
 
     out = {
         "loglike": loglike,
+        "loglikeobs": loglikeobs,
         "debug_loglike": debug_loglike,
-        "gradient": gradient,
         "jacobian": jacobian,
         "loglike_and_gradient": loglike_and_gradient,
         "constraints": constr,
