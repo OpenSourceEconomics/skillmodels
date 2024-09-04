@@ -12,13 +12,14 @@ def process_data(df, labels, update_info, anchoring_info, purpose="estimation"):
 
     Args:
         df (DataFrame): panel dataset in long format. It has a MultiIndex
-            where the first level indicates the period and the second
-            the individual.
+            where the first level indicates the period and the second the individual.
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
         update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
-        anchoring_info (dict): Information about anchoring. See :ref:`anchoring`
+        anchoring_qinfo (dict): Information about anchoring. See :ref:`anchoring`
+        purpose (Literal["estimation", "anything"]): Whether the data is used for
+            estimation (default, includes measurement data) or not.
 
     Returns:
         meas_data (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
@@ -29,6 +30,14 @@ def process_data(df, labels, update_info, anchoring_info, purpose="estimation"):
             n_observed_factors) with data on the observed factors.
 
     """
+    # Stick to required data.
+    cols_to_keep = update_info.index.get_level_values("variable").unique().tolist()
+    cols_to_keep += labels["observed_factors"]
+    cols_to_keep += list(set(labels["controls"]).difference({"constant"}))
+    if anchoring_info["anchoring"]:
+        cols_to_keep += list(anchoring_info["outcomes"].values())
+    df = df[cols_to_keep]
+
     df = pre_process_data(df, labels["periods"])
     df["constant"] = 1
     df = _add_copies_of_anchoring_outcome(df, anchoring_info)
@@ -60,7 +69,7 @@ def pre_process_data(df, periods):
             enumerates individuals. The second level counts periods, starting at 0.
 
     """
-    df = df.copy(deep=True).sort_index()
+    df = df.sort_index()
     df["__old_id__"] = df.index.get_level_values(0)
     df["__old_period__"] = df.index.get_level_values(1)
 
@@ -100,10 +109,9 @@ def _check_data(df, update_info, labels, purpose):
                 if meas not in period_data.columns:
                     var_report.loc[(period, meas), "problem"] = "Variable is missing"
                 elif len(period_data[meas].dropna().unique()) == 1:
-                    var_report.loc[
-                        (period, meas),
-                        "problem",
-                    ] = "Variable has no variance"
+                    var_report.loc[(period, meas), "problem"] = (
+                        "Variable has no variance"
+                    )
 
         for factor in labels["observed_factors"]:
             if factor not in period_data.columns:
@@ -118,7 +126,6 @@ def _check_data(df, update_info, labels, purpose):
 
 
 def _handle_controls_with_missings(df, controls, update_info):
-    df = df.copy(deep=True)
     periods = update_info.index.get_level_values(0).unique().tolist()
     problematic_index = df.index[:0]
     for period in periods:
