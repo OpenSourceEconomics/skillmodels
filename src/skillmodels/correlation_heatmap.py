@@ -253,10 +253,10 @@ def _process_corr_data_for_plotting(
     mask = _get_mask(corr, show_upper_triangle, show_diagonal)
     corr = corr.where(mask).round(rounding)
     if trim_heatmap:
-        keeprows = mask.any(axis=1) & corr.notnull().any(axis="columns").to_numpy()
+        keeprows = mask.any(axis=1) & corr.notna().any(axis="columns").to_numpy()
         mask = mask[keeprows]
         corr = corr[keeprows]
-        keepcols = mask.any(axis=0) & corr.notnull().any(axis="index").to_numpy()
+        keepcols = mask.any(axis=0) & corr.notna().any(axis="index").to_numpy()
         mask = mask.T[keepcols].T
         corr = corr.T[keepcols].T
     return corr
