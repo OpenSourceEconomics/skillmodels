@@ -4,8 +4,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-from jax import config, lax
 
+import skillmodels.likelihood_function_debug as lfd
 from skillmodels.clipping import soft_clipping
 from skillmodels.constraints import add_bounds, get_constraints
 from skillmodels.kalman_filters import (
@@ -19,10 +19,10 @@ from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
 
-config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", False)  # noqa: FBT003
 
 
-def get_maximization_inputs(model_dict, data, jacobian_type="jacrev"):
+def get_maximization_inputs(model_dict, data):
     """Create inputs for estimagic's maximize function.
 
     Args:
@@ -74,77 +74,55 @@ def get_maximization_inputs(model_dict, data, jacobian_type="jacrev"):
         model["estimation_options"]["sigma_points_scale"],
     )
 
-    update_info = model["update_info"]
-    is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
-    _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
-    is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
-    last_period = model["labels"]["periods"][-1]
-    # iteration_to_period is used as an indexer to loop over arrays of different lengths
-    # in a lax.scan. It needs to work for arrays of length n_periods and not raise
-    # IndexErrors on tracer arrays of length n_periods - 1 (i.e. n_transitions).
-    # To achieve that, we replace the last period by -1.
-    iteration_to_period = _periods.replace(last_period, -1).to_numpy()
-
-    _base_loglike = functools.partial(
-        _log_likelihood_jax,
-        parsing_info=parsing_info,
-        measurements=measurements,
-        controls=controls,
-        transition_info=model["transition_info"],
-        sigma_scaling_factor=sigma_scaling_factor,
-        sigma_weights=sigma_weights,
-        dimensions=model["dimensions"],
-        labels=model["labels"],
-        estimation_options=model["estimation_options"],
-        is_measurement_iteration=is_measurement_iteration,
-        is_predict_iteration=is_predict_iteration,
-        iteration_to_period=iteration_to_period,
-        observed_factors=observed_factors,
-    )
-
-    partialed_process_debug_data = functools.partial(process_debug_data, model=model)
-
     partialed_get_jnp_params_vec = functools.partial(
         _get_jnp_params_vec,
         target_index=p_index,
     )
 
-    _debug_loglike = functools.partial(_base_loglike, debug=True)
+    partialed_loglikes = {}
+    for n, fun in {
+        "ll": _log_likelihood_jax,
+        "llo": _log_likelihood_obs_jax,
+        "debug_ll": lfd._log_likelihood_jax,
+    }.items():
+        partialed_loglikes[n] = _partial_some_log_likelihood_jax(
+            fun=fun,
+            parsing_info=parsing_info,
+            measurements=measurements,
+            controls=controls,
+            observed_factors=observed_factors,
+            model=model,
+            sigma_weights=sigma_weights,
+            sigma_scaling_factor=sigma_scaling_factor,
+        )
 
-    _loglike = functools.partial(_base_loglike, debug=False)
-
-    _jitted_loglike = jax.jit(_loglike)
-    _gradient = jax.jit(jax.grad(_loglike, has_aux=True))
-    _jacobian = jax.jit(getattr(jax, jacobian_type)(_loglike, has_aux=True))
-
-    def debug_loglike(params):
-        params_vec = partialed_get_jnp_params_vec(params)
-        jax_output = _debug_loglike(params_vec)[1]
-        if jax_output["contributions"].dtype != "float64":
-            raise TypeError
-        tmp = _to_numpy(jax_output)
-        tmp["value"] = float(tmp["value"])
-        return partialed_process_debug_data(tmp)
+    _jitted_loglike = jax.jit(partialed_loglikes["ll"])
+    _jitted_loglikeobs = jax.jit(partialed_loglikes["llo"])
+    _gradient = jax.jit(jax.grad(partialed_loglikes["ll"]))
 
     def loglike(params):
         params_vec = partialed_get_jnp_params_vec(params)
-        jax_output = _jitted_loglike(params_vec)[1]
-        return float(jax_output['value'])
+        return float(_jitted_loglike(params_vec))
 
     def loglikeobs(params):
         params_vec = partialed_get_jnp_params_vec(params)
-        jax_output = _jitted_loglike(params_vec)[1]
-        return _to_numpy(jax_output)["contributions"]
-
-    def jacobian(params):
-        params_vec = partialed_get_jnp_params_vec(params)
-        jax_output = _jacobian(params_vec)[0]
-        return _to_numpy(jax_output)
+        return _to_numpy(_jitted_loglikeobs(params_vec))
 
     def loglike_and_gradient(params):
         params_vec = partialed_get_jnp_params_vec(params)
-        jax_grad, jax_crit = _gradient(params_vec)
-        return float(jax_crit["value"]), _to_numpy(jax_grad)
+        crit = float(_jitted_loglike(params_vec))
+        grad = _to_numpy(_gradient(params_vec))
+        return crit, grad
+
+    def debug_loglike(params):
+        partialed_process_debug_data = functools.partial(
+            process_debug_data, model=model
+        )
+        params_vec = partialed_get_jnp_params_vec(params)
+        jax_output = partialed_loglikes["debug_ll"](params_vec)
+        tmp = _to_numpy(jax_output)
+        tmp["value"] = float(tmp["value"])
+        return partialed_process_debug_data(tmp)
 
     constr = get_constraints(
         dimensions=model["dimensions"],
@@ -164,7 +142,6 @@ def get_maximization_inputs(model_dict, data, jacobian_type="jacrev"):
         "loglike": loglike,
         "loglikeobs": loglikeobs,
         "debug_loglike": debug_loglike,
-        "jacobian": jacobian,
         "loglike_and_gradient": loglike_and_gradient,
         "constraints": constr,
         "params_template": params_template,
@@ -173,7 +150,46 @@ def get_maximization_inputs(model_dict, data, jacobian_type="jacrev"):
     return out
 
 
-def _log_likelihood_jax(
+def _partial_some_log_likelihood_jax(
+    fun,
+    parsing_info,
+    measurements,
+    controls,
+    observed_factors,
+    model,
+    sigma_weights,
+    sigma_scaling_factor,
+):
+    update_info = model["update_info"]
+    is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
+    _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
+    is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
+    last_period = model["labels"]["periods"][-1]
+    # iteration_to_period is used as an indexer to loop over arrays of different lengths
+    # in a jax.lax.scan. It needs to work for arrays of length n_periods and not raise
+    # IndexErrors on tracer arrays of length n_periods - 1 (i.e. n_transitions).
+    # To achieve that, we replace the last period by -1.
+    iteration_to_period = _periods.replace(last_period, -1).to_numpy()
+
+    return functools.partial(
+        fun,
+        parsing_info=parsing_info,
+        measurements=measurements,
+        controls=controls,
+        transition_info=model["transition_info"],
+        sigma_scaling_factor=sigma_scaling_factor,
+        sigma_weights=sigma_weights,
+        dimensions=model["dimensions"],
+        labels=model["labels"],
+        estimation_options=model["estimation_options"],
+        is_measurement_iteration=is_measurement_iteration,
+        is_predict_iteration=is_predict_iteration,
+        iteration_to_period=iteration_to_period,
+        observed_factors=observed_factors,
+    )
+
+
+def _log_likelihood_obs_jax(
     params,
     parsing_info,
     measurements,
@@ -187,7 +203,6 @@ def _log_likelihood_jax(
     is_measurement_iteration,
     is_predict_iteration,
     iteration_to_period,
-    debug,
     observed_factors,
 ):
     """Log likelihood of a skill formation model.
@@ -222,15 +237,11 @@ def _log_likelihood_jax(
             n_mixtures. See :ref:`dimensions`.
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
-        debug (bool): Boolean flag. If True, more intermediate results are returned
         observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
             n_observed_factors) with data on the observed factors.
 
     Returns:
         jnp.array: 1d array of length 1, the aggregated log likelihood.
-        dict: Additional data, containing log likelihood contribution of each Kalman
-            update potentially if ``debug`` is ``True`` additional information like
-            the filtered states.
 
     """
     n_obs = measurements.shape[1]
@@ -266,15 +277,14 @@ def _log_likelihood_jax(
         sigma_weights=sigma_weights,
         transition_info=transition_info,
         observed_factors=observed_factors,
-        debug=debug,
     )
 
-    carry, static_out = lax.scan(_body, carry, loop_args)
+    carry, static_out = jax.lax.scan(_body, carry, loop_args)
     loglikes = static_out["loglikes"]
 
     # clip contributions before aggregation to preserve as much information as
     # possible.
-    clipped = soft_clipping(
+    return soft_clipping(
         arr=loglikes,
         lower=estimation_options["clipping_lower_bound"],
         upper=estimation_options["clipping_upper_bound"],
@@ -282,34 +292,39 @@ def _log_likelihood_jax(
         upper_hardness=estimation_options["clipping_upper_hardness"],
     )
 
-    value = clipped.sum()
 
-    additional_data = {
-        # used for scalar optimization, thus has to be clipped
-        "value": value,
-        # can be used for sum-structure optimizers, thus has to be clipped
-        "contributions": clipped.sum(axis=0),
-    }
-
-    if debug:
-        additional_data["all_contributions"] = loglikes
-        additional_data["residuals"] = static_out["residuals"]
-        additional_data["residual_sds"] = static_out["residual_sds"]
-
-        initial_states, _, initial_log_mixture_weights, _ = parse_params(
-            params,
-            parsing_info,
-            dimensions,
-            labels,
-            n_obs,
-        )
-        additional_data["initial_states"] = initial_states
-        additional_data["initial_log_mixture_weights"] = initial_log_mixture_weights
-
-        additional_data["filtered_states"] = static_out["states"]
-        additional_data["log_mixture_weights"] = static_out["log_mixture_weights"]
-
-    return value, additional_data
+def _log_likelihood_jax(
+    params,
+    parsing_info,
+    measurements,
+    controls,
+    transition_info,
+    sigma_scaling_factor,
+    sigma_weights,
+    dimensions,
+    labels,
+    estimation_options,
+    is_measurement_iteration,
+    is_predict_iteration,
+    iteration_to_period,
+    observed_factors,
+):
+    return _log_likelihood_obs_jax(
+        params=params,
+        parsing_info=parsing_info,
+        measurements=measurements,
+        controls=controls,
+        transition_info=transition_info,
+        sigma_scaling_factor=sigma_scaling_factor,
+        sigma_weights=sigma_weights,
+        dimensions=dimensions,
+        labels=labels,
+        estimation_options=estimation_options,
+        is_measurement_iteration=is_measurement_iteration,
+        is_predict_iteration=is_predict_iteration,
+        iteration_to_period=iteration_to_period,
+        observed_factors=observed_factors,
+    ).sum()
 
 
 def _scan_body(
@@ -321,7 +336,6 @@ def _scan_body(
     sigma_weights,
     transition_info,
     observed_factors,
-    debug,
 ):
     # ==================================================================================
     # create arguments needed for update
@@ -345,10 +359,10 @@ def _scan_body(
     # ==================================================================================
     # do a measurement or anchoring update
     # ==================================================================================
-    states, upper_chols, log_mixture_weights, loglikes, info = lax.cond(
+    states, upper_chols, log_mixture_weights, loglikes = jax.lax.cond(
         loop_args["is_measurement_iteration"],
-        functools.partial(_one_arg_measurement_update, debug=debug),
-        functools.partial(_one_arg_anchoring_update, debug=debug),
+        functools.partial(_one_arg_measurement_update),
+        functools.partial(_one_arg_anchoring_update),
         update_kwargs,
     )
 
@@ -374,7 +388,7 @@ def _scan_body(
     # ==================================================================================
     # Do a predict step or a do-nothing fake predict step
     # ==================================================================================
-    states, upper_chols, filtered_states = lax.cond(
+    states, upper_chols, filtered_states = jax.lax.cond(
         loop_args["is_predict_iteration"],
         functools.partial(_one_arg_predict, **fixed_kwargs),
         functools.partial(_one_arg_no_predict, **fixed_kwargs),
@@ -387,31 +401,27 @@ def _scan_body(
         "log_mixture_weights": log_mixture_weights,
     }
 
-    static_out = {"loglikes": loglikes, **info, "states": filtered_states}
+    static_out = {"loglikes": loglikes, "states": filtered_states}
     return new_state, static_out
 
 
-def _one_arg_measurement_update(kwargs, debug):
-    out = kalman_update(**kwargs, debug=debug)
+def _one_arg_measurement_update(kwargs):
+    out = kalman_update(**kwargs)
     return out
 
 
-def _one_arg_anchoring_update(kwargs, debug):
-    _, _, new_log_mixture_weights, new_loglikes, debug_info = kalman_update(
-        **kwargs,
-        debug=debug,
-    )
+def _one_arg_anchoring_update(kwargs):
+    _, _, new_log_mixture_weights, new_loglikes = kalman_update(**kwargs)
     out = (
         kwargs["states"],
         kwargs["upper_chols"],
         new_log_mixture_weights,
         new_loglikes,
-        debug_info,
     )
     return out
 
 
-def _one_arg_no_predict(kwargs, transition_info):
+def _one_arg_no_predict(kwargs, transition_info):  # noqa: ARG001
     """Just return the states cond chols without any changes."""
     return kwargs["states"], kwargs["upper_chols"], kwargs["states"]
 

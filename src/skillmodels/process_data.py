@@ -96,12 +96,12 @@ def _add_copies_of_anchoring_outcome(df, anchoring_info):
     return df
 
 
-def _check_data(df, update_info, labels, purpose):
+def _check_data(df, update_info, labels, purpose):  # noqa: C901
     var_report = pd.DataFrame(index=update_info.index[:0], columns=["problem"])
     for period in labels["periods"]:
         period_data = df.query(f"period == {period}")
         for cont in labels["controls"]:
-            if cont not in period_data.columns or period_data[cont].isnull().all():
+            if cont not in period_data.columns or period_data[cont].isna().all():
                 var_report.loc[(period, cont), "problem"] = "Variable is missing"
 
         if purpose == "estimation":
@@ -116,7 +116,7 @@ def _check_data(df, update_info, labels, purpose):
         for factor in labels["observed_factors"]:
             if factor not in period_data.columns:
                 var_report.loc[(period, factor), "problem"] = "Variable is missing"
-            elif period_data[factor].isnull().any():
+            elif period_data[factor].isna().any():
                 var_report.loc[(period, factor), "problem"] = "Variable has missings"
 
     var_report = var_report.to_string() if len(var_report) > 0 else ""
@@ -132,7 +132,7 @@ def _handle_controls_with_missings(df, controls, update_info):
         period_data = df.query(f"period == {period}")
         control_data = period_data[controls]
         meas_data = period_data[get_period_measurements(update_info, period)]
-        problem = control_data.isnull().any(axis=1) & meas_data.notnull().any(axis=1)
+        problem = control_data.isna().any(axis=1) & meas_data.notna().any(axis=1)
         problematic_index = problematic_index.union(period_data[problem].index)
 
     if len(problematic_index) > 0:
@@ -148,14 +148,14 @@ def _generate_measurements_array(df, update_info, n_obs):
     arr = np.zeros((len(update_info), n_obs))
     for k, (period, var) in enumerate(update_info.index):
         arr[k] = df.query(f"period == {period}")[var].to_numpy()
-    return jnp.array(arr)
+    return jnp.array(arr, dtype="float32")
 
 
 def _generate_controls_array(df, labels, n_obs):
     arr = np.zeros((len(labels["periods"]), n_obs, len(labels["controls"])))
     for period in labels["periods"]:
         arr[period] = df.query(f"period == {period}")[labels["controls"]].to_numpy()
-    return jnp.array(arr)
+    return jnp.array(arr, dtype="float32")
 
 
 def _generate_observed_factor_array(df, labels, n_obs):
@@ -164,4 +164,4 @@ def _generate_observed_factor_array(df, labels, n_obs):
         arr[period] = df.query(f"period == {period}")[
             labels["observed_factors"]
         ].to_numpy()
-    return jnp.array(arr)
+    return jnp.array(arr, dtype="float32")

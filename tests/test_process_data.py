@@ -49,7 +49,7 @@ def test_handle_controls_with_missings():
 
     with pytest.warns(UserWarning):
         calculated = _handle_controls_with_missings(df, controls, update_info)
-    assert calculated.loc[(2, 0)].isnull().all()
+    assert calculated.loc[(2, 0)].isna().all()
 
 
 def test_generate_measurements_array():

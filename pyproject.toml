@@ -171,6 +171,9 @@ extend-ignore = [
     # missing return type annotation for private function
     "ANN202",
 
+    # No explicit `stacklevel` keyword argument found
+    "B028",
+
     # In conflict with formatter
     "COM812",
 
@@ -194,8 +197,21 @@ extend-ignore = [
 
     # In conflict with formatter
     "ISC001",
+
+    # array.at is perfectly valid Jax, but linter thinks it's Pandas...
+    "PD008",
+
+    # df is just fine
+    "PD901",
+
+    # Magic values are fine
+    "PLR2004",
+
     # Too many arguments to function call
     "PLR0913",
+
+    # Assignment before return statement is fine.
+    "RET504",
 
     # use of `assert` detected
     "S101",
@@ -211,7 +227,11 @@ extend-ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["INP001"]
+"src/skillmodels/kalman_filters.py" = ["D417"]
+"src/skillmodels/process_data.py" = ["D417"]
+"src/skillmodels/likelihood_function.py" = ["D417"]
+"src/skillmodels/likelihood_function_debug.py" = ["D417"]
+"tests/*" = ["INP001", "PD002"]
 "**/*.ipynb" = ["B018", "T201", "E402", "PLR2004", "INP001", "PTH100"]
 "docs/**/*" = ["ERA001", "A001"]
 
