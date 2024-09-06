@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from memory_profiler import profile
 from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.decorators import register_params
@@ -95,6 +96,60 @@ def test_likelihood_contributions_have_not_changed(
     with open(regvault / f"{model_name}_result.json") as j:
         old_loglikes = np.array(json.load(j))
     aaae(new_loglikes, old_loglikes)
+
+
+@profile
+@pytest.mark.parametrize(
+    ("model_name", "fun_key"), product(MODEL_NAMES, LIKELIHOODS_CONTRIBUTIONS)
+)
+def test_likelihood_contributions_large_nobs(model2, model2_data, model_name, fun_key):
+    regvault = TEST_DIR / "regression_vault"
+    model = _convert_model(model2, model_name)
+    params = pd.read_csv(regvault / f"{model_name}.csv").set_index(
+        ["category", "period", "name1", "name2"],
+    )
+
+    to_concat = [model2_data]
+    idx_names = model2_data.index.names
+    n_repetitions = 50
+    n_ids = model2_data.index.get_level_values("caseid").max()
+    for i in range(1, 1 + n_repetitions):
+        increment = i * n_ids
+        this_round = model2_data.copy().reset_index()
+        for col in ("caseid", "id"):
+            this_round[col] += increment
+        this_round = this_round.set_index(idx_names)
+        for col in [
+            "y1",
+            "y2",
+            "y3",
+            "y4",
+            "y5",
+            "y6",
+            "y7",
+            "y8",
+            "y9",
+            "Q1",
+            "dy7",
+            "dy8",
+            "dy9",
+            "x1",
+        ]:
+            this_round[col] += np.random.normal(0, 0.1, (len(model2_data),))
+        to_concat.append(this_round)
+
+    stacked_data = pd.concat(to_concat)
+
+    inputs = get_maximization_inputs(model, stacked_data)
+
+    params = params.loc[inputs["params_template"].index]
+
+    fun = inputs[fun_key]
+    new_loglikes = fun(params)["contributions"] if "debug" in fun_key else fun(params)
+
+    with open(regvault / f"{model_name}_result.json") as j:
+        old_loglikes = np.array(json.load(j))
+    aaae(new_loglikes[:n_ids], old_loglikes)
 
 
 def test_likelihood_runs_with_empty_periods(model2, model2_data):

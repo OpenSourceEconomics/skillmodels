@@ -84,7 +84,7 @@ allow-direct-references = true
 
 [tool.pixi.project]
 channels = ["conda-forge"]
-platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+platforms = ["linux-64"]
 
 # Development Dependencies (conda)
 # --------------------------------------------------------------------------------------
@@ -92,7 +92,6 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
 [tool.pixi.dependencies]
 filterpy = "*"
 jupyterlab = "*"
-memory_profiler = "*"
 nbformat = ">=5.10.4,<6"
 optimagic = "*"
 pixi-kernel = ">=0.4.0,<0.5"
@@ -118,13 +117,16 @@ skillmodels = {path = ".", editable = true}
 # --------------------------------------------------------------------------------------
 
 [tool.pixi.feature.test.dependencies]
+memory_profiler = "*"
 pytest = "*"
 pytest-cov = "*"
 pytest-xdist = "*"
 
+
 [tool.pixi.feature.test.tasks]
 tests = "pytest tests"
 tests-with-cov = "pytest tests --cov-report=xml --cov=./"
+tests-with-memprofile = "pytest tests --cov-report=xml --cov=./"
 
 [tool.pixi.feature.mypy.dependencies]
 mypy = "*"
