@@ -43,7 +43,6 @@ autodoc_mock_imports = [
     "numpy",
     "pandas",
     "scipy",
-    "statsmodels",
     "filterpy",
     "dags",
     "plotly",
