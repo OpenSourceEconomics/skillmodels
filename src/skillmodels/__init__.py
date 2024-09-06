@@ -1,6 +1,13 @@
 __version__ = "0.2.2"
 
 
+import contextlib
+
+try:
+    import pdbp  # noqa: F401
+except ImportError:
+    contextlib.suppress(Exception)
+
 from skillmodels.filtered_states import get_filtered_states
 from skillmodels.likelihood_function import get_maximization_inputs
 from skillmodels.simulate_data import simulate_dataset
