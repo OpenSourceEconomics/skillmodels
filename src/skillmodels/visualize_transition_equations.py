@@ -418,7 +418,7 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
         input_data = pd.DataFrame()
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
         fixed_quantiles = period_data.drop(columns=input_factor).quantile(quantile)
-        breakpoint()
+        # breakpoint()
         input_data[fixed_quantiles.index] = fixed_quantiles
         input_arr = jnp.array(input_data[all_factors].to_numpy())
         # convert from jax to numpy array
@@ -465,7 +465,7 @@ def _prepare_data_for_one_plot_average_2d(
     for _, draw in draws.iterrows():
         input_data = pd.DataFrame()
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
-        breakpoint()
+        # breakpoint()
         input_data[draw.index] = draw
         input_arr = jnp.array(input_data[all_factors].to_numpy())
         # convert from jax to numpy array
