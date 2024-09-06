@@ -6,14 +6,15 @@ repos:
       - id: check-useless-excludes
       # - id: identity  # Prints all files passed to pre-commits. Debugging.
   - repo: https://github.com/lyz-code/yamlfix
-    rev: 1.16.0
+    rev: 1.17.0
     hooks:
       - id: yamlfix
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
       - id: check-added-large-files
-        args: [--maxkb=50000]
+        args:
+          - --maxkb=50000
       - id: check-case-conflict
       - id: check-merge-conflict
       - id: check-vcs-permalinks
@@ -22,13 +23,16 @@ repos:
       - id: debug-statements
       - id: end-of-file-fixer
       - id: fix-byte-order-marker
-        types: [text]
+        types:
+          - text
       - id: forbid-submodules
       - id: mixed-line-ending
-        args: [--fix=lf]
+        args:
+          - --fix=lf
         description: Forces to replace line ending by the UNIX 'lf' character.
       - id: name-tests-test
-        args: [--pytest-test-first]
+        args:
+          - --pytest-test-first
       - id: trailing-whitespace
       - id: check-ast
       - id: check-docstring-first
@@ -37,16 +41,22 @@ repos:
     hooks:
       - id: yamllint
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.6
+    rev: v0.6.4
     hooks:
       # Run the linter.
       - id: ruff
-        types_or: [python, pyi, jupyter]
+        types_or:
+          - python
+          - pyi
+          - jupyter
         args:
           - --fix
       # Run the formatter.
       - id: ruff-format
-        types_or: [python, pyi, jupyter]
+        types_or:
+          - python
+          - pyi
+          - jupyter
   - repo: https://github.com/kynan/nbstripout
     rev: 0.7.1
     hooks:
@@ -58,7 +68,11 @@ repos:
     rev: 0.7.17
     hooks:
       - id: mdformat
-        additional_dependencies: [mdformat-myst, mdformat-ruff]
-        args: [--wrap, '88']
+        additional_dependencies:
+          - mdformat-myst
+          - mdformat-ruff
+        args:
+          - --wrap
+          - '88'
 ci:
   autoupdate_schedule: monthly
