@@ -241,7 +241,7 @@ def _log_likelihood_obs_jax(
             n_observed_factors) with data on the observed factors.
 
     Returns:
-        jnp.array: 1d array of length 1, the aggregated log likelihood.
+        jnp.array: 1d array of length N, the aggregated log likelihood.
 
     """
     n_obs = measurements.shape[1]
@@ -290,7 +290,7 @@ def _log_likelihood_obs_jax(
         upper=estimation_options["clipping_upper_bound"],
         lower_hardness=estimation_options["clipping_lower_hardness"],
         upper_hardness=estimation_options["clipping_upper_hardness"],
-    )
+    ).sum(axis=0)
 
 
 def _log_likelihood_jax(
