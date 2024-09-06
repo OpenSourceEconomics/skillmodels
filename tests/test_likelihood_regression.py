@@ -1,38 +1,43 @@
 import json
+from itertools import product
 from pathlib import Path
 
+import jax
 import numpy as np
 import pandas as pd
 import pytest
 import yaml
-from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
+
 from skillmodels.decorators import register_params
 from skillmodels.likelihood_function import get_maximization_inputs
 from skillmodels.utilities import reduce_n_periods
 
-config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
 
-model_names = [
+MODEL_NAMES = [
     "no_stages_anchoring",
     "one_stage",
     "one_stage_anchoring",
     "two_stages_anchoring",
     "one_stage_anchoring_custom_functions",
 ]
+# keys in dict returned by get_maximization_inputs
+LIKELIHOODS_VALUES = ["loglike", "debug_loglike"]
+LIKELIHOODS_CONTRIBUTIONS = ["loglikeobs"]
 
 # importing the TEST_DIR from config does not work for test run in conda build
 TEST_DIR = Path(__file__).parent.resolve()
 
 
-@pytest.fixture()
+@pytest.fixture
 def model2():
     with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     return model_dict
 
 
-@pytest.fixture()
+@pytest.fixture
 def model2_data():
     data = pd.read_stata(TEST_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])
@@ -68,27 +73,27 @@ def _convert_model(base_model, model_name):
     return model
 
 
-@pytest.mark.parametrize("model_name", model_names)
-def test_likelihood_contributions_have_not_changed(model2, model2_data, model_name):
+@pytest.mark.parametrize(
+    ("model_name", "fun_key"), product(MODEL_NAMES, LIKELIHOODS_CONTRIBUTIONS)
+)
+def test_likelihood_contributions_have_not_changed(
+    model2, model2_data, model_name, fun_key
+):
     regvault = TEST_DIR / "regression_vault"
     model = _convert_model(model2, model_name)
     params = pd.read_csv(regvault / f"{model_name}.csv").set_index(
         ["category", "period", "name1", "name2"],
     )
 
-    func_dict = get_maximization_inputs(model, model2_data)
+    inputs = get_maximization_inputs(model, model2_data)
 
-    params = params.loc[func_dict["params_template"].index]
+    params = params.loc[inputs["params_template"].index]
 
-    debug_loglike = func_dict["debug_loglike"]
-
-    new_loglikes = debug_loglike(params)["contributions"]
-
-    func_dict["loglike"](params)
+    fun = inputs[fun_key]
+    new_loglikes = fun(params)["contributions"] if "debug" in fun_key else fun(params)
 
     with open(regvault / f"{model_name}_result.json") as j:
         old_loglikes = np.array(json.load(j))
-
     aaae(new_loglikes, old_loglikes)
 
 

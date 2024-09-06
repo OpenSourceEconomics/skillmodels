@@ -1,7 +1,8 @@
+import jax
 import jax.numpy as jnp
 import numpy as np
-from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
+
 from skillmodels.transition_functions import (
     constant,
     linear,
@@ -12,7 +13,7 @@ from skillmodels.transition_functions import (
     translog,
 )
 
-config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
 
 
 def test_linear():

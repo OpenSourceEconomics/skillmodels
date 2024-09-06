@@ -229,7 +229,7 @@ extend-ignore = [
 "src/skillmodels/process_data.py" = ["D417"]
 "src/skillmodels/likelihood_function.py" = ["D417"]
 "src/skillmodels/likelihood_function_debug.py" = ["D417"]
-"tests/*" = ["INP001", "PD002"]
+"tests/*" = ["ARG001", "FBT003", "INP001", "PD002", "NPY002", "PTH123", "S506"]
 "**/*.ipynb" = ["B018", "T201", "E402", "PLR2004", "INP001", "PTH100"]
 "docs/**/*" = ["ERA001", "A001"]
 

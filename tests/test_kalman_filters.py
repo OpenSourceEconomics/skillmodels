@@ -1,12 +1,13 @@
 from itertools import product
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 import scipy
 from filterpy.kalman import JulierSigmaPoints, KalmanFilter
-from jax import config
 from numpy.testing import assert_array_almost_equal as aaae
+
 from skillmodels.kalman_filters import (
     _calculate_sigma_points,
     calculate_sigma_scaling_factor_and_weights,
@@ -14,19 +15,19 @@ from skillmodels.kalman_filters import (
     kalman_update,
     transform_sigma_points,
 )
+from skillmodels.kalman_filters_debug import kalman_update as kalman_update_debug
 
-config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
 
 # ======================================================================================
 # Test Kalman Update with random state and cov againts filterpy
 # ======================================================================================
 
 SEEDS = range(20)
-UPDATE_FUNCS = [kalman_update]
-TEST_CASES = product(SEEDS, UPDATE_FUNCS)
+UPDATE_FUNCS = [kalman_update, kalman_update_debug]
 
 
-@pytest.mark.parametrize("seed, update_func", TEST_CASES)
+@pytest.mark.parametrize(("seed", "update_func"), product(SEEDS, UPDATE_FUNCS))
 def test_kalman_update(seed, update_func):
     np.random.seed(seed)
     dim = np.random.randint(low=1, high=10)
@@ -62,8 +63,7 @@ def test_kalman_update(seed, update_func):
         states,
         covs,
     )
-
-    calc_states, calc_chols, calc_weights, calc_loglikes, _ = update_func(
+    results = update_func(
         states=sm_states,
         upper_chols=sm_chols,
         loadings=jnp.array(loadings),
@@ -73,11 +73,10 @@ def test_kalman_update(seed, update_func):
         measurements=jnp.array(measurements) + 1,
         controls=jnp.ones((n_obs, 2)) * 0.5,
         log_mixture_weights=jnp.full((n_obs, n_mix), jnp.log(0.5)),
-        debug=False,
     )
-    calculated_covs = np.matmul(np.transpose(calc_chols, axes=(0, 1, 3, 2)), calc_chols)
+    calculated_covs = np.matmul(np.transpose(results[1], axes=(0, 1, 3, 2)), results[1])
 
-    aaae(calc_states, expected_states)
+    aaae(results[0], expected_states)
     aaae(calculated_covs, expected_covs)
 
 
@@ -86,7 +85,8 @@ def test_kalman_update(seed, update_func):
 # ======================================================================================
 
 
-def test_kalman_update_with_missing():
+@pytest.mark.parametrize("update_func", UPDATE_FUNCS)
+def test_kalman_update_with_missing(update_func):
     """State, cov and weights should not change, log likelihood should be zero."""
     n_mixtures = 2
     n_obs = 3
@@ -104,7 +104,7 @@ def test_kalman_update_with_missing():
     controls[1:] = np.nan
     controls = jnp.array(controls)
 
-    calc_states, calc_chols, calc_weights, calc_loglikes, _ = kalman_update(
+    results = update_func(
         states=states,
         upper_chols=chols,
         loadings=jnp.ones(n_states) * 2,
@@ -113,8 +113,9 @@ def test_kalman_update_with_missing():
         measurements=measurements,
         controls=controls,
         log_mixture_weights=jnp.log(jnp.ones((n_obs, 2)) * 0.5),
-        debug=False,
     )
+    # debug version has an extra return, so go through this hoop.
+    calc_states, calc_chols, calc_weights, calc_loglikes = results[:4]
 
     aaae(calc_states[1:], states[1:])
     aaae(calc_chols[1:], chols[1:])
@@ -157,7 +158,7 @@ def test_sigma_points(seed):
 
 @pytest.mark.parametrize("seed", SEEDS)
 def test_sigma_scaling_factor_and_weights(seed):
-    np.random.seed
+    np.random.seed(seed)
     dim = np.random.randint(low=1, high=15)
     kappa = np.random.uniform(low=0.5, high=5)
     # Test my assumption that weights for mean and cov are equal in the Julier algorithm
