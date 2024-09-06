@@ -30,14 +30,6 @@ def process_data(df, labels, update_info, anchoring_info, purpose="estimation"):
             n_observed_factors) with data on the observed factors.
 
     """
-    # Stick to required data.
-    cols_to_keep = update_info.index.get_level_values("variable").unique().tolist()
-    cols_to_keep += labels["observed_factors"]
-    cols_to_keep += list(set(labels["controls"]).difference({"constant"}))
-    if anchoring_info["anchoring"]:
-        cols_to_keep += list(anchoring_info["outcomes"].values())
-    df = df[cols_to_keep]
-
     df = pre_process_data(df, labels["periods"])
     df["constant"] = 1
     df = _add_copies_of_anchoring_outcome(df, anchoring_info)
