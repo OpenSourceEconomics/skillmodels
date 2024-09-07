@@ -52,18 +52,15 @@ def test_extract_factors_single(model2, factors):
 
 def test_update_parameter_values():
     params = pd.DataFrame()
-    params["value"] = np.arange(5)
+    params["value"] = np.arange(5, dtype=np.int64)
 
     others = [
-        pd.DataFrame(
-            np.array([[7], [8]]), dtype=np.int64, columns=["value"], index=[1, 4]
-        ),
-        pd.DataFrame(np.array([[9]], dtype=np.int64), columns=["value"], index=[2]),
+        pd.DataFrame([[7], [8]], columns=["value"], index=[1, 4]),
+        pd.DataFrame([[9]], columns=["value"], index=[2]),
     ]
 
-    expected = pd.DataFrame(
-        np.array([[0, 7, 9, 3, 8]], dtype=np.int64).T, columns=["value"], index=range(5)
-    )
+    expected = pd.DataFrame()
+    expected["value"] = [0, 7, 9, 3, 8]
 
     calculated = update_parameter_values(params, others)
     assert_frame_equal(calculated, expected)
