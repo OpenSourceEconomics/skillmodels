@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 import yaml
 from pandas.testing import assert_frame_equal, assert_index_equal
+
 from skillmodels.process_model import process_model
 from skillmodels.utilities import (
     _get_params_index_from_model_dict,
@@ -32,7 +33,7 @@ from skillmodels.utilities import (
 TEST_DIR = Path(__file__).parent.resolve()
 
 
-@pytest.fixture()
+@pytest.fixture
 def model2():
     with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
@@ -54,12 +55,15 @@ def test_update_parameter_values():
     params["value"] = np.arange(5)
 
     others = [
-        pd.DataFrame([[7], [8]], columns=["value"], index=[1, 4]),
-        pd.DataFrame([[9]], columns=["value"], index=[2]),
+        pd.DataFrame(
+            np.array([[7], [8]]), dtype=np.int64, columns=["value"], index=[1, 4]
+        ),
+        pd.DataFrame(np.array([[9]], dtype=np.int64), columns=["value"], index=[2]),
     ]
 
-    expected = pd.DataFrame()
-    expected["value"] = [0, 7, 9, 3, 8]
+    expected = pd.DataFrame(
+        np.array([[0, 7, 9, 3, 8]], dtype=np.int64).T, columns=["value"], index=range(5)
+    )
 
     calculated = update_parameter_values(params, others)
     assert_frame_equal(calculated, expected)
