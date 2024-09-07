@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 import yaml
+
 from skillmodels.params_index import (
     get_control_params_index_tuples,
     get_initial_cholcovs_index_tuples,
@@ -17,7 +18,7 @@ from skillmodels.params_index import (
 from skillmodels.process_model import process_model
 
 
-@pytest.fixture()
+@pytest.fixture
 def model2_inputs():
     test_dir = Path(__file__).parent.resolve()
     with open(test_dir / "model2.yaml") as y:

@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal as afe
+
 from skillmodels.correlation_heatmap import (
     _get_mask,
     _get_measurement_data_for_multiple_periods,
@@ -264,7 +265,7 @@ def test_get_mask_lower_triangle_only():
         [
             [False] * 4,
             [True] + [False] * 3,
-            [True, True] + [False, False],
+            [True, True, False, False],
             [True] * 3 + [False],
         ],
     )

@@ -53,8 +53,7 @@ def extract_params(func=None, *, key=None, names=None):
 
     if callable(func):
         return decorator_extract_params(func)
-    else:
-        return decorator_extract_params
+    return decorator_extract_params
 
 
 def jax_array_output(func):
@@ -76,5 +75,4 @@ def register_params(func=None, *, params=None):
 
     if callable(func):
         return decorator_register_params(func)
-    else:
-        return decorator_register_params
+    return decorator_register_params

@@ -111,7 +111,7 @@ def _get_normalization_constraints(normalizations, factors):
     fixed_values = []
 
     for factor in factors:
-        if "variances" in normalizations[factor].keys():
+        if "variances" in normalizations[factor]:
             raise ValueError("normalization for variances cannot be provided")
         for period in periods:
             loading_norminfo = normalizations[factor]["loadings"][period]
@@ -151,9 +151,8 @@ def _get_mixture_weights_constraints(n_mixtures):
                 "description": msg,
             },
         ]
-    else:
-        msg = "Ensure that weights are between 0 and 1 and sum to 1."
-        return [{"loc": "mixture_weights", "type": "probability", "description": msg}]
+    msg = "Ensure that weights are between 0 and 1 and sum to 1."
+    return [{"loc": "mixture_weights", "type": "probability", "description": msg}]
 
 
 def _get_stage_constraints(stagemap, stages):

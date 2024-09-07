@@ -261,7 +261,7 @@ def _simulate_dataset(
 
     observed_data = pd.concat(observed_data_by_period, axis=0, sort=True)
     observed_data["id"] = observed_data.index
-    observed_data.sort_values(["id", "period"], inplace=True)
+    observed_data = observed_data.sort_values(["id", "period"])
 
     latent_data_by_period = []
     for t in range(n_periods):
@@ -271,7 +271,7 @@ def _simulate_dataset(
 
     latent_data = pd.concat(latent_data_by_period, axis=0, sort=True)
     latent_data["id"] = latent_data.index
-    latent_data.sort_values(["id", "period"], inplace=True)
+    latent_data = latent_data.sort_values(["id", "period"])
 
     return observed_data, latent_data
 

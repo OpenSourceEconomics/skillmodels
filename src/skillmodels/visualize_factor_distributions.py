@@ -496,12 +496,12 @@ def _process_data(states, period, factors, observed_states=None):
         data["scenario"] = "none"
     else:
         if not isinstance(states, dict):
-            states = {i: df for i, df in enumerate(states)}
+            states = dict(enumerate(states))
         to_concat = []
         for name, df in states.items():
-            df = df.query(f"period == {period}")[factors]
-            df["scenario"] = name
-            to_concat.append(df)
+            to_keep = df.query(f"period == {period}")[factors].copy()
+            to_keep["scenario"] = name
+            to_concat.append(to_keep)
         data = pd.concat(to_concat)
     data = data.reset_index()
     if observed_states is not None:
@@ -606,7 +606,7 @@ def _process_layout_kwargs_3d(layout_kwargs, showgrids, showaxlines, showlabels)
 
 
 def _process_factor_mapping_dist(mapper, factors):
-    """Process mapper to return dictionary with old and new factor names"""
+    """Process mapper to return dictionary with old and new factor names."""
     if mapper is None:
         mapper = {fac: fac for fac in factors}
     else:

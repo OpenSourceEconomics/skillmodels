@@ -65,7 +65,7 @@ def _check_anchoring(anchoring):
     else:
         variables = list(anchoring["outcomes"].values())
         for var in variables:
-            if not isinstance(var, (str, int, tuple)):
+            if not isinstance(var, str | int | tuple):
                 report.append("Outcomes variables have to be valid variable names.")
 
     if not isinstance(anchoring["free_controls"], bool):
@@ -88,7 +88,7 @@ def _check_measurements(model_dict, factors):
         else:
             for period, meas_list in enumerate(candidate):
                 for meas in meas_list:
-                    if not isinstance(meas, (int, str, tuple)):
+                    if not isinstance(meas, int | str | tuple):
                         report.append(
                             "Measurements need to be valid pandas column names. Check "
                             f"{meas} for {factor} in period {period}.",

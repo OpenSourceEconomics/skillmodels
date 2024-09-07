@@ -10,6 +10,7 @@ def get_layout_kwargs(
     rows=None,
 ):
     """Define and update default kwargs for update_layout.
+
     Defines some default keyword arguments to update figure layout, such as
     title and legend.
 
