@@ -31,7 +31,8 @@ def combine_transition_plots(
     title_kwargs=None,
 ):
     """Combine individual plots into figure with subplots.
-    Uses dictionary with plotly images as values to build plotly Figure with subplots.
+
+    Use dictionary with plotly images as values to build plotly figure with subplots.
 
     Args:
         plots_dict (dict): Dictionary with plots of transition functions for each
@@ -219,7 +220,8 @@ def _get_dictionary_with_plots(
     showlegend=True,
 ):
     """Get plots of transition functions for each input and output combination.
-    Returns a dictionary with individual plots of transition fanctions for each input
+
+    Return a dictionary with individual plots of transition functions for each input
     and output factors.
 
     Args:
@@ -326,7 +328,7 @@ def _get_dictionary_with_plots(
 
 
 def _get_state_ranges(state_ranges, states_data, all_factors):
-    """Create state ranges if none is given"""
+    """Create state ranges if none is given."""
     if state_ranges is None:
         state_ranges = create_state_ranges(states_data, all_factors)
     return state_ranges
@@ -418,8 +420,8 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
         input_data = pd.DataFrame()
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
         fixed_quantiles = period_data.drop(columns=input_factor).quantile(quantile)
-        # breakpoint()
-        input_data[fixed_quantiles.index] = fixed_quantiles
+        for col, val in fixed_quantiles.items():
+            input_data[col] = val
         input_arr = jnp.array(input_data[all_factors].to_numpy())
         # convert from jax to numpy array
         output_arr = np.array(transition_function(transition_params, input_arr))
@@ -435,9 +437,9 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
 
 def _process_quantiles_of_other_factors(quantiles_of_other_factors):
     """Process quantiles of other factors to always have list as type."""
-    if isinstance(quantiles_of_other_factors, (float, int)):
+    if isinstance(quantiles_of_other_factors, float | int):
         quantiles_of_other_factors = [quantiles_of_other_factors]
-    elif isinstance(quantiles_of_other_factors, (tuple, list)):
+    elif isinstance(quantiles_of_other_factors, tuple | list):
         quantiles_of_other_factors = list(quantiles_of_other_factors)
     return quantiles_of_other_factors
 
@@ -465,8 +467,8 @@ def _prepare_data_for_one_plot_average_2d(
     for _, draw in draws.iterrows():
         input_data = pd.DataFrame()
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
-        # breakpoint()
-        input_data[draw.index] = draw
+        for col, val in draw.items():
+            input_data[col] = val
         input_arr = jnp.array(input_data[all_factors].to_numpy())
         # convert from jax to numpy array
         output_arr = np.array(transition_function(transition_params, input_arr))
@@ -480,7 +482,7 @@ def _prepare_data_for_one_plot_average_2d(
 
 
 def _process_factor_mapping_trans(factor_mapper, output_factors, input_factors):
-    """Process mapper to return dictionary with old and new factor names"""
+    """Process mapper to return dictionary with old and new factor names."""
     all_factors = input_factors + output_factors
     if factor_mapper is None:
         factor_mapper = {fac: fac for fac in all_factors}
@@ -495,14 +497,14 @@ def _process_orders(columns, rows, plots_dict):
     """Process axes orders to return list of strings."""
     if columns is None:
         columns = []
-        for f in plots_dict.keys():
+        for f in plots_dict:
             if f[0] not in columns:
                 columns.append(f[0])
     elif isinstance(columns, str):
         columns = [columns]
     if rows is None:
         rows = []
-        for f in plots_dict.keys():
+        for f in plots_dict:
             if f[1] not in rows:
                 rows.append(f[1])
     elif isinstance(rows, str):

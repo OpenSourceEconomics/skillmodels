@@ -36,7 +36,7 @@ def update_parameter_values(params, others):
 
     Args:
         params (pandas.DataFrame or None): The params DataFrame for the full model.
-        other (pandas.DataFrame or list): Another DataFrame with parameters or list
+        others (pandas.DataFrame or list): Another DataFrame with parameters or list
             of thereof. The values from other are used to update the value column
             of ``params``. If other is a list, the updates will be in order, i.e.
             later elements overwrite earlier ones.
@@ -49,8 +49,16 @@ def update_parameter_values(params, others):
         others = [others]
 
     out = params.copy(deep=True)
+
+    # Create a temporary Series to hold the updated values
+    temp_series = out["value"].copy()
+
+    # Update the temporary Series
     for other in others:
-        out["value"].update(other["value"])
+        temp_series.update(other["value"])
+
+    # Assign the updated Series back to the DataFrame
+    out["value"] = temp_series
 
     return out
 

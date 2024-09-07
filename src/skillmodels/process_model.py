@@ -11,6 +11,8 @@ import skillmodels.transition_functions as tf
 from skillmodels.check_model import check_model
 from skillmodels.decorators import extract_params, jax_array_output
 
+pd.set_option("future.no_silent_downcasting", True)  # noqa:  FBT003
+
 
 def process_model(model_dict):
     """Check, clean, extend and transform the model specs.
@@ -98,7 +100,7 @@ def _get_labels(model_dict, dimensions):
     labels = {
         "latent_factors": list(model_dict["factors"]),
         "observed_factors": list(model_dict.get("observed_factors", [])),
-        "controls": ["constant"] + list(model_dict.get("controls", [])),
+        "controls": ["constant", *list(model_dict.get("controls", []))],
         "periods": list(range(dimensions["n_periods"])),
         "stagemap": stagemap,
         "stages": sorted(np.unique(stagemap)),
@@ -270,10 +272,8 @@ def _get_update_info(model_dict, dimensions, labels, anchoring_info):
             uinfo.loc[(period, name), factor] = True
             uinfo.loc[(period, name), "purpose"] = "anchoring"
 
-    uinfo.fillna(False, inplace=True)
-    # fillna seems to convert objects to bool, but not consistently
-    for factor in labels["latent_factors"]:
-        uinfo[factor] = uinfo[factor].astype(bool)
+    for col in [c for c in uinfo.columns if c != "purpose"]:
+        uinfo[col] = uinfo[col].fillna(value=False).astype(bool)
     return uinfo
 
 
