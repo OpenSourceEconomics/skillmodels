@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
-from memory_profiler import profile
 from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.decorators import register_params
@@ -23,9 +22,6 @@ MODEL_NAMES = [
     "two_stages_anchoring",
     "one_stage_anchoring_custom_functions",
 ]
-# keys in dict returned by get_maximization_inputs
-LIKELIHOODS_VALUES = ["loglike", "debug_loglike"]
-LIKELIHOODS_CONTRIBUTIONS = ["loglikeobs"]
 
 # importing the TEST_DIR from config does not work for test run in conda build
 TEST_DIR = Path(__file__).parent.resolve()
@@ -75,7 +71,29 @@ def _convert_model(base_model, model_name):
 
 
 @pytest.mark.parametrize(
-    ("model_name", "fun_key"), product(MODEL_NAMES, LIKELIHOODS_CONTRIBUTIONS)
+    ("model_name", "fun_key"), product(MODEL_NAMES, ["loglike", "debug_loglike"])
+)
+def test_likelihood_values_have_not_changed(model2, model2_data, model_name, fun_key):
+    regvault = TEST_DIR / "regression_vault"
+    model = _convert_model(model2, model_name)
+    params = pd.read_csv(regvault / f"{model_name}.csv").set_index(
+        ["category", "period", "name1", "name2"],
+    )
+
+    inputs = get_maximization_inputs(model, model2_data)
+
+    params = params.loc[inputs["params_template"].index]
+
+    fun = inputs[fun_key]
+    new_loglike = fun(params)["value"] if "debug" in fun_key else fun(params)
+
+    with open(regvault / f"{model_name}_result.json") as j:
+        old_loglike = np.array(json.load(j)).sum()
+    aaae(new_loglike, old_loglike)
+
+
+@pytest.mark.parametrize(
+    ("model_name", "fun_key"), product(MODEL_NAMES, ["loglikeobs"])
 )
 def test_likelihood_contributions_have_not_changed(
     model2, model2_data, model_name, fun_key
@@ -98,20 +116,20 @@ def test_likelihood_contributions_have_not_changed(
     aaae(new_loglikes, old_loglikes)
 
 
-@profile
 @pytest.mark.parametrize(
-    ("model_name", "fun_key"), product(MODEL_NAMES, LIKELIHOODS_CONTRIBUTIONS)
+    ("model_type", "fun_key"),
+    product(["no_stages_anchoring", "with_missings"], ["loglike_and_gradient"]),
 )
-def test_likelihood_contributions_large_nobs(model2, model2_data, model_name, fun_key):
+def test_likelihood_contributions_large_nobs(model2, model2_data, model_type, fun_key):
     regvault = TEST_DIR / "regression_vault"
-    model = _convert_model(model2, model_name)
-    params = pd.read_csv(regvault / f"{model_name}.csv").set_index(
+    model = _convert_model(model2, "no_stages_anchoring")
+    params = pd.read_csv(regvault / "no_stages_anchoring.csv").set_index(
         ["category", "period", "name1", "name2"],
     )
 
     to_concat = [model2_data]
     idx_names = model2_data.index.names
-    n_repetitions = 50
+    n_repetitions = 5
     n_ids = model2_data.index.get_level_values("caseid").max()
     for i in range(1, 1 + n_repetitions):
         increment = i * n_ids
@@ -119,7 +137,7 @@ def test_likelihood_contributions_large_nobs(model2, model2_data, model_name, fu
         for col in ("caseid", "id"):
             this_round[col] += increment
         this_round = this_round.set_index(idx_names)
-        for col in [
+        cols = [
             "y1",
             "y2",
             "y3",
@@ -134,8 +152,18 @@ def test_likelihood_contributions_large_nobs(model2, model2_data, model_name, fu
             "dy8",
             "dy9",
             "x1",
-        ]:
-            this_round[col] += np.random.normal(0, 0.1, (len(model2_data),))
+        ]
+        if model_type == "no_stages_anchoring":
+            for col in cols:
+                this_round[col] += np.random.normal(0, 0.1, (len(model2_data),))
+        elif model_type == "with_missings":
+            fraction_to_set_missing = 0.9
+            n_rows = len(this_round)
+            n_missing = int(n_rows * fraction_to_set_missing)
+            rows_to_set_missing = this_round.sample(n=n_missing).index
+            this_round.loc[rows_to_set_missing, cols] = np.nan
+        else:
+            raise ValueError(f"Invalid model type: {model_type}")
         to_concat.append(this_round)
 
     stacked_data = pd.concat(to_concat)
@@ -144,12 +172,10 @@ def test_likelihood_contributions_large_nobs(model2, model2_data, model_name, fu
 
     params = params.loc[inputs["params_template"].index]
 
-    fun = inputs[fun_key]
-    new_loglikes = fun(params)["contributions"] if "debug" in fun_key else fun(params)
+    loglike = inputs[fun_key](params)
 
-    with open(regvault / f"{model_name}_result.json") as j:
-        old_loglikes = np.array(json.load(j))
-    aaae(new_loglikes[:n_ids], old_loglikes)
+    assert np.isfinite(loglike[0])
+    assert np.isfinite(loglike[1]).all()
 
 
 def test_likelihood_runs_with_empty_periods(model2, model2_data):

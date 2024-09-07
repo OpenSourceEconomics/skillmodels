@@ -84,7 +84,7 @@ allow-direct-references = true
 
 [tool.pixi.project]
 channels = ["conda-forge"]
-platforms = ["linux-64"]
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
 
 # Development Dependencies (conda)
 # --------------------------------------------------------------------------------------
@@ -101,7 +101,6 @@ pybaum = "*"
 python = ">=3.12.5"
 python-kaleido = "*"
 scipy = "<=1.13"
-snakeviz = "*"
 
 
 # Development Dependencies (pypi)
@@ -117,16 +116,18 @@ skillmodels = {path = ".", editable = true}
 # --------------------------------------------------------------------------------------
 
 [tool.pixi.feature.test.dependencies]
-memory_profiler = "*"
 pytest = "*"
 pytest-cov = "*"
 pytest-xdist = "*"
+snakeviz = "*"
 
+[tool.pixi.feature.test.target.unix.dependencies]
+pytest-memray = "*"
 
 [tool.pixi.feature.test.tasks]
 tests = "pytest tests"
 tests-with-cov = "pytest tests --cov-report=xml --cov=./"
-tests-with-memprofile = "pytest tests --cov-report=xml --cov=./"
+mem = "pytest -x -s --pdb --memray --fail-on-increase tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs"
 
 [tool.pixi.feature.mypy.dependencies]
 mypy = "*"
