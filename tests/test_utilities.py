@@ -52,7 +52,7 @@ def test_extract_factors_single(model2, factors):
 
 def test_update_parameter_values():
     params = pd.DataFrame()
-    params["value"] = np.arange(5)
+    params["value"] = np.arange(5, dtype=np.int64)
 
     others = [
         pd.DataFrame([[7], [8]], columns=["value"], index=[1, 4]),
