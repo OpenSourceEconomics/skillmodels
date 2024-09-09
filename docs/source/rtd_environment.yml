@@ -2,9 +2,8 @@
 name: skillmodels_rtd
 channels:
   - conda-forge
-  - janosg
 dependencies:
-  - python=3.7
+  - python=3.12
   - skillmodels
   - sphinxcontrib-bibtex
   - pydata-sphinx-theme>=0.3

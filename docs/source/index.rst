@@ -126,7 +126,7 @@ skillmodels, please complain or open an issue at `GitHub`_.
     https://tinyurl.com/yyuq2sa4
 
 .. _GitHub:
-    https://github.com/janosg/skillmodels
+    https://github.com/OpenSourceEconomics/skillmodels
 
 
 .. _Econometrica 2010:
