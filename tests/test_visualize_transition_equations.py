@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
+
 from skillmodels.likelihood_function import get_maximization_inputs
 from skillmodels.visualize_transition_equations import (
     combine_transition_plots,

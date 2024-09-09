@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
+
 from skillmodels.constraints import (
     _get_anchoring_constraints,
     _get_constant_factors_constraints,
@@ -202,7 +203,7 @@ def test_trans_coeff_constraints():
 # ======================================================================================
 
 
-@pytest.fixture()
+@pytest.fixture
 def anch_uinfo():
     ind_tups = [
         (0, "outcome_f1"),
@@ -217,7 +218,7 @@ def anch_uinfo():
     return uinfo
 
 
-@pytest.fixture()
+@pytest.fixture
 def base_anchoring_info():
     anch_info = {
         "factors": ["f1", "f2"],

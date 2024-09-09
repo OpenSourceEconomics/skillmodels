@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from numpy.testing import assert_array_equal as aae
+
 from skillmodels.process_data import (
     _generate_controls_array,
     _generate_measurements_array,

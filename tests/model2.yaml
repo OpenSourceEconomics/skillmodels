@@ -1,3 +1,4 @@
+---
 factors:
   fac1:
     measurements:
@@ -11,7 +12,15 @@ factors:
       - [y1, y2, y3]
     transition_function: log_ces
     normalizations:
-      loadings: [{y1: 1}, {y1: 1}, {y1: 1}, {y1: 1}, {y1: 1}, {y1: 1}, {y1: 1}, {y1: 1}]
+      loadings:
+        - {y1: 1}
+        - {y1: 1}
+        - {y1: 1}
+        - {y1: 1}
+        - {y1: 1}
+        - {y1: 1}
+        - {y1: 1}
+        - {y1: 1}
   fac2:
     measurements:
       - [y4, y5, y6]
@@ -24,20 +33,38 @@ factors:
       - [y4, y5, y6]
     transition_function: linear
     normalizations:
-      loadings: [{y4: 1}, {y4: 1}, {y4: 1}, {y4: 1}, {y4: 1}, {y4: 1}, {y4: 1}, {y4: 1}]
+      loadings:
+        - {y4: 1}
+        - {y4: 1}
+        - {y4: 1}
+        - {y4: 1}
+        - {y4: 1}
+        - {y4: 1}
+        - {y4: 1}
+        - {y4: 1}
   fac3:
-    measurements: [[y7, y8, y9]]
+    measurements:
+      - [y7, y8, y9]
     transition_function: constant
     normalizations:
-      loadings: [{y7: 1}]
+      loadings:
+        - {y7: 1}
 anchoring:
   outcomes: {fac1: Q1}
   free_controls: true
   free_constant: true
   free_loadings: true
   ignore_constant_when_anchoring: true
-controls: [x1]
-stagemap: [0, 0, 0, 0, 0, 0, 0]
+controls:
+  - x1
+stagemap:
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
 estimation_options:
   robust_bounds: true
   bounds_distance: 0.001

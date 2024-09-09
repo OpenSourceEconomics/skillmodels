@@ -7,20 +7,21 @@ import pandas as pd
 import pytest
 import yaml
 from numpy.testing import assert_array_almost_equal as aaae
+
 from skillmodels.simulate_data import measurements_from_states, simulate_dataset
 
 # importing the TEST_DIR from config does not work for test run in conda build
 TEST_DIR = Path(__file__).parent.resolve()
 
 
-@pytest.fixture()
+@pytest.fixture
 def model2():
     with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     return model_dict
 
 
-@pytest.fixture()
+@pytest.fixture
 def model2_data():
     data = pd.read_stata(TEST_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])

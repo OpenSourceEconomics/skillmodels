@@ -269,7 +269,7 @@ def _get_mask(corr, show_upper_triangle, show_diagonal):
     if show_upper_triangle:
         mask[np.triu_indices_from(mask, k=1)] = True
     if show_diagonal:
-        np.fill_diagonal(mask, True)
+        np.fill_diagonal(mask, val=True)
     return mask
 
 
@@ -709,7 +709,7 @@ def _process_periods(periods, model):
     """Process periods to get a list."""
     if periods is None:
         periods = list(range(model["dimensions"]["n_periods"]))
-    elif isinstance(periods, (int, float)):
+    elif isinstance(periods, int | float):
         periods = [periods]
     return periods
 
@@ -867,6 +867,6 @@ def _get_heatmap_kwargs(
 
 
 def _process_axes_tick_args(args):
-    if isinstance(args, (tuple, list)):
+    if isinstance(args, tuple | list):
         args = {"x": args[0], "y": args[1]}
     return args

@@ -1,3 +1,4 @@
+---
 name: skillmodels
 channels:
   - conda-forge
@@ -26,5 +27,5 @@ dependencies:
   - dags
   - plotly
   - pip:
-    - pre-commit
-    - black
+      - pre-commit
+      - black

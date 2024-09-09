@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 import yaml
 from pandas.testing import assert_frame_equal
+
 from skillmodels.process_model import process_model
 
 # ======================================================================================
@@ -15,7 +16,7 @@ from skillmodels.process_model import process_model
 TEST_DIR = Path(__file__).parent.resolve()
 
 
-@pytest.fixture()
+@pytest.fixture
 def model2():
     with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)

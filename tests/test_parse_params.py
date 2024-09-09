@@ -13,11 +13,12 @@ import pandas as pd
 import pytest
 import yaml
 from numpy.testing import assert_array_equal as aae
+
 from skillmodels.parse_params import create_parsing_info, parse_params
 from skillmodels.process_model import process_model
 
 
-@pytest.fixture()
+@pytest.fixture
 def parsed_parameters():
     test_dir = Path(__file__).parent.resolve()
     p_index = pd.read_csv(

@@ -35,8 +35,3 @@ Model Checking
 
 .. automodule:: skillmodels.check_model
     :members:
-
-
-
-
-

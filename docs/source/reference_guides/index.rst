@@ -10,7 +10,3 @@ Reference Guides
     simulation
     transition_functions
     endogeneity_corrections
-
-
-
-

@@ -203,6 +203,9 @@ extend-ignore = [
     # In conflict with formatter
     "ISC001",
 
+    # Leave Numpy's legacy RNG
+    "NPY002",
+
     # array.at is perfectly valid Jax, but linter thinks it's Pandas...
     "PD008",
 
@@ -211,6 +214,9 @@ extend-ignore = [
 
     # df is just fine
     "PD901",
+
+    # Many suggestions to use list comprehension are not helpful
+    "PERF401",
 
     # Magic values are fine
     "PLR2004",
@@ -235,14 +241,20 @@ extend-ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"src/skillmodels/constraints.py" = ["D417"]
+"src/skillmodels/decorators.py" = ["D417"]
 "src/skillmodels/kalman_filters.py" = ["D417"]
-"src/skillmodels/process_data.py" = ["D417"]
 "src/skillmodels/likelihood_function.py" = ["D417"]
 "src/skillmodels/likelihood_function_debug.py" = ["D417"]
-"src/skillmodels/visualize_transition_equations.py" = ["D417"]
+"src/skillmodels/params_index.py" = ["D417"]
+"src/skillmodels/parse_params.py" = ["D417"]
+"src/skillmodels/process_data.py" = ["D417"]
+"src/skillmodels/simulate_data.py" = ["D417"]
+"src/skillmodels/visualize_*.py" = ["BLE001", "D417"]
+"src/skillmodels/*_heatmap*.py" = ["D417"]
 "tests/*" = ["ARG001", "FBT003", "INP001", "PD002", "NPY002", "PTH123", "S506"]
 "**/*.ipynb" = ["B018", "T201", "E402", "PLR2004", "INP001", "PTH100"]
-"docs/**/*" = ["ERA001", "A001"]
+"docs/**/*" = ["A001", "ERA001", "INP001", "PTH100", "PTH123", "S506"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

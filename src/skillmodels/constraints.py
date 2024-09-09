@@ -113,7 +113,7 @@ def _get_normalization_constraints(normalizations, factors):
     fixed_values = []
 
     for factor in factors:
-        if "variances" in normalizations[factor].keys():
+        if "variances" in normalizations[factor]:
             raise ValueError("normalization for variances cannot be provided")
         for period in periods:
             loading_norminfo = normalizations[factor]["loadings"][period]

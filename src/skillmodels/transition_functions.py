@@ -44,7 +44,7 @@ def linear(states, params):
 
 def params_linear(factors):
     """Index tuples for linear transition function."""
-    return factors + ["constant"]
+    return [*factors, "constant"]
 
 
 def translog(states, params):
@@ -98,7 +98,7 @@ def log_ces(states, params):
 
 def params_log_ces(factors):
     """Index tuples for the log_ces production function."""
-    return factors + ["phi"]
+    return [*factors, "phi"]
 
 
 def constraints_log_ces(factor, factors, period):
@@ -107,12 +107,12 @@ def constraints_log_ces(factor, factors, period):
     return {"loc": loc, "type": "probability"}
 
 
-def constant(state, params):
+def constant(state, params):  # noqa: ARG001
     """Constant production function."""
     return state
 
 
-def params_constant(factors):
+def params_constant(factors):  # noqa: ARG001
     """Index tuples for the constant production function."""
     return []
 

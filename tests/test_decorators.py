@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+
 from skillmodels.decorators import extract_params, jax_array_output, register_params
 
 
