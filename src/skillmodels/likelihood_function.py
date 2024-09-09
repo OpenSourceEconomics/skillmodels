@@ -23,14 +23,14 @@ jax.config.update("jax_enable_x64", False)  # noqa: FBT003
 
 
 def get_maximization_inputs(model_dict, data):
-    """Create inputs for estimagic's maximize function.
+    """Create inputs for optimagic's maximize function.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
         data (DataFrame): dataset in long format.
 
     Returns a dictionary with keys:
-        loglike (function): A jax jitted function that takes an estimagic-style
+        loglike (function): A jax jitted function that takes an optimagic-style
             params dataframe as only input and returns a dict with entries:
             - "value": The scalar log likelihood
             - "contributions": An array with the log likelihood per observation
@@ -42,7 +42,7 @@ def get_maximization_inputs(model_dict, data):
             function with respect to the parameters.
         loglike_and_gradient (function): Combination of loglike and
             loglike_gradient that is faster than calling the two functions separately.
-        constraints (list): List of estimagic constraints that are implied by the
+        constraints (list): List of optimagic constraints that are implied by the
             model specification.
         params_template (pd.DataFrame): Parameter DataFrame with correct index and
             bounds but with empty value column.

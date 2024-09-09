@@ -36,9 +36,8 @@ extensions = [
 
 # Mock imports.
 autodoc_mock_imports = [
-    "estimagic",
+    "optimagic",
     "matplotlib",
-    "estimagic",
     "jax",
     "numpy",
     "pandas",
@@ -116,7 +115,9 @@ html_theme = "pydata_sphinx_theme"
 
 html_logo = "_static/images/logo.svg"
 
-html_theme_options = {"github_url": "https://github.com/OpenSourceEconomics/estimagic"}
+html_theme_options = {
+    "github_url": "https://github.com/OpenSourceEconomics/skillmodels"
+}
 
 html_css_files = ["css/custom.css"]
 
