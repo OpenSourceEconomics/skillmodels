@@ -10,8 +10,10 @@ estimators were proposed. None of them is implemented in standard econometrics p
 
 The package can be installed via conda. To do so, type the following in a terminal:
 
-conda config --add channels conda-forge conda config --add channels janosg conda install
-skillmodels
+```
+conda config --add channels conda-forge
+conda install skillmodels
+```
 
 ## Documentation
 
@@ -20,22 +22,9 @@ skillmodels
 Alternatively, you can build it locally. After cloning the repository you can cd to the
 docs directory and type:
 
+```
 make html
-
-## Building the package with conda-build
-
-If you want to make changes to the source code of skillmodels or build the package on
-your machine for any other reason, you can do so with conda-build.
-
-- clone the repository and make your changes
-- Install conda-build 2.0 or higher (earlier versions won't work!)
-- Adjust the version number in setup.py and meta.yaml.
-- Open a shell in the directory that contains skillmodels (i.e. one level higher than
-  your git repository)
-- type: conda build skillmodels
-
-For more information see the
-[conda documentation](http://conda.pydata.org/docs/building/build.html)
+```
 
 ## Citation
 
@@ -51,7 +40,7 @@ becomes part of a published paper.
   Title                    = {A Python Library to Estimate Nonlinear Dynamic Latent Factor Models},
   Author                   = {Janos Gabler},
   Year                     = {2018},
-  Url                      = {https://github.com/janosg/skillmodels}
+  Url                      = {https://github.com/OpenSourceEconomics/skillmodels}
 }
 ```
 
@@ -59,4 +48,4 @@ becomes part of a published paper.
 
 If you find skillmodels helpful for research or teaching, please let me know. If you
 encounter any problems with the installation or while using skillmodels, please complain
-or open an issue at [GitHub](https://github.com/janosg/skillmodels)
+or open an issue at [GitHub](https://github.com/OpenSourceEconomics/skillmodels)

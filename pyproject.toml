@@ -47,9 +47,9 @@ content-type = "text/markdown"
 text = "MIT"
 
 [project.urls]
-Repository = "https://github.com/janosg/skillmodels"
-Github = "https://github.com/janosg/skillmodels"
-Tracker = "https://github.com/janosg/skillmodels/issues"
+Repository = "https://github.com/OpenSourceEconomics/skillmodels"
+Github = "https://github.com/OpenSourceEconomics/skillmodels"
+Tracker = "https://github.com/OpenSourceEconomics/skillmodels/issues"
 
 
 # ======================================================================================

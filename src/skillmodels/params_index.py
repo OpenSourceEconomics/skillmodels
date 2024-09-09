@@ -2,7 +2,7 @@ import pandas as pd
 
 
 def get_params_index(update_info, labels, dimensions, transition_info):
-    """Generate index for the params_df for estimagic.
+    """Generate index for the params_df for optimagic.
 
     The index has four levels. The first is the parameter category. The second is the
     period in which the parameters are used. The third and fourth are additional

@@ -1,4 +1,4 @@
-"""Construct an estimagic constraints list for a model."""
+"""List of constraints for a model, which can be converted to optimagic constraints."""
 
 import warnings
 
@@ -8,7 +8,9 @@ import skillmodels.transition_functions as tf
 
 
 def get_constraints(dimensions, labels, anchoring_info, update_info, normalizations):
-    """Generate the estimagic constraints implied by the model specification.
+    """Generate constraints implied by the model specification.
+
+    The result can easily be converted to optimagic-style constraints.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
@@ -23,7 +25,7 @@ def get_constraints(dimensions, labels, anchoring_info, update_info, normalizati
             loadings and intercepts for each factor. See :ref:`normalizations`.
 
     Returns:
-        list: List of estimagic compatible constraints.
+        list[dict]: List of constraints.
 
     """
     constr = []
