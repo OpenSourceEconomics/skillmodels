@@ -10,10 +10,7 @@ estimators were proposed. None of them is implemented in standard econometrics p
 
 The package can be installed via conda. To do so, type the following in a terminal:
 
-```
-conda config --add channels conda-forge
-conda install skillmodels
-```
+conda config --add channels conda-forge conda install skillmodels
 
 ## Documentation
 
