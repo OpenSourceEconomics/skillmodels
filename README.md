@@ -33,10 +33,10 @@ entry for a suggested citation. The suggested citation will be updated once the 
 becomes part of a published paper.
 
 ```
-@Unpublished{Gabler2018,
+@Unpublished{Gabler2024,
   Title                    = {A Python Library to Estimate Nonlinear Dynamic Latent Factor Models},
   Author                   = {Janos Gabler},
-  Year                     = {2018},
+  Year                     = {2024},
   Url                      = {https://github.com/OpenSourceEconomics/skillmodels}
 }
 ```
