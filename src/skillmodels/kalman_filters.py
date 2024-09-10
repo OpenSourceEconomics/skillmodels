@@ -9,6 +9,7 @@ array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
 # ======================================================================================
 
 
+@jax.remat
 def kalman_update(
     states,
     upper_chols,
