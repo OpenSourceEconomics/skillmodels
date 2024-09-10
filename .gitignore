@@ -117,3 +117,8 @@ venv.bak/
 
 
 mixed_documents/
+src/skillmodels/_version.py
+.pixi
+.vscode
+*.py.*.bin
+*.py.*.html

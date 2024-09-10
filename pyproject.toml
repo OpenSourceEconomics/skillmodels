@@ -1,0 +1,288 @@
+# ======================================================================================
+# Project metadata
+# ======================================================================================
+
+[project]
+name = "skillmodels"
+authors = [
+    { name = "Janoś Gabler", email = "janos.gabler@gmail.com" },
+]
+maintainers = [
+    { name = "Janoś Gabler", email = "janos.gabler@gmail.com" },
+    { name = "Hans-Martin von Gaudecker", email = "hmgaudecker@uni-bonn.de" },
+]
+description = "Estimators for skill formation models"
+requires-python = ">=3.12"
+dependencies = [
+    "dags",
+    "numpy",
+    "pandas",
+]
+dynamic = ["version"]
+keywords = [
+    "Skill formation",
+    "Econometrics",
+    "Economics",
+    "Estimation",
+    "Statistics",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.license]
+text = "MIT"
+
+[project.urls]
+Repository = "https://github.com/OpenSourceEconomics/skillmodels"
+Github = "https://github.com/OpenSourceEconomics/skillmodels"
+Tracker = "https://github.com/OpenSourceEconomics/skillmodels/issues"
+
+
+# ======================================================================================
+# Build system configuration
+# ======================================================================================
+
+[build-system]
+requires = ["hatchling", "hatch_vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/skillmodels/_version.py"
+
+[tool.hatch.build.targets.sdist]
+exclude = ["tests"]
+only-packages = true
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+
+# ======================================================================================
+# Pixi
+# ======================================================================================
+
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+
+# Development Dependencies (conda)
+# --------------------------------------------------------------------------------------
+
+[tool.pixi.dependencies]
+filterpy = "*"
+jupyterlab = "*"
+nbformat = ">=5.10.4,<6"
+optimagic = "*"
+pixi-kernel = ">=0.4.0,<0.5"
+plotly = ">=5.2,<6"
+pre-commit = "*"
+pybaum = "*"
+python = ">=3.12.5"
+python-kaleido = "*"
+scipy = "<=1.13"
+
+
+# Development Dependencies (pypi)
+# --------------------------------------------------------------------------------------
+
+[tool.pixi.pypi-dependencies]
+jax = { version = ">=0.4.20", extras = ["cpu"] }
+jaxlib = ">=0.4.20"
+pdbp = "*"
+skillmodels = {path = ".", editable = true}
+
+# Features and Tasks
+# --------------------------------------------------------------------------------------
+
+[tool.pixi.feature.test.dependencies]
+pytest = "*"
+pytest-cov = "*"
+pytest-xdist = "*"
+snakeviz = "*"
+
+[tool.pixi.feature.test.target.unix.dependencies]
+pytest-memray = "*"
+
+[tool.pixi.feature.test.tasks]
+tests = "pytest tests"
+tests-with-cov = "pytest tests --cov-report=xml --cov=./"
+mem = "pytest -x -s --pdb --memray --fail-on-increase tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs"
+
+[tool.pixi.feature.mypy.dependencies]
+mypy = "*"
+pandas-stubs = "*"
+matplotlib = "*"  # required because of pandas
+
+[tool.pixi.feature.mypy.tasks]
+mypy = "mypy src"
+
+# Environments
+# --------------------------------------------------------------------------------------
+
+[tool.pixi.environments]
+mypy = {features = ["mypy"], solve-group = "default"}
+test = {features = ["test"], solve-group = "default"}
+
+
+# ======================================================================================
+# Ruff configuration
+# ======================================================================================
+
+[tool.ruff]
+target-version = "py312"
+fix = true
+line-length = 88
+
+
+[tool.ruff.lint]
+select = ["ALL"]
+extend-ignore = [
+    # missing type annotation
+    "ANN001",
+
+    # missing type annotation for `*args`
+    "ANN002",
+
+    # missing type annotation for `**kwargs`
+    "ANN003",
+
+    # missing return type annotation for public function
+    "ANN201",
+
+    # missing return type annotation for private function
+    "ANN202",
+
+    # No explicit `stacklevel` keyword argument found
+    "B028",
+
+    # In conflict with formatter
+    "COM812",
+
+    # Missing docstring in public module
+    "D100",
+
+    # missing docstring in public function
+    "D103",
+
+    # missing docstring in public package
+    "D104",
+
+    # exception must not use a string literal
+    "EM101",
+
+    # exception must not use an f-string literal
+    "EM102",
+
+    # Boolean default positional argument in function definition
+    "FBT002",
+
+    # line contains a todo
+    "FIX002",
+
+    # In conflict with formatter
+    "ISC001",
+
+    # Leave Numpy's legacy RNG
+    "NPY002",
+
+    # array.at is perfectly valid Jax, but linter thinks it's Pandas...
+    "PD008",
+
+    # pd.merge is fine
+    "PD015",
+
+    # df is just fine
+    "PD901",
+
+    # Many suggestions to use list comprehension are not helpful
+    "PERF401",
+
+    # Magic values are fine
+    "PLR2004",
+
+    # Too many arguments to function call
+    "PLR0913",
+
+    # Assignment before return statement is fine.
+    "RET504",
+
+    # use of `assert` detected
+    "S101",
+
+    # `pickle` module is unsafe
+    "S301",
+
+    # Private member accessed: `_stochastic_info`
+    "SLF001",
+
+    # long messages outside the exception class
+    "TRY003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/skillmodels/constraints.py" = ["D417"]
+"src/skillmodels/decorators.py" = ["D417"]
+"src/skillmodels/kalman_filters.py" = ["D417"]
+"src/skillmodels/likelihood_function.py" = ["D417"]
+"src/skillmodels/likelihood_function_debug.py" = ["D417"]
+"src/skillmodels/params_index.py" = ["D417"]
+"src/skillmodels/parse_params.py" = ["D417"]
+"src/skillmodels/process_data.py" = ["D417"]
+"src/skillmodels/simulate_data.py" = ["D417"]
+"src/skillmodels/visualize_*.py" = ["BLE001", "D417"]
+"src/skillmodels/*_heatmap*.py" = ["D417"]
+"tests/*" = ["ARG001", "FBT003", "INP001", "PD002", "NPY002", "PTH123", "S506"]
+"**/*.ipynb" = ["B018", "T201", "E402", "PLR2004", "INP001", "PTH100"]
+"docs/**/*" = ["A001", "ERA001", "INP001", "PTH100", "PTH123", "S506"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+
+[tool.pytest.ini_options]
+markers = [
+    "wip: Tests that are work-in-progress.",
+    "unit: Flag for unit tests which target mainly a single function.",
+    "integration: Flag for integration tests which may comprise of multiple unit tests.",
+    "end_to_end: Flag for tests that cover the whole program.",
+]
+norecursedirs = ["docs", ".envs"]
+
+
+# ======================================================================================
+# yamlfix configuration
+# ======================================================================================
+
+[tool.yamlfix]
+line_length = 88
+sequence_style = "block_style"
+none_representation = "null"
+
+# ======================================================================================
+# mypy configuration
+# ======================================================================================
+
+[[tool.mypy.overrides]]
+module = ["dags", "dags.signature"]
+ignore_missing_imports = true

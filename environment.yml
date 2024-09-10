@@ -1,3 +1,4 @@
+---
 name: skillmodels
 channels:
   - conda-forge
@@ -17,7 +18,6 @@ dependencies:
   - restructuredtext_lint
   - tox-conda
   - scipy
-  - seaborn
   - sphinxcontrib-bibtex
   - pydata-sphinx-theme>=0.3
   - anaconda-client
@@ -27,5 +27,5 @@ dependencies:
   - dags
   - plotly
   - pip:
-    - pre-commit
-    - black
+      - pre-commit
+      - black

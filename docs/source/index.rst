@@ -20,7 +20,7 @@ Structure of the Documentation
                         <div class="card-body flex-fill">
                             <h5 class="card-title">Getting Started</h5>
                             <p class="card-text">
-                                New users of estimagic should read this first
+                                New users of skillmodels should read this first
                             </p>
                         </div>
                     </div>
@@ -126,7 +126,7 @@ skillmodels, please complain or open an issue at `GitHub`_.
     https://tinyurl.com/yyuq2sa4
 
 .. _GitHub:
-    https://github.com/janosg/skillmodels
+    https://github.com/OpenSourceEconomics/skillmodels
 
 
 .. _Econometrica 2010:
