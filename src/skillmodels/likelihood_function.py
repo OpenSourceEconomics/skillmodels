@@ -260,14 +260,24 @@ def _log_likelihood_obs_jax(
         "is_predict_iteration": is_predict_iteration,
     }
 
-    _body = functools.partial(
-        _scan_body,
-        controls=controls,
-        pardict=pardict,
-        sigma_scaling_factor=sigma_scaling_factor,
-        sigma_weights=sigma_weights,
-        transition_func=transition_func,
-        observed_factors=observed_factors,
+    _body = jax.jit(
+        functools.partial(
+            _scan_body,
+            controls=controls,
+            pardict=pardict,
+            sigma_scaling_factor=sigma_scaling_factor,
+            sigma_weights=sigma_weights,
+            transition_func=transition_func,
+            observed_factors=observed_factors,
+        ),
+        static_argnames=(
+            "controls",
+            "pardict",
+            "sigma_scaling_factor",
+            "sigma_weights",
+            "transition_func",
+            "observed_factors",
+        ),
     )
 
     static_out = jax.lax.scan(_body, carry, loop_args)[1]
