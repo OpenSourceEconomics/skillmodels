@@ -1,6 +1,7 @@
-| Commit                                   | Description                | no_stages | with_missings | runtime (home) |
-| ---------------------------------------- | -------------------------- | --------- | ------------- | -------------- |
-| b54a8d2679a97b5e3ce16f2244a3127269c9a37e | Baseline                   | 2.4GiB    | 2.4GiB        | 27s            |
-| afbabcd82c002765a5298d6fb763b22992182998 | No jitting at all          | 3.9GiB    | 3.9GiB        | 36s            |
-| 664504fb5518308d872e35b621caaa2358481589 | Jit \_scan_body            | 3.9GiB    | 3.9GiB        | 37s            |
-| 79d094bc40c2745067d44c953e935fcc526ce37d | jax.remat on kalman_update | 1.9GiB    | 1.9GiB        | 26s            |
+| Commit                                   | Description                         | no_stages | with_missings | runtime (home) |
+| ---------------------------------------- | ----------------------------------- | --------- | ------------- | -------------- |
+| b54a8d2679a97b5e3ce16f2244a3127269c9a37e | Baseline                            | 2.4GiB    | 2.4GiB        | 27s            |
+| afbabcd82c002765a5298d6fb763b22992182998 | No jitting at all                   | 3.9GiB    | 3.9GiB        | 36s            |
+| 664504fb5518308d872e35b621caaa2358481589 | Jit \_scan_body                     | 3.9GiB    | 3.9GiB        | 37s            |
+| 79d094bc40c2745067d44c953e935fcc526ce37d | jax.remat on kalman_update          | 1.9GiB    | 1.9GiB        | 26s            |
+| 00fcc5b99e0d19b7b743627b80a27224c458bc23 | jax.remat on calculate_sigma_points | 1.9GiB    | 1.9GiB        | 25s            |
