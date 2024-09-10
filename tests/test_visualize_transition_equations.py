@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from skillmodels.likelihood_function import get_maximization_inputs
+from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.visualize_transition_equations import (
     combine_transition_plots,
     get_transition_plots,

@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
 
-from skillmodels.likelihood_function import _to_numpy
+from skillmodels.maximization_inputs import _to_numpy
 
 
 def test_to_numpy_with_dict():

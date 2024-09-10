@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from skillmodels.filtered_states import get_filtered_states
-from skillmodels.likelihood_function import get_maximization_inputs
+from skillmodels.maximization_inputs import get_maximization_inputs
 
 # importing the TEST_DIR from config does not work for test run in conda build
 TEST_DIR = Path(__file__).parent.resolve()

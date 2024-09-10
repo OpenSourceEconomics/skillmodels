@@ -10,7 +10,7 @@ import yaml
 from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.decorators import register_params
-from skillmodels.likelihood_function import get_maximization_inputs
+from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.utilities import reduce_n_periods
 
 jax.config.update("jax_enable_x64", True)
