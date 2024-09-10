@@ -96,18 +96,22 @@ def get_maximization_inputs(model_dict, data):
             sigma_scaling_factor=sigma_scaling_factor,
         )
 
+    _jitted_loglike = jax.jit(partialed_loglikes["ll"])
+    _jitted_loglikeobs = jax.jit(partialed_loglikes["llo"])
+    _gradient = jax.jit(jax.grad(partialed_loglikes["ll"]))
+
     def loglike(params):
         params_vec = partialed_get_jnp_params_vec(params)
-        return float(partialed_loglikes["ll"](params_vec))
+        return float(_jitted_loglike(params_vec))
 
     def loglikeobs(params):
         params_vec = partialed_get_jnp_params_vec(params)
-        return _to_numpy(partialed_loglikes["llo"](params_vec))
+        return _to_numpy(_jitted_loglikeobs(params_vec))
 
     def loglike_and_gradient(params):
         params_vec = partialed_get_jnp_params_vec(params)
-        crit = float(partialed_loglikes["ll"](params_vec))
-        grad = _to_numpy(jax.grad(partialed_loglikes["ll"])(params_vec))
+        crit = float(_jitted_loglike(params_vec))
+        grad = _to_numpy(_gradient(params_vec))
         return crit, grad
 
     def debug_loglike(params):
@@ -260,24 +264,14 @@ def _log_likelihood_obs_jax(
         "is_predict_iteration": is_predict_iteration,
     }
 
-    _body = jax.jit(
-        functools.partial(
-            _scan_body,
-            controls=controls,
-            pardict=pardict,
-            sigma_scaling_factor=sigma_scaling_factor,
-            sigma_weights=sigma_weights,
-            transition_func=transition_func,
-            observed_factors=observed_factors,
-        ),
-        static_argnames=(
-            "controls",
-            "pardict",
-            "sigma_scaling_factor",
-            "sigma_weights",
-            "transition_func",
-            "observed_factors",
-        ),
+    _body = functools.partial(
+        _scan_body,
+        controls=controls,
+        pardict=pardict,
+        sigma_scaling_factor=sigma_scaling_factor,
+        sigma_weights=sigma_weights,
+        transition_func=transition_func,
+        observed_factors=observed_factors,
     )
 
     static_out = jax.lax.scan(_body, carry, loop_args)[1]
