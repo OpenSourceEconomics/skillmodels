@@ -115,14 +115,11 @@ def get_maximization_inputs(model_dict, data):
         return crit, grad
 
     def debug_loglike(params):
-        partialed_process_debug_data = functools.partial(
-            process_debug_data, model=model
-        )
         params_vec = partialed_get_jnp_params_vec(params)
         jax_output = partialed_loglikes["debug_ll"](params_vec)
         tmp = _to_numpy(jax_output)
         tmp["value"] = float(tmp["value"])
-        return partialed_process_debug_data(tmp)
+        return process_debug_data(debug_data=tmp, model=model)
 
     constr = get_constraints(
         dimensions=model["dimensions"],
