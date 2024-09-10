@@ -224,6 +224,7 @@ def kalman_predict(
     return predicted_states, predicted_covs
 
 
+@jax.remat
 def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factors):
     """Calculate the array of sigma_points for the unscented transform.
 
