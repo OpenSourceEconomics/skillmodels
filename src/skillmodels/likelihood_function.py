@@ -319,6 +319,7 @@ def _log_likelihood_jax(
     ).sum()
 
 
+@jax.jit
 def _scan_body(
     carry,
     loop_args,
