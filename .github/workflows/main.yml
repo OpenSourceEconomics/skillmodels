@@ -39,6 +39,8 @@ jobs:
       - name: Upload coverage report
         if: runner.os == 'Linux' && matrix.python-version == '3.12'
         uses: codecov/codecov-action@v4
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   # run-mypy:
   #   name: Run mypy on Python 3.12
   #   runs-on: ubuntu-latest
