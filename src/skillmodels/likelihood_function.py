@@ -169,7 +169,7 @@ def _partial_some_log_likelihood_jax(
         parsing_info=parsing_info,
         measurements=measurements,
         controls=controls,
-        transition_info=model["transition_info"],
+        transition_func=model["transition_info"]["func"],
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
         dimensions=model["dimensions"],
@@ -187,7 +187,7 @@ def _log_likelihood_obs_jax(
     parsing_info,
     measurements,
     controls,
-    transition_info,
+    transition_func,
     sigma_scaling_factor,
     sigma_weights,
     dimensions,
@@ -218,9 +218,7 @@ def _log_likelihood_obs_jax(
             observed measurements. NaN if the measurement was not observed.
         controls (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
             with observed control variables for the measurement equations.
-        transition_info (dict): Dict with the entries "func" (the actual transition
-            function) and "columns" (a dictionary mapping factors that are needed
-            as individual columns to positions in the factor array).
+        transition_func (Callable): The transition function.
         sigma_scaling_factor (float): A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
@@ -268,7 +266,7 @@ def _log_likelihood_obs_jax(
         pardict=pardict,
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
-        transition_info=transition_info,
+        transition_func=transition_func,
         observed_factors=observed_factors,
     )
 
@@ -290,7 +288,7 @@ def _log_likelihood_jax(
     parsing_info,
     measurements,
     controls,
-    transition_info,
+    transition_func,
     sigma_scaling_factor,
     sigma_weights,
     dimensions,
@@ -306,7 +304,7 @@ def _log_likelihood_jax(
         parsing_info=parsing_info,
         measurements=measurements,
         controls=controls,
-        transition_info=transition_info,
+        transition_func=transition_func,
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
         dimensions=dimensions,
@@ -326,7 +324,7 @@ def _scan_body(
     pardict,
     sigma_scaling_factor,
     sigma_weights,
-    transition_info,
+    transition_func,
     observed_factors,
 ):
     # ==================================================================================
@@ -375,7 +373,7 @@ def _scan_body(
         "observed_factors": observed_factors[t],
     }
 
-    fixed_kwargs = {"transition_info": transition_info}
+    fixed_kwargs = {"transition_func": transition_func}
 
     # ==================================================================================
     # Do a predict step or a do-nothing fake predict step
@@ -413,16 +411,16 @@ def _one_arg_anchoring_update(kwargs):
     return out
 
 
-def _one_arg_no_predict(kwargs, transition_info):  # noqa: ARG001
+def _one_arg_no_predict(kwargs, transition_func):  # noqa: ARG001
     """Just return the states cond chols without any changes."""
     return kwargs["states"], kwargs["upper_chols"], kwargs["states"]
 
 
-def _one_arg_predict(kwargs, transition_info):
+def _one_arg_predict(kwargs, transition_func):
     """Do a predict step but also return the input states as filtered states."""
     new_states, new_upper_chols = kalman_predict(
         **kwargs,
-        transition_info=transition_info,
+        transition_func=transition_func,
     )
     return new_states, new_upper_chols, kwargs["states"]
 
