@@ -423,8 +423,8 @@ def _one_arg_no_predict(kwargs, transition_func):  # noqa: ARG001
 def _one_arg_predict(kwargs, transition_func):
     """Do a predict step but also return the input states as filtered states."""
     new_states, new_upper_chols = kalman_predict(
+        transition_func,
         **kwargs,
-        transition_func=transition_func,
     )
     return new_states, new_upper_chols, kwargs["states"]
 

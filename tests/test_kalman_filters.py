@@ -232,7 +232,7 @@ def test_predict_against_linear_filterpy(seed):
     expected_cov = fp_filter.P
 
     def linear(params, states):
-        return np.dot(states, params)
+        return jnp.dot(states, params)
 
     def transition_function(params, states):
         out = jnp.column_stack([linear(params[f"fac{i}"], states) for i in range(dim)])
@@ -246,11 +246,11 @@ def test_predict_against_linear_filterpy(seed):
     observed_factors = jnp.zeros((1, 0))
 
     calc_states, calc_chols = kalman_predict(
+        transition_function,
         sm_state,
         sm_chol,
         scaling_factor,
         weights,
-        transition_function,
         trans_coeffs,
         jnp.array(shock_sds),
         anch_scaling,

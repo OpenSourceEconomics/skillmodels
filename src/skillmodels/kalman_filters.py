@@ -155,12 +155,13 @@ def calculate_sigma_scaling_factor_and_weights(n_states, kappa=2):
     return scaling_factor, weights
 
 
+@functools.partial(jax.checkpoint, static_argnums=0, prevent_cse=False)
 def kalman_predict(
+    transition_func,
     states,
     upper_chols,
     sigma_scaling_factor,
     sigma_weights,
-    transition_func,
     trans_coeffs,
     shock_sds,
     anchoring_scaling_factors,
@@ -170,6 +171,7 @@ def kalman_predict(
     """Make a unscented Kalman predict.
 
     Args:
+        transition_func (Callable): The transition function.
         states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states) with
             pre-update states estimates.
         upper_chols (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states,
@@ -180,7 +182,6 @@ def kalman_predict(
             the sigma_point algorithm chosen.
         sigma_weights (jax.numpy.array): 1d array of length n_sigma with non-negative
             sigma weights.
-        transition_func (Callable): The transition function.
         trans_coeffs (tuple): Tuple of 1d jax.numpy.arrays with transition parameters.
         anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_fac) with
             the scaling factors for anchoring. The first row corresponds to the input
