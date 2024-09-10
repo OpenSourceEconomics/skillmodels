@@ -128,6 +128,7 @@ pytest-memray = "*"
 tests = "pytest tests"
 tests-with-cov = "pytest tests --cov-report=xml --cov=./"
 mem = "pytest -x -s --pdb --memray --fail-on-increase tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs"
+mem-on-clean-repo = "git status --porcelain && git diff-index --quiet HEAD -- && git rev-parse HEAD && pytest -x -s --pdb --memray --fail-on-increase tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs"
 
 [tool.pixi.feature.mypy.dependencies]
 mypy = "*"
