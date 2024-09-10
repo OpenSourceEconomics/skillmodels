@@ -100,7 +100,7 @@ def _log_likelihood_jax(
         observed_factors=observed_factors,
     )
 
-    carry, static_out = jax.lax.scan(_body, carry, loop_args)
+    static_out = jax.lax.scan(_body, carry, loop_args)[1]
 
     # clip contributions before aggregation to preserve as much information as
     # possible.
