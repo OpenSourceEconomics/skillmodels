@@ -101,12 +101,11 @@ def _log_likelihood_jax(
     )
 
     carry, static_out = jax.lax.scan(_body, carry, loop_args)
-    loglikes = static_out["loglikes"]
 
     # clip contributions before aggregation to preserve as much information as
     # possible.
     clipped = soft_clipping(
-        arr=loglikes,
+        arr=static_out["loglikes"],
         lower=estimation_options["clipping_lower_bound"],
         upper=estimation_options["clipping_upper_bound"],
         lower_hardness=estimation_options["clipping_lower_hardness"],
@@ -122,7 +121,7 @@ def _log_likelihood_jax(
         "contributions": clipped.sum(axis=0),
     }
 
-    out["all_contributions"] = loglikes
+    out["all_contributions"] = static_out["loglikes"]
     out["residuals"] = static_out["residuals"]
     out["residual_sds"] = static_out["residual_sds"]
 

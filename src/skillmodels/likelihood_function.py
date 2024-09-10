@@ -96,22 +96,18 @@ def get_maximization_inputs(model_dict, data):
             sigma_scaling_factor=sigma_scaling_factor,
         )
 
-    _jitted_loglike = jax.jit(partialed_loglikes["ll"])
-    _jitted_loglikeobs = jax.jit(partialed_loglikes["llo"])
-    _gradient = jax.jit(jax.grad(partialed_loglikes["ll"]))
-
     def loglike(params):
         params_vec = partialed_get_jnp_params_vec(params)
-        return float(_jitted_loglike(params_vec))
+        return float(partialed_loglikes["ll"](params_vec))
 
     def loglikeobs(params):
         params_vec = partialed_get_jnp_params_vec(params)
-        return _to_numpy(_jitted_loglikeobs(params_vec))
+        return _to_numpy(partialed_loglikes["llo"](params_vec))
 
     def loglike_and_gradient(params):
         params_vec = partialed_get_jnp_params_vec(params)
-        crit = float(_jitted_loglike(params_vec))
-        grad = _to_numpy(_gradient(params_vec))
+        crit = float(partialed_loglikes["ll"](params_vec))
+        grad = _to_numpy(jax.grad(partialed_loglikes["ll"])(params_vec))
         return crit, grad
 
     def debug_loglike(params):
@@ -277,12 +273,11 @@ def _log_likelihood_obs_jax(
     )
 
     carry, static_out = jax.lax.scan(_body, carry, loop_args)
-    loglikes = static_out["loglikes"]
 
     # clip contributions before aggregation to preserve as much information as
     # possible.
     return soft_clipping(
-        arr=loglikes,
+        arr=static_out["loglikes"],
         lower=estimation_options["clipping_lower_bound"],
         upper=estimation_options["clipping_upper_bound"],
         lower_hardness=estimation_options["clipping_lower_hardness"],
