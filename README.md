@@ -8,19 +8,59 @@ estimators were proposed. None of them is implemented in standard econometrics p
 
 ## Installation
 
-The package can be installed via conda. To do so, type the following in a terminal:
+> **Warning:** To run skillmodels you need to install jax and jaxlib. At the time of
+> writing, in most use cases, it is faster on a CPU than on a GPU, so it should be
+> sufficient to install the CPU version, which is available on all platforms. In any
+> case, for installation of jax and jaxlib, please consult the jax
+> [docs](https://jax.readthedocs.io/en/latest/installation.html#supported-platforms).
 
-conda config --add channels conda-forge conda install skillmodels
+Skillmodels can be installed via PyPI or via GitHub. To do so, type the following in a
+terminal:
+
+```console
+$ pip install skillmodels
+```
+
+or, for the latest development version, type:
+
+```console
+$ pip install git+https://github.com/OpenSourceEconomics/skillmodels.git
+```
 
 ## Documentation
 
 [The documentation is hosted at readthedocs](https://skillmodels.readthedocs.io/en/latest/)
 
-Alternatively, you can build it locally. After cloning the repository you can cd to the
+## Developing
+
+We use [pixi](https://pixi.sh/latest/) for our local development environment. If you
+want to work with or extend the skillmodels code base you can run the tests using
+
+```console
+$ git clone https://github.com/OpenSourceEconomics/skillmodels.git
+$ pixi run tests
+```
+
+This will install the development environment and run the tests. You can run
+[mypy](https://mypy-lang.org/) using
+
+```console
+$ pixi run mypy
+```
+
+Before committing, install the pre-commit hooks using
+
+```console
+$ pre-commit install
+```
+
+#### Documentation
+
+You can build the documentation locally. After cloning the repository you can cd to the
 docs directory and type:
 
-```
-make html
+```console
+$ make html
 ```
 
 ## Citation
