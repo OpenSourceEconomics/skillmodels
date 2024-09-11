@@ -2,199 +2,55 @@ import functools
 
 import jax
 import jax.numpy as jnp
-import numpy as np
-import pandas as pd
 
-import skillmodels.likelihood_function_debug as lfd
 from skillmodels.clipping import soft_clipping
-from skillmodels.constraints import add_bounds, get_constraints
 from skillmodels.kalman_filters import (
-    calculate_sigma_scaling_factor_and_weights,
     kalman_predict,
     kalman_update,
 )
-from skillmodels.params_index import get_params_index
-from skillmodels.parse_params import create_parsing_info, parse_params
-from skillmodels.process_data import process_data
-from skillmodels.process_debug_data import process_debug_data
-from skillmodels.process_model import process_model
-
-jax.config.update("jax_enable_x64", False)  # noqa: FBT003
+from skillmodels.parse_params import parse_params
 
 
-def get_maximization_inputs(model_dict, data):
-    """Create inputs for optimagic's maximize function.
-
-    Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
-        data (DataFrame): dataset in long format.
-
-    Returns a dictionary with keys:
-        loglike (function): A jax jitted function that takes an optimagic-style
-            params dataframe as only input and returns a dict with entries:
-            - "value": The scalar log likelihood
-            - "contributions": An array with the log likelihood per observation
-        debug_loglike (function): Similar to loglike, with the following differences:
-            - It is not jitted and thus faster on the first call and debuggable
-            - It will add intermediate results as additional entries in the returned
-              dictionary. Those can be used for debugging and plotting.
-        gradient (function): The gradient of the scalar log likelihood
-            function with respect to the parameters.
-        loglike_and_gradient (function): Combination of loglike and
-            loglike_gradient that is faster than calling the two functions separately.
-        constraints (list): List of optimagic constraints that are implied by the
-            model specification.
-        params_template (pd.DataFrame): Parameter DataFrame with correct index and
-            bounds but with empty value column.
-
-    """
-    model = process_model(model_dict)
-    p_index = get_params_index(
-        model["update_info"],
-        model["labels"],
-        model["dimensions"],
-        model["transition_info"],
-    )
-
-    parsing_info = create_parsing_info(
-        p_index,
-        model["update_info"],
-        model["labels"],
-        model["anchoring"],
-    )
-    measurements, controls, observed_factors = process_data(
-        data,
-        model["labels"],
-        model["update_info"],
-        model["anchoring"],
-    )
-
-    sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
-        model["dimensions"]["n_latent_factors"],
-        model["estimation_options"]["sigma_points_scale"],
-    )
-
-    partialed_get_jnp_params_vec = functools.partial(
-        _get_jnp_params_vec,
-        target_index=p_index,
-    )
-
-    partialed_loglikes = {}
-    for n, fun in {
-        "ll": _log_likelihood_jax,
-        "llo": _log_likelihood_obs_jax,
-        "debug_ll": lfd._log_likelihood_jax,
-    }.items():
-        partialed_loglikes[n] = _partial_some_log_likelihood_jax(
-            fun=fun,
-            parsing_info=parsing_info,
-            measurements=measurements,
-            controls=controls,
-            observed_factors=observed_factors,
-            model=model,
-            sigma_weights=sigma_weights,
-            sigma_scaling_factor=sigma_scaling_factor,
-        )
-
-    _jitted_loglike = jax.jit(partialed_loglikes["ll"])
-    _jitted_loglikeobs = jax.jit(partialed_loglikes["llo"])
-    _gradient = jax.jit(jax.grad(partialed_loglikes["ll"]))
-
-    def loglike(params):
-        params_vec = partialed_get_jnp_params_vec(params)
-        return float(_jitted_loglike(params_vec))
-
-    def loglikeobs(params):
-        params_vec = partialed_get_jnp_params_vec(params)
-        return _to_numpy(_jitted_loglikeobs(params_vec))
-
-    def loglike_and_gradient(params):
-        params_vec = partialed_get_jnp_params_vec(params)
-        crit = float(_jitted_loglike(params_vec))
-        grad = _to_numpy(_gradient(params_vec))
-        return crit, grad
-
-    def debug_loglike(params):
-        partialed_process_debug_data = functools.partial(
-            process_debug_data, model=model
-        )
-        params_vec = partialed_get_jnp_params_vec(params)
-        jax_output = partialed_loglikes["debug_ll"](params_vec)
-        tmp = _to_numpy(jax_output)
-        tmp["value"] = float(tmp["value"])
-        return partialed_process_debug_data(tmp)
-
-    constr = get_constraints(
-        dimensions=model["dimensions"],
-        labels=model["labels"],
-        anchoring_info=model["anchoring"],
-        update_info=model["update_info"],
-        normalizations=model["normalizations"],
-    )
-
-    params_template = pd.DataFrame(columns=["value"], index=p_index)
-    params_template = add_bounds(
-        params_template,
-        model["estimation_options"]["bounds_distance"],
-    )
-
-    out = {
-        "loglike": loglike,
-        "loglikeobs": loglikeobs,
-        "debug_loglike": debug_loglike,
-        "loglike_and_gradient": loglike_and_gradient,
-        "constraints": constr,
-        "params_template": params_template,
-    }
-
-    return out
-
-
-def _partial_some_log_likelihood_jax(
-    fun,
-    parsing_info,
-    measurements,
-    controls,
-    observed_factors,
-    model,
-    sigma_weights,
-    sigma_scaling_factor,
-):
-    update_info = model["update_info"]
-    is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
-    _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
-    is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
-    last_period = model["labels"]["periods"][-1]
-    # iteration_to_period is used as an indexer to loop over arrays of different lengths
-    # in a jax.lax.scan. It needs to work for arrays of length n_periods and not raise
-    # IndexErrors on tracer arrays of length n_periods - 1 (i.e. n_transitions).
-    # To achieve that, we replace the last period by -1.
-    iteration_to_period = _periods.replace(last_period, -1).to_numpy()
-
-    return functools.partial(
-        fun,
-        parsing_info=parsing_info,
-        measurements=measurements,
-        controls=controls,
-        transition_info=model["transition_info"],
-        sigma_scaling_factor=sigma_scaling_factor,
-        sigma_weights=sigma_weights,
-        dimensions=model["dimensions"],
-        labels=model["labels"],
-        estimation_options=model["estimation_options"],
-        is_measurement_iteration=is_measurement_iteration,
-        is_predict_iteration=is_predict_iteration,
-        iteration_to_period=iteration_to_period,
-        observed_factors=observed_factors,
-    )
-
-
-def _log_likelihood_obs_jax(
+def log_likelihood(
     params,
     parsing_info,
     measurements,
     controls,
-    transition_info,
+    transition_func,
+    sigma_scaling_factor,
+    sigma_weights,
+    dimensions,
+    labels,
+    estimation_options,
+    is_measurement_iteration,
+    is_predict_iteration,
+    iteration_to_period,
+    observed_factors,
+):
+    return log_likelihood_obs(
+        params=params,
+        parsing_info=parsing_info,
+        measurements=measurements,
+        controls=controls,
+        transition_func=transition_func,
+        sigma_scaling_factor=sigma_scaling_factor,
+        sigma_weights=sigma_weights,
+        dimensions=dimensions,
+        labels=labels,
+        estimation_options=estimation_options,
+        is_measurement_iteration=is_measurement_iteration,
+        is_predict_iteration=is_predict_iteration,
+        iteration_to_period=iteration_to_period,
+        observed_factors=observed_factors,
+    ).sum()
+
+
+def log_likelihood_obs(
+    params,
+    parsing_info,
+    measurements,
+    controls,
+    transition_func,
     sigma_scaling_factor,
     sigma_weights,
     dimensions,
@@ -225,9 +81,7 @@ def _log_likelihood_obs_jax(
             observed measurements. NaN if the measurement was not observed.
         controls (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
             with observed control variables for the measurement equations.
-        transition_info (dict): Dict with the entries "func" (the actual transition
-            function) and "columns" (a dictionary mapping factors that are needed
-            as individual columns to positions in the factor array).
+        transition_func (Callable): The transition function.
         sigma_scaling_factor (float): A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
@@ -275,56 +129,21 @@ def _log_likelihood_obs_jax(
         pardict=pardict,
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
-        transition_info=transition_info,
+        transition_func=transition_func,
         observed_factors=observed_factors,
     )
 
-    carry, static_out = jax.lax.scan(_body, carry, loop_args)
-    loglikes = static_out["loglikes"]
+    static_out = jax.lax.scan(_body, carry, loop_args)[1]
 
     # clip contributions before aggregation to preserve as much information as
     # possible.
     return soft_clipping(
-        arr=loglikes,
+        arr=static_out["loglikes"],
         lower=estimation_options["clipping_lower_bound"],
         upper=estimation_options["clipping_upper_bound"],
         lower_hardness=estimation_options["clipping_lower_hardness"],
         upper_hardness=estimation_options["clipping_upper_hardness"],
     ).sum(axis=0)
-
-
-def _log_likelihood_jax(
-    params,
-    parsing_info,
-    measurements,
-    controls,
-    transition_info,
-    sigma_scaling_factor,
-    sigma_weights,
-    dimensions,
-    labels,
-    estimation_options,
-    is_measurement_iteration,
-    is_predict_iteration,
-    iteration_to_period,
-    observed_factors,
-):
-    return _log_likelihood_obs_jax(
-        params=params,
-        parsing_info=parsing_info,
-        measurements=measurements,
-        controls=controls,
-        transition_info=transition_info,
-        sigma_scaling_factor=sigma_scaling_factor,
-        sigma_weights=sigma_weights,
-        dimensions=dimensions,
-        labels=labels,
-        estimation_options=estimation_options,
-        is_measurement_iteration=is_measurement_iteration,
-        is_predict_iteration=is_predict_iteration,
-        iteration_to_period=iteration_to_period,
-        observed_factors=observed_factors,
-    ).sum()
 
 
 def _scan_body(
@@ -334,7 +153,7 @@ def _scan_body(
     pardict,
     sigma_scaling_factor,
     sigma_weights,
-    transition_info,
+    transition_func,
     observed_factors,
 ):
     # ==================================================================================
@@ -383,7 +202,7 @@ def _scan_body(
         "observed_factors": observed_factors[t],
     }
 
-    fixed_kwargs = {"transition_info": transition_info}
+    fixed_kwargs = {"transition_func": transition_func}
 
     # ==================================================================================
     # Do a predict step or a do-nothing fake predict step
@@ -421,47 +240,15 @@ def _one_arg_anchoring_update(kwargs):
     return out
 
 
-def _one_arg_no_predict(kwargs, transition_info):  # noqa: ARG001
+def _one_arg_no_predict(kwargs, transition_func):  # noqa: ARG001
     """Just return the states cond chols without any changes."""
     return kwargs["states"], kwargs["upper_chols"], kwargs["states"]
 
 
-def _one_arg_predict(kwargs, transition_info):
+def _one_arg_predict(kwargs, transition_func):
     """Do a predict step but also return the input states as filtered states."""
     new_states, new_upper_chols = kalman_predict(
+        transition_func,
         **kwargs,
-        transition_info=transition_info,
     )
     return new_states, new_upper_chols, kwargs["states"]
-
-
-def _to_numpy(obj):
-    if isinstance(obj, dict):
-        res = {}
-        for key, value in obj.items():
-            if np.isscalar(value):
-                res[key] = value
-            else:
-                res[key] = np.array(value)
-
-    elif np.isscalar(obj):
-        res = obj
-    else:
-        res = np.array(obj)
-
-    return res
-
-
-def _get_jnp_params_vec(params, target_index):
-    if set(params.index) != set(target_index):
-        additional_entries = params.index.difference(target_index).tolist()
-        missing_entries = target_index.difference(params.index).tolist()
-        msg = "Invalid params DataFrame. "
-        if additional_entries:
-            msg += f"Your params have additional entries: {additional_entries}. "
-        if missing_entries:
-            msg += f"Your params have missing entries: {missing_entries}. "
-        raise ValueError(msg)
-
-    vec = jnp.array(params.reindex(target_index)["value"].to_numpy())
-    return vec

@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from skillmodels.likelihood_function import get_maximization_inputs
+from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.simulate_data import simulate_dataset
 from skillmodels.visualize_factor_distributions import (
     bivariate_density_contours,

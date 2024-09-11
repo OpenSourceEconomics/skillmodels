@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
 
-from skillmodels.likelihood_function import get_maximization_inputs
+from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info, parse_params
 from skillmodels.process_debug_data import create_state_ranges

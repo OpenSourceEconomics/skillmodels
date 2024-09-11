@@ -185,12 +185,6 @@ def test_transformation_of_sigma_points():
         )
         return out
 
-    transition_info = {
-        "func": f,
-        "columns": {"fac2": 1},
-        "order": ["states", "fac2", "params"],
-    }
-
     trans_coeffs = {"fac1": jnp.array([2]), "fac2": jnp.array([])}
 
     anch_scaling = jnp.array([[1, 1], [2, 1]])
@@ -200,11 +194,11 @@ def test_transformation_of_sigma_points():
     expected = jnp.array([[[[3, 2], [7, 4], [11, 6], [15, 8], [19, 10]]]])
 
     calculated = transform_sigma_points(
-        sp,
-        transition_info,
-        trans_coeffs,
-        anch_scaling,
-        anch_constants,
+        sigma_points=sp,
+        transition_func=f,
+        trans_coeffs=trans_coeffs,
+        anchoring_scaling_factors=anch_scaling,
+        anchoring_constants=anch_constants,
     )
 
     aaae(calculated, expected)
@@ -238,7 +232,7 @@ def test_predict_against_linear_filterpy(seed):
     expected_cov = fp_filter.P
 
     def linear(params, states):
-        return np.dot(states, params)
+        return jnp.dot(states, params)
 
     def transition_function(params, states):
         out = jnp.column_stack([linear(params[f"fac{i}"], states) for i in range(dim)])
@@ -246,22 +240,17 @@ def test_predict_against_linear_filterpy(seed):
 
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)
-    transition_info = {
-        "func": transition_function,
-        "columns": {},
-        "order": ["states", "params"],
-    }
     trans_coeffs = {f"fac{i}": jnp.array(trans_mat[i]) for i in range(dim)}
     anch_scaling = jnp.ones((2, dim))
     anch_constants = jnp.zeros((2, dim))
     observed_factors = jnp.zeros((1, 0))
 
     calc_states, calc_chols = kalman_predict(
+        transition_function,
         sm_state,
         sm_chol,
         scaling_factor,
         weights,
-        transition_info,
         trans_coeffs,
         jnp.array(shock_sds),
         anch_scaling,

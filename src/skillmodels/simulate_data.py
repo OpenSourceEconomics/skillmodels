@@ -227,7 +227,7 @@ def _simulate_dataset(
         next_states = np.array(
             transform_sigma_points(
                 sigma_points=states,
-                transition_info=transition_info,
+                transition_func=transition_info["func"],
                 trans_coeffs=trans_coeffs,
                 anchoring_scaling_factors=anchoring_scaling_factors,
                 anchoring_constants=anchoring_constants,
