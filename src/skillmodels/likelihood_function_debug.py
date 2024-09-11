@@ -9,7 +9,7 @@ from skillmodels.kalman_filters_debug import kalman_update
 from skillmodels.parse_params import parse_params
 
 
-def _log_likelihood_jax(
+def log_likelihood(
     params,
     parsing_info,
     measurements,
