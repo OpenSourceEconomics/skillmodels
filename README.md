@@ -8,10 +8,10 @@ estimators were proposed. None of them is implemented in standard econometrics p
 
 ## Installation
 
-> **Warning:** To run skillmodels you need to install jax and jaxlib. If you aim to run
-> skillmodels on a GPU, you need to install jaxlib with CUDA support (for Linux) or with
-> support for AMD GPUs / ARM-based Silicon GPUs (for MacOS). In any case, for
-> installation of jax and jaxlib, please consult the jax
+> **Warning:** To run skillmodels you need to install jax and jaxlib. At the time of
+> writing, in most use cases, it is faster on a CPU than on a GPU, so it should be
+> sufficient to install the CPU version, which is available on all platforms. In any
+> case, for installation of jax and jaxlib, please consult the jax
 > [docs](https://jax.readthedocs.io/en/latest/installation.html#supported-platforms).
 
 Skillmodels can be installed via PyPI or via GitHub. To do so, type the following in a
@@ -21,7 +21,7 @@ terminal:
 $ pip install skillmodels
 ```
 
-or
+or, for the latest development version, type:
 
 ```console
 $ pip install git+https://github.com/OpenSourceEconomics/skillmodels.git
