@@ -15,7 +15,7 @@ from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
 
-jax.config.update("jax_enable_x64", False)  # noqa: FBT003
+jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
 
 def get_maximization_inputs(model_dict, data):
