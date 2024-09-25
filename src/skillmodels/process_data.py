@@ -15,6 +15,7 @@ def _augment_data_for_investments(data: pd.DataFrame, labels: dict[str, Any]):
 
     """
     # Make sure datset is balanced
+    breakpoint()
     assert data.reset_index()["id_kid"].nunique() * 5 == data.shape[0]
     assert set(data.reset_index()["trimester"].unique()) == set(
         TRIM_AUG_TO_TRIMESTER.values()
