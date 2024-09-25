@@ -45,10 +45,14 @@ def process_model(model_dict):
     labels = _get_labels(
         model_dict=model_dict, has_investments=has_investments, dimensions=dims
     )
-    anchoring = _process_anchoring(model_dict)
+    anchoring = _process_anchoring(model_dict, has_investments)
     check_model(model_dict, labels, dims, anchoring)
     if has_investments:
-        model_dict_aug = _augment_periods_for_investments(model_dict, labels)
+        model_dict_aug = _augment_periods_for_investments(
+            model_dict=model_dict,
+            dimensions=dims,
+            labels=labels,
+        )
     else:
         model_dict_aug = model_dict
     transition_info = _get_transition_info(model_dict_aug, labels)
@@ -59,10 +63,10 @@ def process_model(model_dict):
         "dimensions": dims,
         "labels": labels,
         "anchoring": anchoring,
-        "estimation_options": _process_estimation_options(model_dict),
+        "estimation_options": _process_estimation_options(model_dict_aug),
         "transition_info": transition_info,
-        "update_info": _get_update_info(model_dict, dims, labels, anchoring),
-        "normalizations": _process_normalizations(model_dict, dims, labels),
+        "update_info": _get_update_info(model_dict_aug, dims, labels, anchoring),
+        "normalizations": _process_normalizations(model_dict_aug, dims, labels),
     }
     return processed
 
@@ -207,16 +211,20 @@ def _process_estimation_options(model_dict):
     return default_options
 
 
-def _process_anchoring(model_dict):
+def _process_anchoring(model_dict, has_investments):
     """Process the specification that governs how latent factors are anchored.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
+        has_investments (bool): Whether the model has any investments.
 
     Returns:
         dict: Dictionary with information about anchoring. See :ref:`anchoring`
 
     """
+    if "anchoring" in model_dict and has_investments:
+        raise ValueError("anchoring is not supported when investments are present.")
+
     anchinfo = {
         "anchoring": False,
         "outcomes": {},
@@ -243,13 +251,16 @@ def _insert_empty_elements_into_list(old, insert_at_modulo, to_insert, p_to_p_ra
 
 
 def _augment_periods_for_investments(
-    model_dict: dict[str, Any], labels: dict[str, Any]
+    model_dict: dict[str, Any], dimensions: dict[str, Any], labels: dict[str, Any]
 ) -> dict[str, Any]:
     """Insert periods without measurements / normalisations if investments are present.
 
     Args:
         model_dict: The model specification. See: :ref:`model_specs`
-        labels: Dictionary with information about periods etc.
+        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
+            n_mixtures. See :ref:`dimensions`.
+        labels (dict): Dict of lists with labels for the model quantities like
+            factors, periods, controls, stagemap and stages. See :ref:`labels`
 
     Returns:
         Model dictionary with twice the amount of periods
@@ -258,12 +269,36 @@ def _augment_periods_for_investments(
     aug = deepcopy(model_dict)
     for fac, v in model_dict["factors"].items():
         insert_at_modulo = 0 if v.get("is_investment", False) else 1
+
+        # Insert empty elements into measurements when we do not have those.
+        if len(v["measurements"]) != dimensions["n_periods_raw"]:
+            raise ValueError(
+                "Measurements must be of length `n_periods_raw`, "
+                f"got {v['measurements']} for {fac}"
+            )
         aug["factors"][fac]["measurements"] = _insert_empty_elements_into_list(
             old=v["measurements"],
             insert_at_modulo=insert_at_modulo,
             to_insert=[],
             p_to_p_raw=labels["periods_to_periods_raw"],
         )
+
+        # Insert empty elements into normalizations when we do not have those.
+        for norm_type, normalizations in v.get("normalizations", {}).items():
+            if not len(normalizations) == dimensions["n_periods_raw"]:
+                raise ValueError(
+                    "Normalizations must be lists of length `n_periods`, "
+                    f"got {normalizations} for {fac}['normalizations']['{norm_type}']"
+                )
+            aug["factors"][fac]["normalizations"][norm_type] = (
+                _insert_empty_elements_into_list(
+                    old=normalizations,
+                    insert_at_modulo=insert_at_modulo,
+                    to_insert={},
+                    p_to_p_raw=labels["periods_to_periods_raw"],
+                )
+            )
+    return aug
 
 
 def _get_transition_info(model_dict, labels):
@@ -355,11 +390,12 @@ def _get_update_info(model_dict, dimensions, labels, anchoring_info):
 
     measurements = {}
     for factor in labels["latent_factors"]:
-        measurements[factor] = fill_list(
-            model_dict["factors"][factor]["measurements"],
-            [],
-            dimensions["n_periods"],
-        )
+        measurements[factor] = model_dict["factors"][factor]["measurements"]
+        if len(measurements[factor]) != dimensions["n_periods"]:
+            raise ValueError(
+                "Measurements must be of length `n_periods`, "
+                f"got {measurements[factor]} for {factor}"
+            )
 
     for period in labels["periods"]:
         for factor in labels["latent_factors"]:
@@ -397,8 +433,14 @@ def _process_normalizations(model_dict, dimensions, labels):
         normalizations[factor] = {}
         norminfo = model_dict["factors"][factor].get("normalizations", {})
         for norm_type in ["loadings", "intercepts"]:
-            candidate = norminfo.get(norm_type, [])
-            candidate = fill_list(candidate, {}, dimensions["n_periods"])
+            candidate = norminfo.get(
+                norm_type, [{} for _ in range(dimensions["n_periods"])]
+            )
+            if not len(candidate) == dimensions["n_periods"]:
+                raise ValueError(
+                    "Normalizations must be of length `n_periods`, "
+                    f"got {norminfo} for {factor}['{norm_type}']"
+                )
             normalizations[factor][norm_type] = candidate
 
     return normalizations

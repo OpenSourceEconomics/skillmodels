@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from skillmodels.params_index import get_params_index
-from skillmodels.process_model import get_dimensions, process_model
+from skillmodels.process_model import get_dimensions, get_has_investments, process_model
 
 
 def extract_factors(factors, model_dict, params=None):
@@ -81,6 +81,9 @@ def remove_factors(factors, model_dict, params=None):
         pandas.DataFrame: The reduced parameter DataFrame (only if params is not None)
 
     """
+    # We need this for the full model when investments are present.
+    has_investments = get_has_investments(model_dict["factors"])
+
     out = deepcopy(model_dict)
 
     out["factors"] = _remove_from_dict(out["factors"], factors)
@@ -95,7 +98,7 @@ def remove_factors(factors, model_dict, params=None):
             out = _remove_from_dict(out, "anchoring")
 
     # Remove periods if necessary
-    new_n_periods = get_dimensions(out)["n_periods"]
+    new_n_periods = get_dimensions(out, has_investments)["n_periods"]
     out = reduce_n_periods(out, new_n_periods)
 
     if params is not None:

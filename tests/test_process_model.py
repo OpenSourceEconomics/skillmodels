@@ -126,6 +126,30 @@ def test_normalizations(model2):
 # ======================================================================================
 
 
+def test_anchoring_and_investments_conflict():
+    with open(TEST_DIR / "model2.yaml") as y:
+        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+    # Set fac3 to be an investment
+    model_dict["factors"]["fac3"]["is_investment"] = True
+    del model_dict["stagemap"]
+    with pytest.raises(
+        ValueError, match="anchoring is not supported when investments are present."
+    ):
+        process_model(model_dict)
+
+
+def test_stages_and_investments_conflict():
+    with open(TEST_DIR / "model2.yaml") as y:
+        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+    # Set fac3 to be an investment
+    model_dict["factors"]["fac3"]["is_investment"] = True
+    del model_dict["anchoring"]
+    with pytest.raises(
+        ValueError, match="Stages currently not supported when investments are present"
+    ):
+        process_model(model_dict)
+
+
 @pytest.fixture
 def model2_inv():
     with open(TEST_DIR / "model2.yaml") as y:
@@ -133,6 +157,7 @@ def model2_inv():
     # Set fac3 to be an investment
     model_dict["factors"]["fac3"]["is_investment"] = True
     del model_dict["stagemap"]
+    del model_dict["anchoring"]
     return model_dict
 
 
@@ -170,13 +195,13 @@ def test_with_inv_estimation_options(model2_inv):
     assert res["bounds_distance"] == 0.001
 
 
-def test_with_inv_anchoring(model2_inv):
+def test_with_inv_anchoring_is_empty(model2_inv):
     res = process_model(model2_inv)["anchoring"]
-    assert res["outcomes"] == {"fac1": "Q1"}
-    assert res["factors"] == ["fac1"]
-    assert res["free_controls"]
-    assert res["free_constant"]
-    assert res["free_loadings"]
+    assert res["outcomes"] == {}
+    assert res["factors"] == []
+    assert res["free_controls"] is False
+    assert res["free_constant"] is False
+    assert res["free_loadings"] is False
 
 
 def test_with_inv_transition_info(model2_inv):
@@ -192,7 +217,7 @@ def test_with_inv_update_info(model2_inv):
     res = process_model(model2_inv)["update_info"]
     test_dir = Path(__file__).parent.resolve()
     expected = pd.read_csv(
-        test_dir / "model2_correct_update_info.csv",
+        test_dir / "model2_with_inv_correct_update_info.csv",
         index_col=["period", "variable"],
     )
     assert_frame_equal(res, expected)
@@ -203,32 +228,116 @@ def test_with_inv_normalizations(model2_inv):
         "fac1": {
             "loadings": [
                 {"y1": 1},
+                {},
                 {"y1": 1},
+                {},
                 {"y1": 1},
+                {},
                 {"y1": 1},
+                {},
                 {"y1": 1},
+                {},
                 {"y1": 1},
+                {},
                 {"y1": 1},
+                {},
                 {"y1": 1},
+                {},
             ],
-            "intercepts": [{}, {}, {}, {}, {}, {}, {}, {}],
+            "intercepts": [
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+            ],
         },
         "fac2": {
             "loadings": [
                 {"y4": 1},
+                {},
                 {"y4": 1},
+                {},
                 {"y4": 1},
+                {},
                 {"y4": 1},
+                {},
                 {"y4": 1},
+                {},
                 {"y4": 1},
+                {},
                 {"y4": 1},
+                {},
                 {"y4": 1},
+                {},
             ],
-            "intercepts": [{}, {}, {}, {}, {}, {}, {}, {}],
+            "intercepts": [
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+            ],
         },
         "fac3": {
-            "loadings": [{"y7": 1}, {}, {}, {}, {}, {}, {}, {}],
-            "intercepts": [{}, {}, {}, {}, {}, {}, {}, {}],
+            "loadings": [
+                {},
+                {"y7": 1},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+            ],
+            "intercepts": [
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+            ],
         },
     }
     res = process_model(model2_inv)["normalizations"]
