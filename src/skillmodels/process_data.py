@@ -1,10 +1,39 @@
 import warnings
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 
 from skillmodels.process_model import get_period_measurements
+
+
+def augment_data_for_investments(data: pd.DataFrame, model_dict: dict[str, Any]):
+    """Make room for endogenous investments by doubling up the periods.
+
+    Endogeneity of investments means that current states influence the
+
+    """
+    assert data.reset_index()["id_kid"].nunique() * 5 == data.shape[0]
+    assert set(data.reset_index()["trimester"].unique()) == set(
+        TRIM_AUG_TO_TRIMESTER.values()
+    )
+
+    out = pd.DataFrame()
+    for trim_aug, trimester in TRIM_AUG_TO_TRIMESTER.items():
+        meas_cols = sorted(
+            {
+                m
+                for f in model_dict["factors"].values()
+                for m in f["measurements"][trim_aug]
+            }
+        )
+        cols = model_dict["observed_factors"] + meas_cols
+        period_data = data.loc[(slice(None), trimester), cols].copy()
+        period_data["trim_aug"] = trim_aug
+        out = pd.concat([out, period_data])
+
+    out = out.reset_index().set_index(["id_kid", "trim_aug"]).sort_index()
 
 
 def process_data(df, labels, update_info, anchoring_info, purpose="estimation"):

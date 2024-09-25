@@ -1,5 +1,4 @@
 import functools
-from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -17,31 +16,6 @@ from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
 
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
-
-
-def model_has_investments(factors: dict[str, Any]) -> bool:
-    """Check whether there are any investment factors present."""
-    investments = pd.DataFrame(
-        [
-            {
-                "factor": f,
-                "is_investment": v.get("is_investment", False),
-                "is_correction": v.get("is_correction", False),
-            }
-            for f, v in factors.items()
-        ]
-    ).set_index("factor")
-    if (investments.dtypes != bool).any():  # noqa: E721
-        raise ValueError(
-            "If specified, 'is_investment' and 'is_correction' both need to be of type"
-            f"'bool', got:\n{investments}"
-        )
-    if (~investments["is_investment"] & investments["is_correction"]).any():
-        raise ValueError(
-            "A factor cannot be a correction and not an investment, got:\n"
-            f"{investments}"
-        )
-    return investments["is_investment"].any()
 
 
 def get_maximization_inputs(model_dict, data):
@@ -74,8 +48,6 @@ def get_maximization_inputs(model_dict, data):
 
 
     """
-    has_investments = model_has_investments(model_dict["factors"])
-
     model = process_model(model_dict)
     p_index = get_params_index(
         model["update_info"],

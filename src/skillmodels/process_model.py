@@ -1,4 +1,5 @@
 from functools import partial
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -38,14 +39,18 @@ def process_model(model_dict):
         loadings and intercepts for each factor. See :ref:`normalizations`.
 
     """
-    dims = get_dimensions(model_dict)
-    labels = _get_labels(model_dict, dims)
+    has_investments = get_has_investments(model_dict["factors"])
+    dims = get_dimensions(model_dict, has_investments)
+    labels = _get_labels(
+        model_dict=model_dict, has_investments=has_investments, dimensions=dims
+    )
     anchoring = _process_anchoring(model_dict)
     check_model(model_dict, labels, dims, anchoring)
     transition_info = _get_transition_info(model_dict, labels)
     labels["transition_names"] = list(transition_info["function_names"].values())
 
     processed = {
+        "has_investments": has_investments,
         "dimensions": dims,
         "labels": labels,
         "anchoring": anchoring,
@@ -57,11 +62,37 @@ def process_model(model_dict):
     return processed
 
 
-def get_dimensions(model_dict):
+def get_has_investments(factors: dict[str, Any]) -> bool:
+    """Return True if any investment factors are present."""
+    investments = pd.DataFrame(
+        [
+            {
+                "factor": f,
+                "is_investment": v.get("is_investment", False),
+                "is_correction": v.get("is_correction", False),
+            }
+            for f, v in factors.items()
+        ]
+    ).set_index("factor")
+    if (investments.dtypes != bool).any():  # noqa: E721
+        raise ValueError(
+            "If specified, 'is_investment' and 'is_correction' both need to be of type"
+            f"'bool', got:\n{investments}"
+        )
+    if (~investments["is_investment"] & investments["is_correction"]).any():
+        raise ValueError(
+            "A factor cannot be a correction and not an investment, got:\n"
+            f"{investments}"
+        )
+    return investments["is_investment"].any()
+
+
+def get_dimensions(model_dict, has_investments):
     """Extract the dimensions of the model.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
+        has_investments (bool): Whether investment factors are present.
 
     Returns:
         dict: Dimensional information like n_states, n_periods, n_controls,
@@ -69,24 +100,41 @@ def get_dimensions(model_dict):
 
     """
     all_n_periods = [len(d["measurements"]) for d in model_dict["factors"].values()]
+    n_periods_raw = max(all_n_periods)
+    n_periods = 2 * n_periods_raw if has_investments else n_periods_raw
 
     dims = {
         "n_latent_factors": len(model_dict["factors"]),
         "n_observed_factors": len(model_dict.get("observed_factors", [])),
-        "n_periods": max(all_n_periods),
-        # plus 1 for the constant
-        "n_controls": len(model_dict.get("controls", [])) + 1,
+        "n_periods": n_periods,
+        "n_periods_raw": n_periods_raw,
+        "n_controls": len(model_dict.get("controls", [])) + 1,  # plus 1: constant
         "n_mixtures": model_dict["estimation_options"].get("n_mixtures", 1),
     }
     dims["n_all_factors"] = dims["n_latent_factors"] + dims["n_observed_factors"]
     return dims
 
 
-def _get_labels(model_dict, dimensions):
+def _get_periods_to_periods_raw(
+    dimensions: dict[str, int], has_investments: bool
+) -> dict[int, int]:
+    """Return mapper of periods potentially augmented for investments to raw periods."""
+    periods = list(range(dimensions["n_periods"]))
+    return {p: p // 2 for p in periods} if has_investments else {p: p for p in periods}
+
+
+def _get_periods_to_period_types(
+    periods: list[int], has_investments: bool
+) -> dict[int, Literal["states", "investments"]]:
+    return {p: p // 2 for p in periods} if has_investments else {p: p for p in periods}
+
+
+def _get_labels(model_dict, has_investments, dimensions):
     """Extract labels of the model quantities.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
+        has_investments (bool): Whether investment factors are present.
         dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
 
@@ -95,13 +143,24 @@ def _get_labels(model_dict, dimensions):
         factors, periods, controls, stagemap and stages. See :ref:`labels`
 
     """
+    if has_investments and "stagemap" in model_dict:
+        raise ValueError("Stages currently not supported when investments are present.")
+
     stagemap = model_dict.get("stagemap", list(range(dimensions["n_periods"] - 1)))
+
+    periods_to_periods_raw = _get_periods_to_periods_raw(dimensions, has_investments)
+    periods_to_period_types = _get_periods_to_period_types(
+        list(periods_to_periods_raw.keys()), has_investments
+    )
 
     labels = {
         "latent_factors": list(model_dict["factors"]),
         "observed_factors": list(model_dict.get("observed_factors", [])),
         "controls": ["constant", *list(model_dict.get("controls", []))],
-        "periods": list(range(dimensions["n_periods"])),
+        "periods": list(periods_to_periods_raw.keys()),
+        "periods_raw": sorted(set(periods_to_periods_raw.values())),
+        "periods_to_periods_raw": periods_to_periods_raw,
+        "periods_to_period_types": periods_to_period_types,
         "stagemap": stagemap,
         "stages": sorted(np.unique(stagemap)),
     }

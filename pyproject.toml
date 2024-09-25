@@ -218,6 +218,9 @@ extend-ignore = [
     # exception must not use an f-string literal
     "EM102",
 
+    # Boolean-typed positional arguments.
+    "FBT001",
+
     # Boolean default positional argument in function definition
     "FBT002",
 
@@ -281,7 +284,6 @@ extend-ignore = [
 "tests/*" = [
     "ARG001",
     "E712",
-    "E721",
     "FBT003",
     "INP001",
     "PD002",
