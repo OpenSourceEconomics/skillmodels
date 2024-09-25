@@ -50,13 +50,16 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         raise ValueError("To simulate a model with controls, data cannot be None.")
 
     if data is not None:
-        control_data, observed_data = process_data(
+        processed_data = process_data(
             df=data,
+            has_investments=model["has_investments"],
             labels=model["labels"],
             update_info=model["update_info"],
             anchoring_info=model["anchoring"],
             purpose="simulation",
         )
+        control_data = processed_data["controls"]
+        observed_factor_data = processed_data["observed_factors"]
         data_n_obs = control_data.shape[1]
 
         if n_obs is not None and data_n_obs != n_obs:
@@ -69,7 +72,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
     else:
         control_data = jnp.ones((n_obs, 1))
         n_periods = model["dimensions"]["n_periods"]
-        observed_data = jnp.zeros((n_periods, n_obs, 0))
+        observed_factor_data = jnp.zeros((n_periods, n_obs, 0))
 
     params_index = get_params_index(
         update_info=model["update_info"],
@@ -95,7 +98,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         n_obs=n_obs,
     )
 
-    observed_data, latent_data = _simulate_dataset(
+    observed_factor_data, latent_data = _simulate_dataset(
         latent_states=states,
         covs=covs,
         log_weights=log_weights,
@@ -105,7 +108,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         n_obs=n_obs,
         update_info=model["update_info"],
         control_data=control_data,
-        observed_factor_data=observed_data,
+        observed_factor_data=observed_factor_data,
         policies=policies,
         transition_info=model["transition_info"],
     )
@@ -131,7 +134,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
                 model["labels"]["latent_factors"],
             ),
         },
-        "measurements": observed_data,
+        "measurements": observed_factor_data,
     }
 
     return out

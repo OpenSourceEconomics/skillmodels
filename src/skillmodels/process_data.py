@@ -8,12 +8,13 @@ import pandas as pd
 from skillmodels.process_model import get_period_measurements
 
 
-def augment_data_for_investments(data: pd.DataFrame, model_dict: dict[str, Any]):
+def _augment_data_for_investments(data: pd.DataFrame, labels: dict[str, Any]):
     """Make room for endogenous investments by doubling up the periods.
 
     Endogeneity of investments means that current states influence the
 
     """
+    # Make sure datset is balanced
     assert data.reset_index()["id_kid"].nunique() * 5 == data.shape[0]
     assert set(data.reset_index()["trimester"].unique()) == set(
         TRIM_AUG_TO_TRIMESTER.values()
@@ -36,12 +37,15 @@ def augment_data_for_investments(data: pd.DataFrame, model_dict: dict[str, Any])
     out = out.reset_index().set_index(["id_kid", "trim_aug"]).sort_index()
 
 
-def process_data(df, labels, update_info, anchoring_info, purpose="estimation"):
+def process_data(
+    df, has_investments, labels, update_info, anchoring_info, purpose="estimation"
+):
     """Process the data for estimation.
 
     Args:
         df (DataFrame): panel dataset in long format. It has a MultiIndex
             where the first level indicates the period and the second the individual.
+        has_investments (bool):
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
         update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
@@ -50,30 +54,33 @@ def process_data(df, labels, update_info, anchoring_info, purpose="estimation"):
         purpose (Literal["estimation", "anything"]): Whether the data is used for
             estimation (default, includes measurement data) or not.
 
-    Returns:
-        meas_data (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
-            observed measurements. NaN if the measurement was not observed.
-        control_data (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
-            with observed control variables for the measurement equations.
-        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
+    Returns a dictionary with keys:
+        controls (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
+            observed measurements. NaN if the measurement was not observed. Only
+            returned if estimation==True
+        observed_factors (jax.numpy.array): Array of shape
+            (n_periods, n_obs, n_controls) with observed control variables for the
+            measurement equations.
+        measurements (jax.numpy.array): Array of shape (n_periods, n_obs,
             n_observed_factors) with data on the observed factors.
 
     """
-    df = pre_process_data(df, labels["periods"])
+    df = pre_process_data(df, labels["periods_raw"])
     df["constant"] = 1
-    df = _add_copies_of_anchoring_outcome(df, anchoring_info)
+    out = {}
+
+    if has_investments:
+        df = _augment_data_for_investments(df, labels)
+    else:
+        df = _add_copies_of_anchoring_outcome(df, anchoring_info)
     _check_data(df, update_info, labels, purpose=purpose)
     n_obs = int(len(df) / len(labels["periods"]))
     df = _handle_controls_with_missings(df, labels["controls"], update_info)
-    if purpose == "estimation":
-        meas_data = _generate_measurements_array(df, update_info, n_obs)
-    control_data = _generate_controls_array(df, labels, n_obs)
-    observed_data = _generate_observed_factor_array(df, labels, n_obs)
+    out["controls"] = _generate_controls_array(df, labels, n_obs)
+    out["observed_factors"] = _generate_observed_factor_array(df, labels, n_obs)
 
     if purpose == "estimation":
-        out = (meas_data, control_data, observed_data)
-    else:
-        out = (control_data, observed_data)
+        out["measurements"] = _generate_measurements_array(df, update_info, n_obs)
     return out
 
 

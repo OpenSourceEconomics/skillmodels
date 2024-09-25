@@ -374,12 +374,13 @@ def _get_states_data(model, period, data, states, observed_factors):
         )
 
     if observed_factors:
-        _, _, _observed_arr = process_data(
+        _observed_arr = process_data(
             df=data,
+            has_investments=model["has_investments"],
             labels=model["labels"],
             update_info=model["update_info"],
             anchoring_info=model["anchoring"],
-        )
+        )["observed_factors"]
         # convert from jax to numpy
         _observed_arr = np.array(_observed_arr)
         observed_data = pd.DataFrame(
