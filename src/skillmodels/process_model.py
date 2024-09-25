@@ -1,3 +1,4 @@
+from copy import deepcopy
 from functools import partial
 from typing import Any, Literal
 
@@ -46,7 +47,11 @@ def process_model(model_dict):
     )
     anchoring = _process_anchoring(model_dict)
     check_model(model_dict, labels, dims, anchoring)
-    transition_info = _get_transition_info(model_dict, labels)
+    if has_investments:
+        model_dict_aug = _augment_periods_for_investments(model_dict, labels)
+    else:
+        model_dict_aug = model_dict
+    transition_info = _get_transition_info(model_dict_aug, labels)
     labels["transition_names"] = list(transition_info["function_names"].values())
 
     processed = {
@@ -126,7 +131,12 @@ def _get_periods_to_periods_raw(
 def _get_periods_to_period_types(
     periods: list[int], has_investments: bool
 ) -> dict[int, Literal["states", "investments"]]:
-    return {p: p // 2 for p in periods} if has_investments else {p: p for p in periods}
+    return {
+        p: ("states" if p % 2 == 0 else "investments")
+        if has_investments
+        else {p: "states"}
+        for p in periods
+    }
 
 
 def _get_labels(model_dict, has_investments, dimensions):
@@ -223,6 +233,37 @@ def _process_anchoring(model_dict):
         anchinfo["factors"] = list(anchinfo["outcomes"])
 
     return anchinfo
+
+
+def _insert_empty_elements_into_list(old, insert_at_modulo, to_insert, p_to_p_raw):
+    return [
+        to_insert if p % 2 == insert_at_modulo else old[p_raw]
+        for p, p_raw in p_to_p_raw.items()
+    ]
+
+
+def _augment_periods_for_investments(
+    model_dict: dict[str, Any], labels: dict[str, Any]
+) -> dict[str, Any]:
+    """Insert periods without measurements / normalisations if investments are present.
+
+    Args:
+        model_dict: The model specification. See: :ref:`model_specs`
+        labels: Dictionary with information about periods etc.
+
+    Returns:
+        Model dictionary with twice the amount of periods
+
+    """
+    aug = deepcopy(model_dict)
+    for fac, v in model_dict["factors"].items():
+        insert_at_modulo = 0 if v.get("is_investment", False) else 1
+        aug["factors"][fac]["measurements"] = _insert_empty_elements_into_list(
+            old=v["measurements"],
+            insert_at_modulo=insert_at_modulo,
+            to_insert=[],
+            p_to_p_raw=labels["periods_to_periods_raw"],
+        )
 
 
 def _get_transition_info(model_dict, labels):
