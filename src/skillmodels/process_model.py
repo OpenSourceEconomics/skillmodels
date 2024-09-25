@@ -446,22 +446,6 @@ def _process_normalizations(model_dict, dimensions, labels):
     return normalizations
 
 
-def fill_list(short_list, fill_value, length):
-    """Extend a list to specified length by filling it with the fill_value.
-
-    Examples:
-    >>> fill_list(["a"], "b", 3)
-    ['a', 'b', 'b']
-
-    """
-    res = list(short_list)
-    diff = length - len(short_list)
-    assert diff >= 0, "short_list has to be shorter than length."
-    if diff >= 1:
-        res += [fill_value] * diff
-    return res
-
-
 def get_period_measurements(update_info, period):
     if period in update_info.index:
         measurements = list(update_info.loc[period].index)
