@@ -42,6 +42,10 @@ def get_maximization_inputs(model_dict, data):
             model specification.
         params_template (pd.DataFrame): Parameter DataFrame with correct index and
             bounds but with empty value column.
+        data_aug (pd.DataFrame): DataFrame with augmented data. If model contains
+            investment factors, we double up the number of periods in order to add
+
+
 
     """
     model = process_model(model_dict)
@@ -58,11 +62,13 @@ def get_maximization_inputs(model_dict, data):
         model["labels"],
         model["anchoring"],
     )
-    measurements, controls, observed_factors = process_data(
-        data,
-        model["labels"],
-        model["update_info"],
-        model["anchoring"],
+    processed_data = process_data(
+        df=data,
+        has_investments=model["has_investments"],
+        labels=model["labels"],
+        update_info=model["update_info"],
+        anchoring_info=model["anchoring"],
+        purpose="estimation",
     )
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
@@ -84,9 +90,9 @@ def get_maximization_inputs(model_dict, data):
         partialed_loglikes[n] = _partial_some_log_likelihood(
             fun=fun,
             parsing_info=parsing_info,
-            measurements=measurements,
-            controls=controls,
-            observed_factors=observed_factors,
+            measurements=processed_data["measurements"],
+            controls=processed_data["controls"],
+            observed_factors=processed_data["observed_factors"],
             model=model,
             sigma_weights=sigma_weights,
             sigma_scaling_factor=sigma_scaling_factor,

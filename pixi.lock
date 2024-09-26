@@ -14100,9 +14100,9 @@ packages:
   timestamp: 1620240338595
 - kind: pypi
   name: skillmodels
-  version: 0.1.dev258+g8312a84.d20240911
+  version: 0.0.24.dev237+gceff7aa.d20240925
   path: .
-  sha256: 3202b313c9a1f6b5a8ae4fdbbe40c12ee62357da7f20f5f03628a3410a6a81d8
+  sha256: 7408737e5806b681e4e330a503191f69bffa6ae324663f0a53341172ffff219a
   requires_dist:
   - dags
   - numpy

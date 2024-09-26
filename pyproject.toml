@@ -218,6 +218,9 @@ extend-ignore = [
     # exception must not use an f-string literal
     "EM102",
 
+    # Boolean-typed positional arguments.
+    "FBT001",
+
     # Boolean default positional argument in function definition
     "FBT002",
 
@@ -276,9 +279,19 @@ extend-ignore = [
 "src/skillmodels/simulate_data.py" = ["D417"]
 "src/skillmodels/visualize_*.py" = ["BLE001", "D417"]
 "src/skillmodels/*_heatmap*.py" = ["D417"]
-"tests/*" = ["ARG001", "FBT003", "INP001", "PD002", "NPY002", "PTH123", "S506"]
 "**/*.ipynb" = ["B018", "T201", "E402", "PLR2004", "INP001", "PTH100"]
 "docs/**/*" = ["A001", "ERA001", "INP001", "PTH100", "PTH123", "S506"]
+"tests/*" = [
+    "ARG001",
+    "E712",
+    "FBT003",
+    "INP001",
+    "PD002",
+    "PT011",
+    "NPY002",
+    "PTH123",
+    "S506"
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
