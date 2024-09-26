@@ -142,8 +142,7 @@ def _augment_data_for_investments(
             for period, period_raw in labels["periods_to_periods_raw"].items()
         ]
     )
-    out = out.set_index(["id", "period"]).sort_index()
-    return out
+    return out.set_index(["id", "period"]).sort_index()
 
 
 def _add_copies_of_anchoring_outcome(df, anchoring_info):
