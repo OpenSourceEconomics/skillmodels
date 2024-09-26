@@ -8,34 +8,61 @@ import pandas as pd
 from skillmodels.process_model import get_period_measurements
 
 
-def _augment_data_for_investments(data: pd.DataFrame, labels: dict[str, Any]):
+def _get_period_data_for_investments(
+    period: int,
+    period_raw: int,
+    df: pd.DataFrame,
+    update_info: pd.DataFrame,
+    labels: dict[str, Any],
+) -> pd.DataFrame:
+    meas = get_period_measurements(update_info, period)
+    controls = labels["controls"]
+    observed = labels["observed_factors"]
+
+    out = df.query(f"period_raw == {period_raw}")[
+        [
+            "id",
+            *meas,
+            *controls,
+            *observed,
+            "period_raw",
+            "__old_id__",
+            "__old_period__",
+        ]
+    ]
+    out["period"] = period
+    return out
+
+
+def _augment_data_for_investments(df: pd.DataFrame, model: dict[str, Any]):
     """Make room for endogenous investments by doubling up the periods.
 
     Endogeneity of investments means that current states influence the
 
     """
+    df = df.reset_index().rename(columns={"period": "period_raw"})
     # Make sure datset is balanced
-    breakpoint()
-    assert data.reset_index()["id_kid"].nunique() * 5 == data.shape[0]
-    assert set(data.reset_index()["trimester"].unique()) == set(
-        TRIM_AUG_TO_TRIMESTER.values()
+    n_ids = df["id"].nunique()
+    n_periods = df["period_raw"].nunique()
+    assert n_ids * n_periods == df.shape[0]
+    assert set(df["period_raw"]) == set(
+        model["labels"]["periods_to_periods_raw"].values()
     )
 
-    out = pd.DataFrame()
-    for trim_aug, trimester in TRIM_AUG_TO_TRIMESTER.items():
-        meas_cols = sorted(
-            {
-                m
-                for f in model_dict["factors"].values()
-                for m in f["measurements"][trim_aug]
-            }
-        )
-        cols = model_dict["observed_factors"] + meas_cols
-        period_data = data.loc[(slice(None), trimester), cols].copy()
-        period_data["trim_aug"] = trim_aug
-        out = pd.concat([out, period_data])
-
-    out = out.reset_index().set_index(["id_kid", "trim_aug"]).sort_index()
+    out = pd.concat(
+        [
+            _get_period_data_for_investments(
+                period=period,
+                period_raw=period_raw,
+                df=df,
+                update_info=model["update_info"],
+                labels=model["labels"],
+            )
+            for period, period_raw in model["labels"]["periods_to_periods_raw"].items()
+        ]
+    )
+    out = out.set_index(["id", "period"]).sort_index()
+    return out
 
 
 def process_data(

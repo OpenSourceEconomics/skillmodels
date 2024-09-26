@@ -46,7 +46,7 @@ def process_model(model_dict):
         model_dict=model_dict, has_investments=has_investments, dimensions=dims
     )
     anchoring = _process_anchoring(model_dict, has_investments)
-    check_model(model_dict, labels, dims, anchoring)
+    check_model(model_dict, labels, dims, anchoring, has_investments)
     if has_investments:
         model_dict_aug = _augment_periods_for_investments(
             model_dict=model_dict,

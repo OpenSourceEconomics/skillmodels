@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def check_model(model_dict, labels, dimensions, anchoring):
+def check_model(model_dict, labels, dimensions, anchoring, has_investments):
     """Check consistency and validity of the model specification.
 
     labels, dimensions and anchoring information are done before the model checking
@@ -15,12 +15,11 @@ def check_model(model_dict, labels, dimensions, anchoring):
         model_dict (dict): The model specification. See: :ref:`model_specs`
         dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
-
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
-
         anchoring (dict): Dictionary with information about anchoring.
             See :ref:`anchoring`
+        has_investments (bool): Whether the model has any investment factors
 
     Raises:
         ValueError
@@ -32,7 +31,14 @@ def check_model(model_dict, labels, dimensions, anchoring):
         dimensions["n_periods"],
     )
     report += _check_anchoring(anchoring)
-    report += _check_measurements(model_dict, labels["latent_factors"])
+    invalid_measurements = _check_measurements(model_dict, labels["latent_factors"])
+    if invalid_measurements:
+        report += invalid_measurements
+    elif has_investments:
+        # Make this conditional because the check only works for valid meas.
+        report += _check_no_overlap_in_measurements_of_states_and_inv(
+            model_dict, labels
+        )
     report += _check_normalizations(model_dict, labels["latent_factors"])
 
     report = "\n".join(report)
@@ -83,7 +89,7 @@ def _check_measurements(model_dict, factors):
         candidate = model_dict["factors"][factor]["measurements"]
         if not _is_list_of(candidate, list):
             report.append(
-                f"measurements must lists of lists. Check measurements of {factor}.",
+                f"measurements must be lists of lists. Check measurements of {factor}.",
             )
         else:
             for period, meas_list in enumerate(candidate):
@@ -93,6 +99,24 @@ def _check_measurements(model_dict, factors):
                             "Measurements need to be valid pandas column names. Check "
                             f"{meas} for {factor} in period {period}.",
                         )
+    return report
+
+
+def _check_no_overlap_in_measurements_of_states_and_inv(model_dict, labels):
+    report = []
+    for period in labels["periods_raw"]:
+        meas = {}
+        for factor in labels["latent_factors"]:
+            props = model_dict["factors"][factor]
+            if props.get("is_investment", False):
+                meas["investments"] = set(props["measurements"][period])
+            else:
+                meas["states"] = set(props["measurements"][period])
+        if overlap := meas["states"].intersection(meas["investments"]):
+            report.append(
+                "Measurements for states and investments must not overlap. Check "
+                f"measurements {overlap} in period {period}.",
+            )
     return report
 
 
