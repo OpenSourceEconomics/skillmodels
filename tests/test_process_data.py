@@ -173,7 +173,11 @@ def test_augment_data_for_investments():
         }
     ).set_index(["id", "period"])
 
-    res = _augment_data_for_investments(df=pre_processed_data, model=model)
+    res = _augment_data_for_investments(
+        df=pre_processed_data,
+        labels=model["labels"],
+        update_info=model["update_info"],
+    )
     cols = ["period_raw", "var", "inv", "constant", "of"]
     pd.testing.assert_frame_equal(res[cols], exp[cols])
 
