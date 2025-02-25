@@ -84,7 +84,7 @@ allow-direct-references = true
 
 [tool.pixi.project]
 channels = ["conda-forge"]
-platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+platforms = ["linux-64", "win-64"]
 
 # Development Dependencies (conda)
 # --------------------------------------------------------------------------------------
@@ -92,23 +92,23 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
 [tool.pixi.dependencies]
 filterpy = "*"
 jupyterlab = "*"
-nbformat = ">=5.10.4,<6"
+nbformat = "*"
+networkx = "*"
 optimagic = "*"
-pixi-kernel = ">=0.4.0,<0.5"
+pixi-kernel = "*"
 plotly = ">=5.2,<6"
 pre-commit = "*"
 pybaum = "*"
-python = ">=3.12.5"
+python = "~=3.13"
 python-kaleido = "*"
-scipy = "<=1.13"
+scipy = "*"
 
 
 # Development Dependencies (pypi)
 # --------------------------------------------------------------------------------------
 
 [tool.pixi.target.unix.dependencies]
-jax = ">=0.4.20"
-jaxlib = ">=0.4.20"
+jaxlib = ">=0.5"
 
 # Development Dependencies (pypi)
 # --------------------------------------------------------------------------------------
@@ -118,20 +118,19 @@ pdbp = "*"
 skillmodels = {path = ".", editable = true}
 
 [tool.pixi.target.win-64.pypi-dependencies]
-jax = { version = ">=0.4.20", extras = ["cpu"] }
-jaxlib = ">=0.4.20"
+jax = { version = ">=0.5", extras = ["cpu"] }
+jaxlib = ">=0.5"
 
 # Features and Tasks
 # --------------------------------------------------------------------------------------
 
 [tool.pixi.feature.cuda]
-platforms = ["linux-64"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
 system-requirements = {cuda = "12"}
 
-[tool.pixi.feature.cuda.target.linux-64.dependencies]
+[tool.pixi.feature.cuda.target.unix.dependencies]
 cuda-nvcc = ">=12"
-jax = ">=0.4.20"
-jaxlib = { version = ">=0.4.20", build = "cuda12*" }
+jaxlib = { version = ">=0.5", build = "cuda12*" }
 
 [tool.pixi.feature.test.dependencies]
 pytest = "*"
