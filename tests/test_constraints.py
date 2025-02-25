@@ -28,6 +28,7 @@ def test_add_bounds():
     )
     expected = df.copy(deep=True)
     expected["lower_bound"] = [0.1] * 5 + [0.1, -np.inf, 0.1, -np.inf, 0.1]
+    expected["upper_bound"] = np.inf
 
     calculated = add_bounds(df, 0.1)
     assert_frame_equal(calculated, expected)

@@ -7,7 +7,9 @@ import numpy as np
 import skillmodels.transition_functions as tf
 
 
-def get_constraints(dimensions, labels, anchoring_info, update_info, normalizations):
+def get_constraint_tuples(
+    dimensions, labels, anchoring_info, update_info, normalizations
+):
     """Generate constraints implied by the model specification.
 
     The result can easily be converted to optimagic-style constraints.
@@ -71,6 +73,9 @@ def add_bounds(params_df, bounds_distance=0.0):
         )
         if "lower_bound" not in df.columns:
             df["lower_bound"] = -np.inf
+        if "upper_bound" not in df.columns:
+            df["upper_bound"] = np.inf
+
         df.loc["meas_sds", "lower_bound"] = bounds_distance
         df.loc["shock_sds", "lower_bound"] = bounds_distance
 

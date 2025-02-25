@@ -1,13 +1,15 @@
 import functools
+from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optimagic as om
 import pandas as pd
 
 import skillmodels.likelihood_function as lf
 import skillmodels.likelihood_function_debug as lfd
-from skillmodels.constraints import add_bounds, get_constraints
+from skillmodels.constraints import add_bounds, get_constraint_tuples
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
@@ -41,7 +43,7 @@ def get_maximization_inputs(model_dict, data):
         constraints (list): List of optimagic constraints that are implied by the
             model specification.
         params_template (pd.DataFrame): Parameter DataFrame with correct index and
-            bounds but with empty value column.
+            bounds. The value column is empty except for the fixed constraints.
         data_aug (pd.DataFrame): DataFrame with augmented data. If model contains
             investment factors, we double up the number of periods in order to add
 
@@ -123,7 +125,7 @@ def get_maximization_inputs(model_dict, data):
         tmp["value"] = float(tmp["value"])
         return process_debug_data(debug_data=tmp, model=model)
 
-    constr = get_constraints(
+    _constraints_tuples = get_constraint_tuples(
         dimensions=model["dimensions"],
         labels=model["labels"],
         anchoring_info=model["anchoring"],
@@ -131,10 +133,16 @@ def get_maximization_inputs(model_dict, data):
         normalizations=model["normalizations"],
     )
 
+    constraints = convert_old_style_constraints(_constraints_tuples)
+
     params_template = pd.DataFrame(columns=["value"], index=p_index)
     params_template = add_bounds(
         params_template,
         model["estimation_options"]["bounds_distance"],
+    )
+    params_template = _fill_fixed_constraints(
+        params_template=params_template,
+        constraints_tuples=_constraints_tuples,
     )
 
     out = {
@@ -142,7 +150,7 @@ def get_maximization_inputs(model_dict, data):
         "loglikeobs": loglikeobs,
         "debug_loglike": debug_loglike,
         "loglike_and_gradient": loglike_and_gradient,
-        "constraints": constr,
+        "constraints": constraints,
         "params_template": params_template,
     }
 
@@ -218,3 +226,49 @@ def _get_jnp_params_vec(params, target_index):
 
     vec = jnp.array(params.reindex(target_index)["value"].to_numpy())
     return vec
+
+
+def _sel(params, loc):
+    return params.loc[loc]
+
+
+def convert_old_style_constraints(old_style):
+    # Need this in many cases, anyhow -- so just impose to simplify code below!
+    new_style = []
+    for oc in old_style:
+        if oc["type"] == "pairwise_equality":
+            new_style.append(
+                om.PairwiseEqualityConstraint(
+                    selectors=[functools.partial(_sel, loc=loc) for loc in oc["locs"]]
+                )
+            )
+        else:
+            sel = functools.partial(_sel, loc=oc["loc"])
+            if oc["type"] == "fixed":
+                new_style.append(om.FixedConstraint(selector=sel))
+            elif oc["type"] == "equality":
+                new_style.append(om.EqualityConstraint(selector=sel))
+            elif oc["type"] == "probability":
+                new_style.append(om.ProbabilityConstraint(selector=sel))
+            elif oc["type"] == "increasing":
+                new_style.append(om.IncreasingConstraint(selector=sel))
+            else:
+                raise TypeError(oc["type"])
+    return new_style
+
+
+def _fill_fixed_constraints(
+    params_template: pd.DataFrame,
+    constraints_tuples: list[dict[str, Any]],
+) -> pd.DataFrame:
+    params = params_template.copy()
+    for constr in constraints_tuples:
+        if constr["type"] == "fixed":
+            params.loc[constr["loc"], "value"] = constr["value"]
+
+    # Check that fixed constraints are valid
+    fixed = params[params["value"].notna()]
+    invalid = fixed.query("value < lower_bound or value > upper_bound")
+    if len(invalid) > 0:
+        raise ValueError(f"Invalid fixed constraints:\n\n{invalid}")
+    return params
