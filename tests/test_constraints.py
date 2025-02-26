@@ -50,15 +50,29 @@ def test_normalization_constraints():
 
     expected = [
         {
-            "loc": [
-                ("loadings", 0, "m1", "fac1"),
-                ("loadings", 0, "m2", "fac1"),
-                ("controls", 0, "m1", "constant"),
-                ("loadings", 1, "m1", "fac1"),
-                ("loadings", 0, "m3", "fac2"),
-            ],
+            "loc": ("loadings", 0, "m1", "fac1"),
             "type": "fixed",
-            "value": [2, 1.5, 0.5, 3, 1],
+            "value": 2,
+        },
+        {
+            "loc": ("loadings", 0, "m2", "fac1"),
+            "type": "fixed",
+            "value": 1.5,
+        },
+        {
+            "loc": ("controls", 0, "m1", "constant"),
+            "type": "fixed",
+            "value": 0.5,
+        },
+        {
+            "loc": ("loadings", 1, "m1", "fac1"),
+            "type": "fixed",
+            "value": 3,
+        },
+        {
+            "loc": ("loadings", 0, "m3", "fac2"),
+            "type": "fixed",
+            "value": 1,
         },
     ]
 
@@ -266,8 +280,8 @@ def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
         (0, 1),
     )
 
-    for constr in calculated:
-        del constr["description"]
+    for c_t in calculated:
+        del c_t["description"]
 
     expected = [
         {
@@ -306,8 +320,8 @@ def test_anchoring_constraints_for_loadings(anch_uinfo, base_anchoring_info):
         },
     ]
 
-    for constr in calculated:
-        del constr["description"]
+    for c_t in calculated:
+        del c_t["description"]
 
     assert calculated == expected
 
