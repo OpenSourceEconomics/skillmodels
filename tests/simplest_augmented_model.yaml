@@ -1,0 +1,19 @@
+---
+factors:
+  fac1:
+    is_correction: false
+    is_investment: false
+    measurements:
+      -   - var
+      -   - var
+    transition_function: linear
+  fac2:
+    is_correction: false
+    is_investment: true
+    measurements:
+      -   - inv
+      -   - inv
+    transition_function: linear
+observed_factors:
+  - of
+estimation_options: {}

@@ -1,10 +1,12 @@
 import io
 import textwrap
+from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 from numpy.testing import assert_array_equal as aae
 
 from skillmodels.process_data import (
@@ -16,6 +18,9 @@ from skillmodels.process_data import (
     pre_process_data,
 )
 from skillmodels.process_model import process_model
+
+# importing the TEST_DIR from config does not work for test run in conda build
+TEST_DIR = Path(__file__).parent.resolve()
 
 
 def test_pre_process_data():
@@ -40,146 +45,34 @@ def test_pre_process_data():
     assert res[["var", "inv"]].equals(exp[["var", "inv"]])
 
 
-def test_augment_data_for_investments():
-    df = pd.DataFrame(data=np.arange(15).reshape(3, 5).T, columns=["var", "inv", "of"])
-    df["period"] = [1, 1, 2, 1, 2]
-    df["id"] = [1, 3, 3, 5, 5]
-    df.set_index(["id", "period"], inplace=True)
+@pytest.fixture
+def simplest_augmented():
+    out = {}
+    with open(TEST_DIR / "simplest_augmented_model.yaml") as y:
+        out["model_dict"] = yaml.load(y, Loader=yaml.FullLoader)
+    _df = pd.DataFrame(data=np.arange(15).reshape(3, 5).T, columns=["var", "inv", "of"])
+    _df["period"] = [1, 1, 2, 1, 2]
+    _df["id"] = [1, 3, 3, 5, 5]
+    out["data_input"] = _df.set_index(["id", "period"])
+    out["data_exp"] = pd.read_csv(
+        TEST_DIR / "simplest_augmented_data_expected.csv", index_col=["id", "period"]
+    )
+    return out
 
-    model_dict = {
-        "factors": {
-            "fac1": {
-                "measurements": [["var"], ["var"]],
-                "transition_function": "linear",
-                "is_investment": False,
-                "is_correction": False,
-            },
-            "fac2": {
-                "measurements": [["inv"], ["inv"]],
-                "transition_function": "linear",
-                "is_investment": True,
-                "is_correction": False,
-            },
-        },
-        "observed_factors": ["of"],
-        "estimation_options": {},
-    }
 
-    model = process_model(model_dict)
-    pre_processed_data = pre_process_data(df, model["labels"]["periods_raw"])
+def test_augment_data_for_investments(simplest_augmented):
+    model = process_model(simplest_augmented["model_dict"])
+    pre_processed_data = pre_process_data(
+        simplest_augmented["data_input"], model["labels"]["periods_raw"]
+    )
     pre_processed_data["constant"] = 1
-
-    nan = np.nan
-    exp = pd.DataFrame(
-        {
-            "id": {
-                0: 0,
-                1: 0,
-                2: 0,
-                3: 0,
-                4: 1,
-                5: 1,
-                6: 1,
-                7: 1,
-                8: 2,
-                9: 2,
-                10: 2,
-                11: 2,
-            },
-            "period": {
-                0: 0,
-                1: 1,
-                2: 2,
-                3: 3,
-                4: 0,
-                5: 1,
-                6: 2,
-                7: 3,
-                8: 0,
-                9: 1,
-                10: 2,
-                11: 3,
-            },
-            "period_raw": {
-                0: 0,
-                1: 0,
-                2: 1,
-                3: 1,
-                4: 0,
-                5: 0,
-                6: 1,
-                7: 1,
-                8: 0,
-                9: 0,
-                10: 1,
-                11: 1,
-            },
-            "constant": {
-                0: 1,
-                1: 1,
-                2: 1,
-                3: 1,
-                4: 1,
-                5: 1,
-                6: 1,
-                7: 1,
-                8: 1,
-                9: 1,
-                10: 1,
-                11: 1,
-            },
-            "var": {
-                0: 0.0,
-                1: nan,
-                2: nan,
-                3: nan,
-                4: 1.0,
-                5: nan,
-                6: 2.0,
-                7: nan,
-                8: 3.0,
-                9: nan,
-                10: 4.0,
-                11: nan,
-            },
-            "inv": {
-                0: nan,
-                1: 5.0,
-                2: nan,
-                3: nan,
-                4: nan,
-                5: 6.0,
-                6: nan,
-                7: 7.0,
-                8: nan,
-                9: 8.0,
-                10: nan,
-                11: 9.0,
-            },
-            "of": {
-                0: 10.0,
-                1: 10.0,
-                2: nan,
-                3: nan,
-                4: 11.0,
-                5: 11.0,
-                6: 12.0,
-                7: 12.0,
-                8: 13.0,
-                9: 13.0,
-                10: 14.0,
-                11: 14.0,
-            },
-        }
-    ).set_index(["id", "period"])
-
     res = _augment_data_for_investments(
         df=pre_processed_data,
         labels=model["labels"],
         update_info=model["update_info"],
     )
     cols = ["period_raw", "var", "inv", "constant", "of"]
-    pd.testing.assert_frame_equal(res[cols], exp[cols])
+    pd.testing.assert_frame_equal(res[cols], simplest_augmented["data_exp"][cols])
 
 
 def test_handle_controls_with_missings():
