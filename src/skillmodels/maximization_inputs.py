@@ -70,7 +70,7 @@ def get_maximization_inputs(model_dict, data):
     )
     processed_data = process_data(
         df=data,
-        has_investments=model["has_investments"],
+        has_investments=model["investments_info"]["has_investments"],
         labels=model["labels"],
         update_info=model["update_info"],
         anchoring_info=model["anchoring"],
@@ -135,6 +135,7 @@ def get_maximization_inputs(model_dict, data):
         anchoring_info=model["anchoring"],
         update_info=model["update_info"],
         normalizations=model["normalizations"],
+        investments_info=model["investments_info"],
     )
 
     constraints = constraints_dicts_to_om(_constraints_tuples)

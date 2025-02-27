@@ -47,6 +47,22 @@ def params_linear(factors):
     return [*factors, "constant"]
 
 
+def identity_constraints_linear(factor, period, all_factors) -> list[dict]:
+    """Index tuples for linear transition function."""
+    constraints_dicts = []
+    for regressor in params_linear(all_factors):
+        val = 1.0 if factor == regressor else 0.0
+        constraints_dicts.append(
+            {
+                "loc": ("transition", period, factor, regressor),
+                "type": "fixed",
+                "value": val,
+                "description": "Identity constraint.",
+            }
+        )
+    return constraints_dicts
+
+
 def translog(states, params):
     """Translog transition function.
 
@@ -80,6 +96,22 @@ def params_translog(factors):
     return names
 
 
+def identity_constraints_translog(factor, period, all_factors) -> list[dict]:
+    """Index tuples for translog transition function."""
+    constraints_dicts = []
+    for regressor in params_translog(all_factors):
+        val = 1.0 if factor == regressor else 0.0
+        constraints_dicts.append(
+            {
+                "loc": ("transition", period, factor, regressor),
+                "type": "fixed",
+                "value": val,
+                "description": "Identity constraint.",
+            }
+        )
+    return constraints_dicts
+
+
 def log_ces(states, params):
     """Log CES production function (KLS version)."""
     phi = params[-1]
@@ -105,6 +137,10 @@ def constraints_log_ces(factor, factors, period):
     names = params_log_ces(factors)
     loc = [("transition", period, factor, name) for name in names[:-1]]
     return {"loc": loc, "type": "probability"}
+
+
+def identity_constraints_log_ces(factors, period, all_factors):
+    raise NotImplementedError
 
 
 def constant(state, params):  # noqa: ARG001
@@ -137,6 +173,10 @@ def params_robust_translog(factors):
     return params_translog(factors)
 
 
+def identity_constraints_robust_translog(factor, period, all_factors) -> list[dict]:
+    return identity_constraints_translog(factor, period, all_factors)
+
+
 def linear_and_squares(states, params):
     """linear_and_squares transition function."""
     nfac = len(states)
@@ -154,6 +194,22 @@ def params_linear_and_squares(factors):
     """Index tuples for the linear_and_squares production function."""
     names = factors + [f"{factor} ** 2" for factor in factors] + ["constant"]
     return names
+
+
+def identity_constraints_linear_and_squares(factor, period, all_factors) -> list[dict]:
+    """Index tuples for linear_and_squares transition function."""
+    constraints_dicts = []
+    for regressor in params_linear_and_squares(all_factors):
+        val = 1.0 if factor == regressor else 0.0
+        constraints_dicts.append(
+            {
+                "loc": ("transition", period, factor, regressor),
+                "type": "fixed",
+                "value": val,
+                "description": "Identity constraint.",
+            }
+        )
+    return constraints_dicts
 
 
 def log_ces_general(states, params):
@@ -176,3 +232,7 @@ def log_ces_general(states, params):
 def params_log_ces_general(factors):
     """Index tuples for the generalized log_ces production function."""
     return factors + [f"sigma_{fac}" for fac in factors] + ["tfp"]
+
+
+def identity_constraints_log_ces_general(factors, period, all_factors):
+    raise NotImplementedError

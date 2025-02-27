@@ -9,8 +9,8 @@ from dags.signature import rename_arguments
 from jax import vmap
 from pandas import DataFrame
 
-import skillmodels.transition_functions as tf
-from skillmodels.check_model import check_model
+import skillmodels.transition_functions as t_f_module
+from skillmodels.check_model import check_model, check_stagemap
 from skillmodels.decorators import extract_params, jax_array_output
 
 pd.set_option("future.no_silent_downcasting", True)  # noqa:  FBT003
@@ -29,37 +29,48 @@ def process_model(model_dict):
     Returns:
         dict: nested dictionary of model specs. It has the following entries:
         - dimensions (dict): Dimensional information like n_states, n_periods,
-        n_controls, n_mixtures. See :ref:`dimensions`.
+          n_controls, n_mixtures. See :ref:`dimensions`.
         - labels (dict): Dict of lists with labels for the model quantities like
-        factors, periods, controls, stagemap and stages. See :ref:`labels`
+          factors, periods, controls, stagemap and stages. See :ref:`labels`
         - anchoring (dict): Information about anchoring. See :ref:`anchoring`
         - transition_info (dict): Everything related to transition functions.
         - update_info (pandas.DataFrame): DataFrame with one row per Kalman update
-        needed in the likelihood function. See :ref:`update_info`.
+          needed in the likelihood function. See :ref:`update_info`.
         - normalizations (dict): Nested dictionary with information on normalized factor
-        loadings and intercepts for each factor. See :ref:`normalizations`.
+          loadings and intercepts for each factor. See :ref:`normalizations`.
 
     """
     has_investments = get_has_investments(model_dict["factors"])
-    dims = get_dimensions(model_dict, has_investments)
+    dims = get_dimensions(model_dict=model_dict, has_investments=has_investments)
     labels = _get_labels(
         model_dict=model_dict, has_investments=has_investments, dimensions=dims
     )
     anchoring = _process_anchoring(model_dict, has_investments)
-    check_model(model_dict, labels, dims, anchoring, has_investments)
     if has_investments:
         model_dict_aug = _augment_periods_for_investments(
             model_dict=model_dict,
             dimensions=dims,
             labels=labels,
         )
+        investments_info = _get_investments_info(
+            has_investments=has_investments,
+            model_dict=model_dict_aug,
+            labels=labels,
+        )
     else:
         model_dict_aug = model_dict
+        investments_info = {"has_investments": has_investments}
+    check_model(
+        model_dict=model_dict_aug,
+        labels=labels,
+        dimensions=dims,
+        anchoring=anchoring,
+        has_investments=has_investments,
+    )
     transition_info = _get_transition_info(model_dict_aug, labels)
     labels["transition_names"] = list(transition_info["function_names"].values())
 
     processed = {
-        "has_investments": has_investments,
         "dimensions": dims,
         "labels": labels,
         "anchoring": anchoring,
@@ -67,6 +78,7 @@ def process_model(model_dict):
         "transition_info": transition_info,
         "update_info": _get_update_info(model_dict_aug, dims, labels, anchoring),
         "normalizations": _process_normalizations(model_dict_aug, dims, labels),
+        "investments_info": investments_info,
     }
     return processed
 
@@ -125,22 +137,11 @@ def get_dimensions(model_dict, has_investments):
 
 
 def _get_periods_to_periods_raw(
-    dimensions: dict[str, int], has_investments: bool
+    n_periods: int, has_investments: bool
 ) -> dict[int, int]:
     """Return mapper of periods potentially augmented for investments to raw periods."""
-    periods = list(range(dimensions["n_periods"]))
+    periods = list(range(n_periods))
     return {p: p // 2 for p in periods} if has_investments else {p: p for p in periods}
-
-
-def _get_periods_to_period_types(
-    periods: list[int], has_investments: bool
-) -> dict[int, Literal["states", "investments"]]:
-    return {
-        p: ("states" if p % 2 == 0 else "investments")
-        if has_investments
-        else {p: "states"}
-        for p in periods
-    }
 
 
 def _get_labels(model_dict, has_investments, dimensions):
@@ -157,15 +158,37 @@ def _get_labels(model_dict, has_investments, dimensions):
         factors, periods, controls, stagemap and stages. See :ref:`labels`
 
     """
-    if has_investments and "stagemap" in model_dict:
-        raise ValueError("Stages currently not supported when investments are present.")
-
-    stagemap = model_dict.get("stagemap", list(range(dimensions["n_periods"] - 1)))
-
-    periods_to_periods_raw = _get_periods_to_periods_raw(dimensions, has_investments)
-    periods_to_period_types = _get_periods_to_period_types(
-        list(periods_to_periods_raw.keys()), has_investments
+    periods_to_periods_raw = _get_periods_to_periods_raw(
+        n_periods=dimensions["n_periods"],
+        has_investments=has_investments,
     )
+
+    stagemap_raw = model_dict.get(
+        "stagemap", list(range(dimensions["n_periods_raw"] - 1))
+    )
+    stages_raw = sorted(int(v) for v in np.unique(stagemap_raw))
+
+    if has_investments:
+        report = check_stagemap(
+            stagemap=stagemap_raw,
+            stages=stages_raw,
+            n_periods=dimensions["n_periods_raw"],
+            has_investments=False,
+        )
+        if report:
+            raise ValueError(f"Invalid stage map: {report}")
+        stagemap = []
+        stages_to_stages_raw = {}
+        relevant_periods = sorted(periods_to_periods_raw.keys())[:-2]
+        for p in relevant_periods:
+            p_raw = periods_to_periods_raw[p]
+            s_raw = stagemap_raw[p_raw]
+            s = 2 * s_raw + p % 2
+            stagemap.append(s)
+            stages_to_stages_raw[s] = s_raw
+    else:
+        stagemap = stagemap_raw
+        stages_to_stages_raw = {s_raw: s_raw for s_raw in stages_raw}
 
     labels = {
         "latent_factors": list(model_dict["factors"]),
@@ -174,9 +197,11 @@ def _get_labels(model_dict, has_investments, dimensions):
         "periods": list(periods_to_periods_raw.keys()),
         "periods_raw": sorted(set(periods_to_periods_raw.values())),
         "periods_to_periods_raw": periods_to_periods_raw,
-        "periods_to_period_types": periods_to_period_types,
         "stagemap": stagemap,
-        "stages": sorted(np.unique(stagemap)),
+        "stages": sorted(int(v) for v in np.unique(stagemap)),
+        "stages_to_stages_raw": stages_to_stages_raw,
+        "stagemap_raw": stagemap_raw,
+        "stages_raw": stages_raw,
     }
 
     labels["all_factors"] = labels["latent_factors"] + labels["observed_factors"]
@@ -310,11 +335,11 @@ def _get_transition_info(model_dict, labels):
     for factor in latent_factors:
         spec = model_dict["factors"][factor]["transition_function"]
         if isinstance(spec, str):
-            func = getattr(tf, spec)
+            func = getattr(t_f_module, spec)
             if spec == "constant":
                 func = rename_arguments(func, mapper={"state": factor})
             func_list.append(extract_params(func, key=factor))
-            param_names.append(getattr(tf, f"params_{spec}")(all_factors))
+            param_names.append(getattr(t_f_module, f"params_{spec}")(all_factors))
         elif callable(spec):
             if not hasattr(spec, "__name__"):
                 raise AttributeError(
@@ -367,6 +392,41 @@ def _get_transition_info(model_dict, labels):
         "function_names": dict(zip(latent_factors, function_names, strict=False)),
     }
     return out
+
+
+def _get_investments_info(
+    has_investments: bool,
+    model_dict: dict[str, Any],
+    labels: dict[str, Any],
+) -> dict[str, Any]:
+    """Collect information about investments."""
+    investments_info = {
+        "has_investments": has_investments,
+        "periods_to_period_types": _get_periods_to_period_types(
+            periods=labels["periods_to_periods_raw"].keys(),
+            has_investments=has_investments,
+        ),
+    }
+    for fac, v in model_dict["factors"].items():
+        investments_info[fac] = {
+            "is_state": (
+                not v.get("is_investment", False) and not v.get("is_correction", False)
+            ),
+            "is_investment": v.get("is_investment", False),
+            "is_correction": v.get("is_correction", False),
+        }
+    return investments_info
+
+
+def _get_periods_to_period_types(
+    periods: list[int], has_investments: bool
+) -> dict[int, Literal["states", "investments"]]:
+    return {
+        p: ("states" if p % 2 == 0 else "investments")
+        if has_investments
+        else {p: "states"}
+        for p in periods
+    }
 
 
 def _get_update_info(model_dict, dimensions, labels, anchoring_info):
@@ -444,11 +504,3 @@ def _process_normalizations(model_dict, dimensions, labels):
             normalizations[factor][norm_type] = candidate
 
     return normalizations
-
-
-def get_period_measurements(update_info, period):
-    if period in update_info.index:
-        measurements = list(update_info.loc[period].index)
-    else:
-        measurements = []
-    return measurements

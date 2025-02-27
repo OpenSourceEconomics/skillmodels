@@ -52,7 +52,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
     if data is not None:
         processed_data = process_data(
             df=data,
-            has_investments=model["has_investments"],
+            has_investments=model["investments_info"]["has_investments"],
             labels=model["labels"],
             update_info=model["update_info"],
             anchoring_info=model["anchoring"],

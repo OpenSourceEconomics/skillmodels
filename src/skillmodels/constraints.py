@@ -8,11 +8,11 @@ import numpy as np
 import optimagic as om
 import pandas as pd
 
-import skillmodels.transition_functions as tf
+import skillmodels.transition_functions as t_f_module
 
 
 def get_constraints_dicts(
-    dimensions, labels, anchoring_info, update_info, normalizations
+    dimensions, labels, anchoring_info, update_info, normalizations, investments_info
 ) -> list[dict]:
     """Generate constraints implied by the model specification.
 
@@ -31,7 +31,7 @@ def get_constraints_dicts(
             loadings and intercepts for each factor. See :ref:`normalizations`.
 
     Returns:
-        A list of constraints with entries:
+        A list of constraints dictionaries with entries:
         - "type": str, one of "fixed", "equality", "probability", "increasing",
             "pairwise_equality". Must map to an optimagic constraint, see
             :func:`constraints_dicts_to_om`.
@@ -40,28 +40,38 @@ def get_constraints_dicts(
         - "description": str, optional description of the constraint
 
     """
-    c_d = []
+    constraints_dicts = []
 
-    c_d += _get_normalization_constraints(normalizations, labels["latent_factors"])
-    c_d += _get_mixture_weights_constraints(dimensions["n_mixtures"])
-    c_d += _get_stage_constraints(labels["stagemap"], labels["stages"])
-    c_d += _get_constant_factors_constraints(labels)
-    c_d += _get_initial_states_constraints(
-        dimensions["n_mixtures"],
-        labels["latent_factors"],
+    constraints_dicts += _get_normalization_constraints(
+        normalizations, labels["latent_factors"]
     )
-    c_d += _get_transition_constraints(labels)
-    c_d += _get_anchoring_constraints(
-        update_info,
-        labels["controls"],
-        anchoring_info,
-        labels["periods"],
+    constraints_dicts += _get_mixture_weights_constraints(dimensions["n_mixtures"])
+    constraints_dicts += _get_stage_constraints(
+        stagemap=labels["stagemap"],
+        stages=labels["stages"],
     )
+    constraints_dicts += _get_constant_factors_constraints(labels=labels)
+    constraints_dicts += _get_initial_states_constraints(
+        n_mixtures=dimensions["n_mixtures"],
+        factors=labels["latent_factors"],
+    )
+    constraints_dicts += _get_transition_constraints(labels=labels)
+    constraints_dicts += _get_anchoring_constraints(
+        update_info=update_info,
+        controls=labels["controls"],
+        anchoring_info=anchoring_info,
+        periods=labels["periods"],
+    )
+    if investments_info["has_investments"]:
+        constraints_dicts += _get_constraints_for_augmented_periods(
+            labels=labels,
+            investments_info=investments_info,
+        )
 
-    for i, c in enumerate(c_d):
+    for i, c in enumerate(constraints_dicts):
         c["id"] = i
 
-    return c_d
+    return constraints_dicts
 
 
 def add_bounds(params: pd.DataFrame, bounds_distance: float) -> pd.DataFrame:
@@ -291,9 +301,8 @@ def _get_transition_constraints(labels) -> list[dict]:
         msg = f"This constraint is inherent to the {tname} production function."
         for period in labels["periods"][:-1]:
             funcname = f"constraints_{tname}"
-            if hasattr(tf, funcname):
-                func = getattr(tf, funcname)
-                c = func(factor, labels["all_factors"], period)
+            if func := getattr(t_f_module, funcname, False):
+                c = func(factor=factor, factors=labels["all_factors"], period=period)
                 if "description" not in c:
                     c["description"] = msg
                 constraints_dicts.append(c)
@@ -361,6 +370,55 @@ def _get_anchoring_constraints(
         )
 
     constraints_dicts = [c for c in constraints_dicts if c["loc"] != []]
+
+    return constraints_dicts
+
+
+def _get_constraints_for_augmented_periods(labels, investments_info) -> list[dict]:
+    """Constraints for augmented periods.
+
+    - Carry forward states from uneven periods to even periods
+    - Carry forward investments even periods to uneven periods
+    - Set shock_sds to 0 when carrying anything forward
+
+    Both depend on the transition function.
+
+    Args:
+        labels (dict): Dict of lists with labels for the model quantities like
+            factors, periods, controls, stagemap and stages. See :ref:`labels`
+
+    Returns:
+        constraints_dicts
+
+    """
+    constraints_dicts = []
+    for f, factor in enumerate(labels["latent_factors"]):
+        tname = labels["transition_names"][f]
+        if tname == "constant":
+            continue
+        period_type_to_constrain = (
+            "investments" if investments_info[factor]["is_state"] else "states"
+        )
+        periods_to_constrain = [
+            k
+            for k, v in investments_info["periods_to_period_types"].items()
+            if v == period_type_to_constrain
+        ]
+        for period in periods_to_constrain:
+            if func := getattr(t_f_module, f"identity_constraints_{tname}", False):
+                constraints_dicts += func(
+                    factor=factor,
+                    period=period,
+                    all_factors=labels["all_factors"],
+                )
+            constraints_dicts.append(
+                {
+                    "loc": ("shock_sds", period, factor, "-"),
+                    "type": "fixed",
+                    "value": 0.0,
+                    "description": "Identity constraint.",
+                }
+            )
 
     return constraints_dicts
 

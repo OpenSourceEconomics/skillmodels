@@ -24,7 +24,7 @@ def model2():
 
 
 def test_has_investments(model2):
-    assert process_model(model2)["has_investments"] == False
+    assert process_model(model2)["investments_info"]["has_investments"] == False
 
 
 def test_dimensions(model2):
@@ -138,16 +138,28 @@ def test_anchoring_and_investments_conflict():
         process_model(model_dict)
 
 
-def test_stages_and_investments_conflict():
+def test_stagemap_with_investments_wrong_labels():
     with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     # Set fac3 to be an investment
     model_dict["factors"]["fac3"]["is_investment"] = True
+    model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 4]
     del model_dict["anchoring"]
-    with pytest.raises(
-        ValueError, match="Stages currently not supported when investments are present"
-    ):
+    with pytest.raises(ValueError, match="Invalid stage map:"):
         process_model(model_dict)
+
+
+def test_stagemap_with_investments():
+    with open(TEST_DIR / "model2.yaml") as y:
+        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+    # Set fac3 to be an investment
+    model_dict["factors"]["fac3"]["is_investment"] = True
+    model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 3]
+    del model_dict["anchoring"]
+    model = process_model(model_dict)
+    assert model["labels"]["stagemap_raw"] == model_dict["stagemap"]
+    assert model["labels"]["stages_raw"] == [0, 1, 2, 3]
+    assert model["labels"]["stagemap"] == [0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 7]
 
 
 @pytest.fixture
@@ -162,7 +174,7 @@ def model2_inv():
 
 
 def test_with_inv_has_investments(model2_inv):
-    assert process_model(model2_inv)["has_investments"] == True
+    assert process_model(model2_inv)["investments_info"]["has_investments"] == True
 
 
 def test_with_inv_dimensions(model2_inv):
@@ -178,14 +190,15 @@ def test_with_inv_dimensions(model2_inv):
 
 def test_with_inv_labels(model2_inv):
     res = process_model(model2_inv)["labels"]
+    n_periods = 16
     assert res["latent_factors"] == ["fac1", "fac2", "fac3"]
     assert res["observed_factors"] == []
     assert res["all_factors"] == ["fac1", "fac2", "fac3"]
     assert res["controls"] == ["constant", "x1"]
-    assert res["periods"] == list(range(16))
+    assert res["periods"] == list(range(n_periods))
     assert res["periods_raw"] == [0, 1, 2, 3, 4, 5, 6, 7]
-    assert res["stagemap"] == list(range(15))
-    assert res["stages"] == list(range(15))
+    assert res["stagemap"] == list(range(n_periods - 2))
+    assert res["stages"] == list(range(n_periods - 2))
 
 
 def test_with_inv_estimation_options(model2_inv):
