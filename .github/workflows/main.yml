@@ -23,12 +23,12 @@ jobs:
           - macos-latest
           - windows-latest
         python-version:
-          - '3.12'
+          - '3.13'
     steps:
       - uses: actions/checkout@v4
       - uses: prefix-dev/setup-pixi@v0.8.0
         with:
-          pixi-version: v0.29.0
+          pixi-version: v0.41.4
           cache: true
           cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
           environments: test-cpu
@@ -37,12 +37,12 @@ jobs:
         shell: bash -l {0}
         run: pixi run -e test-cpu tests-with-cov
       - name: Upload coverage report
-        if: runner.os == 'Linux' && matrix.python-version == '3.12'
+        if: runner.os == 'Linux' && matrix.python-version == '3.13'
         uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   # run-mypy:
-  #   name: Run mypy on Python 3.12
+  #   name: Run mypy on Python 3.13
   #   runs-on: ubuntu-latest
   #   strategy:
   #     fail-fast: false
@@ -58,7 +58,7 @@ jobs:
   #       shell: bash -l {0}
   #       run: pixi run mypy
   # run-explanation-notebooks:
-  #   name: Run explanation notebooks on Python 3.12
+  #   name: Run explanation notebooks on Python 3.13
   #   runs-on: ubuntu-latest
   #   steps:
   #     - uses: actions/checkout@v4
