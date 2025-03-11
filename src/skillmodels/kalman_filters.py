@@ -1,9 +1,66 @@
 import functools
-
 import jax
 import jax.numpy as jnp
 
-array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
+
+@jax.custom_jvp
+def qr(A):
+    """Custom implementation of the QR Decomposition"""
+    r,tau = jnp.linalg.qr(A, mode='raw')
+    
+    q = _householder(r.mT,tau)
+    return q,jnp.triu(r.mT[:tau.shape[0]])
+
+
+def _householder(r,tau):
+    """Custom implementation of the Householder Product to calculate Q from the outputs of 
+    jnp.linalg.qr with mode = "raw". This is needed because the JAX implementation is extremely slow
+    for a batch of small matrices.
+    """
+    m = r.shape[0]
+    n = tau.shape[0]
+    v1 = jnp.expand_dims(r[:,0], 1)
+    v1 = v1.at[0:0].set(0)
+    v1 = v1.at[0].set(1)
+    H = jnp.eye(m) - tau[0] * (v1 @ jnp.transpose(v1))
+    for i in range(1, n):
+        vi = jnp.expand_dims(r[:,i], 1)
+        vi = vi.at[0:i].set(0)
+        vi = vi.at[i].set(1)
+        H = H @ (jnp.eye(m) - tau[i] * (vi @ jnp.transpose(vi)))
+    return H[:,:n]
+
+def _T(x: jax.Array) -> jax.Array:
+  return jax.lax.transpose(x, (*range(x.ndim - 2), x.ndim - 1, x.ndim - 2))
+
+def _H(x: jax.Array) -> jax.Array:
+  return _T(x).conj()
+
+def _tril(m: jax.Array, k:int = 0) -> jax.Array:
+  *_, N, M = m.shape
+  mask = jnp.tri(N, M, k,bool)
+  return jax.lax.select(jax.lax.broadcast(mask, m.shape[:-2]), m, jax.lax.zeros_like_array(m))
+
+@qr.defjvp
+def qr_jvp_rule(primals, tangents):
+    """Calculates the derivative of the custom QR composition."""
+    # See j-towns.github.io/papers/qr-derivative.pdf for a terse derivation.
+    x, = primals
+    dx, = tangents
+    q, r, = qr(x)
+    *_, m, n = x.shape
+    dx_rinv = jax.lax.linalg.triangular_solve(r, dx)  # Right side solve by default
+    qt_dx_rinv = _H(q) @ dx_rinv
+    qt_dx_rinv_lower = _tril(qt_dx_rinv, -1)
+    do = qt_dx_rinv_lower - _H(qt_dx_rinv_lower)  # This is skew-symmetric
+    # The following correction is necessary for complex inputs
+    I = jax.lax.expand_dims(jnp.eye(n, n), range(qt_dx_rinv.ndim - 2))
+    do = do + I * (qt_dx_rinv - qt_dx_rinv.real.astype(qt_dx_rinv.dtype))
+    dq = q @ (do - qt_dx_rinv) + dx_rinv
+    dr = (qt_dx_rinv - do) @ r
+    return (q, r), (dq, dr)
+
+array_qr_jax = jax.vmap(jax.vmap(qr))
 
 
 # ======================================================================================
@@ -11,7 +68,7 @@ array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
 # ======================================================================================
 
 
-@functools.partial(jax.checkpoint, prevent_cse=False)
+
 def kalman_update(
     states,
     upper_chols,
@@ -225,6 +282,7 @@ def kalman_predict(
     predicted_covs = array_qr_jax(qr_points)[1][:, :, :n_fac]
 
     return predicted_states, predicted_covs
+
 
 
 @functools.partial(jax.checkpoint, prevent_cse=False)
