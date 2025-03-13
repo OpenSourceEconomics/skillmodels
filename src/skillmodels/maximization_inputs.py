@@ -129,7 +129,7 @@ def get_maximization_inputs(model_dict, data):
         tmp["value"] = float(tmp["value"])
         return process_debug_data(debug_data=tmp, model=model)
 
-    _constraints_tuples = get_constraints_dicts(
+    _constraints_dicts = get_constraints_dicts(
         dimensions=model["dimensions"],
         labels=model["labels"],
         anchoring_info=model["anchoring"],
@@ -138,7 +138,7 @@ def get_maximization_inputs(model_dict, data):
         investments_info=model["investments_info"],
     )
 
-    constraints = constraints_dicts_to_om(_constraints_tuples)
+    constraints = constraints_dicts_to_om(_constraints_dicts)
 
     params_template = pd.DataFrame(columns=["value"], index=p_index)
     params_template = add_bounds(
@@ -147,7 +147,7 @@ def get_maximization_inputs(model_dict, data):
     )
     params_template = enforce_fixed_constraints(
         params_template=params_template,
-        constraints_dicts=_constraints_tuples,
+        constraints_dicts=_constraints_dicts,
     )
 
     out = {
