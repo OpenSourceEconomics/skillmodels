@@ -1,7 +1,9 @@
 import pandas as pd
 
 
-def get_params_index(update_info, labels, dimensions, transition_info):
+def get_params_index(
+    update_info, labels, dimensions, transition_info, investments_info
+):
     """Generate index for the params_df for optimagic.
 
     The index has four levels. The first is the parameter category. The second is the
@@ -16,25 +18,38 @@ def get_params_index(update_info, labels, dimensions, transition_info):
             factors, periods, controls, stagemap and stages. See :ref:`labels`
         options (dict): Tuning parameters for the estimation.
             See :ref:`estimation_options`.
+        transition_info (dict): Information about the transition equations.
+        investments_info (dict): Information about the investment factors, if any.
 
     Returns:
         params_index (pd.MultiIndex)
 
     """
-    ind_tups = get_control_params_index_tuples(labels["controls"], update_info)
-    ind_tups += get_loadings_index_tuples(labels["latent_factors"], update_info)
-    ind_tups += get_meas_sds_index_tuples(update_info)
-    ind_tups += get_shock_sds_index_tuples(labels["periods"], labels["latent_factors"])
+    ind_tups = get_control_params_index_tuples(
+        controls=labels["controls"], update_info=update_info
+    )
+    ind_tups += get_loadings_index_tuples(
+        factors=labels["latent_factors"], update_info=update_info
+    )
+    ind_tups += get_meas_sds_index_tuples(update_info=update_info)
+    ind_tups += get_shock_sds_index_tuples(
+        periods=labels["periods"],
+        factors=labels["latent_factors"],
+    )
     ind_tups += initial_mean_index_tuples(
-        dimensions["n_mixtures"],
-        labels["latent_factors"],
+        n_mixtures=dimensions["n_mixtures"],
+        factors=labels["latent_factors"],
     )
-    ind_tups += get_mixture_weights_index_tuples(dimensions["n_mixtures"])
+    ind_tups += get_mixture_weights_index_tuples(n_mixtures=dimensions["n_mixtures"])
     ind_tups += get_initial_cholcovs_index_tuples(
-        dimensions["n_mixtures"],
-        labels["latent_factors"],
+        n_mixtures=dimensions["n_mixtures"],
+        factors=labels["latent_factors"],
     )
-    ind_tups += get_transition_index_tuples(transition_info, labels["periods"])
+    ind_tups += get_transition_index_tuples(
+        transition_info=transition_info,
+        periods=labels["periods"],
+        has_investments=investments_info["has_investments"],
+    )
 
     index = pd.MultiIndex.from_tuples(
         ind_tups,
@@ -177,7 +192,7 @@ def get_initial_cholcovs_index_tuples(n_mixtures, factors):
     return ind_tups
 
 
-def get_transition_index_tuples(transition_info, periods):
+def get_transition_index_tuples(transition_info, periods, has_investments):
     """Index tuples for transition equation coefficients.
 
     Args:
@@ -185,14 +200,16 @@ def get_transition_index_tuples(transition_info, periods):
         all_factors (list): The latent and observed factors of the model.
         periods (list): The periods of the model
         transition_names (list): name of the transition equation of each factor
+        has_investments (bool): Whether the model has investment factors.
 
     Returns:
         ind_tups (list)
 
     """
+    end = -2 if has_investments else -1
     ind_tups = []
     for factor, names in transition_info["param_names"].items():
-        for period in periods[:-1]:
+        for period in periods[:end]:
             for name in names:
                 ind_tups.append(("transition", period, factor, name))
     return ind_tups

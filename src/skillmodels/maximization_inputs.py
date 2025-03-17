@@ -56,10 +56,11 @@ def get_maximization_inputs(model_dict, data):
     """
     model = process_model(model_dict)
     p_index = get_params_index(
-        model["update_info"],
-        model["labels"],
-        model["dimensions"],
-        model["transition_info"],
+        update_info=model["update_info"],
+        labels=model["labels"],
+        dimensions=model["dimensions"],
+        transition_info=model["transition_info"],
+        investments_info=model["investments_info"],
     )
 
     parsing_info = create_parsing_info(

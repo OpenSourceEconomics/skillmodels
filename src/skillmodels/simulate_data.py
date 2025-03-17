@@ -79,6 +79,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         labels=model["labels"],
         dimensions=model["dimensions"],
         transition_info=model["transition_info"],
+        investments_info=model["investments_info"],
     )
 
     params = params.reindex(params_index)

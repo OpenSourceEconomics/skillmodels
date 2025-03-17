@@ -360,6 +360,7 @@ def _set_index_params(model, params):
         labels=model["labels"],
         dimensions=model["dimensions"],
         transition_info=model["transition_info"],
+        investments_info=model["investments_info"],
     )
 
     params = params.reindex(params_index)
