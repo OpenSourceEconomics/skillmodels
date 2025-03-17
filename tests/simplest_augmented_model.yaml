@@ -1,0 +1,27 @@
+---
+factors:
+  fac1:
+    is_correction: false
+    is_investment: false
+    measurements:
+      -   - var
+      -   - var
+    normalizations:
+      loadings:
+        - {var: 1}
+        - {var: 1}
+    transition_function: linear
+  fac2:
+    is_correction: false
+    is_investment: true
+    measurements:
+      -   - inv
+      -   - inv
+    normalizations:
+      loadings:
+        - {inv: 1}
+        - {inv: 1}
+    transition_function: linear
+observed_factors:
+  - of
+estimation_options: {}

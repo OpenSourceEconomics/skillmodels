@@ -1,23 +1,30 @@
 import io
 import textwrap
+from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 from numpy.testing import assert_array_equal as aae
 
 from skillmodels.process_data import (
+    _augment_data_for_investments,
     _generate_controls_array,
     _generate_measurements_array,
     _generate_observed_factor_array,
     _handle_controls_with_missings,
     pre_process_data,
 )
+from skillmodels.process_model import process_model
+
+# importing the TEST_DIR from config does not work for test run in conda build
+TEST_DIR = Path(__file__).parent.resolve()
 
 
 def test_pre_process_data():
-    df = pd.DataFrame(data=np.arange(10).reshape(10, 1), columns=["var"])
+    df = pd.DataFrame(data=np.arange(20).reshape(2, 10).T, columns=["var", "inv"])
     df["period"] = [1, 2, 3, 2, 3, 4, 2, 4, 3, 1]
     df["id"] = [1, 1, 1, 3, 3, 3, 4, 4, 5, 5]
     df.set_index(["id", "period"], inplace=True)
@@ -26,14 +33,46 @@ def test_pre_process_data():
     period = [0, 1, 2, 3] * 4
     id_ = np.arange(4).repeat(4)
     nan = np.nan
-    data = [0, 1, 2, nan, nan, 3, 4, 5, nan, 6, nan, 7, 9, nan, 8, nan]
-    data = np.column_stack([period, id_, data])
-    exp = pd.DataFrame(data=data, columns=["__period__", "__id__", "var"])
+    data = {
+        "var": [0, 1, 2, nan, nan, 3, 4, 5, nan, 6, nan, 7, 9, nan, 8, nan],
+        "inv": [10, 11, 12, nan, nan, 13, 14, 15, nan, 16, nan, 17, 19, nan, 18, nan],
+    }
+    data = np.column_stack([period, id_, data["var"], data["inv"]])
+    exp = pd.DataFrame(data=data, columns=["__period__", "__id__", "var", "inv"])
     exp.set_index(["__id__", "__period__"], inplace=True)
 
     res = pre_process_data(df, [0, 1, 2, 3])
+    assert res[["var", "inv"]].equals(exp[["var", "inv"]])
 
-    assert res["var"].equals(exp["var"])
+
+@pytest.fixture
+def simplest_augmented():
+    out = {}
+    with open(TEST_DIR / "simplest_augmented_model.yaml") as y:
+        out["model_dict"] = yaml.load(y, Loader=yaml.FullLoader)
+    _df = pd.DataFrame(data=np.arange(15).reshape(3, 5).T, columns=["var", "inv", "of"])
+    _df["period"] = [1, 1, 2, 1, 2]
+    _df["id"] = [1, 3, 3, 5, 5]
+    out["data_input"] = _df.set_index(["id", "period"])
+    out["data_exp"] = pd.read_csv(
+        TEST_DIR / "simplest_augmented_data_expected.csv", index_col=["id", "period"]
+    )
+    return out
+
+
+def test_augment_data_for_investments(simplest_augmented):
+    model = process_model(simplest_augmented["model_dict"])
+    pre_processed_data = pre_process_data(
+        simplest_augmented["data_input"], model["labels"]["periods_raw"]
+    )
+    pre_processed_data["constant"] = 1
+    res = _augment_data_for_investments(
+        df=pre_processed_data,
+        labels=model["labels"],
+        update_info=model["update_info"],
+    )
+    cols = ["period_raw", "var", "inv", "constant", "of"]
+    pd.testing.assert_frame_equal(res[cols], simplest_augmented["data_exp"][cols])
 
 
 def test_handle_controls_with_missings():

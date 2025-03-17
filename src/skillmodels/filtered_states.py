@@ -57,19 +57,20 @@ def anchor_states_df(states_df, model_dict, params):
     model = process_model(model_dict)
 
     p_index = get_params_index(
-        model["update_info"],
-        model["labels"],
-        model["dimensions"],
-        model["transition_info"],
+        update_info=model["update_info"],
+        labels=model["labels"],
+        dimensions=model["dimensions"],
+        transition_info=model["transition_info"],
+        investments_info=model["investments_info"],
     )
 
     params = params.loc[p_index]
 
     parsing_info = create_parsing_info(
-        p_index,
-        model["update_info"],
-        model["labels"],
-        model["anchoring"],
+        params_index=p_index,
+        update_info=model["update_info"],
+        labels=model["labels"],
+        anchoring=model["anchoring"],
     )
 
     *_, pardict = parse_params(

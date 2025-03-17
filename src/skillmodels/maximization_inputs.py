@@ -7,7 +7,12 @@ import pandas as pd
 
 import skillmodels.likelihood_function as lf
 import skillmodels.likelihood_function_debug as lfd
-from skillmodels.constraints import add_bounds, get_constraints
+from skillmodels.constraints import (
+    add_bounds,
+    constraints_dicts_to_om,
+    enforce_fixed_constraints,
+    get_constraints_dicts,
+)
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
@@ -41,15 +46,21 @@ def get_maximization_inputs(model_dict, data):
         constraints (list): List of optimagic constraints that are implied by the
             model specification.
         params_template (pd.DataFrame): Parameter DataFrame with correct index and
-            bounds but with empty value column.
+            bounds. The value column is empty except for the fixed constraints, which
+            are set including the bounds.
+        data_aug (pd.DataFrame): DataFrame with augmented data. If model contains
+            investment factors, we double up the number of periods in order to add
+
+
 
     """
     model = process_model(model_dict)
     p_index = get_params_index(
-        model["update_info"],
-        model["labels"],
-        model["dimensions"],
-        model["transition_info"],
+        update_info=model["update_info"],
+        labels=model["labels"],
+        dimensions=model["dimensions"],
+        transition_info=model["transition_info"],
+        investments_info=model["investments_info"],
     )
 
     parsing_info = create_parsing_info(
@@ -58,11 +69,13 @@ def get_maximization_inputs(model_dict, data):
         model["labels"],
         model["anchoring"],
     )
-    measurements, controls, observed_factors = process_data(
-        data,
-        model["labels"],
-        model["update_info"],
-        model["anchoring"],
+    processed_data = process_data(
+        df=data,
+        has_investments=model["investments_info"]["has_investments"],
+        labels=model["labels"],
+        update_info=model["update_info"],
+        anchoring_info=model["anchoring"],
+        purpose="estimation",
     )
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
@@ -84,9 +97,9 @@ def get_maximization_inputs(model_dict, data):
         partialed_loglikes[n] = _partial_some_log_likelihood(
             fun=fun,
             parsing_info=parsing_info,
-            measurements=measurements,
-            controls=controls,
-            observed_factors=observed_factors,
+            measurements=processed_data["measurements"],
+            controls=processed_data["controls"],
+            observed_factors=processed_data["observed_factors"],
             model=model,
             sigma_weights=sigma_weights,
             sigma_scaling_factor=sigma_scaling_factor,
@@ -117,18 +130,25 @@ def get_maximization_inputs(model_dict, data):
         tmp["value"] = float(tmp["value"])
         return process_debug_data(debug_data=tmp, model=model)
 
-    constr = get_constraints(
+    _constraints_dicts = get_constraints_dicts(
         dimensions=model["dimensions"],
         labels=model["labels"],
         anchoring_info=model["anchoring"],
         update_info=model["update_info"],
         normalizations=model["normalizations"],
+        investments_info=model["investments_info"],
     )
+
+    constraints = constraints_dicts_to_om(_constraints_dicts)
 
     params_template = pd.DataFrame(columns=["value"], index=p_index)
     params_template = add_bounds(
-        params_template,
-        model["estimation_options"]["bounds_distance"],
+        params=params_template,
+        bounds_distance=model["estimation_options"]["bounds_distance"],
+    )
+    params_template = enforce_fixed_constraints(
+        params_template=params_template,
+        constraints_dicts=_constraints_dicts,
     )
 
     out = {
@@ -136,7 +156,7 @@ def get_maximization_inputs(model_dict, data):
         "loglikeobs": loglikeobs,
         "debug_loglike": debug_loglike,
         "loglike_and_gradient": loglike_and_gradient,
-        "constraints": constr,
+        "constraints": constraints,
         "params_template": params_template,
     }
 

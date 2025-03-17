@@ -1,18 +1,20 @@
 import warnings
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 
-from skillmodels.process_model import get_period_measurements
 
-
-def process_data(df, labels, update_info, anchoring_info, purpose="estimation"):
+def process_data(
+    df, has_investments, labels, update_info, anchoring_info, purpose="estimation"
+):
     """Process the data for estimation.
 
     Args:
         df (DataFrame): panel dataset in long format. It has a MultiIndex
             where the first level indicates the period and the second the individual.
+        has_investments (bool):
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
         update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
@@ -21,30 +23,33 @@ def process_data(df, labels, update_info, anchoring_info, purpose="estimation"):
         purpose (Literal["estimation", "anything"]): Whether the data is used for
             estimation (default, includes measurement data) or not.
 
-    Returns:
-        meas_data (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
-            observed measurements. NaN if the measurement was not observed.
-        control_data (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
-            with observed control variables for the measurement equations.
-        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
+    Returns a dictionary with keys:
+        controls (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
+            observed measurements. NaN if the measurement was not observed. Only
+            returned if estimation==True
+        observed_factors (jax.numpy.array): Array of shape
+            (n_periods, n_obs, n_controls) with observed control variables for the
+            measurement equations.
+        measurements (jax.numpy.array): Array of shape (n_periods, n_obs,
             n_observed_factors) with data on the observed factors.
 
     """
-    df = pre_process_data(df, labels["periods"])
+    df = pre_process_data(df, labels["periods_raw"])
     df["constant"] = 1
-    df = _add_copies_of_anchoring_outcome(df, anchoring_info)
+    out = {}
+
+    if has_investments:
+        df = _augment_data_for_investments(df, labels, update_info)
+    else:
+        df = _add_copies_of_anchoring_outcome(df, anchoring_info)
     _check_data(df, update_info, labels, purpose=purpose)
     n_obs = int(len(df) / len(labels["periods"]))
     df = _handle_controls_with_missings(df, labels["controls"], update_info)
-    if purpose == "estimation":
-        meas_data = _generate_measurements_array(df, update_info, n_obs)
-    control_data = _generate_controls_array(df, labels, n_obs)
-    observed_data = _generate_observed_factor_array(df, labels, n_obs)
+    out["controls"] = _generate_controls_array(df, labels, n_obs)
+    out["observed_factors"] = _generate_observed_factor_array(df, labels, n_obs)
 
     if purpose == "estimation":
-        out = (meas_data, control_data, observed_data)
-    else:
-        out = (control_data, observed_data)
+        out["measurements"] = _generate_measurements_array(df, update_info, n_obs)
     return out
 
 
@@ -80,6 +85,64 @@ def pre_process_data(df, periods):
     return df
 
 
+def _get_period_data_for_investments(
+    period: int,
+    period_raw: int,
+    df: pd.DataFrame,
+    labels: dict[str, Any],
+    update_info: pd.DataFrame,
+) -> pd.DataFrame:
+    meas = _get_period_measurements(update_info, period)
+    controls = labels["controls"]
+    observed = labels["observed_factors"]
+
+    out = df.query(f"period_raw == {period_raw}")[
+        [
+            "id",
+            *meas,
+            *controls,
+            *observed,
+            "period_raw",
+            "__old_id__",
+            "__old_period__",
+        ]
+    ]
+    out["period"] = period
+    return out
+
+
+def _augment_data_for_investments(
+    df: pd.DataFrame,
+    labels: dict[str, Any],
+    update_info: pd.DataFrame,
+):
+    """Make room for endogenous investments by doubling up the periods.
+
+    Endogeneity of investments means that current states influence the
+
+    """
+    df = df.reset_index().rename(columns={"period": "period_raw"})
+    # Make sure datset is balanced
+    n_ids = df["id"].nunique()
+    n_periods = df["period_raw"].nunique()
+    assert n_ids * n_periods == df.shape[0]
+    assert set(df["period_raw"]) == set(labels["periods_to_periods_raw"].values())
+
+    out = pd.concat(
+        [
+            _get_period_data_for_investments(
+                period=period,
+                period_raw=period_raw,
+                df=df,
+                update_info=update_info,
+                labels=labels,
+            )
+            for period, period_raw in labels["periods_to_periods_raw"].items()
+        ]
+    )
+    return out.set_index(["id", "period"]).sort_index()
+
+
 def _add_copies_of_anchoring_outcome(df, anchoring_info):
     df = df.copy()
     for factor in anchoring_info["factors"]:
@@ -97,7 +160,7 @@ def _check_data(df, update_info, labels, purpose):  # noqa: C901
                 var_report.loc[(period, cont), "problem"] = "Variable is missing"
 
         if purpose == "estimation":
-            for meas in get_period_measurements(update_info, period):
+            for meas in _get_period_measurements(update_info, period):
                 if meas not in period_data.columns:
                     var_report.loc[(period, meas), "problem"] = "Variable is missing"
                 elif len(period_data[meas].dropna().unique()) == 1:
@@ -123,7 +186,7 @@ def _handle_controls_with_missings(df, controls, update_info):
     for period in periods:
         period_data = df.query(f"period == {period}")
         control_data = period_data[controls]
-        meas_data = period_data[get_period_measurements(update_info, period)]
+        meas_data = period_data[_get_period_measurements(update_info, period)]
         problem = control_data.isna().any(axis=1) & meas_data.notna().any(axis=1)
         problematic_index = problematic_index.union(period_data[problem].index)
 
@@ -134,6 +197,14 @@ def _handle_controls_with_missings(df, controls, update_info):
         warnings.warn(msg)
         df.loc[problematic_index] = np.nan
     return df
+
+
+def _get_period_measurements(update_info, period):
+    if period in update_info.index:
+        measurements = list(update_info.loc[period].index)
+    else:
+        measurements = []
+    return measurements
 
 
 def _generate_measurements_array(df, update_info, n_obs):

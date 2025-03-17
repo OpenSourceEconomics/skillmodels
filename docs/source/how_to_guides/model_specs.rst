@@ -96,14 +96,8 @@ Any python string is possible as factor name. The values are dictionaries with t
 entries:
 
 - measurements: A nested list that is as long as the number of periods of the model.
-  Each sublist contains the names of the measurements in that period. If A factor has
-  no measurements in a period, it has to be an empty list. If a factor only has
-  measurements up to a certain period you can leave out the empty lists at the end. In
-  the example this is done for factor 3. Note that even in that case, the measurements
-  have to be specified as nested list. If a factor only starts having measurements in
-  some period, you still have to specify the empty lists for all periods before that
-  period.
-
+  Each sublist contains the names of the measurements in that period. If a factor has
+  no measurements in a period, it has to be an empty list.
 
 - normalizations: This entry is optional. It is a dictionary that can have the keys
   ``"loadings"`` and ``"intercepts"``. The values are lists of dictionaries. The list
@@ -114,7 +108,7 @@ entries:
 - transition_equation: A string with the name of a pre-implemented transition equation
   or a custom transition equation. Pre-implemented transition equations are
   linear, log_ces (in the known location and scale version), constant and translog.
-  The example model dictionary only uses pre-implement transition functions.
+  The example model dictionary only uses pre-implemented transition functions.
 
   To see how to use custom transition functions, assume that the yaml file shown above
   has been loaded into a python dictionary called ``model`` and look at the following

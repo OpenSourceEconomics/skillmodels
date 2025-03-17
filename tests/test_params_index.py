@@ -30,6 +30,7 @@ def model2_inputs():
         "labels": processed["labels"],
         "dimensions": processed["dimensions"],
         "transition_info": processed["transition_info"],
+        "investments_info": processed["investments_info"],
     }
     return out
 
@@ -173,7 +174,7 @@ def test_initial_cov_index_tuples():
     assert calculated == expected
 
 
-def test_trans_coeffs_index_tuples():
+def test_trans_coeffs_index_tuples_no_investments():
     periods = [0, 1, 2]
 
     param_names = {
@@ -202,6 +203,64 @@ def test_trans_coeffs_index_tuples():
         ("transition", 1, "fac3", "phi"),
     ]
 
-    calculated = get_transition_index_tuples(trans_info, periods)
+    calculated = get_transition_index_tuples(
+        transition_info=trans_info,
+        periods=periods,
+        has_investments=False,
+    )
+
+    assert calculated == expected
+
+
+def test_trans_coeffs_index_tuples_has_investments():
+    periods = [0, 1, 2, 3, 4, 5]
+
+    param_names = {
+        "fac1": ["fac1", "fac2", "fac3", "constant"],
+        "fac2": [],
+        "fac3": ["fac1", "fac2", "fac3", "phi"],
+    }
+    trans_info = {"param_names": param_names}
+
+    expected = [
+        ("transition", 0, "fac1", "fac1"),
+        ("transition", 0, "fac1", "fac2"),
+        ("transition", 0, "fac1", "fac3"),
+        ("transition", 0, "fac1", "constant"),
+        ("transition", 1, "fac1", "fac1"),
+        ("transition", 1, "fac1", "fac2"),
+        ("transition", 1, "fac1", "fac3"),
+        ("transition", 1, "fac1", "constant"),
+        ("transition", 2, "fac1", "fac1"),
+        ("transition", 2, "fac1", "fac2"),
+        ("transition", 2, "fac1", "fac3"),
+        ("transition", 2, "fac1", "constant"),
+        ("transition", 3, "fac1", "fac1"),
+        ("transition", 3, "fac1", "fac2"),
+        ("transition", 3, "fac1", "fac3"),
+        ("transition", 3, "fac1", "constant"),
+        ("transition", 0, "fac3", "fac1"),
+        ("transition", 0, "fac3", "fac2"),
+        ("transition", 0, "fac3", "fac3"),
+        ("transition", 0, "fac3", "phi"),
+        ("transition", 1, "fac3", "fac1"),
+        ("transition", 1, "fac3", "fac2"),
+        ("transition", 1, "fac3", "fac3"),
+        ("transition", 1, "fac3", "phi"),
+        ("transition", 2, "fac3", "fac1"),
+        ("transition", 2, "fac3", "fac2"),
+        ("transition", 2, "fac3", "fac3"),
+        ("transition", 2, "fac3", "phi"),
+        ("transition", 3, "fac3", "fac1"),
+        ("transition", 3, "fac3", "fac2"),
+        ("transition", 3, "fac3", "fac3"),
+        ("transition", 3, "fac3", "phi"),
+    ]
+
+    calculated = get_transition_index_tuples(
+        transition_info=trans_info,
+        periods=periods,
+        has_investments=True,
+    )
 
     assert calculated == expected

@@ -10,7 +10,7 @@ repos:
     hooks:
       - id: yamlfix
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v5.0.0
     hooks:
       - id: check-added-large-files
         args:
@@ -37,11 +37,11 @@ repos:
       - id: check-ast
       - id: check-docstring-first
   - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.35.1
+    rev: v1.36.1
     hooks:
       - id: yamllint
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.4
+    rev: v0.11.0
     hooks:
       # Run the linter.
       - id: ruff
@@ -59,14 +59,14 @@ repos:
           - pyi
           - jupyter
   - repo: https://github.com/kynan/nbstripout
-    rev: 0.7.1
+    rev: 0.8.1
     hooks:
       - id: nbstripout
         args:
           - --extra-keys
           - metadata.kernelspec metadata.language_info.version metadata.vscode
   - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.17
+    rev: 0.7.22
     hooks:
       - id: mdformat
         additional_dependencies:

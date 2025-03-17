@@ -45,10 +45,24 @@ factors:
   fac3:
     measurements:
       - [y7, y8, y9]
+      - []
+      - []
+      - []
+      - []
+      - []
+      - []
+      - []
     transition_function: constant
     normalizations:
       loadings:
         - {y7: 1}
+        - {}
+        - {}
+        - {}
+        - {}
+        - {}
+        - {}
+        - {}
 anchoring:
   outcomes: {fac1: Q1}
   free_controls: true
