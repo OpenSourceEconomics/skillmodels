@@ -1,10 +1,15 @@
 import functools
+
 import jax
 import jax.numpy as jnp
+
 from skillmodels.qr import qr_gpu
 
-
-array_qr_jax = jax.vmap(jax.vmap(qr_gpu)) if jax.default_backend()=='gpu' else jax.vmap(jax.vmap(jnp.linalg.qr)) 
+array_qr_jax = (
+    jax.vmap(jax.vmap(qr_gpu))
+    if jax.default_backend() == "gpu"
+    else jax.vmap(jax.vmap(jnp.linalg.qr))
+)
 
 # ======================================================================================
 # Update Step
@@ -225,7 +230,6 @@ def kalman_predict(
     predicted_covs = array_qr_jax(qr_points)[1][:, :, :n_fac]
 
     return predicted_states, predicted_covs
-
 
 
 @functools.partial(jax.checkpoint, prevent_cse=False)
