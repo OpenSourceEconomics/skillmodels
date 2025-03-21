@@ -35,6 +35,7 @@ def get_params_index(
     ind_tups += get_shock_sds_index_tuples(
         periods=labels["periods"],
         factors=labels["latent_factors"],
+        has_investments=investments_info["has_investments"],
     )
     ind_tups += initial_mean_index_tuples(
         n_mixtures=dimensions["n_mixtures"],
@@ -113,7 +114,7 @@ def get_meas_sds_index_tuples(update_info):
     return ind_tups
 
 
-def get_shock_sds_index_tuples(periods, factors):
+def get_shock_sds_index_tuples(periods, factors, has_investments):
     """Index tuples for shock_sd.
 
     Args:
@@ -124,8 +125,9 @@ def get_shock_sds_index_tuples(periods, factors):
         ind_tups (list)
 
     """
+    end = -2 if has_investments else -1
     ind_tups = []
-    for period in periods[:-1]:
+    for period in periods[:end]:
         for factor in factors:
             ind_tups.append(("shock_sds", period, factor, "-"))
     return ind_tups
