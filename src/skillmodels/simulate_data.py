@@ -89,6 +89,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         update_info=model["update_info"],
         labels=model["labels"],
         anchoring=model["anchoring"],
+        has_investments=model["investments_info"]["has_investments"],
     )
 
     states, covs, log_weights, pardict = parse_params(

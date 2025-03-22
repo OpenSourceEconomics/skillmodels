@@ -71,6 +71,7 @@ def anchor_states_df(states_df, model_dict, params):
         update_info=model["update_info"],
         labels=model["labels"],
         anchoring=model["anchoring"],
+        has_investments=model["investments_info"]["has_investments"],
     )
 
     *_, pardict = parse_params(

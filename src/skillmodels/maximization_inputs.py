@@ -64,10 +64,11 @@ def get_maximization_inputs(model_dict, data):
     )
 
     parsing_info = create_parsing_info(
-        p_index,
-        model["update_info"],
-        model["labels"],
-        model["anchoring"],
+        params_index=p_index,
+        update_info=model["update_info"],
+        labels=model["labels"],
+        anchoring=model["anchoring"],
+        has_investments=model["investments_info"]["has_investments"],
     )
     processed_data = process_data(
         df=data,
@@ -177,11 +178,16 @@ def _partial_some_log_likelihood(
     is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
     _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
     is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
-    last_period = model["labels"]["periods"][-1]
     # iteration_to_period is used as an indexer to loop over arrays of different lengths
     # in a jax.lax.scan. It needs to work for arrays of length n_periods and not raise
     # IndexErrors on tracer arrays of length n_periods - 1 (i.e. n_transitions).
-    # To achieve that, we replace the last period by -1.
+    # To achieve that, we replace the last period by -1. If there are investments,
+    # we replace the last two internal periods, corresponding to one raw period.
+    last_period = (
+        model["labels"]["periods"][-2]
+        if parsing_info["has_investments"]
+        else model["labels"]["periods"][-1]
+    )
     iteration_to_period = _periods.replace(last_period, -1).to_numpy()
 
     return functools.partial(

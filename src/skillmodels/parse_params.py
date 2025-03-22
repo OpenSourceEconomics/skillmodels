@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 
-def create_parsing_info(params_index, update_info, labels, anchoring):
+def create_parsing_info(params_index, update_info, labels, anchoring, has_investments):
     """Create a dictionary with information how the parameter vector has to be parsed.
 
     Args:
@@ -15,6 +15,8 @@ def create_parsing_info(params_index, update_info, labels, anchoring):
             in the likelihood function. See :ref:`update_info`.
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
+        anchoring (dict): Dictionary with anchoring settings.
+        has_investments (bool): Whether the model includes investments.
 
     Returns:
         dict: dictionary that maps model quantities to positions or slices of the
@@ -72,6 +74,9 @@ def create_parsing_info(params_index, update_info, labels, anchoring):
     parsing_info["ignore_constant_when_anchoring"] = anchoring[
         "ignore_constant_when_anchoring"
     ]
+
+    # Add has_investments to parsing_info
+    parsing_info["has_investments"] = has_investments
 
     return parsing_info
 
@@ -207,9 +212,13 @@ def _get_transition_params(params, info, labels):
     trans_params = {}
     t_info = info["transition"]
     n_periods = len(labels["periods"])
+
+    # Use has_investments from parsing_info instead of undefined global
+    len_reduction = 2 if info["has_investments"] else 1
+
     for factor in labels["latent_factors"]:
         ilocs = t_info[factor]
-        trans_params[factor] = params[ilocs].reshape(n_periods - 1, -1)
+        trans_params[factor] = params[ilocs].reshape(n_periods - len_reduction, -1)
     return trans_params
 
 

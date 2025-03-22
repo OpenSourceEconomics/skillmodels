@@ -120,7 +120,7 @@ def test_shock_sd_index_tuples():
         ("shock_sds", 1, "fac2", "-"),
     ]
 
-    calculated = get_shock_sds_index_tuples(periods, factors)
+    calculated = get_shock_sds_index_tuples(periods, factors, False)
     assert calculated == expected
 
 

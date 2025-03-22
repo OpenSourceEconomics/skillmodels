@@ -341,6 +341,7 @@ def _get_pardict(model, params):
         update_info=model["update_info"],
         labels=model["labels"],
         anchoring=model["anchoring"],
+        has_investments=model["investments_info"]["has_investments"],
     )
 
     _, _, _, pardict = parse_params(

@@ -38,7 +38,13 @@ def parsed_parameters():
     # more meaningful test
     anchoring = {"ignore_constant_when_anchoring": False}
 
-    parsing_info = create_parsing_info(p_index, update_info, labels, anchoring)
+    parsing_info = create_parsing_info(
+        params_index=p_index,
+        update_info=update_info,
+        labels=labels,
+        anchoring=anchoring,
+        has_investments=False,
+    )
 
     params_vec = jnp.arange(len(p_index))
     n_obs = 5
