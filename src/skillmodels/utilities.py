@@ -97,12 +97,14 @@ def remove_factors(factors, model_dict, params=None):
         if out["anchoring"]["outcomes"] == {}:
             out = _remove_from_dict(out, "anchoring")
 
-    # Remove periods if necessary
-    new_n_periods = get_dimensions(out, has_investments)["n_periods"]
-    out = reduce_n_periods(out, new_n_periods)
+    # Remove periods if necessary, but only if no investments are present.
+    # (else we would mess up the mapping between raw periods model periods)
+    if not has_investments:
+        new_n_periods = get_dimensions(out, has_investments)["n_periods"]
+        out = reduce_n_periods(out, new_n_periods)
 
     if params is not None:
-        out_params = _reduce_params(params, out)
+        out_params = _reduce_params(params, out, has_investments)
         out = (out, out_params)
 
     return out
@@ -148,7 +150,8 @@ def remove_measurements(measurements, model_dict, params=None):
             )
 
     if params is not None:
-        out_params = _reduce_params(params, out)
+        # This likely won't work if we have investments.
+        out_params = _reduce_params(params, out, has_investments=False)
         out = (out, out_params)
 
     return out
@@ -175,7 +178,8 @@ def remove_controls(controls, model_dict, params=None):
         out = _remove_from_dict(out, "controls")
 
     if params is not None:
-        out_params = _reduce_params(params, out)
+        # This likely won't work if we have investments.
+        out_params = _reduce_params(params, out, has_investments=False)
         out = (out, out_params)
 
     return out
@@ -201,7 +205,8 @@ def switch_translog_to_linear(model_dict, params=None):
             out["factors"][factor]["transition_function"] = "linear"
 
     if params is not None:
-        out_params = _reduce_params(params, out)
+        # This likely won't work if we have investments.
+        out_params = _reduce_params(params, out, has_investments=False)
         out = (out, out_params)
 
     return out
@@ -289,7 +294,7 @@ def _remove_from_dict(dict_, to_remove):
     return {key: val for key, val in dict_.items() if key not in to_remove}
 
 
-def _reduce_params(params, model_dict):
+def _reduce_params(params, model_dict, has_investments):
     """Reduce a parameter DataFrame from a larger model to a reduced model.
 
     The reduced model must be nested in the original model for which the params
@@ -298,14 +303,25 @@ def _reduce_params(params, model_dict):
     Args:
         params (pandas.DataFrame or None): The params DataFrame for the full model.
         model_dict (dict): The model specification. See: :ref:`model_specs`.
+        has_investments (bool): Whether the model has investments.
 
     Returns:
         pandas.DataFrame: The reduced parameters DataFrame.
 
     """
     index = _get_params_index_from_model_dict(model_dict)
-    out = params.loc[index]
-    return out
+    # If we have investments, we need to keep the periods from params.
+    if has_investments:
+        df = pd.merge(
+            left=params.reset_index(),
+            right=index.to_frame(index=False)[
+                ["category", "name1", "name2"]
+            ].drop_duplicates(),
+            on=["category", "name1", "name2"],
+            how="right",
+        )
+        index = pd.MultiIndex.from_frame(df[params.index.names])
+    return params.loc[index]
 
 
 def _extend_params(params, model_dict, fill_value):

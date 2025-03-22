@@ -151,7 +151,9 @@ def get_maximization_inputs(model_dict, data):
         params_template=params_template,
         constraints_dicts=_constraints_dicts,
     )
-
+    assert params_template.index.equals(p_index), (
+        "params_template index is not equal to p_index"
+    )
     out = {
         "loglike": loglike,
         "loglikeobs": loglikeobs,

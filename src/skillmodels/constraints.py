@@ -496,4 +496,5 @@ def enforce_fixed_constraints(
     invalid = fixed.query("value < lower_bound or value > upper_bound")
     if len(invalid) > 0:
         raise ValueError(f"Invalid fixed constraints:\n\n{invalid}")
-    return params
+    # Setting via loc may expand the index, so reduce to the original index
+    return params.loc[params_template.index].astype(float)
