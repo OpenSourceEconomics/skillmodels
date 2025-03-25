@@ -95,7 +95,7 @@ ipykernel = "*"
 jupyterlab = "*"
 nbformat = "*"
 networkx = "*"
-optimagic = "*"
+# optimagic = "*"
 plotly = ">=5.2,<6"
 pre-commit = "*"
 pybaum = "*"
@@ -110,6 +110,7 @@ jaxlib = ">=0.5.2"
 [tool.pixi.pypi-dependencies]
 pdbp = "*"
 skillmodels = {path = ".", editable = true}
+optimagic = {path = "../optimagic", editable = true}
 
 [tool.pixi.target.win-64.pypi-dependencies]
 jax = { version = ">=0.5.1", extras = ["cpu"] }
