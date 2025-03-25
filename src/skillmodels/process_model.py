@@ -56,6 +56,7 @@ def process_model(model_dict):
             has_investments=has_investments,
             model_dict=model_dict_aug,
             labels=labels,
+            bounds_distance=model_dict["estimation_options"]["bounds_distance"],
         )
     else:
         model_dict_aug = model_dict
@@ -223,7 +224,7 @@ def _process_estimation_options(model_dict):
         "sigma_points_scale": 2,
         "robust_bounds": True,
         "bounds_distance": 1e-3,
-        "clipping_lower_bound": -1e250,
+        "clipping_lower_bound": -1e30,
         "clipping_upper_bound": None,
         "clipping_lower_hardness": 1,
         "clipping_upper_hardness": 1,
@@ -398,6 +399,7 @@ def _get_investments_info(
     has_investments: bool,
     model_dict: dict[str, Any],
     labels: dict[str, Any],
+    bounds_distance: float,
 ) -> dict[str, Any]:
     """Collect information about investments."""
     investments_info = {
@@ -406,6 +408,7 @@ def _get_investments_info(
             periods=labels["periods_to_periods_raw"].keys(),
             has_investments=has_investments,
         ),
+        "bounds_distance": bounds_distance,
     }
     for fac, v in model_dict["factors"].items():
         investments_info[fac] = {

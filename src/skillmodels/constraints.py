@@ -2,6 +2,7 @@
 
 import functools
 import warnings
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -227,7 +228,7 @@ def _get_stage_constraints(stagemap, stages) -> list[dict]:
 
 
 def _get_constant_factors_constraints(labels) -> list[dict]:
-    """Fix shock variances of constant factors to 0.
+    """Fix shock variances of constant factors to `bounds_distance`.
 
     Args:
         labels (dict): Dict of lists with labels for the model quantities like
@@ -411,11 +412,12 @@ def _get_constraints_for_augmented_periods(labels, investments_info) -> list[dic
                     period=period,
                     all_factors=labels["all_factors"],
                 )
+        for period in periods_to_constrain[:-1]:
             constraints_dicts.append(
                 {
                     "loc": ("shock_sds", period, factor, "-"),
                     "type": "fixed",
-                    "value": 0.0,
+                    "value": investments_info["bounds_distance"],
                     "description": "Identity constraint.",
                 }
             )
@@ -425,6 +427,47 @@ def _get_constraints_for_augmented_periods(labels, investments_info) -> list[dic
 
 def _sel(params, loc):
     return params.loc[loc]
+
+
+@dataclass(frozen=True)
+class SkillmodelsPairwiseEqualityConstraint(om.PairwiseEqualityConstraint):
+    loc: pd.MultiIndex | tuple | str | None = None
+    description: str | None = None
+    type: str = "Just to be able to use **constraints_dict"
+    id: int | None = None
+
+
+@dataclass(frozen=True)
+class SkillmodelsFixedConstraint(om.FixedConstraint):
+    loc: pd.MultiIndex | tuple | str | None = None
+    description: str | None = None
+    type: str = "Just to be able to use **constraints_dict"
+    id: int | None = None
+    value: float | None = None
+
+
+@dataclass(frozen=True)
+class SkillmodelsEqualityConstraint(om.EqualityConstraint):
+    loc: pd.MultiIndex | tuple | str | None = None
+    description: str | None = None
+    type: str = "Just to be able to use **constraints_dict"
+    id: int | None = None
+
+
+@dataclass(frozen=True)
+class SkillmodelsProbabilityConstraint(om.ProbabilityConstraint):
+    loc: pd.MultiIndex | tuple | str | None = None
+    description: str | None = None
+    type: str = "Just to be able to use **constraints_dict"
+    id: int | None = None
+
+
+@dataclass(frozen=True)
+class SkillmodelsIncreasingConstraint(om.IncreasingConstraint):
+    loc: pd.MultiIndex | tuple | str | None = None
+    description: str | None = None
+    type: str = "Just to be able to use **constraints_dict"
+    id: int | None = None
 
 
 def constraints_dicts_to_om(
@@ -440,24 +483,26 @@ def constraints_dicts_to_om(
     Returns:
         List of optimagic constraints.
     """
+    return constraints_dicts
     om_style = []
     for c_d in constraints_dicts:
         if c_d["type"] == "pairwise_equality":
             om_style.append(
-                om.PairwiseEqualityConstraint(
-                    selectors=[functools.partial(_sel, loc=loc) for loc in c_d["locs"]]
+                SkillmodelsPairwiseEqualityConstraint(
+                    selectors=[functools.partial(_sel, loc=loc) for loc in c_d["locs"]],
+                    **c_d,
                 )
             )
         else:
             sel = functools.partial(_sel, loc=c_d["loc"])
             if c_d["type"] == "fixed":
-                om_style.append(om.FixedConstraint(selector=sel))
+                om_style.append(SkillmodelsFixedConstraint(selector=sel, **c_d))
             elif c_d["type"] == "equality":
-                om_style.append(om.EqualityConstraint(selector=sel))
+                om_style.append(SkillmodelsEqualityConstraint(selector=sel, **c_d))
             elif c_d["type"] == "probability":
-                om_style.append(om.ProbabilityConstraint(selector=sel))
+                om_style.append(SkillmodelsProbabilityConstraint(selector=sel, **c_d))
             elif c_d["type"] == "increasing":
-                om_style.append(om.IncreasingConstraint(selector=sel))
+                om_style.append(SkillmodelsIncreasingConstraint(selector=sel, **c_d))
             else:
                 raise TypeError(c_d["type"])
     return om_style
@@ -488,7 +533,9 @@ def enforce_fixed_constraints(
         for constraint in constraints_dicts:
             if constraint["type"] == "fixed":
                 params.loc[constraint["loc"], "value"] = constraint["value"]
-                params.loc[constraint["loc"], "lower_bound"] = constraint["value"]
+                params.loc[constraint["loc"], "lower_bound"] = np.nextafter(
+                    constraint["value"], -np.inf
+                )
                 params.loc[constraint["loc"], "upper_bound"] = constraint["value"]
 
     # Check that fixed constraints are valid

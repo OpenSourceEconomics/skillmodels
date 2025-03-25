@@ -24,4 +24,5 @@ factors:
     transition_function: linear
 observed_factors:
   - of
-estimation_options: {}
+estimation_options:
+  bounds_distance: 0.00000001

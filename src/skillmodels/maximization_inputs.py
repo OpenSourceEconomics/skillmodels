@@ -184,13 +184,15 @@ def _partial_some_log_likelihood(
     # in a jax.lax.scan. It needs to work for arrays of length n_periods and not raise
     # IndexErrors on tracer arrays of length n_periods - 1 (i.e. n_transitions).
     # To achieve that, we replace the last period by -1. If there are investments,
-    # we replace the last two internal periods, corresponding to one raw period.
+    # the last period is found at index -2 (there should not be measurements for
+    # investments in the "second half" of the last period).
     last_period = (
         model["labels"]["periods"][-2]
         if parsing_info["has_investments"]
         else model["labels"]["periods"][-1]
     )
     iteration_to_period = _periods.replace(last_period, -1).to_numpy()
+    assert max(iteration_to_period) == last_period - 1
 
     return functools.partial(
         fun,
