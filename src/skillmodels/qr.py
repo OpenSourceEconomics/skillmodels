@@ -29,7 +29,7 @@ def _householder(r: jax.Array, tau: jax.Array):
         vi = jnp.expand_dims(r[:, i], 1)
         vi = vi.at[0:i].set(0)
         vi = vi.at[i].set(1)
-        h = h @ (jnp.eye(m) - tau[i] * (vi @ jnp.transpose(vi)))
+        h = h - tau[i] * (h @ vi) @ jnp.transpose(vi)
     return h[:, :n]
 
 
