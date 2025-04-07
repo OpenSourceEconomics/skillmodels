@@ -23,12 +23,14 @@ from skillmodels.process_model import process_model
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
 
-def get_maximization_inputs(model_dict, data):
+def get_maximization_inputs(model_dict, data, split_dataset=1):
     """Create inputs for optimagic's maximize function.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
         data (DataFrame): dataset in long format.
+        split_dataset(Int): Controls into how many sclices to split the dataset
+            during the gradient computation.
 
     Returns a dictionary with keys:
         loglike (function): A jax jitted function that takes an optimagic-style
@@ -121,7 +123,27 @@ def get_maximization_inputs(model_dict, data):
     def loglike_and_gradient(params):
         params_vec = partialed_get_jnp_params_vec(params)
         crit = float(_jitted_loglike(params_vec))
-        grad = _to_numpy(_gradient(params_vec))
+        n_obs = processed_data["measurements"].shape[1]
+        _grad = jnp.zeros_like(params_vec)
+        start = 0
+        stop = int(n_obs / split_dataset)
+        step = int(n_obs / split_dataset)
+        for i in range(split_dataset):
+            stop = n_obs if i == split_dataset - 1 else stop
+            measurements_slice = processed_data["measurements"][:, start:stop]
+            controls_slice = processed_data["controls"][:, start:stop, :]
+            observed_factors_slice = processed_data["observed_factors"][
+                :, start:stop, :
+            ]
+            _grad += _gradient(
+                params_vec,
+                measurements=measurements_slice,
+                controls=controls_slice,
+                observed_factors=observed_factors_slice,
+            )
+            start += step
+            stop += step
+        grad = _to_numpy(_grad)
         return crit, grad
 
     def debug_loglike(params):
