@@ -91,6 +91,19 @@ def test_likelihood_values_have_not_changed(model2, model2_data, model_name, fun
         old_loglike = np.array(json.load(j)).sum()
     aaae(new_loglike, old_loglike)
 
+def test_splitting_does_not_change_gradient(model2, model2_data):
+
+    inputs = get_maximization_inputs(model2, model2_data)
+    inputs_split = get_maximization_inputs(model2, model2_data, 13)
+
+    params = inputs["params_template"]
+    params["value"] = 0.1
+
+    _, gradient = inputs["loglike_and_gradient"](params)
+    _, gradient_split = inputs_split["loglike_and_gradient"](params)
+
+    aaae(gradient, gradient_split)
+
 
 @pytest.mark.parametrize(
     ("model_name", "fun_key"), product(MODEL_NAMES, ["loglikeobs"])
