@@ -110,7 +110,8 @@ jaxlib = ">=0.5.2"
 [tool.pixi.pypi-dependencies]
 pdbp = "*"
 skillmodels = {path = ".", editable = true}
-optimagic = {path = "../optimagic", editable = true}
+# optimagic = {path = "../optimagic", editable = true}
+optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main"}
 
 [tool.pixi.target.win-64.pypi-dependencies]
 jax = { version = ">=0.5.1", extras = ["cpu"] }
