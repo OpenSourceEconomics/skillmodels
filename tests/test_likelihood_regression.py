@@ -91,8 +91,8 @@ def test_likelihood_values_have_not_changed(model2, model2_data, model_name, fun
         old_loglike = np.array(json.load(j)).sum()
     aaae(new_loglike, old_loglike)
 
-def test_splitting_does_not_change_gradient(model2, model2_data):
 
+def test_splitting_does_not_change_gradient(model2, model2_data):
     inputs = get_maximization_inputs(model2, model2_data)
     inputs_split = get_maximization_inputs(model2, model2_data, 13)
 

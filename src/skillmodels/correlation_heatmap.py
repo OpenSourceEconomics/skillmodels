@@ -134,9 +134,10 @@ def get_measurements_corr(data, model_dict, factors, periods):
             and extract measurements for each period.
         factors (list, str or NoneType): List of factors, to retrieve measurements for.
             If None, then calculate correlations of measurements of all factors.
-        periods (int,float, list or NoneType): If int, the period within which to
+        periods (int, float, list or NoneType): If int, the period within which to
             calculate measurement correlations. If a list, calculate correlations over
-            periods. If None, calculate correlations across all periods.
+            periods. If None, calculate correlations across all periods. Note: Periods
+            refer to originl periods, not the augmented periods.
 
     Returns:
         corr (DataFrame): DataFrame with measurement correlations.
@@ -145,15 +146,15 @@ def get_measurements_corr(data, model_dict, factors, periods):
     data = data.copy(deep=True)
     model = process_model(model_dict)
     periods = _process_periods(periods, model)
-    data = pre_process_data(data, periods)
+    processed_data = pre_process_data(data, periods)
     latent_factors, observed_factors = _process_factors(model, factors)
-    update_info = model["update_info"]
+    update_info = _get_update_info_for_periods_raw(model)
     df = _get_measurement_data(
-        data,
-        update_info,
-        periods,
-        latent_factors,
-        observed_factors,
+        data=processed_data,
+        update_info=update_info,
+        periods=periods,
+        latent_factors=latent_factors,
+        observed_factors=observed_factors,
     )
     corr = df.corr()
     return corr
@@ -186,15 +187,15 @@ def get_quasi_scores_corr(data, model_dict, factors, periods):
     data = data.copy(deep=True)
     model = process_model(model_dict)
     periods = _process_periods(periods, model)
-    data = pre_process_data(data, periods)
+    processed_data = pre_process_data(data, periods)
     latent_factors, observed_factors = _process_factors(model, factors)
-    update_info = model["update_info"]
+    update_info = _get_update_info_for_periods_raw(model)
     df = _get_quasi_factor_scores_data(
-        data,
-        update_info,
-        periods,
-        latent_factors,
-        observed_factors,
+        data=processed_data,
+        update_info=update_info,
+        periods=periods,
+        latent_factors=latent_factors,
+        observed_factors=observed_factors,
     )
     corr = df.corr()
     return corr
@@ -226,17 +227,17 @@ def get_scores_corr(data, params, model_dict, factors, periods):
     data = data.copy(deep=True)
     model = process_model(model_dict)
     periods = _process_periods(periods, model)
-    data = pre_process_data(data, periods)
+    processed_data = pre_process_data(data, periods)
     latent_factors, observed_factors = _process_factors(model, factors)
-    update_info = model["update_info"]
+    update_info = _get_update_info_for_periods_raw(model)
     params = params.loc[["controls", "loadings"]]
     df = _get_factor_scores_data(
-        data,
-        params,
-        update_info,
-        periods,
-        latent_factors,
-        observed_factors,
+        data=processed_data,
+        params=params,
+        update_info=update_info,
+        periods=periods,
+        latent_factors=latent_factors,
+        observed_factors=observed_factors,
     )
     corr = df.corr()
     return corr
@@ -271,6 +272,24 @@ def _get_mask(corr, show_upper_triangle, show_diagonal):
     if show_diagonal:
         np.fill_diagonal(mask, val=True)
     return mask
+
+
+def _get_update_info_for_periods_raw(model):
+    """Transform update_info to use periods_raw instead of periods."""
+    update_info = model["update_info"].copy()
+
+    # Replace period level with period_raw using set_codes
+    period_raw_values = update_info.index.get_level_values("period").map(
+        model["labels"]["periods_to_periods_raw"]
+    )
+    update_info.index = update_info.index.set_codes(period_raw_values, level="period")
+
+    # Group by period_raw and variable, apply OR logic for boolean columns
+    cols = [col for col in update_info.columns if col != "purpose"]
+    agg_dict = dict.fromkeys(cols, "any")
+    agg_dict["purpose"] = "first"
+
+    return update_info.groupby(["period", "variable"]).agg(agg_dict)
 
 
 def _get_measurement_data(data, update_info, periods, latent_factors, observed_factors):
@@ -708,7 +727,7 @@ def _process_factors(model, factors):
 def _process_periods(periods, model):
     """Process periods to get a list."""
     if periods is None:
-        periods = list(range(model["dimensions"]["n_periods"]))
+        periods = list(range(model["dimensions"]["n_periods_raw"]))
     elif isinstance(periods, int | float):
         periods = [periods]
     return periods

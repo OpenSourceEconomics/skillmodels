@@ -37,7 +37,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
 
     """
     if data is None and n_obs is None:
-        raise ValueError("If data is None, n_obs has to be provided.")
+        raise ValueError("Either `data` or `n_obs` has to be provided.")
 
     model = process_model(model_dict)
 
@@ -108,6 +108,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         labels=model["labels"],
         dimensions=model["dimensions"],
         n_obs=n_obs,
+        has_investments=model["investments_info"]["has_investments"],
         update_info=model["update_info"],
         control_data=control_data,
         observed_factor_data=observed_factor_data,
@@ -150,6 +151,7 @@ def _simulate_dataset(
     labels,
     dimensions,
     n_obs,
+    has_investments,
     update_info,
     control_data,
     observed_factor_data,
@@ -168,7 +170,10 @@ def _simulate_dataset(
     policies = policies if policies is not None else []
 
     n_states = dimensions["n_latent_factors"]
-    n_periods = dimensions["n_periods"]
+    if has_investments:
+        n_periods = dimensions["n_periods"] - 1
+    else:
+        n_periods = dimensions["n_periods"]
 
     weights = np.exp(log_weights)[0]
     loadings_df = pd.DataFrame(
