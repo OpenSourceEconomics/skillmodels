@@ -205,7 +205,7 @@ def test_trans_coeffs_index_tuples_no_endogenous_factors():
 
     calculated = get_transition_index_tuples(
         transition_info=trans_info,
-        periods=periods,
+        aug_periods=periods,
         has_endogenous_factors=False,
     )
 
@@ -259,7 +259,7 @@ def test_trans_coeffs_index_tuples_has_endogenous_factors():
 
     calculated = get_transition_index_tuples(
         transition_info=trans_info,
-        periods=periods,
+        aug_periods=periods,
         has_endogenous_factors=True,
     )
 
