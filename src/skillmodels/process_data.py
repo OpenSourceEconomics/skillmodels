@@ -7,14 +7,19 @@ import pandas as pd
 
 
 def process_data(
-    df, has_investments, labels, update_info, anchoring_info, purpose="estimation"
+    df,
+    has_endogenous_factors,
+    labels,
+    update_info,
+    anchoring_info,
+    purpose="estimation",
 ):
     """Process the data for estimation.
 
     Args:
         df (DataFrame): panel dataset in long format. It has a MultiIndex
             where the first level indicates the period and the second the individual.
-        has_investments (bool):
+        has_endogenous_factors (bool):
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
         update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
@@ -38,8 +43,8 @@ def process_data(
     df["constant"] = 1
     out = {}
 
-    if has_investments:
-        df = _augment_data_for_investments(df, labels, update_info)
+    if has_endogenous_factors:
+        df = _augment_data_for_endogenous_factors(df, labels, update_info)
     else:
         df = _add_copies_of_anchoring_outcome(df, anchoring_info)
     _check_data(df, update_info, labels, purpose=purpose)
@@ -85,7 +90,7 @@ def pre_process_data(df, periods):
     return df
 
 
-def _get_period_data_for_investments(
+def _get_period_data_for_endogenous_factors(
     aug_period: int,
     period: int,
     df: pd.DataFrame,
@@ -111,14 +116,16 @@ def _get_period_data_for_investments(
     return out
 
 
-def _augment_data_for_investments(
+def _augment_data_for_endogenous_factors(
     df: pd.DataFrame,
     labels: dict[str, Any],
     update_info: pd.DataFrame,
 ):
-    """Make room for endogenous investments by doubling up the periods.
+    """Make room for endogenous factors by doubling up the periods.
 
-    Endogeneity of investments means that current states influence the
+    Endogeneity means that current states influence the factor. Typically, this comes
+    as an investment equation. We make that look like a transition for skillmodels'
+    internal machinery.
 
     """
     df = df.reset_index()
@@ -130,7 +137,7 @@ def _augment_data_for_investments(
 
     out = pd.concat(
         [
-            _get_period_data_for_investments(
+            _get_period_data_for_endogenous_factors(
                 aug_period=aug_period,
                 period=period,
                 df=df,

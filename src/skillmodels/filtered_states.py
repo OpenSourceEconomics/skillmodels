@@ -61,7 +61,7 @@ def anchor_states_df(states_df, model_dict, params):
         labels=model["labels"],
         dimensions=model["dimensions"],
         transition_info=model["transition_info"],
-        investments_info=model["investments_info"],
+        endogenous_factors_info=model["endogenous_factors_info"],
     )
 
     params = params.loc[p_index]
@@ -71,7 +71,9 @@ def anchor_states_df(states_df, model_dict, params):
         update_info=model["update_info"],
         labels=model["labels"],
         anchoring=model["anchoring"],
-        has_investments=model["investments_info"]["has_investments"],
+        has_endogenous_factors=model["endogenous_factors_info"][
+            "has_endogenous_factors"
+        ],
     )
 
     *_, pardict = parse_params(

@@ -51,7 +51,7 @@ def get_maximization_inputs(model_dict, data, split_dataset=1):
             bounds. The value column is empty except for the fixed constraints, which
             are set including the bounds.
         data_aug (pd.DataFrame): DataFrame with augmented data. If model contains
-            investment factors, we double up the number of periods in order to add
+            endogenous factors, we double up the number of periods in order to add
 
 
 
@@ -62,7 +62,7 @@ def get_maximization_inputs(model_dict, data, split_dataset=1):
         labels=model["labels"],
         dimensions=model["dimensions"],
         transition_info=model["transition_info"],
-        investments_info=model["investments_info"],
+        endogenous_factors_info=model["endogenous_factors_info"],
     )
 
     parsing_info = create_parsing_info(
@@ -70,11 +70,15 @@ def get_maximization_inputs(model_dict, data, split_dataset=1):
         update_info=model["update_info"],
         labels=model["labels"],
         anchoring=model["anchoring"],
-        has_investments=model["investments_info"]["has_investments"],
+        has_endogenous_factors=model["endogenous_factors_info"][
+            "has_endogenous_factors"
+        ],
     )
     processed_data = process_data(
         df=data,
-        has_investments=model["investments_info"]["has_investments"],
+        has_endogenous_factors=model["endogenous_factors_info"][
+            "has_endogenous_factors"
+        ],
         labels=model["labels"],
         update_info=model["update_info"],
         anchoring_info=model["anchoring"],
@@ -159,7 +163,7 @@ def get_maximization_inputs(model_dict, data, split_dataset=1):
         anchoring_info=model["anchoring"],
         update_info=model["update_info"],
         normalizations=model["normalizations"],
-        investments_info=model["investments_info"],
+        endogenous_factors_info=model["endogenous_factors_info"],
     )
 
     constraints = constraints_dicts_to_om(_constraints_dicts)
@@ -205,12 +209,12 @@ def _partial_some_log_likelihood(
     # iteration_to_period is used as an indexer to loop over arrays of different lengths
     # in a jax.lax.scan. It needs to work for arrays of length n_aug_periods and not raise
     # IndexErrors on tracer arrays of length n_aug_periods - 1 (i.e. n_transitions).
-    # To achieve that, we replace the last aug_period by -1. If there are investments,
+    # To achieve that, we replace the last aug_period by -1. If there are endogenous factors,
     # the last aug_period is found at index -2 (there should not be measurements for
-    # investments in the "second half" of the last period).
+    # endogenous factors in the "second half" of the last period).
     last_aug_period = (
         model["labels"]["aug_periods"][-2]
-        if parsing_info["has_investments"]
+        if parsing_info["has_endogenous_factors"]
         else model["labels"]["aug_periods"][-1]
     )
     iteration_to_period = _periods.replace(last_aug_period, -1).to_numpy()

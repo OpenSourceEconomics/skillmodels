@@ -43,7 +43,7 @@ def parsed_parameters():
         update_info=update_info,
         labels=labels,
         anchoring=anchoring,
-        has_investments=False,
+        has_endogenous_factors=False,
     )
 
     params_vec = jnp.arange(len(p_index))

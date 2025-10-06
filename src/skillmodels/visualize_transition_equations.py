@@ -343,7 +343,9 @@ def _get_pardict(model, params):
         update_info=model["update_info"],
         labels=model["labels"],
         anchoring=model["anchoring"],
-        has_investments=model["investments_info"]["has_investments"],
+        has_endogenous_factors=model["endogenous_factors_info"][
+            "has_endogenous_factors"
+        ],
     )
 
     _, _, _, pardict = parse_params(
@@ -363,7 +365,7 @@ def _set_index_params(model, params):
         labels=model["labels"],
         dimensions=model["dimensions"],
         transition_info=model["transition_info"],
-        investments_info=model["investments_info"],
+        endogenous_factors_info=model["endogenous_factors_info"],
     )
 
     params = params.reindex(params_index)
@@ -380,14 +382,16 @@ def _get_states_data(model, period, data, states, observed_factors):
     if observed_factors:
         _observed_arr = process_data(
             df=data,
-            has_investments=model["investments_info"]["has_investments"],
+            has_endogenous_factors=model["endogenous_factors_info"][
+                "has_endogenous_factors"
+            ],
             labels=model["labels"],
             update_info=model["update_info"],
             anchoring_info=model["anchoring"],
         )["observed_factors"]
         # convert from jax to numpy
         _observed_arr = np.array(_observed_arr)
-        if model["investments_info"]["has_investments"]:
+        if model["endogenous_factors_info"]["has_endogenous_factors"]:
             both_aug_periods = [
                 aug_p
                 for aug_p, p in model["labels"]["aug_periods_to_periods"].items()
@@ -481,7 +485,7 @@ def _prepare_data_for_one_plot_average_2d(
     transition_params,
     all_factors,
 ):
-    if model["investments_info"]["has_investments"]:
+    if model["endogenous_factors_info"]["has_endogenous_factors"]:
         aug_periods = [
             aug_p
             for aug_p, p in model["labels"]["aug_periods_to_periods"].items()

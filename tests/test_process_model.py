@@ -6,7 +6,7 @@ import pytest
 import yaml
 from pandas.testing import assert_frame_equal
 
-from skillmodels.process_model import get_has_investments, process_model
+from skillmodels.process_model import get_has_endogenous_factors, process_model
 
 # ======================================================================================
 # Integration test with model2 from the replication files of CHS2010
@@ -23,8 +23,11 @@ def model2():
     return model_dict
 
 
-def test_has_investments(model2):
-    assert process_model(model2)["investments_info"]["has_investments"] == False
+def test_has_endogenous_factors(model2):
+    assert (
+        process_model(model2)["endogenous_factors_info"]["has_endogenous_factors"]
+        == False
+    )
 
 
 def test_dimensions(model2):
@@ -122,38 +125,39 @@ def test_normalizations(model2):
 
 
 # ======================================================================================
-# Augment model2 with investments
+# Augment model2 with endogenous factors
 # ======================================================================================
 
 
-def test_anchoring_and_investments_conflict():
+def test_anchoring_and_endogenous_factors_conflict():
     with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
-    # Set fac3 to be an investment
-    model_dict["factors"]["fac3"]["is_investment"] = True
+    # Set fac3 to be endogenous
+    model_dict["factors"]["fac3"]["is_endogenous"] = True
     del model_dict["stagemap"]
     with pytest.raises(
-        ValueError, match=r"anchoring is not supported when investments are present."
+        ValueError,
+        match=r"anchoring is not supported when endogenous factors are present.",
     ):
         process_model(model_dict)
 
 
-def test_stagemap_with_investments_wrong_labels():
+def test_stagemap_with_endogenous_factors_wrong_labels():
     with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
-    # Set fac3 to be an investment
-    model_dict["factors"]["fac3"]["is_investment"] = True
+    # Set fac3 to be endogenous
+    model_dict["factors"]["fac3"]["is_endogenous"] = True
     model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 4]
     del model_dict["anchoring"]
     with pytest.raises(ValueError, match="Invalid stage map:"):
         process_model(model_dict)
 
 
-def test_stagemap_with_investments():
+def test_stagemap_with_endogenous_factors():
     with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
-    # Set fac3 to be an investment
-    model_dict["factors"]["fac3"]["is_investment"] = True
+    # Set fac3 to be endogenous
+    model_dict["factors"]["fac3"]["is_endogenous"] = True
     model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 3]
     del model_dict["anchoring"]
     model = process_model(model_dict)
@@ -166,18 +170,21 @@ def test_stagemap_with_investments():
 def model2_inv():
     with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
-    # Set fac3 to be an investment
-    model_dict["factors"]["fac3"]["is_investment"] = True
+    # Set fac3 to be endogenous
+    model_dict["factors"]["fac3"]["is_endogenous"] = True
     del model_dict["stagemap"]
     del model_dict["anchoring"]
     return model_dict
 
 
-def test_with_inv_has_investments(model2_inv):
-    assert process_model(model2_inv)["investments_info"]["has_investments"] == True
+def test_with_endog_has_endogenous_factors(model2_inv):
+    assert (
+        process_model(model2_inv)["endogenous_factors_info"]["has_endogenous_factors"]
+        == True
+    )
 
 
-def test_with_inv_dimensions(model2_inv):
+def test_with_endog_dimensions(model2_inv):
     res = process_model(model2_inv)["dimensions"]
     assert res["n_latent_factors"] == 3
     assert res["n_observed_factors"] == 0
@@ -188,7 +195,7 @@ def test_with_inv_dimensions(model2_inv):
     assert res["n_mixtures"] == 1
 
 
-def test_with_inv_labels(model2_inv):
+def test_with_endog_labels(model2_inv):
     res = process_model(model2_inv)["labels"]
     n_aug_periods = 16
     assert res["latent_factors"] == ["fac1", "fac2", "fac3"]
@@ -201,14 +208,14 @@ def test_with_inv_labels(model2_inv):
     assert res["aug_stages"] == list(range(n_aug_periods - 2))
 
 
-def test_with_inv_estimation_options(model2_inv):
+def test_with_endog_estimation_options(model2_inv):
     res = process_model(model2_inv)["estimation_options"]
     assert res["sigma_points_scale"] == 2
     assert res["robust_bounds"]
     assert res["bounds_distance"] == 0.001
 
 
-def test_with_inv_anchoring_is_empty(model2_inv):
+def test_with_endog_anchoring_is_empty(model2_inv):
     res = process_model(model2_inv)["anchoring"]
     assert res["outcomes"] == {}
     assert res["factors"] == []
@@ -217,7 +224,7 @@ def test_with_inv_anchoring_is_empty(model2_inv):
     assert res["free_loadings"] is False
 
 
-def test_with_inv_transition_info(model2_inv):
+def test_with_endog_transition_info(model2_inv):
     res = process_model(model2_inv)["transition_info"]
 
     assert isinstance(res, dict)
@@ -226,17 +233,17 @@ def test_with_inv_transition_info(model2_inv):
     assert list(inspect.signature(res["func"]).parameters) == ["params", "states"]
 
 
-def test_with_inv_update_info(model2_inv):
+def test_with_endog_update_info(model2_inv):
     res = process_model(model2_inv)["update_info"]
     test_dir = Path(__file__).parent.resolve()
     expected = pd.read_csv(
-        test_dir / "model2_with_inv_correct_update_info.csv",
+        test_dir / "model2_with_endog_correct_update_info.csv",
         index_col=["period", "variable"],
     )
     assert_frame_equal(res, expected)
 
 
-def test_with_inv_normalizations(model2_inv):
+def test_with_endog_normalizations(model2_inv):
     expected = {
         "fac1": {
             "loadings": [
@@ -363,35 +370,35 @@ def test_with_inv_normalizations(model2_inv):
 # ======================================================================================
 
 
-def test_model_has_investments_not_specified():
+def test_model_has_endogenous_factors_not_specified():
     factors = {"a": {}}
-    assert get_has_investments(factors) == False
+    assert get_has_endogenous_factors(factors) == False
 
 
-def test_get_has_investments_wrong_type():
-    factors = {"a": {"is_investment": 3}}
+def test_get_has_endogenous_factors_wrong_type():
+    factors = {"a": {"is_endogenous": 3}}
     with pytest.raises(ValueError):
-        get_has_investments(factors)
+        get_has_endogenous_factors(factors)
 
 
-def test_get_has_investments_wrong_constellation():
-    factors = {"a": {"is_investment": False, "is_correction": True}}
+def test_get_has_endogenous_factors_wrong_constellation():
+    factors = {"a": {"is_endogenous": False, "is_correction": True}}
     with pytest.raises(ValueError):
-        get_has_investments(factors)
+        get_has_endogenous_factors(factors)
 
 
-def test_get_has_investments_indeed():
+def test_get_has_endogenous_factors_indeed():
     factors = {
-        "a": {"is_investment": True, "is_correction": False},
-        "b": {"is_investment": False, "is_correction": False},
+        "a": {"is_endogenous": True, "is_correction": False},
+        "b": {"is_endogenous": False, "is_correction": False},
     }
-    assert get_has_investments(factors) == True
+    assert get_has_endogenous_factors(factors) == True
 
 
-def test_get_has_investments_and_correction():
+def test_get_has_endogenous_factors_and_correction():
     factors = {
-        "a": {"is_investment": True, "is_correction": False},
-        "b": {"is_investment": False, "is_correction": False},
-        "c": {"is_investment": True, "is_correction": True},
+        "a": {"is_endogenous": True, "is_correction": False},
+        "b": {"is_endogenous": False, "is_correction": False},
+        "c": {"is_endogenous": True, "is_correction": True},
     }
-    assert get_has_investments(factors) == True
+    assert get_has_endogenous_factors(factors) == True

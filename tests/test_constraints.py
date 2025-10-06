@@ -138,7 +138,7 @@ def test_stage_constraints():
     assert_list_equal_except_for_order(calculated, expected)
 
 
-def test_stage_constraints_with_investments():
+def test_stage_constraints_with_endogenous_factors():
     stages = [0, 1, 2, 3]
     stagemap = [0, 1, 0, 1, 2, 3]
     expected = [
@@ -379,7 +379,7 @@ def simplest_augmented_model():
 def test_get_constraints_for_augmented_periods(simplest_augmented_model):
     calculated = _get_constraints_for_augmented_periods(
         labels=simplest_augmented_model["labels"],
-        investments_info=simplest_augmented_model["investments_info"],
+        endogenous_factors_info=simplest_augmented_model["endogenous_factors_info"],
     )
     for c in calculated:
         del c["description"]

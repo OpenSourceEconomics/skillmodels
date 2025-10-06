@@ -5,7 +5,11 @@ import numpy as np
 import pandas as pd
 
 from skillmodels.params_index import get_params_index
-from skillmodels.process_model import get_dimensions, get_has_investments, process_model
+from skillmodels.process_model import (
+    get_dimensions,
+    get_has_endogenous_factors,
+    process_model,
+)
 
 
 def extract_factors(factors, model_dict, params=None):
@@ -81,8 +85,8 @@ def remove_factors(factors, model_dict, params=None):
         pandas.DataFrame: The reduced parameter DataFrame (only if params is not None)
 
     """
-    # We need this for the full model when investments are present.
-    has_investments = get_has_investments(model_dict["factors"])
+    # We need this for the full model when endogenous factors are present.
+    has_endogenous_factors = get_has_endogenous_factors(model_dict["factors"])
 
     out = deepcopy(model_dict)
 
@@ -97,14 +101,14 @@ def remove_factors(factors, model_dict, params=None):
         if out["anchoring"]["outcomes"] == {}:
             out = _remove_from_dict(out, "anchoring")
 
-    # Remove periods if necessary, but only if no investments are present.
+    # Remove periods if necessary, but only if no endogenous factors are present.
     # (else we would mess up the mapping between raw periods model periods)
-    if not has_investments:
-        new_n_periods = get_dimensions(out, has_investments)["n_periods"]
+    if not has_endogenous_factors:
+        new_n_periods = get_dimensions(out, has_endogenous_factors)["n_periods"]
         out = reduce_n_periods(out, new_n_periods)
 
     if params is not None:
-        out_params = _reduce_params(params, out, has_investments)
+        out_params = _reduce_params(params, out, has_endogenous_factors)
         out = (out, out_params)
 
     return out
@@ -150,8 +154,8 @@ def remove_measurements(measurements, model_dict, params=None):
             )
 
     if params is not None:
-        # This likely won't work if we have investments.
-        out_params = _reduce_params(params, out, has_investments=False)
+        # This likely won't work if we have endogenous factors.
+        out_params = _reduce_params(params, out, has_endogenous_factors=False)
         out = (out, out_params)
 
     return out
@@ -178,8 +182,8 @@ def remove_controls(controls, model_dict, params=None):
         out = _remove_from_dict(out, "controls")
 
     if params is not None:
-        # This likely won't work if we have investments.
-        out_params = _reduce_params(params, out, has_investments=False)
+        # This likely won't work if we have endogenous factors.
+        out_params = _reduce_params(params, out, has_endogenous_factors=False)
         out = (out, out_params)
 
     return out
@@ -205,8 +209,8 @@ def switch_translog_to_linear(model_dict, params=None):
             out["factors"][factor]["transition_function"] = "linear"
 
     if params is not None:
-        # This likely won't work if we have investments.
-        out_params = _reduce_params(params, out, has_investments=False)
+        # This likely won't work if we have endogenous factors.
+        out_params = _reduce_params(params, out, has_endogenous_factors=False)
         out = (out, out_params)
 
     return out
@@ -294,7 +298,7 @@ def _remove_from_dict(dict_, to_remove):
     return {key: val for key, val in dict_.items() if key not in to_remove}
 
 
-def _reduce_params(params, model_dict, has_investments):
+def _reduce_params(params, model_dict, has_endogenous_factors):
     """Reduce a parameter DataFrame from a larger model to a reduced model.
 
     The reduced model must be nested in the original model for which the params
@@ -303,15 +307,15 @@ def _reduce_params(params, model_dict, has_investments):
     Args:
         params (pandas.DataFrame or None): The params DataFrame for the full model.
         model_dict (dict): The model specification. See: :ref:`model_specs`.
-        has_investments (bool): Whether the model has investments.
+        has_endogenous_factors (bool): Whether the model has endogenous factors.
 
     Returns:
         pandas.DataFrame: The reduced parameters DataFrame.
 
     """
     index = _get_params_index_from_model_dict(model_dict)
-    # If we have investments, we need to keep the periods from params.
-    if has_investments:
+    # If we have endogenous factors, we need to keep the periods from params.
+    if has_endogenous_factors:
         df = pd.merge(
             left=params.reset_index(),
             right=index.to_frame(index=False)[
@@ -344,7 +348,7 @@ def _get_params_index_from_model_dict(model_dict):
         labels=mod["labels"],
         dimensions=mod["dimensions"],
         transition_info=mod["transition_info"],
-        investments_info=mod["investments_info"],
+        endogenous_factors_info=mod["endogenous_factors_info"],
     )
     return index
 

@@ -2,7 +2,7 @@ import pandas as pd
 
 
 def get_params_index(
-    update_info, labels, dimensions, transition_info, investments_info
+    update_info, labels, dimensions, transition_info, endogenous_factors_info
 ):
     """Generate index for the params_df for optimagic.
 
@@ -19,7 +19,7 @@ def get_params_index(
         options (dict): Tuning parameters for the estimation.
             See :ref:`estimation_options`.
         transition_info (dict): Information about the transition equations.
-        investments_info (dict): Information about the investment factors, if any.
+        endogenous_factors_info (dict): Information about the endogenous factors, if any.
 
     Returns:
         params_index (pd.MultiIndex)
@@ -35,7 +35,7 @@ def get_params_index(
     ind_tups += get_shock_sds_index_tuples(
         periods=labels["aug_periods"],
         factors=labels["latent_factors"],
-        has_investments=investments_info["has_investments"],
+        has_endogenous_factors=endogenous_factors_info["has_endogenous_factors"],
     )
     ind_tups += initial_mean_index_tuples(
         n_mixtures=dimensions["n_mixtures"],
@@ -49,7 +49,7 @@ def get_params_index(
     ind_tups += get_transition_index_tuples(
         transition_info=transition_info,
         periods=labels["aug_periods"],
-        has_investments=investments_info["has_investments"],
+        has_endogenous_factors=endogenous_factors_info["has_endogenous_factors"],
     )
 
     index = pd.MultiIndex.from_tuples(
@@ -114,7 +114,7 @@ def get_meas_sds_index_tuples(update_info):
     return ind_tups
 
 
-def get_shock_sds_index_tuples(periods, factors, has_investments):
+def get_shock_sds_index_tuples(periods, factors, has_endogenous_factors):
     """Index tuples for shock_sd.
 
     Args:
@@ -125,7 +125,7 @@ def get_shock_sds_index_tuples(periods, factors, has_investments):
         ind_tups (list)
 
     """
-    end = -2 if has_investments else -1
+    end = -2 if has_endogenous_factors else -1
     ind_tups = []
     for period in periods[:end]:
         for factor in factors:
@@ -194,7 +194,7 @@ def get_initial_cholcovs_index_tuples(n_mixtures, factors):
     return ind_tups
 
 
-def get_transition_index_tuples(transition_info, periods, has_investments):
+def get_transition_index_tuples(transition_info, periods, has_endogenous_factors):
     """Index tuples for transition equation coefficients.
 
     Args:
@@ -202,13 +202,13 @@ def get_transition_index_tuples(transition_info, periods, has_investments):
         all_factors (list): The latent and observed factors of the model.
         periods (list): The periods of the model
         transition_names (list): name of the transition equation of each factor
-        has_investments (bool): Whether the model has investment factors.
+        has_endogenous_factors (bool): Whether the model has endogenous factors.
 
     Returns:
         ind_tups (list)
 
     """
-    end = -2 if has_investments else -1
+    end = -2 if has_endogenous_factors else -1
     ind_tups = []
     for factor, names in transition_info["param_names"].items():
         for period in periods[:end]:

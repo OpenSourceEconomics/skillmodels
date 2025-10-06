@@ -607,7 +607,7 @@ def _get_factor_scores_data_for_single_period(
 ):
     """Get frame with factor scores in a given period.
 
-    Careful: When we have investments, *period* refers to the raw period, but the
+    Careful: When we have endogenous factors, *period* refers to the raw period, but the
     *params* are for the augmented periods. This function is the layer to abstract from
     augmented periods.
 

@@ -30,7 +30,7 @@ def model2_inputs():
         "labels": processed["labels"],
         "dimensions": processed["dimensions"],
         "transition_info": processed["transition_info"],
-        "investments_info": processed["investments_info"],
+        "endogenous_factors_info": processed["endogenous_factors_info"],
     }
     return out
 
@@ -174,7 +174,7 @@ def test_initial_cov_index_tuples():
     assert calculated == expected
 
 
-def test_trans_coeffs_index_tuples_no_investments():
+def test_trans_coeffs_index_tuples_no_endogenous_factors():
     periods = [0, 1, 2]
 
     param_names = {
@@ -206,13 +206,13 @@ def test_trans_coeffs_index_tuples_no_investments():
     calculated = get_transition_index_tuples(
         transition_info=trans_info,
         periods=periods,
-        has_investments=False,
+        has_endogenous_factors=False,
     )
 
     assert calculated == expected
 
 
-def test_trans_coeffs_index_tuples_has_investments():
+def test_trans_coeffs_index_tuples_has_endogenous_factors():
     periods = [0, 1, 2, 3, 4, 5]
 
     param_names = {
@@ -260,7 +260,7 @@ def test_trans_coeffs_index_tuples_has_investments():
     calculated = get_transition_index_tuples(
         transition_info=trans_info,
         periods=periods,
-        has_investments=True,
+        has_endogenous_factors=True,
     )
 
     assert calculated == expected

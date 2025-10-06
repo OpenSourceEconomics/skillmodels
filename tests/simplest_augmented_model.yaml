@@ -2,7 +2,7 @@
 factors:
   fac1:
     is_correction: false
-    is_investment: false
+    is_endogenous: false
     measurements:
       -   - var
       -   - var
@@ -13,7 +13,7 @@ factors:
     transition_function: linear
   fac2:
     is_correction: false
-    is_investment: true
+    is_endogenous: true
     measurements:
       -   - inv
       -   - inv

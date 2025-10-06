@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def check_model(model_dict, labels, dimensions, anchoring, has_investments):
+def check_model(model_dict, labels, dimensions, anchoring, has_endogenous_factors):
     """Check consistency and validity of the model specification.
 
     labels, dimensions and anchoring information are done before the model checking
@@ -19,7 +19,7 @@ def check_model(model_dict, labels, dimensions, anchoring, has_investments):
             factors, periods, controls, stagemap and stages. See :ref:`labels`
         anchoring (dict): Dictionary with information about anchoring.
             See :ref:`anchoring`
-        has_investments (bool): Whether the model has any investment factors
+        has_endogenous_factors (bool): Whether the model has any endogenous factors
 
     Raises:
         ValueError
@@ -29,13 +29,13 @@ def check_model(model_dict, labels, dimensions, anchoring, has_investments):
         stagemap=labels["aug_stagemap"],
         stages=labels["aug_stages"],
         n_periods=dimensions["n_aug_periods"],
-        is_augmented=has_investments,
+        is_augmented=has_endogenous_factors,
     )
     report += _check_anchoring(anchoring)
     invalid_measurements = _check_measurements(model_dict, labels["latent_factors"])
     if invalid_measurements:
         report += invalid_measurements
-    elif has_investments:
+    elif has_endogenous_factors:
         # Make this conditional because the check only works for valid meas.
         report += _check_no_overlap_in_measurements_of_states_and_inv(
             model_dict, labels
@@ -114,14 +114,14 @@ def _check_no_overlap_in_measurements_of_states_and_inv(model_dict, labels):
         meas = {}
         for factor in labels["latent_factors"]:
             props = model_dict["factors"][factor]
-            if props.get("is_investment", False):
-                meas["investments"] = set(props["measurements"][period])
+            if props.get("is_endogenous", False):
+                meas["endogenous_factors"] = set(props["measurements"][period])
             else:
                 meas["states"] = set(props["measurements"][period])
-        if overlap := meas["states"].intersection(meas["investments"]):
+        if overlap := meas["states"].intersection(meas["endogenous_factors"]):
             report.append(
-                "Measurements for states and investments must not overlap. Check "
-                f"measurements {overlap} in period {period}.",
+                "Measurements for exogenous and endogenous latent factors must not "
+                f"overlap.\n\nCheck measurements {overlap} in period {period}.",
             )
     return report
 

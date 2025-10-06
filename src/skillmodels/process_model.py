@@ -40,33 +40,37 @@ def process_model(model_dict):
           loadings and intercepts for each factor. See :ref:`normalizations`.
 
     """
-    has_investments = get_has_investments(model_dict["factors"])
-    dims = get_dimensions(model_dict=model_dict, has_investments=has_investments)
-    labels = _get_labels(
-        model_dict=model_dict, has_investments=has_investments, dimensions=dims
+    has_endogenous_factors = get_has_endogenous_factors(model_dict["factors"])
+    dims = get_dimensions(
+        model_dict=model_dict, has_endogenous_factors=has_endogenous_factors
     )
-    anchoring = _process_anchoring(model_dict, has_investments)
-    if has_investments:
-        _model_dict_aug = _augment_periods_for_investments(
+    labels = _get_labels(
+        model_dict=model_dict,
+        has_endogenous_factors=has_endogenous_factors,
+        dimensions=dims,
+    )
+    anchoring = _process_anchoring(model_dict, has_endogenous_factors)
+    if has_endogenous_factors:
+        _model_dict_aug = _augment_periods_for_endogenous_factors(
             model_dict=model_dict,
             dimensions=dims,
             labels=labels,
         )
-        investments_info = _get_investments_info(
-            has_investments=has_investments,
+        endogenous_factors_info = _get_endogenous_factors_info(
+            has_endogenous_factors=has_endogenous_factors,
             model_dict=_model_dict_aug,
             labels=labels,
             bounds_distance=model_dict["estimation_options"]["bounds_distance"],
         )
     else:
         _model_dict_aug = model_dict
-        investments_info = {"has_investments": has_investments}
+        endogenous_factors_info = {"has_endogenous_factors": has_endogenous_factors}
     check_model(
         model_dict=_model_dict_aug,
         labels=labels,
         dimensions=dims,
         anchoring=anchoring,
-        has_investments=has_investments,
+        has_endogenous_factors=has_endogenous_factors,
     )
     transition_info = _get_transition_info(_model_dict_aug, labels)
     labels["transition_names"] = list(transition_info["function_names"].values())
@@ -79,42 +83,44 @@ def process_model(model_dict):
         "transition_info": transition_info,
         "update_info": _get_update_info(_model_dict_aug, dims, labels, anchoring),
         "normalizations": _process_normalizations(_model_dict_aug, dims, labels),
-        "investments_info": investments_info,
+        "endogenous_factors_info": endogenous_factors_info,
     }
     return processed
 
 
-def get_has_investments(factors: dict[str, Any]) -> bool:
-    """Return True if any investment factors are present."""
-    investments = pd.DataFrame(
+def get_has_endogenous_factors(factors: dict[str, Any]) -> bool:
+    """Return True if any endogenous factors are present."""
+    endogenous_factors = pd.DataFrame(
         [
             {
                 "factor": f,
-                "is_investment": v.get("is_investment", False),
+                "is_endogenous": v.get("is_endogenous", False),
                 "is_correction": v.get("is_correction", False),
             }
             for f, v in factors.items()
         ]
     ).set_index("factor")
-    if (investments.dtypes != bool).any():  # noqa: E721
+    if (endogenous_factors.dtypes != bool).any():  # noqa: E721
         raise ValueError(
-            "If specified, 'is_investment' and 'is_correction' both need to be of type"
-            f"'bool', got:\n{investments}"
+            "If specified, 'is_endogenous' and 'is_correction' both need to be of type"
+            f"'bool', got:\n{endogenous_factors}"
         )
-    if (~investments["is_investment"] & investments["is_correction"]).any():
+    if (
+        ~endogenous_factors["is_endogenous"] & endogenous_factors["is_correction"]
+    ).any():
         raise ValueError(
-            "A factor cannot be a correction and not an investment, got:\n"
-            f"{investments}"
+            "A factor cannot be a correction and not endogenous, got:\n"
+            f"{endogenous_factors}"
         )
-    return investments["is_investment"].any()
+    return endogenous_factors["is_endogenous"].any()
 
 
-def get_dimensions(model_dict, has_investments):
+def get_dimensions(model_dict, has_endogenous_factors):
     """Extract the dimensions of the model.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
-        has_investments (bool): Whether investment factors are present.
+        has_endogenous_factors (bool): Whether endogenous factors are present.
 
     Returns:
         dict: Dimensional information like n_states, n_periods, n_controls,
@@ -123,7 +129,7 @@ def get_dimensions(model_dict, has_investments):
     """
     all_n_periods = [len(d["measurements"]) for d in model_dict["factors"].values()]
     n_periods = max(all_n_periods)
-    n_aug_periods = 2 * n_periods if has_investments else n_periods
+    n_aug_periods = 2 * n_periods if has_endogenous_factors else n_periods
 
     dims = {
         "n_latent_factors": len(model_dict["factors"]),
@@ -138,23 +144,23 @@ def get_dimensions(model_dict, has_investments):
 
 
 def _get_aug_periods_to_periods(
-    n_aug_periods: int, has_investments: bool
+    n_aug_periods: int, has_endogenous_factors: bool
 ) -> dict[int, int]:
     """Return mapper of (potentially) augmented periods to user-provided periods."""
     aug_periods = list(range(n_aug_periods))
     return (
         {p: p // 2 for p in aug_periods}
-        if has_investments
+        if has_endogenous_factors
         else {p: p for p in aug_periods}
     )
 
 
-def _get_labels(model_dict, has_investments, dimensions):
+def _get_labels(model_dict, has_endogenous_factors, dimensions):
     """Extract labels of the model quantities.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
-        has_investments (bool): Whether investment factors are present.
+        has_endogenous_factors (bool): Whether endogenous factors are present.
         dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
 
@@ -165,7 +171,7 @@ def _get_labels(model_dict, has_investments, dimensions):
     """
     aug_periods_to_periods = _get_aug_periods_to_periods(
         n_aug_periods=dimensions["n_aug_periods"],
-        has_investments=has_investments,
+        has_endogenous_factors=has_endogenous_factors,
     )
 
     stagemap = model_dict.get("stagemap", list(range(dimensions["n_periods"] - 1)))
@@ -179,7 +185,7 @@ def _get_labels(model_dict, has_investments, dimensions):
     )
     if report:
         raise ValueError(f"Invalid stage map: {report}")
-    if has_investments:
+    if has_endogenous_factors:
         aug_stagemap = []
         aug_stages_to_stages = {}
         relevant_aug_periods = sorted(aug_periods_to_periods.keys())[:-2]
@@ -239,19 +245,21 @@ def _process_estimation_options(model_dict):
     return default_options
 
 
-def _process_anchoring(model_dict, has_investments):
+def _process_anchoring(model_dict, has_endogenous_factors):
     """Process the specification that governs how latent factors are anchored.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
-        has_investments (bool): Whether the model has any investments.
+        has_endogenous_factors (bool): Whether the model has any endogenous factors.
 
     Returns:
         dict: Dictionary with information about anchoring. See :ref:`anchoring`
 
     """
-    if "anchoring" in model_dict and has_investments:
-        raise ValueError("anchoring is not supported when investments are present.")
+    if "anchoring" in model_dict and has_endogenous_factors:
+        raise ValueError(
+            "anchoring is not supported when endogenous factors are present."
+        )
 
     anchinfo = {
         "anchoring": False,
@@ -278,10 +286,10 @@ def _insert_empty_elements_into_list(old, insert_at_modulo, to_insert, aug_p_to_
     ]
 
 
-def _augment_periods_for_investments(
+def _augment_periods_for_endogenous_factors(
     model_dict: dict[str, Any], dimensions: dict[str, Any], labels: dict[str, Any]
 ) -> dict[str, Any]:
-    """Insert periods without measurements / normalisations if investments are present.
+    """Insert periods without measurements / normalisations if endogenous factors are present.
 
     Args:
         model_dict: The model specification. See: :ref:`model_specs`
@@ -296,7 +304,7 @@ def _augment_periods_for_investments(
     """
     aug = deepcopy(model_dict)
     for fac, v in model_dict["factors"].items():
-        insert_at_modulo = 0 if v.get("is_investment", False) else 1
+        insert_at_modulo = 0 if v.get("is_endogenous", False) else 1
 
         # Insert empty elements into measurements when we do not have those.
         if len(v["measurements"]) != dimensions["n_periods"]:
@@ -397,38 +405,38 @@ def _get_transition_info(model_dict, labels):
     return out
 
 
-def _get_investments_info(
-    has_investments: bool,
+def _get_endogenous_factors_info(
+    has_endogenous_factors: bool,
     model_dict: dict[str, Any],
     labels: dict[str, Any],
     bounds_distance: float,
 ) -> dict[str, Any]:
-    """Collect information about investments."""
-    investments_info = {
-        "has_investments": has_investments,
+    """Collect information about endogenous factors."""
+    endogenous_factors_info = {
+        "has_endogenous_factors": has_endogenous_factors,
         "aug_periods_to_aug_period_types": _get_aug_periods_to_aug_period_types(
             aug_periods=labels["aug_periods_to_periods"].keys(),
-            has_investments=has_investments,
+            has_endogenous_factors=has_endogenous_factors,
         ),
         "bounds_distance": bounds_distance,
     }
     for fac, v in model_dict["factors"].items():
-        investments_info[fac] = {
+        endogenous_factors_info[fac] = {
             "is_state": (
-                not v.get("is_investment", False) and not v.get("is_correction", False)
+                not v.get("is_endogenous", False) and not v.get("is_correction", False)
             ),
-            "is_investment": v.get("is_investment", False),
+            "is_endogenous": v.get("is_endogenous", False),
             "is_correction": v.get("is_correction", False),
         }
-    return investments_info
+    return endogenous_factors_info
 
 
 def _get_aug_periods_to_aug_period_types(
-    aug_periods: list[int], has_investments: bool
-) -> dict[int, Literal["states", "investments"]]:
+    aug_periods: list[int], has_endogenous_factors: bool
+) -> dict[int, Literal["states", "endogenous_factors"]]:
     return {
-        aug_p: ("states" if aug_p % 2 == 0 else "investments")
-        if has_investments
+        aug_p: ("states" if aug_p % 2 == 0 else "endogenous_factors")
+        if has_endogenous_factors
         else {aug_p: "states"}
         for aug_p in aug_periods
     }

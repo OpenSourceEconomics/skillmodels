@@ -10,7 +10,7 @@ import yaml
 from numpy.testing import assert_array_equal as aae
 
 from skillmodels.process_data import (
-    _augment_data_for_investments,
+    _augment_data_for_endogenous_factors,
     _generate_controls_array,
     _generate_measurements_array,
     _generate_observed_factor_array,
@@ -60,13 +60,13 @@ def simplest_augmented():
     return out
 
 
-def test_augment_data_for_investments(simplest_augmented):
+def test_augment_data_for_endogenous_factors(simplest_augmented):
     model = process_model(simplest_augmented["model_dict"])
     pre_processed_data = pre_process_data(
         simplest_augmented["data_input"], model["labels"]["periods"]
     )
     pre_processed_data["constant"] = 1
-    res = _augment_data_for_investments(
+    res = _augment_data_for_endogenous_factors(
         df=pre_processed_data,
         labels=model["labels"],
         update_info=model["update_info"],

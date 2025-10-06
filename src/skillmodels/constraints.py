@@ -13,7 +13,12 @@ import skillmodels.transition_functions as t_f_module
 
 
 def get_constraints_dicts(
-    dimensions, labels, anchoring_info, update_info, normalizations, investments_info
+    dimensions,
+    labels,
+    anchoring_info,
+    update_info,
+    normalizations,
+    endogenous_factors_info,
 ) -> list[dict]:
     """Generate constraints implied by the model specification.
 
@@ -63,10 +68,10 @@ def get_constraints_dicts(
         anchoring_info=anchoring_info,
         periods=labels["aug_periods"],
     )
-    if investments_info["has_investments"]:
+    if endogenous_factors_info["has_endogenous_factors"]:
         constraints_dicts += _get_constraints_for_augmented_periods(
             labels=labels,
-            investments_info=investments_info,
+            endogenous_factors_info=endogenous_factors_info,
         )
 
     for i, c in enumerate(constraints_dicts):
@@ -377,11 +382,13 @@ def _get_anchoring_constraints(
     return constraints_dicts
 
 
-def _get_constraints_for_augmented_periods(labels, investments_info) -> list[dict]:
+def _get_constraints_for_augmented_periods(
+    labels, endogenous_factors_info
+) -> list[dict]:
     """Constraints for augmented periods.
 
     - Carry forward states from uneven periods to even periods
-    - Carry forward investments even periods to uneven periods
+    - Carry forward endogenous factors even periods to uneven periods
     - Set shock_sds to 0 when carrying anything forward
 
     Both depend on the transition function.
@@ -400,11 +407,15 @@ def _get_constraints_for_augmented_periods(labels, investments_info) -> list[dic
         if tname == "constant":
             continue
         aug_period_type_to_constrain = (
-            "investments" if investments_info[factor]["is_state"] else "states"
+            "endogenous_factors"
+            if endogenous_factors_info[factor]["is_state"]
+            else "states"
         )
         aug_periods_to_constrain = [
             k
-            for k, v in investments_info["aug_periods_to_aug_period_types"].items()
+            for k, v in endogenous_factors_info[
+                "aug_periods_to_aug_period_types"
+            ].items()
             if v == aug_period_type_to_constrain
         ]
         for aug_period in aug_periods_to_constrain:
@@ -419,7 +430,7 @@ def _get_constraints_for_augmented_periods(labels, investments_info) -> list[dic
                 {
                     "loc": ("shock_sds", aug_period, factor, "-"),
                     "type": "fixed",
-                    "value": investments_info["bounds_distance"],
+                    "value": endogenous_factors_info["bounds_distance"],
                     "description": "Identity constraint.",
                 }
             )

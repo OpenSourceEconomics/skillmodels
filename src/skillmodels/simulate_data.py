@@ -52,7 +52,9 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
     if data is not None:
         processed_data = process_data(
             df=data,
-            has_investments=model["investments_info"]["has_investments"],
+            has_endogenous_factors=model["endogenous_factors_info"][
+                "has_endogenous_factors"
+            ],
             labels=model["labels"],
             update_info=model["update_info"],
             anchoring_info=model["anchoring"],
@@ -79,7 +81,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         labels=model["labels"],
         dimensions=model["dimensions"],
         transition_info=model["transition_info"],
-        investments_info=model["investments_info"],
+        endogenous_factors_info=model["endogenous_factors_info"],
     )
 
     params = params.reindex(params_index)
@@ -89,7 +91,9 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         update_info=model["update_info"],
         labels=model["labels"],
         anchoring=model["anchoring"],
-        has_investments=model["investments_info"]["has_investments"],
+        has_endogenous_factors=model["endogenous_factors_info"][
+            "has_endogenous_factors"
+        ],
     )
 
     states, covs, log_weights, pardict = parse_params(
@@ -108,7 +112,9 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         labels=model["labels"],
         dimensions=model["dimensions"],
         n_obs=n_obs,
-        has_investments=model["investments_info"]["has_investments"],
+        has_endogenous_factors=model["endogenous_factors_info"][
+            "has_endogenous_factors"
+        ],
         update_info=model["update_info"],
         control_data=control_data,
         observed_factor_data=observed_factor_data,
@@ -151,7 +157,7 @@ def _simulate_dataset(
     labels,
     dimensions,
     n_obs,
-    has_investments,
+    has_endogenous_factors,
     update_info,
     control_data,
     observed_factor_data,
@@ -170,7 +176,7 @@ def _simulate_dataset(
     policies = policies if policies is not None else []
 
     n_states = dimensions["n_latent_factors"]
-    if has_investments:
+    if has_endogenous_factors:
         n_periods = dimensions["n_aug_periods"] - 2
     else:
         n_periods = dimensions["n_aug_periods"]
