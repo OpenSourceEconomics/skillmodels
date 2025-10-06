@@ -47,9 +47,7 @@ def _tril(m: jax.Array, k: int = 0) -> jax.Array:
     """Select lower Triangle of a Matrix."""
     *_, dim_n, dim_m = m.shape
     mask = jnp.tri(dim_n, dim_m, k, bool)
-    return jax.lax.select(
-        jax.lax.broadcast(mask, m.shape[:-2]), m, jax.lax.zeros_like_array(m)
-    )
+    return jax.lax.select(jax.lax.broadcast(mask, m.shape[:-2]), m, jnp.zeros_like(m))
 
 
 @qr_gpu.defjvp
@@ -59,12 +57,12 @@ def qr_jvp_rule(primals, tangents):
     (x,) = primals
     (dx,) = tangents
     q, r = qr_gpu(x)
-    *_, m, n = x.shape
     dx_rinv = jax.lax.linalg.triangular_solve(r, dx)  # Right side solve by default
     qt_dx_rinv = _h(q) @ dx_rinv
     qt_dx_rinv_lower = _tril(qt_dx_rinv, -1)
     do = qt_dx_rinv_lower - _h(qt_dx_rinv_lower)  # This is skew-symmetric
     # The following correction is necessary for complex inputs
+    n = x.shape[-1]
     i = jax.lax.expand_dims(jnp.eye(n, n), range(qt_dx_rinv.ndim - 2))
     do = do + i * (qt_dx_rinv - qt_dx_rinv.real.astype(qt_dx_rinv.dtype))
     dq = q @ (do - qt_dx_rinv) + dx_rinv
