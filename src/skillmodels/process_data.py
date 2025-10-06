@@ -194,12 +194,12 @@ def _check_data(df, update_info, labels, purpose):  # noqa: C901
 
 
 def _handle_controls_with_missings(df, controls, update_info):
-    periods = update_info.index.get_level_values(0).unique().tolist()
+    aug_periods = update_info.index.get_level_values(0).unique().tolist()
     problematic_index = df.index[:0]
-    for period in periods:
-        period_data = df.query(f"period == {period}")
+    for aug_period in aug_periods:
+        period_data = df.query(f"period == {aug_period}")
         control_data = period_data[controls]
-        meas_data = period_data[_get_period_measurements(update_info, period)]
+        meas_data = period_data[_get_period_measurements(update_info, aug_period)]
         problem = control_data.isna().any(axis=1) & meas_data.notna().any(axis=1)
         problematic_index = problematic_index.union(period_data[problem].index)
 
@@ -212,9 +212,9 @@ def _handle_controls_with_missings(df, controls, update_info):
     return df
 
 
-def _get_period_measurements(update_info, period):
-    if period in update_info.index:
-        measurements = list(update_info.loc[period].index)
+def _get_period_measurements(update_info, aug_period):
+    if aug_period in update_info.index:
+        measurements = list(update_info.loc[aug_period].index)
     else:
         measurements = []
     return measurements
@@ -222,8 +222,8 @@ def _get_period_measurements(update_info, period):
 
 def _generate_measurements_array(df, update_info, n_obs):
     arr = np.zeros((len(update_info), n_obs))
-    for k, (period, var) in enumerate(update_info.index):
-        arr[k] = df.query(f"period == {period}")[var].to_numpy()
+    for k, (aug_period, var) in enumerate(update_info.index):
+        arr[k] = df.query(f"period == {aug_period}")[var].to_numpy()
     return jnp.array(arr, dtype="float32")
 
 

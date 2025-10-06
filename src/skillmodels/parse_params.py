@@ -11,7 +11,7 @@ def create_parsing_info(
     """Create a dictionary with information how the parameter vector has to be parsed.
 
     Args:
-        params_index (pandas.MultiIndex): It has the levels ["category", "period",
+        params_index (pandas.MultiIndex): It has the levels ["category", "aug_period",
             "name1", "name2"]
         update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.

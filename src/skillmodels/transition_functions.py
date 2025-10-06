@@ -47,14 +47,14 @@ def params_linear(factors):
     return [*factors, "constant"]
 
 
-def identity_constraints_linear(factor, period, all_factors) -> list[dict]:
-    """Index tuples for linear transition function."""
+def identity_constraints_linear(factor, aug_period, all_factors) -> list[dict]:
+    """Identity constraints for linear transition function."""
     constraints_dicts = []
     for regressor in params_linear(all_factors):
         val = 1.0 if factor == regressor else 0.0
         constraints_dicts.append(
             {
-                "loc": ("transition", period, factor, regressor),
+                "loc": ("transition", aug_period, factor, regressor),
                 "type": "fixed",
                 "value": val,
                 "description": "Identity constraint.",
@@ -96,14 +96,14 @@ def params_translog(factors):
     return names
 
 
-def identity_constraints_translog(factor, period, all_factors) -> list[dict]:
-    """Index tuples for translog transition function."""
+def identity_constraints_translog(factor, aug_period, all_factors) -> list[dict]:
+    """Identity constraints for translog transition function."""
     constraints_dicts = []
     for regressor in params_translog(all_factors):
         val = 1.0 if factor == regressor else 0.0
         constraints_dicts.append(
             {
-                "loc": ("transition", period, factor, regressor),
+                "loc": ("transition", aug_period, factor, regressor),
                 "type": "fixed",
                 "value": val,
                 "description": "Identity constraint.",
@@ -133,13 +133,15 @@ def params_log_ces(factors):
     return [*factors, "phi"]
 
 
-def constraints_log_ces(factor, factors, period):
+def constraints_log_ces(factor, factors, aug_period):
+    """Constraints for log_ces production function."""
     names = params_log_ces(factors)
-    loc = [("transition", period, factor, name) for name in names[:-1]]
+    loc = [("transition", aug_period, factor, name) for name in names[:-1]]
     return {"loc": loc, "type": "probability"}
 
 
-def identity_constraints_log_ces(factors, period, all_factors):
+def identity_constraints_log_ces(factors, aug_period, all_factors):
+    """Identity constraints for log_ces."""
     raise NotImplementedError
 
 
@@ -173,8 +175,9 @@ def params_robust_translog(factors):
     return params_translog(factors)
 
 
-def identity_constraints_robust_translog(factor, period, all_factors) -> list[dict]:
-    return identity_constraints_translog(factor, period, all_factors)
+def identity_constraints_robust_translog(factor, aug_period, all_factors) -> list[dict]:
+    """Identity constraints for robust_translog."""
+    return identity_constraints_translog(factor, aug_period, all_factors)
 
 
 def linear_and_squares(states, params):
@@ -196,14 +199,16 @@ def params_linear_and_squares(factors):
     return names
 
 
-def identity_constraints_linear_and_squares(factor, period, all_factors) -> list[dict]:
-    """Index tuples for linear_and_squares transition function."""
+def identity_constraints_linear_and_squares(
+    factor, aug_period, all_factors
+) -> list[dict]:
+    """Identity constraints for linear_and_squares transition function."""
     constraints_dicts = []
     for regressor in params_linear_and_squares(all_factors):
         val = 1.0 if factor == regressor else 0.0
         constraints_dicts.append(
             {
-                "loc": ("transition", period, factor, regressor),
+                "loc": ("transition", aug_period, factor, regressor),
                 "type": "fixed",
                 "value": val,
                 "description": "Identity constraint.",
@@ -234,5 +239,6 @@ def params_log_ces_general(factors):
     return factors + [f"sigma_{fac}" for fac in factors] + ["tfp"]
 
 
-def identity_constraints_log_ces_general(factors, period, all_factors):
+def identity_constraints_log_ces_general(factors, aug_period, all_factors):
+    """Identity constraints for log_ces_general."""
     raise NotImplementedError

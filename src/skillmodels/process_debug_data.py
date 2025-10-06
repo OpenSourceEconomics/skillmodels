@@ -95,9 +95,11 @@ def process_debug_data(debug_data, model):
 
 def _create_post_update_states(filtered_states, factors, update_info):
     to_concat = []
-    for (period, meas), data in zip(update_info.index, filtered_states, strict=False):
+    for (aug_period, meas), data in zip(
+        update_info.index, filtered_states, strict=False
+    ):
         df = _convert_state_array_to_df(data, factors)
-        df["period"] = period
+        df["period"] = aug_period
         df["id"] = np.arange(len(df))
         df["measurement"] = meas
         to_concat.append(df)
@@ -128,9 +130,9 @@ def _create_filtered_states(filtered_states, log_mixture_weights, update_info, f
     agg_states = (filtered_states * weights.reshape(*weights.shape, 1)).sum(axis=-2)
 
     keep = []
-    for i, (period, measurement) in enumerate(update_info.index):
+    for i, (aug_period, measurement) in enumerate(update_info.index):
         last_measurement = update_info.query(
-            f"purpose == 'measurement' & period == {period}",
+            f"purpose == 'measurement' & period == {aug_period}",
         ).index[-1][1]
 
         if measurement == last_measurement:
@@ -162,10 +164,10 @@ def create_state_ranges(filtered_states, factors):
 def _process_residuals(residuals, update_info):
     to_concat = []
     n_obs, n_mixtures = residuals[0].shape
-    for (period, meas), data in zip(update_info.index, residuals, strict=False):
+    for (aug_period, meas), data in zip(update_info.index, residuals, strict=False):
         df = pd.DataFrame(data.reshape(-1, 1), columns=["residual"])
         df["mixture"] = np.full((n_obs, n_mixtures), np.arange(n_mixtures)).flatten()
-        df["period"] = period
+        df["period"] = aug_period
         df["id"] = np.arange(len(df))
         df["measurement"] = meas
         to_concat.append(df)

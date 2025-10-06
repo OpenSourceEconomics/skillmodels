@@ -204,8 +204,8 @@ def _partial_some_log_likelihood(
 ):
     update_info = model["update_info"]
     is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
-    _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
-    is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
+    _aug_periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
+    is_predict_iteration = ((_aug_periods - _aug_periods.shift(-1)) == -1).to_numpy()
     # iteration_to_period is used as an indexer to loop over arrays of different lengths
     # in a jax.lax.scan. It needs to work for arrays of length n_aug_periods and not raise
     # IndexErrors on tracer arrays of length n_aug_periods - 1 (i.e. n_transitions).
@@ -217,7 +217,7 @@ def _partial_some_log_likelihood(
         if parsing_info["has_endogenous_factors"]
         else model["labels"]["aug_periods"][-1]
     )
-    iteration_to_period = _periods.replace(last_aug_period, -1).to_numpy()
+    iteration_to_period = _aug_periods.replace(last_aug_period, -1).to_numpy()
     assert max(iteration_to_period) == last_aug_period - 1
 
     return functools.partial(
