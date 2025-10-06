@@ -186,19 +186,19 @@ def get_transition_plots(
         "anchored_states"
     ]["states"]
     plots_dict = _get_dictionary_with_plots(
-        model,
-        data,
-        params,
-        states,
-        state_ranges,
-        latent_factors,
-        all_factors,
-        quantiles_of_other_factors,
-        period,
-        n_points,
-        n_draws,
-        colorscale,
-        layout_kwargs,
+        model=model,
+        data=data,
+        params=params,
+        states=states,
+        state_ranges=state_ranges,
+        latent_factors=latent_factors,
+        all_factors=all_factors,
+        quantiles_of_other_factors=quantiles_of_other_factors,
+        period=period,
+        n_points=n_points,
+        n_draws=n_draws,
+        colorscale=colorscale,
+        layout_kwargs=layout_kwargs,
     )
     return plots_dict
 
@@ -285,6 +285,7 @@ def _get_dictionary_with_plots(
                 input_factor=input_factor,
                 output_factor=output_factor,
                 quantiles_of_other_factors=quantiles_of_other_factors,
+                model=model,
                 n_points=n_points,
                 transition_function=transition_function,
                 transition_params=transition_params,
@@ -298,6 +299,7 @@ def _get_dictionary_with_plots(
                 period=period,
                 input_factor=input_factor,
                 output_factor=output_factor,
+                model=model,
                 n_points=n_points,
                 n_draws=n_draws,
                 transition_function=transition_function,
@@ -371,8 +373,8 @@ def _set_index_params(model, params):
 def _get_states_data(model, period, data, states, observed_factors):
     if observed_factors and data is None:
         raise ValueError(
-            """The model has observed factors. You must pass the empirical data to
-        'visualize_transition_equations' via the keyword *data*.""",
+            "The model has observed factors. You must pass the empirical data to "
+            "'visualize_transition_equations' via the keyword *data*.",
         )
 
     if observed_factors:
@@ -385,12 +387,30 @@ def _get_states_data(model, period, data, states, observed_factors):
         )["observed_factors"]
         # convert from jax to numpy
         _observed_arr = np.array(_observed_arr)
-        observed_data = pd.DataFrame(
-            data=_observed_arr[period],
-            columns=observed_factors,
-        )
-        observed_data["id"] = observed_data.index
-        observed_data["period"] = period
+        if model["investments_info"]["has_investments"]:
+            both_periods = {
+                p: period
+                for p, pr in model["labels"]["periods_to_periods_raw"].items()
+                if pr == period
+            }
+            to_concat = []
+            for p in both_periods:
+                df = pd.DataFrame(
+                    data=_observed_arr[p],
+                    columns=observed_factors,
+                )
+                df["id"] = df.index
+                df["period"] = p
+                to_concat.append(df)
+            observed_data = pd.concat(to_concat)
+        else:
+            observed_data = pd.DataFrame(
+                data=_observed_arr[period],
+                columns=observed_factors,
+            )
+            observed_data["id"] = observed_data.index
+            observed_data["period"] = period
+        # Do a left merge because we need all periods for the ranges
         states_data = pd.merge(
             left=states,
             right=observed_data,
@@ -410,6 +430,7 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
     input_factor,
     output_factor,
     quantiles_of_other_factors,
+    model,
     n_points,
     transition_function,
     transition_params,
@@ -453,13 +474,22 @@ def _prepare_data_for_one_plot_average_2d(
     period,
     input_factor,
     output_factor,
+    model,
     n_points,
     n_draws,
     transition_function,
     transition_params,
     all_factors,
 ):
-    period_data = states_data.query(f"period == {period}")[all_factors].reset_index()
+    if model["investments_info"]["has_investments"]:
+        aug_periods = [
+            p
+            for p, pr in model["labels"]["periods_to_periods_raw"].items()
+            if pr == period
+        ]
+    else:
+        aug_periods = [period]
+    period_data = states_data.query(f"period in {aug_periods}")
 
     sampled_factors = [factor for factor in all_factors if factor != input_factor]
     draws = period_data[sampled_factors].sample(n=n_draws)
