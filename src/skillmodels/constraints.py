@@ -48,8 +48,8 @@ def get_constraints_dicts(
     )
     constraints_dicts += _get_mixture_weights_constraints(dimensions["n_mixtures"])
     constraints_dicts += _get_stage_constraints(
-        stagemap=labels["stagemap"],
-        stages=labels["stages"],
+        stagemap=labels["aug_stagemap"],
+        stages=labels["aug_stages"],
     )
     constraints_dicts += _get_constant_factors_constraints(labels=labels)
     constraints_dicts += _get_initial_states_constraints(
@@ -61,7 +61,7 @@ def get_constraints_dicts(
         update_info=update_info,
         controls=labels["controls"],
         anchoring_info=anchoring_info,
-        periods=labels["periods"],
+        periods=labels["aug_periods"],
     )
     if investments_info["has_investments"]:
         constraints_dicts += _get_constraints_for_augmented_periods(
@@ -190,8 +190,8 @@ def _get_stage_constraints(stagemap, stages) -> list[dict]:
     """Equality constraints for transition and shock parameters within stages.
 
     Args:
-        stagemap (list): map periods to stages
-        stages (list): stages
+        stagemap (list): map aug_periods to aug_stages
+        stages (list): aug_stages
     Returns:
         constraints_dicts
 
@@ -202,8 +202,8 @@ def _get_stage_constraints(stagemap, stages) -> list[dict]:
     constraints_dicts = []
 
     stages_to_periods = {stage: [] for stage in stages}
-    for period, stage in enumerate(stagemap):
-        stages_to_periods[stage].append(period)
+    for aug_period, stage in enumerate(stagemap):
+        stages_to_periods[stage].append(aug_period)
 
     for stage, stage_periods in stages_to_periods.items():
         if len(stage_periods) > 1:
@@ -242,10 +242,10 @@ def _get_constant_factors_constraints(labels) -> list[dict]:
     for f, factor in enumerate(labels["latent_factors"]):
         if labels["transition_names"][f] == "constant":
             msg = f"This constraint was generated because {factor} is constant."
-            for period in labels["periods"][:-1]:
+            for aug_period in labels["aug_periods"][:-1]:
                 constraints_dicts.append(
                     {
-                        "loc": ("shock_sds", period, factor, "-"),
+                        "loc": ("shock_sds", aug_period, factor, "-"),
                         "type": "fixed",
                         "value": 0.0,
                         "description": msg,
@@ -300,10 +300,12 @@ def _get_transition_constraints(labels) -> list[dict]:
     for f, factor in enumerate(labels["latent_factors"]):
         tname = labels["transition_names"][f]
         msg = f"This constraint is inherent to the {tname} production function."
-        for period in labels["periods"][:-1]:
+        for aug_period in labels["aug_periods"][:-1]:
             funcname = f"constraints_{tname}"
             if func := getattr(t_f_module, funcname, False):
-                c = func(factor=factor, factors=labels["all_factors"], period=period)
+                c = func(
+                    factor=factor, factors=labels["all_factors"], period=aug_period
+                )
                 if "description" not in c:
                     c["description"] = msg
                 constraints_dicts.append(c)
@@ -397,25 +399,25 @@ def _get_constraints_for_augmented_periods(labels, investments_info) -> list[dic
         tname = labels["transition_names"][f]
         if tname == "constant":
             continue
-        period_type_to_constrain = (
+        aug_period_type_to_constrain = (
             "investments" if investments_info[factor]["is_state"] else "states"
         )
-        periods_to_constrain = [
+        aug_periods_to_constrain = [
             k
-            for k, v in investments_info["periods_to_period_types"].items()
-            if v == period_type_to_constrain
+            for k, v in investments_info["aug_periods_to_aug_period_types"].items()
+            if v == aug_period_type_to_constrain
         ]
-        for period in periods_to_constrain:
+        for aug_period in aug_periods_to_constrain:
             if func := getattr(t_f_module, f"identity_constraints_{tname}", False):
                 constraints_dicts += func(
                     factor=factor,
-                    period=period,
+                    period=aug_period,
                     all_factors=labels["all_factors"],
                 )
-        for period in periods_to_constrain[:-1]:
+        for aug_period in aug_periods_to_constrain[:-1]:
             constraints_dicts.append(
                 {
-                    "loc": ("shock_sds", period, factor, "-"),
+                    "loc": ("shock_sds", aug_period, factor, "-"),
                     "type": "fixed",
                     "value": investments_info["bounds_distance"],
                     "description": "Identity constraint.",

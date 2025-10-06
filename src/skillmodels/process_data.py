@@ -34,7 +34,7 @@ def process_data(
             n_observed_factors) with data on the observed factors.
 
     """
-    df = pre_process_data(df, labels["periods_raw"])
+    df = pre_process_data(df, labels["periods"])
     df["constant"] = 1
     out = {}
 
@@ -43,7 +43,7 @@ def process_data(
     else:
         df = _add_copies_of_anchoring_outcome(df, anchoring_info)
     _check_data(df, update_info, labels, purpose=purpose)
-    n_obs = int(len(df) / len(labels["periods"]))
+    n_obs = int(len(df) / len(labels["aug_periods"]))
     df = _handle_controls_with_missings(df, labels["controls"], update_info)
     out["controls"] = _generate_controls_array(df, labels, n_obs)
     out["observed_factors"] = _generate_observed_factor_array(df, labels, n_obs)
@@ -86,28 +86,28 @@ def pre_process_data(df, periods):
 
 
 def _get_period_data_for_investments(
+    aug_period: int,
     period: int,
-    period_raw: int,
     df: pd.DataFrame,
     labels: dict[str, Any],
     update_info: pd.DataFrame,
 ) -> pd.DataFrame:
-    meas = _get_period_measurements(update_info, period)
+    meas = _get_period_measurements(update_info, aug_period)
     controls = labels["controls"]
     observed = labels["observed_factors"]
 
-    out = df.query(f"period_raw == {period_raw}")[
+    out = df.query(f"period == {period}")[
         [
             "id",
             *meas,
             *controls,
             *observed,
-            "period_raw",
+            "period",
             "__old_id__",
             "__old_period__",
         ]
     ]
-    out["period"] = period
+    out["aug_period"] = aug_period
     return out
 
 
@@ -121,26 +121,28 @@ def _augment_data_for_investments(
     Endogeneity of investments means that current states influence the
 
     """
-    df = df.reset_index().rename(columns={"period": "period_raw"})
+    df = df.reset_index()
     # Make sure datset is balanced
     n_ids = df["id"].nunique()
-    n_periods = df["period_raw"].nunique()
+    n_periods = df["period"].nunique()
     assert n_ids * n_periods == df.shape[0]
-    assert set(df["period_raw"]) == set(labels["periods_to_periods_raw"].values())
+    assert set(df["period"]) == set(labels["aug_periods_to_periods"].values())
 
     out = pd.concat(
         [
             _get_period_data_for_investments(
+                aug_period=aug_period,
                 period=period,
-                period_raw=period_raw,
                 df=df,
                 update_info=update_info,
                 labels=labels,
             )
-            for period, period_raw in labels["periods_to_periods_raw"].items()
+            for aug_period, period in labels["aug_periods_to_periods"].items()
         ]
     )
-    return out.set_index(["id", "period"]).sort_index()
+    return (
+        out.set_index(["id", "aug_period"]).rename_axis(["id", "period"]).sort_index()
+    )
 
 
 def _add_copies_of_anchoring_outcome(df, anchoring_info):
@@ -153,26 +155,30 @@ def _add_copies_of_anchoring_outcome(df, anchoring_info):
 
 def _check_data(df, update_info, labels, purpose):  # noqa: C901
     var_report = pd.DataFrame(index=update_info.index[:0], columns=["problem"])
-    for period in labels["periods"]:
-        period_data = df.query(f"period == {period}")
+    for aug_period in labels["aug_periods"]:
+        period_data = df.query(f"period == {aug_period}")
         for cont in labels["controls"]:
             if cont not in period_data.columns or period_data[cont].isna().all():
-                var_report.loc[(period, cont), "problem"] = "Variable is missing"
+                var_report.loc[(aug_period, cont), "problem"] = "Variable is missing"
 
         if purpose == "estimation":
-            for meas in _get_period_measurements(update_info, period):
+            for meas in _get_period_measurements(update_info, aug_period):
                 if meas not in period_data.columns:
-                    var_report.loc[(period, meas), "problem"] = "Variable is missing"
+                    var_report.loc[(aug_period, meas), "problem"] = (
+                        "Variable is missing"
+                    )
                 elif len(period_data[meas].dropna().unique()) == 1:
-                    var_report.loc[(period, meas), "problem"] = (
+                    var_report.loc[(aug_period, meas), "problem"] = (
                         "Variable has no variance"
                     )
 
         for factor in labels["observed_factors"]:
             if factor not in period_data.columns:
-                var_report.loc[(period, factor), "problem"] = "Variable is missing"
+                var_report.loc[(aug_period, factor), "problem"] = "Variable is missing"
             elif period_data[factor].isna().any():
-                var_report.loc[(period, factor), "problem"] = "Variable has missings"
+                var_report.loc[(aug_period, factor), "problem"] = (
+                    "Variable has missings"
+                )
 
     var_report = var_report.to_string() if len(var_report) > 0 else ""
 
@@ -215,16 +221,18 @@ def _generate_measurements_array(df, update_info, n_obs):
 
 
 def _generate_controls_array(df, labels, n_obs):
-    arr = np.zeros((len(labels["periods"]), n_obs, len(labels["controls"])))
-    for period in labels["periods"]:
-        arr[period] = df.query(f"period == {period}")[labels["controls"]].to_numpy()
+    arr = np.zeros((len(labels["aug_periods"]), n_obs, len(labels["controls"])))
+    for aug_period in labels["aug_periods"]:
+        arr[aug_period] = df.query(f"period == {aug_period}")[
+            labels["controls"]
+        ].to_numpy()
     return jnp.array(arr, dtype="float32")
 
 
 def _generate_observed_factor_array(df, labels, n_obs):
-    arr = np.zeros((len(labels["periods"]), n_obs, len(labels["observed_factors"])))
-    for period in labels["periods"]:
-        arr[period] = df.query(f"period == {period}")[
+    arr = np.zeros((len(labels["aug_periods"]), n_obs, len(labels["observed_factors"])))
+    for aug_period in labels["aug_periods"]:
+        arr[aug_period] = df.query(f"period == {aug_period}")[
             labels["observed_factors"]
         ].to_numpy()
     return jnp.array(arr, dtype="float32")

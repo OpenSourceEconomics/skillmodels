@@ -388,19 +388,19 @@ def _get_states_data(model, period, data, states, observed_factors):
         # convert from jax to numpy
         _observed_arr = np.array(_observed_arr)
         if model["investments_info"]["has_investments"]:
-            both_periods = {
-                p: period
-                for p, pr in model["labels"]["periods_to_periods_raw"].items()
-                if pr == period
-            }
+            both_aug_periods = [
+                aug_p
+                for aug_p, p in model["labels"]["aug_periods_to_periods"].items()
+                if p == period
+            ]
             to_concat = []
-            for p in both_periods:
+            for aug_p in both_aug_periods:
                 df = pd.DataFrame(
-                    data=_observed_arr[p],
+                    data=_observed_arr[aug_p],
                     columns=observed_factors,
                 )
                 df["id"] = df.index
-                df["period"] = p
+                df["period"] = aug_p
                 to_concat.append(df)
             observed_data = pd.concat(to_concat)
         else:
@@ -483,9 +483,9 @@ def _prepare_data_for_one_plot_average_2d(
 ):
     if model["investments_info"]["has_investments"]:
         aug_periods = [
-            p
-            for p, pr in model["labels"]["periods_to_periods_raw"].items()
-            if pr == period
+            aug_p
+            for aug_p, p in model["labels"]["aug_periods_to_periods"].items()
+            if p == period
         ]
     else:
         aug_periods = [period]

@@ -133,7 +133,7 @@ def test_anchoring_and_investments_conflict():
     model_dict["factors"]["fac3"]["is_investment"] = True
     del model_dict["stagemap"]
     with pytest.raises(
-        ValueError, match="anchoring is not supported when investments are present."
+        ValueError, match=r"anchoring is not supported when investments are present."
     ):
         process_model(model_dict)
 
@@ -157,9 +157,9 @@ def test_stagemap_with_investments():
     model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 3]
     del model_dict["anchoring"]
     model = process_model(model_dict)
-    assert model["labels"]["stagemap_raw"] == model_dict["stagemap"]
-    assert model["labels"]["stages_raw"] == [0, 1, 2, 3]
-    assert model["labels"]["stagemap"] == [0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 7]
+    assert model["labels"]["stagemap"] == model_dict["stagemap"]
+    assert model["labels"]["stages"] == [0, 1, 2, 3]
+    assert model["labels"]["aug_stagemap"] == [0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 7]
 
 
 @pytest.fixture
@@ -182,23 +182,23 @@ def test_with_inv_dimensions(model2_inv):
     assert res["n_latent_factors"] == 3
     assert res["n_observed_factors"] == 0
     assert res["n_all_factors"] == 3
-    assert res["n_periods"] == 16
-    assert res["n_periods_raw"] == 8
+    assert res["n_aug_periods"] == 16
+    assert res["n_periods"] == 8
     assert res["n_controls"] == 2
     assert res["n_mixtures"] == 1
 
 
 def test_with_inv_labels(model2_inv):
     res = process_model(model2_inv)["labels"]
-    n_periods = 16
+    n_aug_periods = 16
     assert res["latent_factors"] == ["fac1", "fac2", "fac3"]
     assert res["observed_factors"] == []
     assert res["all_factors"] == ["fac1", "fac2", "fac3"]
     assert res["controls"] == ["constant", "x1"]
-    assert res["periods"] == list(range(n_periods))
-    assert res["periods_raw"] == [0, 1, 2, 3, 4, 5, 6, 7]
-    assert res["stagemap"] == list(range(n_periods - 2))
-    assert res["stages"] == list(range(n_periods - 2))
+    assert res["aug_periods"] == list(range(n_aug_periods))
+    assert res["periods"] == [0, 1, 2, 3, 4, 5, 6, 7]
+    assert res["aug_stagemap"] == list(range(n_aug_periods - 2))
+    assert res["aug_stages"] == list(range(n_aug_periods - 2))
 
 
 def test_with_inv_estimation_options(model2_inv):

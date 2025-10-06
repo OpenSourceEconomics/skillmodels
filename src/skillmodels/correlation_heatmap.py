@@ -148,7 +148,7 @@ def get_measurements_corr(data, model_dict, factors, periods):
     periods = _process_periods(periods, model)
     processed_data = pre_process_data(data, periods)
     latent_factors, observed_factors = _process_factors(model, factors)
-    update_info = _get_update_info_for_periods_raw(model)
+    update_info = _get_update_info_for_periods(model)
     df = _get_measurement_data(
         data=processed_data,
         update_info=update_info,
@@ -189,7 +189,7 @@ def get_quasi_scores_corr(data, model_dict, factors, periods):
     periods = _process_periods(periods, model)
     processed_data = pre_process_data(data, periods)
     latent_factors, observed_factors = _process_factors(model, factors)
-    update_info = _get_update_info_for_periods_raw(model)
+    update_info = _get_update_info_for_periods(model)
     df = _get_quasi_factor_scores_data(
         data=processed_data,
         update_info=update_info,
@@ -273,17 +273,17 @@ def _get_mask(corr, show_upper_triangle, show_diagonal):
     return mask
 
 
-def _get_update_info_for_periods_raw(model):
-    """Transform update_info to use periods_raw instead of periods."""
+def _get_update_info_for_periods(model):
+    """Transform update_info to use user-provided periods instead of augmented periods."""
     update_info = model["update_info"].copy()
 
-    # Replace period level with period_raw using set_codes
-    period_raw_values = update_info.index.get_level_values("period").map(
-        model["labels"]["periods_to_periods_raw"]
+    # Replace period level with user-provided period using set_codes
+    period_values = update_info.index.get_level_values("period").map(
+        model["labels"]["aug_periods_to_periods"]
     )
-    update_info.index = update_info.index.set_codes(period_raw_values, level="period")
+    update_info.index = update_info.index.set_codes(period_values, level="period")
 
-    # Group by period_raw and variable, apply OR logic for boolean columns
+    # Group by period and variable, apply OR logic for boolean columns
     cols = [col for col in update_info.columns if col != "purpose"]
     agg_dict = dict.fromkeys(cols, "any")
     agg_dict["purpose"] = "first"
@@ -627,7 +627,9 @@ def _get_factor_scores_data_for_single_period(
 
     """
     model_periods = [
-        mp for mp, p in model["labels"]["periods_to_periods_raw"].items() if p == period
+        aug_p
+        for aug_p, p in model["labels"]["aug_periods_to_periods"].items()
+        if p == period
     ]
     df = pd.concat(
         [
@@ -780,7 +782,7 @@ def _process_factors(model, factors):
 def _process_periods(periods, model):
     """Process periods to get a list."""
     if periods is None:
-        periods = list(range(model["dimensions"]["n_periods_raw"]))
+        periods = list(range(model["dimensions"]["n_periods"]))
     elif isinstance(periods, int | float):
         periods = [periods]
     return periods

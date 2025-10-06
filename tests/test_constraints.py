@@ -174,7 +174,7 @@ def test_stage_constraints_with_investments():
 def test_constant_factor_constraints():
     labels = {
         "latent_factors": ["fac1", "fac2"],
-        "periods": [0, 1, 2],
+        "aug_periods": [0, 1, 2],
         "transition_names": ["bla", "constant"],
     }
 
@@ -220,7 +220,7 @@ def test_trans_coeff_constraints():
     labels = {
         "latent_factors": ["fac1", "fac2", "fac3"],
         "transition_names": ["log_ces", "bla", "blubb"],
-        "periods": [0, 1, 2],
+        "aug_periods": [0, 1, 2],
     }
     labels["all_factors"] = labels["latent_factors"]
 

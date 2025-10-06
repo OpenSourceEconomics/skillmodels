@@ -33,7 +33,7 @@ def get_params_index(
     )
     ind_tups += get_meas_sds_index_tuples(update_info=update_info)
     ind_tups += get_shock_sds_index_tuples(
-        periods=labels["periods"],
+        periods=labels["aug_periods"],
         factors=labels["latent_factors"],
         has_investments=investments_info["has_investments"],
     )
@@ -48,7 +48,7 @@ def get_params_index(
     )
     ind_tups += get_transition_index_tuples(
         transition_info=transition_info,
-        periods=labels["periods"],
+        periods=labels["aug_periods"],
         has_investments=investments_info["has_investments"],
     )
 

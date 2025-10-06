@@ -26,10 +26,10 @@ def check_model(model_dict, labels, dimensions, anchoring, has_investments):
 
     """
     report = check_stagemap(
-        stagemap=labels["stagemap"],
-        stages=labels["stages"],
-        n_periods=dimensions["n_periods"],
-        has_investments=has_investments,
+        stagemap=labels["aug_stagemap"],
+        stages=labels["aug_stages"],
+        n_periods=dimensions["n_aug_periods"],
+        is_augmented=has_investments,
     )
     report += _check_anchoring(anchoring)
     invalid_measurements = _check_measurements(model_dict, labels["latent_factors"])
@@ -47,21 +47,21 @@ def check_model(model_dict, labels, dimensions, anchoring, has_investments):
         raise ValueError(f"Invalid model specification: {report}")
 
 
-def check_stagemap(stagemap, stages, n_periods, has_investments):
+def check_stagemap(stagemap, stages, n_periods, is_augmented):
     report = []
-    len_reduction = 2 if has_investments else 1
-    if len(stagemap) != n_periods - len_reduction:
+    step_size = 2 if is_augmented else 1
+    if len(stagemap) != n_periods - step_size:
         report.append(
-            f"The stagemap needs to be of length n_periods - {len_reduction}. "
+            f"The stagemap needs to be of length n_periods - {step_size}. "
             f" n_periods is {n_periods}, the stagemap has length {len(stagemap)}.",
         )
-    if not has_investments:
-        if stages != list(range(len(stages))):
-            report.append(
-                "Stages need to be integers, start at zero and increase by 1."
-            )
+    if stages != list(range(len(stages))):
+        report.append("Stages need to be integers, start at zero and increase by 1.")
 
-        if not np.isin(np.array(stagemap[1:]) - np.array(stagemap[:-1]), (0, 1)).all():
+    # Hijacking the stagemap for endogenous factors leads to interleaved elements.
+    to_consider = [stagemap] if not is_augmented else [stagemap[0::2], stagemap[1::2]]
+    for sm in to_consider:
+        if not np.isin(np.array(sm[1:]) - np.array(sm[:-1]), (0, step_size)).all():
             report.append(
                 "Consecutive entries in stagemap must be equal or increase by 1."
             )
@@ -110,7 +110,7 @@ def _check_measurements(model_dict, factors):
 
 def _check_no_overlap_in_measurements_of_states_and_inv(model_dict, labels):
     report = []
-    for period in labels["periods_raw"]:
+    for period in labels["periods"]:
         meas = {}
         for factor in labels["latent_factors"]:
             props = model_dict["factors"][factor]

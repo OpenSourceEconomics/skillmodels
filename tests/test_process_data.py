@@ -63,7 +63,7 @@ def simplest_augmented():
 def test_augment_data_for_investments(simplest_augmented):
     model = process_model(simplest_augmented["model_dict"])
     pre_processed_data = pre_process_data(
-        simplest_augmented["data_input"], model["labels"]["periods_raw"]
+        simplest_augmented["data_input"], model["labels"]["periods"]
     )
     pre_processed_data["constant"] = 1
     res = _augment_data_for_investments(
@@ -71,7 +71,7 @@ def test_augment_data_for_investments(simplest_augmented):
         labels=model["labels"],
         update_info=model["update_info"],
     )
-    cols = ["period_raw", "var", "inv", "constant", "of"]
+    cols = ["var", "inv", "constant", "of"]
     pd.testing.assert_frame_equal(res[cols], simplest_augmented["data_exp"][cols])
 
 
@@ -121,7 +121,7 @@ def test_generate_controls_array():
     """
     data = _read_csv_string(csv, ["id", "period"])
 
-    labels = {"controls": ["c1", "c2"], "periods": [0, 1]}
+    labels = {"controls": ["c1", "c2"], "aug_periods": [0, 1]}
 
     calculated = _generate_controls_array(data, labels, 2)
     expected = jnp.array([[[1, 2], [5, 8]], [[3, 4], [7, 8]]])
@@ -138,7 +138,7 @@ def test_generate_observed_factor_array():
     """
     data = _read_csv_string(csv, ["id", "period"])
 
-    labels = {"observed_factors": ["v1", "v2"], "periods": [0, 1]}
+    labels = {"observed_factors": ["v1", "v2"], "aug_periods": [0, 1]}
 
     calculated = _generate_observed_factor_array(data, labels, 2)
     expected = jnp.array([[[1, 2], [5, 8]], [[3, 4], [7, 8]]])

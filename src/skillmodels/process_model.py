@@ -47,38 +47,38 @@ def process_model(model_dict):
     )
     anchoring = _process_anchoring(model_dict, has_investments)
     if has_investments:
-        model_dict_aug = _augment_periods_for_investments(
+        _model_dict_aug = _augment_periods_for_investments(
             model_dict=model_dict,
             dimensions=dims,
             labels=labels,
         )
         investments_info = _get_investments_info(
             has_investments=has_investments,
-            model_dict=model_dict_aug,
+            model_dict=_model_dict_aug,
             labels=labels,
             bounds_distance=model_dict["estimation_options"]["bounds_distance"],
         )
     else:
-        model_dict_aug = model_dict
+        _model_dict_aug = model_dict
         investments_info = {"has_investments": has_investments}
     check_model(
-        model_dict=model_dict_aug,
+        model_dict=_model_dict_aug,
         labels=labels,
         dimensions=dims,
         anchoring=anchoring,
         has_investments=has_investments,
     )
-    transition_info = _get_transition_info(model_dict_aug, labels)
+    transition_info = _get_transition_info(_model_dict_aug, labels)
     labels["transition_names"] = list(transition_info["function_names"].values())
 
     processed = {
         "dimensions": dims,
         "labels": labels,
         "anchoring": anchoring,
-        "estimation_options": _process_estimation_options(model_dict_aug),
+        "estimation_options": _process_estimation_options(_model_dict_aug),
         "transition_info": transition_info,
-        "update_info": _get_update_info(model_dict_aug, dims, labels, anchoring),
-        "normalizations": _process_normalizations(model_dict_aug, dims, labels),
+        "update_info": _get_update_info(_model_dict_aug, dims, labels, anchoring),
+        "normalizations": _process_normalizations(_model_dict_aug, dims, labels),
         "investments_info": investments_info,
     }
     return processed
@@ -122,27 +122,31 @@ def get_dimensions(model_dict, has_investments):
 
     """
     all_n_periods = [len(d["measurements"]) for d in model_dict["factors"].values()]
-    n_periods_raw = max(all_n_periods)
-    n_periods = 2 * n_periods_raw if has_investments else n_periods_raw
+    n_periods = max(all_n_periods)
+    n_aug_periods = 2 * n_periods if has_investments else n_periods
 
     dims = {
         "n_latent_factors": len(model_dict["factors"]),
         "n_observed_factors": len(model_dict.get("observed_factors", [])),
-        "n_periods": n_periods,
-        "n_periods_raw": n_periods_raw,
         "n_controls": len(model_dict.get("controls", [])) + 1,  # plus 1: constant
         "n_mixtures": model_dict["estimation_options"].get("n_mixtures", 1),
+        "n_aug_periods": n_aug_periods,
+        "n_periods": n_periods,
     }
     dims["n_all_factors"] = dims["n_latent_factors"] + dims["n_observed_factors"]
     return dims
 
 
-def _get_periods_to_periods_raw(
-    n_periods: int, has_investments: bool
+def _get_aug_periods_to_periods(
+    n_aug_periods: int, has_investments: bool
 ) -> dict[int, int]:
-    """Return mapper of periods potentially augmented for investments to raw periods."""
-    periods = list(range(n_periods))
-    return {p: p // 2 for p in periods} if has_investments else {p: p for p in periods}
+    """Return mapper of (potentially) augmented periods to user-provided periods."""
+    aug_periods = list(range(n_aug_periods))
+    return (
+        {p: p // 2 for p in aug_periods}
+        if has_investments
+        else {p: p for p in aug_periods}
+    )
 
 
 def _get_labels(model_dict, has_investments, dimensions):
@@ -159,50 +163,48 @@ def _get_labels(model_dict, has_investments, dimensions):
         factors, periods, controls, stagemap and stages. See :ref:`labels`
 
     """
-    periods_to_periods_raw = _get_periods_to_periods_raw(
-        n_periods=dimensions["n_periods"],
+    aug_periods_to_periods = _get_aug_periods_to_periods(
+        n_aug_periods=dimensions["n_aug_periods"],
         has_investments=has_investments,
     )
 
-    stagemap_raw = model_dict.get(
-        "stagemap", list(range(dimensions["n_periods_raw"] - 1))
-    )
-    stages_raw = sorted(int(v) for v in np.unique(stagemap_raw))
+    stagemap = model_dict.get("stagemap", list(range(dimensions["n_periods"] - 1)))
+    stages = sorted(int(v) for v in np.unique(stagemap))
 
+    report = check_stagemap(
+        stagemap=stagemap,
+        stages=stages,
+        n_periods=dimensions["n_periods"],
+        is_augmented=False,
+    )
+    if report:
+        raise ValueError(f"Invalid stage map: {report}")
     if has_investments:
-        report = check_stagemap(
-            stagemap=stagemap_raw,
-            stages=stages_raw,
-            n_periods=dimensions["n_periods_raw"],
-            has_investments=False,
-        )
-        if report:
-            raise ValueError(f"Invalid stage map: {report}")
-        stagemap = []
-        stages_to_stages_raw = {}
-        relevant_periods = sorted(periods_to_periods_raw.keys())[:-2]
-        for p in relevant_periods:
-            p_raw = periods_to_periods_raw[p]
-            s_raw = stagemap_raw[p_raw]
-            s = 2 * s_raw + p % 2
-            stagemap.append(s)
-            stages_to_stages_raw[s] = s_raw
+        aug_stagemap = []
+        aug_stages_to_stages = {}
+        relevant_aug_periods = sorted(aug_periods_to_periods.keys())[:-2]
+        for aug_p in relevant_aug_periods:
+            p = aug_periods_to_periods[aug_p]
+            s = stagemap[p]
+            aug_s = 2 * s + aug_p % 2
+            aug_stagemap.append(aug_s)
+            aug_stages_to_stages[aug_s] = s
     else:
-        stagemap = stagemap_raw
-        stages_to_stages_raw = {s_raw: s_raw for s_raw in stages_raw}
+        aug_stagemap = stagemap
+        aug_stages_to_stages = {s: s for s in stages}
 
     labels = {
         "latent_factors": list(model_dict["factors"]),
         "observed_factors": list(model_dict.get("observed_factors", [])),
         "controls": ["constant", *list(model_dict.get("controls", []))],
-        "periods": list(periods_to_periods_raw.keys()),
-        "periods_raw": sorted(set(periods_to_periods_raw.values())),
-        "periods_to_periods_raw": periods_to_periods_raw,
+        "periods": sorted(set(aug_periods_to_periods.values())),
         "stagemap": stagemap,
-        "stages": sorted(int(v) for v in np.unique(stagemap)),
-        "stages_to_stages_raw": stages_to_stages_raw,
-        "stagemap_raw": stagemap_raw,
-        "stages_raw": stages_raw,
+        "stages": stages,
+        "aug_periods": list(aug_periods_to_periods.keys()),
+        "aug_periods_to_periods": aug_periods_to_periods,
+        "aug_stagemap": aug_stagemap,
+        "aug_stages": sorted(int(v) for v in np.unique(aug_stagemap)),
+        "aug_stages_to_stages": aug_stages_to_stages,
     }
 
     labels["all_factors"] = labels["latent_factors"] + labels["observed_factors"]
@@ -269,10 +271,10 @@ def _process_anchoring(model_dict, has_investments):
     return anchinfo
 
 
-def _insert_empty_elements_into_list(old, insert_at_modulo, to_insert, p_to_p_raw):
+def _insert_empty_elements_into_list(old, insert_at_modulo, to_insert, aug_p_to_p):
     return [
-        to_insert if p % 2 == insert_at_modulo else old[p_raw]
-        for p, p_raw in p_to_p_raw.items()
+        to_insert if aug_p % 2 == insert_at_modulo else old[p]
+        for aug_p, p in aug_p_to_p.items()
     ]
 
 
@@ -297,21 +299,21 @@ def _augment_periods_for_investments(
         insert_at_modulo = 0 if v.get("is_investment", False) else 1
 
         # Insert empty elements into measurements when we do not have those.
-        if len(v["measurements"]) != dimensions["n_periods_raw"]:
+        if len(v["measurements"]) != dimensions["n_periods"]:
             raise ValueError(
-                "Measurements must be of length `n_periods_raw`, "
+                "Measurements must be of length `n_periods`, "
                 f"got {v['measurements']} for {fac}"
             )
         aug["factors"][fac]["measurements"] = _insert_empty_elements_into_list(
             old=v["measurements"],
             insert_at_modulo=insert_at_modulo,
             to_insert=[],
-            p_to_p_raw=labels["periods_to_periods_raw"],
+            aug_p_to_p=labels["aug_periods_to_periods"],
         )
 
         # Insert empty elements into normalizations when we do not have those.
         for norm_type, normalizations in v.get("normalizations", {}).items():
-            if not len(normalizations) == dimensions["n_periods_raw"]:
+            if not len(normalizations) == dimensions["n_periods"]:
                 raise ValueError(
                     "Normalizations must be lists of length `n_periods`, "
                     f"got {normalizations} for {fac}['normalizations']['{norm_type}']"
@@ -321,7 +323,7 @@ def _augment_periods_for_investments(
                     old=normalizations,
                     insert_at_modulo=insert_at_modulo,
                     to_insert={},
-                    p_to_p_raw=labels["periods_to_periods_raw"],
+                    aug_p_to_p=labels["aug_periods_to_periods"],
                 )
             )
     return aug
@@ -404,8 +406,8 @@ def _get_investments_info(
     """Collect information about investments."""
     investments_info = {
         "has_investments": has_investments,
-        "periods_to_period_types": _get_periods_to_period_types(
-            periods=labels["periods_to_periods_raw"].keys(),
+        "aug_periods_to_aug_period_types": _get_aug_periods_to_aug_period_types(
+            aug_periods=labels["aug_periods_to_periods"].keys(),
             has_investments=has_investments,
         ),
         "bounds_distance": bounds_distance,
@@ -421,14 +423,14 @@ def _get_investments_info(
     return investments_info
 
 
-def _get_periods_to_period_types(
-    periods: list[int], has_investments: bool
+def _get_aug_periods_to_aug_period_types(
+    aug_periods: list[int], has_investments: bool
 ) -> dict[int, Literal["states", "investments"]]:
     return {
-        p: ("states" if p % 2 == 0 else "investments")
+        aug_p: ("states" if aug_p % 2 == 0 else "investments")
         if has_investments
-        else {p: "states"}
-        for p in periods
+        else {aug_p: "states"}
+        for aug_p in aug_periods
     }
 
 
@@ -454,22 +456,22 @@ def _get_update_info(model_dict, dimensions, labels, anchoring_info):
     measurements = {}
     for factor in labels["latent_factors"]:
         measurements[factor] = model_dict["factors"][factor]["measurements"]
-        if len(measurements[factor]) != dimensions["n_periods"]:
+        if len(measurements[factor]) != dimensions["n_aug_periods"]:
             raise ValueError(
-                "Measurements must be of length `n_periods`, "
+                "Measurements must be of length `n_aug_periods`, "
                 f"got {measurements[factor]} for {factor}"
             )
 
-    for period in labels["periods"]:
+    for aug_period in labels["aug_periods"]:
         for factor in labels["latent_factors"]:
-            for meas in measurements[factor][period]:
-                uinfo.loc[(period, meas), factor] = True
-                uinfo.loc[(period, meas), "purpose"] = "measurement"
+            for meas in measurements[factor][aug_period]:
+                uinfo.loc[(aug_period, meas), factor] = True
+                uinfo.loc[(aug_period, meas), "purpose"] = "measurement"
         for factor in anchoring_info["factors"]:
             outcome = anchoring_info["outcomes"][factor]
             name = f"{outcome}_{factor}"
-            uinfo.loc[(period, name), factor] = True
-            uinfo.loc[(period, name), "purpose"] = "anchoring"
+            uinfo.loc[(aug_period, name), factor] = True
+            uinfo.loc[(aug_period, name), "purpose"] = "anchoring"
 
     for col in [c for c in uinfo.columns if c != "purpose"]:
         uinfo[col] = uinfo[col].fillna(value=False).astype(bool)
@@ -497,11 +499,11 @@ def _process_normalizations(model_dict, dimensions, labels):
         norminfo = model_dict["factors"][factor].get("normalizations", {})
         for norm_type in ["loadings", "intercepts"]:
             candidate = norminfo.get(
-                norm_type, [{} for _ in range(dimensions["n_periods"])]
+                norm_type, [{} for _ in range(dimensions["n_aug_periods"])]
             )
-            if not len(candidate) == dimensions["n_periods"]:
+            if not len(candidate) == dimensions["n_aug_periods"]:
                 raise ValueError(
-                    "Normalizations must be of length `n_periods`, "
+                    "Normalizations must be of length `n_aug_periods`, "
                     f"got {norminfo} for {factor}['{norm_type}']"
                 )
             normalizations[factor][norm_type] = candidate

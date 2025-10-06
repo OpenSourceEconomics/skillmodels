@@ -171,9 +171,9 @@ def _simulate_dataset(
 
     n_states = dimensions["n_latent_factors"]
     if has_investments:
-        n_periods = dimensions["n_periods"] - 1
+        n_periods = dimensions["n_aug_periods"] - 2
     else:
-        n_periods = dimensions["n_periods"]
+        n_periods = dimensions["n_aug_periods"]
 
     weights = np.exp(log_weights)[0]
     loadings_df = pd.DataFrame(

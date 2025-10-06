@@ -211,14 +211,14 @@ def _get_transition_params(params, info, labels):
     """Create a list of arrays with transition equation parameters."""
     trans_params = {}
     t_info = info["transition"]
-    n_periods = len(labels["periods"])
+    n_aug_periods = len(labels["aug_periods"])
 
     # Use has_investments from parsing_info instead of undefined global
     len_reduction = 2 if info["has_investments"] else 1
 
     for factor in labels["latent_factors"]:
         ilocs = t_info[factor]
-        trans_params[factor] = params[ilocs].reshape(n_periods - len_reduction, -1)
+        trans_params[factor] = params[ilocs].reshape(n_aug_periods - len_reduction, -1)
     return trans_params
 
 
