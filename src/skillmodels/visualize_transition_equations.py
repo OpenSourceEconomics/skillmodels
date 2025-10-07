@@ -404,7 +404,7 @@ def _get_states_data(model, period, data, states, observed_factors):
                     columns=observed_factors,
                 )
                 df["id"] = df.index
-                df["period"] = aug_p
+                df["aug_period"] = aug_p
                 to_concat.append(df)
             observed_data = pd.concat(to_concat)
         else:
@@ -413,13 +413,13 @@ def _get_states_data(model, period, data, states, observed_factors):
                 columns=observed_factors,
             )
             observed_data["id"] = observed_data.index
-            observed_data["period"] = period
+            observed_data["aug_period"] = period
         # Do a left merge because we need all periods for the ranges
         states_data = pd.merge(
             left=states,
             right=observed_data,
             left_on=["id", "period"],
-            right_on=["id", "period"],
+            right_on=["id", "aug_period"],
             how="left",
         )
     else:

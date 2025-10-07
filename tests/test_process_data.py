@@ -55,7 +55,8 @@ def simplest_augmented():
     _df["id"] = [1, 3, 3, 5, 5]
     out["data_input"] = _df.set_index(["id", "period"])
     out["data_exp"] = pd.read_csv(
-        TEST_DIR / "simplest_augmented_data_expected.csv", index_col=["id", "period"]
+        TEST_DIR / "simplest_augmented_data_expected.csv",
+        index_col=["id", "aug_period"],
     )
     return out
 
@@ -81,11 +82,11 @@ def test_handle_controls_with_missings():
     update_info = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_ind_tups))
     data = [[1, 1, 1], [np.nan, 1, 1], [np.nan, 1, np.nan], [np.nan, np.nan, np.nan]]
     df = pd.DataFrame(data=data, columns=["m1", "m2", "c1"])
-    df["period"] = 0
+    df["aug_period"] = 0
     df["id"] = np.arange(4)
     df["__old_id__"] = df["id"]
-    df["__old_period__"] = df["period"] + 1
-    df.set_index(["id", "period"], inplace=True)
+    df["__old_period__"] = df["aug_period"] + 1
+    df.set_index(["id", "aug_period"], inplace=True)
 
     with pytest.warns(UserWarning):
         calculated = _handle_controls_with_missings(df, controls, update_info)
@@ -97,13 +98,13 @@ def test_generate_measurements_array():
     update_info = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_ind_tups))
 
     csv = """
-    id,period,m1,m2,m3
+    id,aug_period,m1,m2,m3
     0,0,1,2,3
     0,1,4,5,6
     1,0,7,8,9
     1,1,10,11,12
     """
-    data = _read_csv_string(csv, ["id", "period"])
+    data = _read_csv_string(csv, ["id", "aug_period"])
 
     expected = jnp.array([[1, 7], [2, 8], [4, 10], [6, 12.0]])
 
@@ -113,13 +114,13 @@ def test_generate_measurements_array():
 
 def test_generate_controls_array():
     csv = """
-    id,period,c1,c2
+    id,aug_period,c1,c2
     0, 0, 1, 2
     0, 1, 3, 4
     1, 0, 5, 8
     1, 1, 7, 8
     """
-    data = _read_csv_string(csv, ["id", "period"])
+    data = _read_csv_string(csv, ["id", "aug_period"])
 
     labels = {"controls": ["c1", "c2"], "aug_periods": [0, 1]}
 
@@ -130,13 +131,13 @@ def test_generate_controls_array():
 
 def test_generate_observed_factor_array():
     csv = """
-    id,period,v1,v2
+    id,aug_period,v1,v2
     0, 0, 1, 2
     0, 1, 3, 4
     1, 0, 5, 8
     1, 1, 7, 8
     """
-    data = _read_csv_string(csv, ["id", "period"])
+    data = _read_csv_string(csv, ["id", "aug_period"])
 
     labels = {"observed_factors": ["v1", "v2"], "aug_periods": [0, 1]}
 

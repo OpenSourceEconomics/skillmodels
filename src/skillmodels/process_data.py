@@ -76,13 +76,13 @@ def pre_process_data(df, periods):
     df["__old_period__"] = df.index.get_level_values(1)
 
     # replace existing codes for periods and
-    df.index.names = ["id", "period"]
+    df.index.names = ["id", "aug_period"]
     for level in [0, 1]:
         df.index = df.index.set_levels(range(len(df.index.levels[level])), level=level)
 
     # create new index
     ids = sorted(df.index.get_level_values("id").unique())
-    new_index = pd.MultiIndex.from_product([ids, periods], names=["id", "period"])
+    new_index = pd.MultiIndex.from_product([ids, periods], names=["id", "aug_period"])
 
     # set new index
     df = df.reindex(new_index)
@@ -101,13 +101,13 @@ def _get_period_data_for_endogenous_factors(
     controls = labels["controls"]
     observed = labels["observed_factors"]
 
-    out = df.query(f"period == {period}")[
+    out = df.query(f"aug_period == {period}")[
         [
             "id",
             *meas,
             *controls,
             *observed,
-            "period",
+            "aug_period",
             "__old_id__",
             "__old_period__",
         ]
@@ -131,9 +131,9 @@ def _augment_data_for_endogenous_factors(
     df = df.reset_index()
     # Make sure datset is balanced
     n_ids = df["id"].nunique()
-    n_periods = df["period"].nunique()
+    n_periods = df["aug_period"].nunique()
     assert n_ids * n_periods == df.shape[0]
-    assert set(df["period"]) == set(labels["aug_periods_to_periods"].values())
+    assert set(df["aug_period"]) == set(labels["aug_periods_to_periods"].values())
 
     out = pd.concat(
         [
@@ -147,9 +147,7 @@ def _augment_data_for_endogenous_factors(
             for aug_period, period in labels["aug_periods_to_periods"].items()
         ]
     )
-    return (
-        out.set_index(["id", "aug_period"]).rename_axis(["id", "period"]).sort_index()
-    )
+    return out.set_index(["id", "aug_period"]).sort_index()
 
 
 def _add_copies_of_anchoring_outcome(df, anchoring_info):
@@ -163,7 +161,7 @@ def _add_copies_of_anchoring_outcome(df, anchoring_info):
 def _check_data(df, update_info, labels, purpose):  # noqa: C901
     var_report = pd.DataFrame(index=update_info.index[:0], columns=["problem"])
     for aug_period in labels["aug_periods"]:
-        period_data = df.query(f"period == {aug_period}")
+        period_data = df.query(f"aug_period == {aug_period}")
         for cont in labels["controls"]:
             if cont not in period_data.columns or period_data[cont].isna().all():
                 var_report.loc[(aug_period, cont), "problem"] = "Variable is missing"
@@ -197,7 +195,7 @@ def _handle_controls_with_missings(df, controls, update_info):
     aug_periods = update_info.index.get_level_values(0).unique().tolist()
     problematic_index = df.index[:0]
     for aug_period in aug_periods:
-        period_data = df.query(f"period == {aug_period}")
+        period_data = df.query(f"aug_period == {aug_period}")
         control_data = period_data[controls]
         meas_data = period_data[_get_period_measurements(update_info, aug_period)]
         problem = control_data.isna().any(axis=1) & meas_data.notna().any(axis=1)
@@ -223,14 +221,14 @@ def _get_period_measurements(update_info, aug_period):
 def _generate_measurements_array(df, update_info, n_obs):
     arr = np.zeros((len(update_info), n_obs))
     for k, (aug_period, var) in enumerate(update_info.index):
-        arr[k] = df.query(f"period == {aug_period}")[var].to_numpy()
+        arr[k] = df.query(f"aug_period == {aug_period}")[var].to_numpy()
     return jnp.array(arr, dtype="float32")
 
 
 def _generate_controls_array(df, labels, n_obs):
     arr = np.zeros((len(labels["aug_periods"]), n_obs, len(labels["controls"])))
     for aug_period in labels["aug_periods"]:
-        arr[aug_period] = df.query(f"period == {aug_period}")[
+        arr[aug_period] = df.query(f"aug_period == {aug_period}")[
             labels["controls"]
         ].to_numpy()
     return jnp.array(arr, dtype="float32")
@@ -239,7 +237,7 @@ def _generate_controls_array(df, labels, n_obs):
 def _generate_observed_factor_array(df, labels, n_obs):
     arr = np.zeros((len(labels["aug_periods"]), n_obs, len(labels["observed_factors"])))
     for aug_period in labels["aug_periods"]:
-        arr[aug_period] = df.query(f"period == {aug_period}")[
+        arr[aug_period] = df.query(f"aug_period == {aug_period}")[
             labels["observed_factors"]
         ].to_numpy()
     return jnp.array(arr, dtype="float32")
