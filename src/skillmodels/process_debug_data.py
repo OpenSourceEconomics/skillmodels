@@ -132,7 +132,7 @@ def _create_filtered_states(filtered_states, log_mixture_weights, update_info, f
     keep = []
     for i, (aug_period, measurement) in enumerate(update_info.index):
         last_measurement = update_info.query(
-            f"purpose == 'measurement' & period == {aug_period}",
+            f"purpose == 'measurement' & aug_period == {aug_period}",
         ).index[-1][1]
 
         if measurement == last_measurement:

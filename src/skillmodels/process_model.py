@@ -458,7 +458,9 @@ def _get_update_info(model_dict, dimensions, labels, anchoring_info):
             the likelihood function. See :ref:`update_info`.
 
     """
-    index = pd.MultiIndex(levels=[[], []], codes=[[], []], names=["period", "variable"])
+    index = pd.MultiIndex(
+        levels=[[], []], codes=[[], []], names=["aug_period", "variable"]
+    )
     uinfo = DataFrame(index=index, columns=labels["latent_factors"] + ["purpose"])
 
     measurements = {}

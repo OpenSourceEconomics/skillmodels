@@ -278,17 +278,17 @@ def _get_update_info_for_periods(model):
     update_info = model["update_info"].copy()
 
     # Replace period level with user-provided period using set_codes
-    period_values = update_info.index.get_level_values("period").map(
+    period_values = update_info.index.get_level_values("aug_period").map(
         model["labels"]["aug_periods_to_periods"]
     )
-    update_info.index = update_info.index.set_codes(period_values, level="period")
+    update_info.index = update_info.index.set_codes(period_values, level="aug_period")
 
     # Group by period and variable, apply OR logic for boolean columns
     cols = [col for col in update_info.columns if col != "purpose"]
     agg_dict = dict.fromkeys(cols, "any")
     agg_dict["purpose"] = "first"
 
-    return update_info.groupby(["period", "variable"]).agg(agg_dict)
+    return update_info.groupby(["aug_period", "variable"]).agg(agg_dict)
 
 
 def _get_measurement_data(data, update_info, periods, latent_factors, observed_factors):
@@ -684,7 +684,7 @@ def _get_factor_scores_data_for_single_model_period(
     if period not in update_info.index:
         return pd.DataFrame()
     period_info = update_info.loc[period].reset_index()
-    params = params.query(f"period=={period}").droplevel("period")
+    params = params.query(f"aug_period=={period}").droplevel("aug_period")
     loadings = params.loc["loadings"]["value"]
     intercepts = (
         params.loc["controls"].query("name2 == 'constant'").droplevel("name2")["value"]

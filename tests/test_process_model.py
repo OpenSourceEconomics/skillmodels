@@ -81,7 +81,7 @@ def test_update_info(model2):
     test_dir = Path(__file__).parent.resolve()
     expected = pd.read_csv(
         test_dir / "model2_correct_update_info.csv",
-        index_col=["period", "variable"],
+        index_col=["aug_period", "variable"],
     )
     assert_frame_equal(res, expected)
 
@@ -238,7 +238,7 @@ def test_with_endog_update_info(model2_inv):
     test_dir = Path(__file__).parent.resolve()
     expected = pd.read_csv(
         test_dir / "model2_with_endog_correct_update_info.csv",
-        index_col=["period", "variable"],
+        index_col=["aug_period", "variable"],
     )
     assert_frame_equal(res, expected)
 

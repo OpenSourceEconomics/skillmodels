@@ -204,7 +204,9 @@ def _partial_some_log_likelihood(
 ):
     update_info = model["update_info"]
     is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
-    _aug_periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
+    _aug_periods = pd.Series(
+        update_info.index.get_level_values("aug_period").to_numpy()
+    )
     is_predict_iteration = ((_aug_periods - _aug_periods.shift(-1)) == -1).to_numpy()
     # iteration_to_period is used as an indexer to loop over arrays of different lengths
     # in a jax.lax.scan. It needs to work for arrays of length n_aug_periods and not raise
