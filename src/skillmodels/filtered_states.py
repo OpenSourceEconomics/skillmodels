@@ -21,6 +21,7 @@ def get_filtered_states(model_dict, data, params):
         states_df=unanchored_states_df,
         model_dict=model_dict,
         params=params,
+        use_aug_period=True,
     )
 
     anchored_ranges = create_state_ranges(
@@ -42,7 +43,7 @@ def get_filtered_states(model_dict, data, params):
     return out
 
 
-def anchor_states_df(states_df, model_dict, params):
+def anchor_states_df(states_df, model_dict, params, use_aug_period):
     """Anchor states in a DataFrame.
 
     The DataFrame is expected to have a column called "period" as well as one column
@@ -86,10 +87,21 @@ def anchor_states_df(states_df, model_dict, params):
 
     n_latent = model["dimensions"]["n_latent_factors"]
 
-    scaling_factors = np.array(pardict["anchoring_scaling_factors"][:, :n_latent])
-    constants = np.array(pardict["anchoring_constants"][:, :n_latent])
+    _scaling_factors = np.array(pardict["anchoring_scaling_factors"][:, :n_latent])
+    _constants = np.array(pardict["anchoring_constants"][:, :n_latent])
+    if use_aug_period:
+        period_arr = states_df["aug_period"].to_numpy()
+        ap_to_p = model["labels"]["aug_periods_to_periods"]
+        scaling_factors = np.empty(shape=(len(ap_to_p), n_latent))
+        constants = np.empty(shape=(len(ap_to_p), n_latent))
+        for ap, p in ap_to_p.items():
+            scaling_factors[ap] = _scaling_factors[p]
+            constants[ap] = _constants[p]
+    else:
+        period_arr = states_df["period"].to_numpy()
+        scaling_factors = _scaling_factors
+        constants = _constants
 
-    period_arr = states_df["period"].to_numpy()
     scaling_arr = scaling_factors[period_arr]
     constants_arr = constants[period_arr]
 

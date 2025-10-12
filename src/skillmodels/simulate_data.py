@@ -61,7 +61,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
             purpose="simulation",
         )
         control_data = processed_data["controls"]
-        observed_factor_data = processed_data["observed_factors"]
+        observed_factors = processed_data["observed_factors"]
         data_n_obs = control_data.shape[1]
 
         if n_obs is not None and data_n_obs != n_obs:
@@ -74,7 +74,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
     else:
         control_data = jnp.ones((n_obs, 1))
         n_periods = model["dimensions"]["n_periods"]
-        observed_factor_data = jnp.zeros((n_periods, n_obs, 0))
+        observed_factors = jnp.zeros((n_periods, n_obs, 0))
 
     params_index = get_params_index(
         update_info=model["update_info"],
@@ -104,7 +104,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         n_obs=n_obs,
     )
 
-    observed_factor_data, latent_data = _simulate_dataset(
+    aug_measurements, aug_latent_data = _simulate_dataset(
         latent_states=states,
         covs=covs,
         log_weights=log_weights,
@@ -117,15 +117,25 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         ],
         update_info=model["update_info"],
         control_data=control_data,
-        observed_factor_data=observed_factor_data,
+        observed_factors=observed_factors,
         policies=policies,
         transition_info=model["transition_info"],
     )
 
+    # Create collapsed versions with user-facing periods
+    latent_data = _collapse_aug_periods_to_periods(
+        df=aug_latent_data,
+        factors=model["labels"]["latent_factors"],
+        aug_periods_to_periods=model["labels"]["aug_periods_to_periods"],
+        endogenous_factors_info=model["endogenous_factors_info"],
+    )
+
+    # Anchor the collapsed version (anchoring only works with period, not aug_period)
     anchored_latent_data = anchor_states_df(
         states_df=latent_data,
         model_dict=model_dict,
         params=params,
+        use_aug_period=False,
     )
 
     out = {
@@ -143,7 +153,14 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
                 model["labels"]["latent_factors"],
             ),
         },
-        "measurements": observed_factor_data,
+        "aug_unanchored_states": {
+            "states": aug_latent_data,
+            "state_ranges": create_state_ranges(
+                aug_latent_data,
+                model["labels"]["latent_factors"],
+            ),
+        },
+        "aug_measurements": aug_measurements,
     }
 
     return out
@@ -160,7 +177,7 @@ def _simulate_dataset(
     has_endogenous_factors,
     update_info,
     control_data,
-    observed_factor_data,
+    observed_factors,
     policies,
     transition_info,
 ):
@@ -177,9 +194,9 @@ def _simulate_dataset(
 
     n_states = dimensions["n_latent_factors"]
     if has_endogenous_factors:
-        n_periods = dimensions["n_aug_periods"] - 2
+        n_aug_periods = dimensions["n_aug_periods"] - 1
     else:
-        n_periods = dimensions["n_aug_periods"]
+        n_aug_periods = dimensions["n_aug_periods"]
 
     weights = np.exp(log_weights)[0]
     loadings_df = pd.DataFrame(
@@ -209,12 +226,12 @@ def _simulate_dataset(
         }
         dist_args.append(args)
 
-    latent_states = np.zeros((n_periods, n_obs, n_states))
+    latent_states = np.zeros((n_aug_periods, n_obs, n_states))
     latent_states[0] = generate_start_states(n_obs, dimensions, dist_args, weights)
 
-    for t in range(n_periods - 1):
+    for t in range(n_aug_periods - 1):
         # if there is a shock in period t, add it here
-        policies_t = [p for p in policies if p["period"] == t]
+        policies_t = [p for p in policies if p["aug_period"] == t]
         for policy in policies_t:
             position = labels["latent_factors"].index(policy["factor"])
             latent_states[t, :, position] += _get_shock(
@@ -224,7 +241,7 @@ def _simulate_dataset(
             )
 
         # get combined states and observed factors as jax array
-        to_concat = [latent_states[t], observed_factor_data[t]]
+        to_concat = [latent_states[t], observed_factors[t]]
         states = jnp.array(np.concatenate(to_concat, axis=-1))
         # reshaping is just needed for transform sigma points
         states = states.reshape(1, 1, *states.shape)
@@ -261,7 +278,7 @@ def _simulate_dataset(
 
     observed_data_by_period = []
 
-    for t in range(n_periods):
+    for t in range(n_aug_periods):
         meas = pd.DataFrame(
             data=measurements_from_states(
                 latent_states[t],
@@ -272,24 +289,64 @@ def _simulate_dataset(
             ),
             columns=loadings_df.loc[t].index,
         )
-        meas["period"] = t
+        meas["aug_period"] = t
         observed_data_by_period.append(meas)
 
     observed_data = pd.concat(observed_data_by_period, axis=0, sort=True)
     observed_data["id"] = observed_data.index
-    observed_data = observed_data.sort_values(["id", "period"])
+    observed_data = observed_data.sort_values(["id", "aug_period"])
 
     latent_data_by_period = []
-    for t in range(n_periods):
+    for t in range(n_aug_periods):
         lat = pd.DataFrame(data=latent_states[t], columns=labels["latent_factors"])
-        lat["period"] = t
+        lat["aug_period"] = t
         latent_data_by_period.append(lat)
 
     latent_data = pd.concat(latent_data_by_period, axis=0, sort=True)
     latent_data["id"] = latent_data.index
-    latent_data = latent_data.sort_values(["id", "period"])
-
+    latent_data = latent_data.sort_values(["id", "aug_period"])
     return observed_data, latent_data
+
+
+def _collapse_aug_periods_to_periods(
+    df, factors, aug_periods_to_periods, endogenous_factors_info
+):
+    """Collapse dataframe with aug_period index to user-facing period index.
+
+    For each factor, extracts from the appropriate aug_period based on is_endogenous.
+
+    Args:
+        df (pd.DataFrame): DataFrame with columns "aug_period" and "id"
+        latent_factors (list): List of latent factors
+        aug_periods_to_periods (dict): Mapping from aug_period to period
+        endogenous_factors_info (dict): Information about which factors are endogenous
+
+    Returns:
+        pd.DataFrame: DataFrame with "period" column instead of "aug_period"
+    """
+    df = df.copy()
+    if not endogenous_factors_info["has_endogenous_factors"]:
+        return df.rename(columns={"aug_period": "period"})
+
+    df["period"] = df["aug_period"].map(aug_periods_to_periods)
+    df["_aug_period_meas_type"] = df["aug_period"].map(
+        endogenous_factors_info["aug_periods_to_aug_period_meas_types"]
+    )
+
+    endogenous_cols = [
+        fac for fac in factors if endogenous_factors_info[fac]["is_endogenous"]
+    ]
+    state_cols = [fac for fac in factors if fac not in endogenous_cols]
+
+    out = df.query('_aug_period_meas_type == "endogenous_factors"')[
+        ["id", "period", *endogenous_cols]
+    ]
+    return pd.merge(
+        out,
+        df.query('_aug_period_meas_type == "states"')[["id", "period", *state_cols]],
+        on=["id", "period"],
+        how="outer",
+    )
 
 
 def _get_shock(mean, sd, size):

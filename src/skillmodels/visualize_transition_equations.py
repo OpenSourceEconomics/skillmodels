@@ -268,25 +268,29 @@ def _get_dictionary_with_plots(
         title_kwargs=None,
         showlegend=showlegend,
     )
+    _aug_periods = model["endogenous_factors_info"]["aug_periods_from_period"](period)
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
         transition_function = model["transition_info"]["individual_functions"][
             output_factor
         ]
+        if model["endogenous_factors_info"][output_factor]["is_endogenous"]:
+            aug_period = min(_aug_periods)
+        else:
+            aug_period = max(_aug_periods)
         transition_params = {
-            output_factor: pardict["transition"][output_factor][period],
+            output_factor: pardict["transition"][output_factor][aug_period]
         }
 
         if quantiles_of_other_factors is not None:
             plot_data = _prepare_data_for_one_plot_fixed_quantile_2d(
                 states_data=states_data,
                 state_ranges=state_ranges,
-                period=period,
+                aug_period=aug_period,
                 input_factor=input_factor,
                 output_factor=output_factor,
-                quantiles_of_other_factors=quantiles_of_other_factors,
-                model=model,
                 n_points=n_points,
+                quantiles_of_other_factors=quantiles_of_other_factors,
                 transition_function=transition_function,
                 transition_params=transition_params,
                 all_factors=all_factors,
@@ -296,10 +300,9 @@ def _get_dictionary_with_plots(
             plot_data = _prepare_data_for_one_plot_average_2d(
                 states_data=states_data,
                 state_ranges=state_ranges,
-                period=period,
+                aug_period=aug_period,
                 input_factor=input_factor,
                 output_factor=output_factor,
-                model=model,
                 n_points=n_points,
                 n_draws=n_draws,
                 transition_function=transition_function,
@@ -418,7 +421,7 @@ def _get_states_data(model, period, data, states, observed_factors):
         states_data = pd.merge(
             left=states,
             right=observed_data,
-            left_on=["id", "period"],
+            left_on=["id", "aug_period"],
             right_on=["id", "aug_period"],
             how="left",
         )
@@ -430,19 +433,18 @@ def _get_states_data(model, period, data, states, observed_factors):
 def _prepare_data_for_one_plot_fixed_quantile_2d(
     states_data,
     state_ranges,
-    period,
+    aug_period,
     input_factor,
     output_factor,
-    quantiles_of_other_factors,
-    model,
     n_points,
+    quantiles_of_other_factors,
     transition_function,
     transition_params,
     all_factors,
 ):
-    period_data = states_data.query(f"period == {period}")[all_factors]
-    input_min = state_ranges[input_factor].loc[period]["minimum"]
-    input_max = state_ranges[input_factor].loc[period]["maximum"]
+    period_data = states_data.query(f"aug_period == {aug_period}")[all_factors]
+    input_min = state_ranges[input_factor].loc[aug_period]["minimum"]
+    input_max = state_ranges[input_factor].loc[aug_period]["maximum"]
     to_concat = []
     for quantile in quantiles_of_other_factors:
         input_data = pd.DataFrame()
@@ -475,30 +477,21 @@ def _process_quantiles_of_other_factors(quantiles_of_other_factors):
 def _prepare_data_for_one_plot_average_2d(
     states_data,
     state_ranges,
-    period,
+    aug_period,
     input_factor,
     output_factor,
-    model,
     n_points,
     n_draws,
     transition_function,
     transition_params,
     all_factors,
 ):
-    if model["endogenous_factors_info"]["has_endogenous_factors"]:
-        aug_periods = [
-            aug_p
-            for aug_p, p in model["labels"]["aug_periods_to_periods"].items()
-            if p == period
-        ]
-    else:
-        aug_periods = [period]
-    period_data = states_data.query(f"period in {aug_periods}")
+    period_data = states_data.query(f"aug_period == {aug_period}")
 
     sampled_factors = [factor for factor in all_factors if factor != input_factor]
     draws = period_data[sampled_factors].sample(n=n_draws)
-    input_min = state_ranges[input_factor].loc[period]["minimum"]
-    input_max = state_ranges[input_factor].loc[period]["maximum"]
+    input_min = state_ranges[input_factor].loc[aug_period]["minimum"]
+    input_max = state_ranges[input_factor].loc[aug_period]["maximum"]
 
     to_concat = []
     for _, draw in draws.iterrows():

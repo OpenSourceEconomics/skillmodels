@@ -47,6 +47,7 @@ def process_data(
         df = _augment_data_for_endogenous_factors(df, labels, update_info)
     else:
         df = _add_copies_of_anchoring_outcome(df, anchoring_info)
+
     _check_data(df, update_info, labels, purpose=purpose)
     n_obs = int(len(df) / len(labels["aug_periods"]))
     df = _handle_controls_with_missings(df, labels["controls"], update_info)
@@ -76,13 +77,13 @@ def pre_process_data(df, periods):
     df["__old_period__"] = df.index.get_level_values(1)
 
     # replace existing codes for periods and
-    df.index.names = ["id", "aug_period"]
+    df.index.names = ["id", "period"]
     for level in [0, 1]:
         df.index = df.index.set_levels(range(len(df.index.levels[level])), level=level)
 
     # create new index
     ids = sorted(df.index.get_level_values("id").unique())
-    new_index = pd.MultiIndex.from_product([ids, periods], names=["id", "aug_period"])
+    new_index = pd.MultiIndex.from_product([ids, periods], names=["id", "period"])
 
     # set new index
     df = df.reindex(new_index)
@@ -101,13 +102,13 @@ def _get_period_data_for_endogenous_factors(
     controls = labels["controls"]
     observed = labels["observed_factors"]
 
-    out = df.query(f"aug_period == {period}")[
+    out = df.query(f"period == {period}")[
         [
             "id",
             *meas,
             *controls,
             *observed,
-            "aug_period",
+            "period",
             "__old_id__",
             "__old_period__",
         ]
@@ -131,9 +132,9 @@ def _augment_data_for_endogenous_factors(
     df = df.reset_index()
     # Make sure datset is balanced
     n_ids = df["id"].nunique()
-    n_periods = df["aug_period"].nunique()
+    n_periods = df["period"].nunique()
     assert n_ids * n_periods == df.shape[0]
-    assert set(df["aug_period"]) == set(labels["aug_periods_to_periods"].values())
+    assert set(df["period"]) == set(labels["aug_periods_to_periods"].values())
 
     out = pd.concat(
         [

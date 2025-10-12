@@ -155,6 +155,13 @@ def _get_aug_periods_to_periods(
     )
 
 
+def _aug_periods_from_period(
+    period: int, aug_periods_to_periods: dict[int, int]
+) -> list[int]:
+    """The inverse of the the aug_periods_to_periods mapper."""
+    return [ap for ap, p in aug_periods_to_periods.items() if p == period]
+
+
 def _get_labels(model_dict, has_endogenous_factors, dimensions):
     """Extract labels of the model quantities.
 
@@ -289,7 +296,7 @@ def _insert_empty_elements_into_list(old, insert_at_modulo, to_insert, aug_p_to_
 def _augment_periods_for_endogenous_factors(
     model_dict: dict[str, Any], dimensions: dict[str, Any], labels: dict[str, Any]
 ) -> dict[str, Any]:
-    """Insert periods without measurements / normalisations if endogenous factors are present.
+    """Augment periods if endogenous factors are present.
 
     Args:
         model_dict: The model specification. See: :ref:`model_specs`
@@ -414,11 +421,15 @@ def _get_endogenous_factors_info(
     """Collect information about endogenous factors."""
     endogenous_factors_info = {
         "has_endogenous_factors": has_endogenous_factors,
-        "aug_periods_to_aug_period_types": _get_aug_periods_to_aug_period_types(
+        "aug_periods_to_aug_period_meas_types": _get_aug_periods_to_aug_period_meas_types(  # noqa: E501
             aug_periods=labels["aug_periods_to_periods"].keys(),
             has_endogenous_factors=has_endogenous_factors,
         ),
         "bounds_distance": bounds_distance,
+        "aug_periods_from_period": partial(
+            _aug_periods_from_period,
+            aug_periods_to_periods=labels["aug_periods_to_periods"],
+        ),
     }
     for fac, v in model_dict["factors"].items():
         endogenous_factors_info[fac] = {
@@ -431,7 +442,7 @@ def _get_endogenous_factors_info(
     return endogenous_factors_info
 
 
-def _get_aug_periods_to_aug_period_types(
+def _get_aug_periods_to_aug_period_meas_types(
     aug_periods: list[int], has_endogenous_factors: bool
 ) -> dict[int, Literal["states", "endogenous_factors"]]:
     return {

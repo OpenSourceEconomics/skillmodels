@@ -406,17 +406,19 @@ def _get_constraints_for_augmented_periods(
         tname = labels["transition_names"][f]
         if tname == "constant":
             continue
-        aug_period_type_to_constrain = (
-            "endogenous_factors"
+        # We are restricting transitions and shocks, not measurements. So this might
+        # look counterintuitive...
+        aug_period_meas_type_to_constrain = (
+            "states"
             if endogenous_factors_info[factor]["is_state"]
-            else "states"
+            else "endogenous_factors"
         )
         aug_periods_to_constrain = [
             k
             for k, v in endogenous_factors_info[
-                "aug_periods_to_aug_period_types"
+                "aug_periods_to_aug_period_meas_types"
             ].items()
-            if v == aug_period_type_to_constrain
+            if v == aug_period_meas_type_to_constrain
         ]
         for aug_period in aug_periods_to_constrain:
             if func := getattr(t_f_module, f"identity_constraints_{tname}", False):
@@ -444,6 +446,11 @@ def _sel(params, loc):
 
 @dataclass(frozen=True)
 class SkillmodelsPairwiseEqualityConstraint(om.PairwiseEqualityConstraint):
+    """Thin wrapper around om.PairwiseEqualityConstraint.
+
+    Adds fields to preserve information from the internal constraints dictionary.
+    """
+
     loc: pd.MultiIndex | tuple | str | None = None
     description: str | None = None
     type: str = "Just to be able to use **constraints_dict"
@@ -452,6 +459,11 @@ class SkillmodelsPairwiseEqualityConstraint(om.PairwiseEqualityConstraint):
 
 @dataclass(frozen=True)
 class SkillmodelsFixedConstraint(om.FixedConstraint):
+    """Thin wrapper around om.FixedConstraint.
+
+    Adds fields to preserve information from the internal constraints dictionary.
+    """
+
     loc: pd.MultiIndex | tuple | str | None = None
     description: str | None = None
     type: str = "Just to be able to use **constraints_dict"
@@ -461,6 +473,11 @@ class SkillmodelsFixedConstraint(om.FixedConstraint):
 
 @dataclass(frozen=True)
 class SkillmodelsEqualityConstraint(om.EqualityConstraint):
+    """Thin wrapper around om.EqualityConstraint.
+
+    Adds fields to preserve information from the internal constraints dictionary.
+    """
+
     loc: pd.MultiIndex | tuple | str | None = None
     description: str | None = None
     type: str = "Just to be able to use **constraints_dict"
@@ -469,6 +486,11 @@ class SkillmodelsEqualityConstraint(om.EqualityConstraint):
 
 @dataclass(frozen=True)
 class SkillmodelsProbabilityConstraint(om.ProbabilityConstraint):
+    """Thin wrapper around om.ProbabilityConstraint.
+
+    Adds fields to preserve information from the internal constraints dictionary.
+    """
+
     loc: pd.MultiIndex | tuple | str | None = None
     description: str | None = None
     type: str = "Just to be able to use **constraints_dict"
@@ -477,6 +499,11 @@ class SkillmodelsProbabilityConstraint(om.ProbabilityConstraint):
 
 @dataclass(frozen=True)
 class SkillmodelsIncreasingConstraint(om.IncreasingConstraint):
+    """Thin wrapper around om.IncreasingConstraint.
+
+    Adds fields to preserve information from the internal constraints dictionary.
+    """
+
     loc: pd.MultiIndex | tuple | str | None = None
     description: str | None = None
     type: str = "Just to be able to use **constraints_dict"
@@ -488,15 +515,12 @@ def constraints_dicts_to_om(
 ) -> list[om.constraints.Constraint]:
     """Convert constraints provided in dictionary form to optimagic constraints.
 
-    Each dictionary requires an
-
     Args:
         constraints_dicts (list): see :ref:`get_constraints_dicts`.
 
     Returns:
         List of optimagic constraints.
     """
-    return constraints_dicts
     om_style = []
     for c_d in constraints_dicts:
         if c_d["type"] == "pairwise_equality":
@@ -546,15 +570,6 @@ def enforce_fixed_constraints(
         for constraint in constraints_dicts:
             if constraint["type"] == "fixed":
                 params.loc[constraint["loc"], "value"] = constraint["value"]
-                params.loc[constraint["loc"], "lower_bound"] = np.nextafter(
-                    constraint["value"], -np.inf
-                )
-                params.loc[constraint["loc"], "upper_bound"] = constraint["value"]
 
-    # Check that fixed constraints are valid
-    fixed = params[params["value"].notna()]
-    invalid = fixed.query("value < lower_bound or value > upper_bound")
-    if len(invalid) > 0:
-        raise ValueError(f"Invalid fixed constraints:\n\n{invalid}")
     # Setting via loc may expand the index, so reduce to the original index
     return params.loc[params_template.index].astype(float)
