@@ -183,7 +183,10 @@ def get_transition_plots(
             "*period* must be the penultimate period of the model or earlier.",
         )
 
-    if include_correction_factors:
+    if (
+        include_correction_factors
+        or not model["endogenous_factors_info"]["has_endogenous_factors"]
+    ):
         latent_factors = model["labels"]["latent_factors"]
     else:
         latent_factors = [
@@ -278,13 +281,22 @@ def _get_dictionary_with_plots(
         title_kwargs=None,
         showlegend=showlegend,
     )
-    _aug_periods = model["endogenous_factors_info"]["aug_periods_from_period"](period)
+    has_endogenous_factors = model["endogenous_factors_info"]["has_endogenous_factors"]
+    if has_endogenous_factors:
+        _aug_periods = model["endogenous_factors_info"]["aug_periods_from_period"](
+            period
+        )
+    else:
+        _aug_periods = [period]
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
         transition_function = model["transition_info"]["individual_functions"][
             output_factor
         ]
-        if model["endogenous_factors_info"][output_factor]["is_endogenous"]:
+        if (
+            has_endogenous_factors
+            and model["endogenous_factors_info"][output_factor]["is_endogenous"]
+        ):
             aug_period = min(_aug_periods)
         else:
             aug_period = max(_aug_periods)

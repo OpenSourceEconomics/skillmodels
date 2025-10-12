@@ -212,18 +212,18 @@ def _get_stage_constraints(stagemap, stages) -> list[dict]:
 
     for stage, stage_periods in stages_to_periods.items():
         if len(stage_periods) > 1:
-            locs_trans = [("transition", p) for p in stage_periods]
-            locs_q = [("shock_sds", p) for p in stage_periods]
+            loc_trans = [("transition", p) for p in stage_periods]
+            loc_q = [("shock_sds", p) for p in stage_periods]
             constraints_dicts.append(
                 {
-                    "locs": locs_trans,
+                    "loc": loc_trans,
                     "type": "pairwise_equality",
                     "description": msg.format(stage),
                 },
             )
             constraints_dicts.append(
                 {
-                    "locs": locs_q,
+                    "loc": loc_q,
                     "type": "pairwise_equality",
                     "description": msg.format(stage),
                 },
@@ -526,7 +526,7 @@ def constraints_dicts_to_om(
         if c_d["type"] == "pairwise_equality":
             om_style.append(
                 SkillmodelsPairwiseEqualityConstraint(
-                    selectors=[functools.partial(_sel, loc=loc) for loc in c_d["locs"]],
+                    selectors=[functools.partial(_sel, loc=loc) for loc in c_d["loc"]],
                     **c_d,
                 )
             )

@@ -123,11 +123,11 @@ def test_stage_constraints():
 
     expected = [
         {
-            "locs": [("transition", 0), ("transition", 1), ("transition", 2)],
+            "loc": [("transition", 0), ("transition", 1), ("transition", 2)],
             "type": "pairwise_equality",
         },
         {
-            "locs": [("shock_sds", 0), ("shock_sds", 1), ("shock_sds", 2)],
+            "loc": [("shock_sds", 0), ("shock_sds", 1), ("shock_sds", 2)],
             "type": "pairwise_equality",
         },
     ]
@@ -143,19 +143,19 @@ def test_stage_constraints_with_endogenous_factors():
     stagemap = [0, 1, 0, 1, 2, 3]
     expected = [
         {
-            "locs": [("transition", 0), ("transition", 2)],
+            "loc": [("transition", 0), ("transition", 2)],
             "type": "pairwise_equality",
         },
         {
-            "locs": [("transition", 1), ("transition", 3)],
+            "loc": [("transition", 1), ("transition", 3)],
             "type": "pairwise_equality",
         },
         {
-            "locs": [("shock_sds", 0), ("shock_sds", 2)],
+            "loc": [("shock_sds", 0), ("shock_sds", 2)],
             "type": "pairwise_equality",
         },
         {
-            "locs": [("shock_sds", 1), ("shock_sds", 3)],
+            "loc": [("shock_sds", 1), ("shock_sds", 3)],
             "type": "pairwise_equality",
         },
     ]
@@ -384,23 +384,23 @@ def test_get_constraints_for_augmented_periods(simplest_augmented_model):
     for c in calculated:
         del c["description"]
     expected = [
-        {"loc": ("transition", 1, "fac1", "fac1"), "type": "fixed", "value": 1.0},
-        {"loc": ("transition", 1, "fac1", "fac2"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 1, "fac1", "of"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 1, "fac1", "constant"), "type": "fixed", "value": 0.0},
-        {"loc": ("shock_sds", 1, "fac1", "-"), "type": "fixed", "value": 0.00000001},
-        {"loc": ("transition", 3, "fac1", "fac1"), "type": "fixed", "value": 1.0},
-        {"loc": ("transition", 3, "fac1", "fac2"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 3, "fac1", "of"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 3, "fac1", "constant"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 0, "fac2", "fac1"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 0, "fac2", "fac2"), "type": "fixed", "value": 1.0},
-        {"loc": ("transition", 0, "fac2", "of"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 0, "fac2", "constant"), "type": "fixed", "value": 0.0},
-        {"loc": ("shock_sds", 0, "fac2", "-"), "type": "fixed", "value": 0.00000001},
-        {"loc": ("transition", 2, "fac2", "fac1"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 2, "fac2", "fac2"), "type": "fixed", "value": 1.0},
-        {"loc": ("transition", 2, "fac2", "of"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 2, "fac2", "constant"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 0, "fac1", "fac1"), "type": "fixed", "value": 1.0},
+        {"loc": ("transition", 0, "fac1", "fac2"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 0, "fac1", "of"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 0, "fac1", "constant"), "type": "fixed", "value": 0.0},
+        {"loc": ("shock_sds", 0, "fac1", "-"), "type": "fixed", "value": 0.00000001},
+        {"loc": ("transition", 2, "fac1", "fac1"), "type": "fixed", "value": 1.0},
+        {"loc": ("transition", 2, "fac1", "fac2"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 2, "fac1", "of"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 2, "fac1", "constant"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 1, "fac2", "fac1"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 1, "fac2", "fac2"), "type": "fixed", "value": 1.0},
+        {"loc": ("transition", 1, "fac2", "of"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 1, "fac2", "constant"), "type": "fixed", "value": 0.0},
+        {"loc": ("shock_sds", 1, "fac2", "-"), "type": "fixed", "value": 0.00000001},
+        {"loc": ("transition", 3, "fac2", "fac1"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 3, "fac2", "fac2"), "type": "fixed", "value": 1.0},
+        {"loc": ("transition", 3, "fac2", "of"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 3, "fac2", "constant"), "type": "fixed", "value": 0.0},
     ]
     assert_list_equal_except_for_order(calculated, expected)

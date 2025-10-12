@@ -47,6 +47,7 @@ def process_data(
         df = _augment_data_for_endogenous_factors(df, labels, update_info)
     else:
         df = _add_copies_of_anchoring_outcome(df, anchoring_info)
+        df.index = df.index.set_names(["id", "aug_period"])
 
     _check_data(df, update_info, labels, purpose=purpose)
     n_obs = int(len(df) / len(labels["aug_periods"]))
