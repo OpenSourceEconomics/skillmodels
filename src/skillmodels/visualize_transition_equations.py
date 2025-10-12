@@ -141,6 +141,7 @@ def get_transition_plots(
     n_draws=50,
     colorscale="Magenta_r",
     layout_kwargs=None,
+    include_correction_factors=False,
 ):
     """Get dictionary with individual plots of transition equations for each factor.
 
@@ -163,6 +164,8 @@ def get_transition_plots(
         layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs
             defined in the function will be used.
+        include_correction_factors (bool): Whether to include correction factors in the
+            plots. Default False.
 
     Returns:
         plots_dict (dict): Dictionary with individual plots of transition equations
@@ -180,7 +183,14 @@ def get_transition_plots(
             "*period* must be the penultimate period of the model or earlier.",
         )
 
-    latent_factors = model["labels"]["latent_factors"]
+    if include_correction_factors:
+        latent_factors = model["labels"]["latent_factors"]
+    else:
+        latent_factors = [
+            lf
+            for lf in model["labels"]["latent_factors"]
+            if not model["endogenous_factors_info"][lf]["is_correction"]
+        ]
     all_factors = model["labels"]["all_factors"]
     states = get_filtered_states(model_dict=model_dict, data=data, params=params)[
         "anchored_states"
@@ -237,7 +247,7 @@ def _get_dictionary_with_plots(
 
         latent_factors (list): Latent factors of the model that are outputs of
             transition factors.
-        all_factors (list): All factors of the model that are the inuts of transition
+        all_factors (list): All factors of the model that are the inputs of transition
             functions.
         quantiles_of_other_factors (float, list or None): Quantiles at which the factors
             that are not varied in a given plot are fixed. If None, those factors are
