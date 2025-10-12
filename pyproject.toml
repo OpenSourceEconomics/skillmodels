@@ -12,9 +12,10 @@ maintainers = [
     { name = "Hans-Martin von Gaudecker", email = "hmgaudecker@uni-bonn.de" },
 ]
 description = "Estimators for skill formation models"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "dags",
+    "jax>=0.7",
     "numpy",
     "pandas",
 ]
@@ -105,7 +106,6 @@ scipy = "*"
 
 [tool.pixi.pypi-dependencies]
 skillmodels = {path = ".", editable = true}
-jax = ">=0.7"
 optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main"}
 pdbp = "*"
 

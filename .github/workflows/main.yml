@@ -25,49 +25,23 @@ jobs:
         python-version:
           - '3.13'
     steps:
-      - uses: actions/checkout@v4
-      - uses: prefix-dev/setup-pixi@v0.8.10
+      - uses: actions/checkout@v5
+      - uses: prefix-dev/setup-pixi@v0.9.1
         with:
-          pixi-version: v0.49.0
+          pixi-version: v0.56.0
           cache: true
           cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
           environments: test-cpu
           activate-environment: true
+          frozen: true
       - name: Run pytest
+        if: runner.os != 'Linux' || matrix.python-version != '3.13'
+        shell: bash -l {0}
+        run: pixi run -e test-cpu tests
+      - name: Run pytest with coverage
+        if: runner.os == 'Linux' && matrix.python-version == '3.13'
         shell: bash -l {0}
         run: pixi run -e test-cpu tests-with-cov
       - name: Upload coverage report
         if: runner.os == 'Linux' && matrix.python-version == '3.13'
-        uses: codecov/codecov-action@v4
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-  # run-mypy:
-  #   name: Run mypy on Python 3.13
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     fail-fast: false
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: prefix-dev/setup-pixi@v0.8.3
-  #       with:
-  #         pixi-version: v0.28.2
-  #         cache: true
-  #         cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-  #         environments: mypy
-  #     - name: Run mypy
-  #       shell: bash -l {0}
-  #       run: pixi run mypy
-  # run-explanation-notebooks:
-  #   name: Run explanation notebooks on Python 3.13
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: prefix-dev/setup-pixi@v0.8.3
-  #       with:
-  #         pixi-version: v0.28.2
-  #         cache: true
-  #         cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-  #         environments: test
-  #     - name: Run explanation notebooks
-  #       shell: bash -l {0}
-  #       run: pixi run -e test explanation-notebooks
+        uses: codecov/codecov-action@v5
