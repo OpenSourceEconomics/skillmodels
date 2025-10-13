@@ -29,14 +29,14 @@ def process_data(
             estimation (default, includes measurement data) or not.
 
     Returns a dictionary with keys:
-        controls (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
+        measurements (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
             observed measurements. NaN if the measurement was not observed. Only
             returned if estimation==True
+        controls (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls) with
+            observed control variables for the measurement equations.
         observed_factors (jax.numpy.array): Array of shape
-            (n_periods, n_obs, n_controls) with observed control variables for the
-            measurement equations.
-        measurements (jax.numpy.array): Array of shape (n_periods, n_obs,
-            n_observed_factors) with data on the observed factors.
+            (n_periods, n_obs, n_observed_factors) with data on the observed factors.
+            Only returned if estimation==True
 
     """
     df = pre_process_data(df, labels["periods"])
