@@ -45,3 +45,5 @@ jobs:
       - name: Upload coverage report
         if: runner.os == 'Linux' && matrix.python-version == '3.13'
         uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
