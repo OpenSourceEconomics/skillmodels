@@ -1,5 +1,5 @@
+import warnings
 from copy import deepcopy
-from logging import warnings
 
 import numpy as np
 import pandas as pd
@@ -217,7 +217,13 @@ def univariate_densities(
         observed_factors=observed_factors,
     )
     observed_states = _get_data_observed_factors(data, factors)
-    df = _process_data(states, period, factors, observed_states)
+    df = _process_data(
+        states=states,
+        period=period,
+        factors=factors,
+        aug_periods_to_periods=model["labels"]["aug_periods_to_periods"],
+        observed_states=observed_states,
+    )
     scenarios = df["scenario"].unique()
     plots_dict = {}
     distplot_kwargs = _process_distplot_kwargs(
@@ -322,7 +328,13 @@ def bivariate_density_contours(
         observed_factors=observed_factors,
     )
     observed_states = _get_data_observed_factors(data=data, factors=factors)
-    df = _process_data(states, period, factors, observed_states)
+    df = _process_data(
+        states=states,
+        period=period,
+        factors=factors,
+        aug_periods_to_periods=model["labels"]["aug_periods_to_periods"],
+        observed_states=observed_states,
+    )
     plots_dict = {}
     contour_kwargs = _process_contour_kwargs(
         contour_kwargs,
@@ -441,7 +453,13 @@ def bivariate_density_surfaces(
         observed_factors=observed_factors,
     )
     observed_states = _get_data_observed_factors(data, factors)
-    df = _process_data(states, period, factors, observed_states)
+    df = _process_data(
+        states=states,
+        period=period,
+        factors=factors,
+        aug_periods_to_periods=model["labels"]["aug_periods_to_periods"],
+        observed_states=observed_states,
+    )
     plots_dict = {}
     layout_kwargs = _process_layout_kwargs_3d(
         layout_kwargs,
@@ -486,12 +504,22 @@ def bivariate_density_surfaces(
     return plots_dict
 
 
-def _process_data(states, period, factors, observed_states=None):
+def _process_data(
+    states, period, factors, aug_periods_to_periods, observed_states=None
+):
+    ap_to_p = pd.Series(aug_periods_to_periods, name="period")
+    ap_to_p.index.name = "aug_period"
     if isinstance(states, pd.DataFrame):
+        one_state_per_period = (
+            states.merge(ap_to_p, left_on="aug_period", right_index=True, how="left")
+            .sort_values(["aug_period", "id"])
+            .groupby(["period", "id"])
+            .last()
+        )
         to_concat = []
         for fac in factors:
-            if fac in states:
-                to_concat.append(states.query(f"period == {period}")[fac])
+            if fac in one_state_per_period:
+                to_concat.append(one_state_per_period.query(f"period == {period}")[fac])
         data = pd.concat(to_concat, axis=1)
         data["scenario"] = "none"
     else:
@@ -499,12 +527,19 @@ def _process_data(states, period, factors, observed_states=None):
             states = dict(enumerate(states))
         to_concat = []
         for name, df in states.items():
-            to_keep = df.query(f"period == {period}")[factors].copy()
+            one_state_per_period = (
+                df.merge(ap_to_p, left_on="aug_period", right_index=True, how="left")
+                .sort_values(["aug_period", "id"])
+                .groupby(["period", "id"])
+                .last()
+            )
+            to_keep = one_state_per_period.query(f"period == {period}")[factors].copy()
             to_keep["scenario"] = name
             to_concat.append(to_keep)
         data = pd.concat(to_concat)
     data = data.reset_index()
     if observed_states is not None:
+        # Not sure whether this will continue to work... But no test case right now.
         data = pd.concat(
             [data, observed_states.query(f"period == {period}").reset_index()],
             axis=1,

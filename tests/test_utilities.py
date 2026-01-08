@@ -147,11 +147,12 @@ def test_reduce_params_via_extract_factors(model2):
             ("meas_sds", 0, "y7", "-"),
             ("meas_sds", 0, "y8", "-"),
             ("meas_sds", 0, "y9", "-"),
+            ("shock_sds", 0, "fac3", "-"),
             ("initial_states", 0, "mixture_0", "fac3"),
             ("mixture_weights", 0, "mixture_0", "-"),
             ("initial_cholcovs", 0, "mixture_0", "fac3-fac3"),
         ],
-        names=["category", "period", "name1", "name2"],
+        names=["category", "aug_period", "name1", "name2"],
     )
 
     assert_index_equal(reduced_params.index, expected_index)
@@ -175,7 +176,7 @@ def test_extend_params_via_switch_to_translog(model2):
             ("transition", 0, "fac2", "fac2 ** 2"),
             ("transition", 0, "fac2", "fac3 ** 2"),
         ],
-        names=["category", "period", "name1", "name2"],
+        names=["category", "aug_period", "name1", "name2"],
     )
 
     assert_index_equal(added_index, expected_added_index)

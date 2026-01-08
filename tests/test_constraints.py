@@ -1,11 +1,15 @@
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 from pandas.testing import assert_frame_equal
 
 from skillmodels.constraints import (
     _get_anchoring_constraints,
     _get_constant_factors_constraints,
+    _get_constraints_for_augmented_periods,
     _get_initial_states_constraints,
     _get_mixture_weights_constraints,
     _get_normalization_constraints,
@@ -13,6 +17,10 @@ from skillmodels.constraints import (
     _get_transition_constraints,
     add_bounds,
 )
+from skillmodels.process_model import process_model
+
+# importing the TEST_DIR from config does not work for test run in conda build
+TEST_DIR = Path(__file__).parent.resolve()
 
 
 def test_add_bounds():
@@ -28,6 +36,7 @@ def test_add_bounds():
     )
     expected = df.copy(deep=True)
     expected["lower_bound"] = [0.1] * 5 + [0.1, -np.inf, 0.1, -np.inf, 0.1]
+    expected["upper_bound"] = np.inf
 
     calculated = add_bounds(df, 0.1)
     assert_frame_equal(calculated, expected)
@@ -49,15 +58,29 @@ def test_normalization_constraints():
 
     expected = [
         {
-            "loc": [
-                ("loadings", 0, "m1", "fac1"),
-                ("loadings", 0, "m2", "fac1"),
-                ("controls", 0, "m1", "constant"),
-                ("loadings", 1, "m1", "fac1"),
-                ("loadings", 0, "m3", "fac2"),
-            ],
+            "loc": ("loadings", 0, "m1", "fac1"),
             "type": "fixed",
-            "value": [2, 1.5, 0.5, 3, 1],
+            "value": 2,
+        },
+        {
+            "loc": ("loadings", 0, "m2", "fac1"),
+            "type": "fixed",
+            "value": 1.5,
+        },
+        {
+            "loc": ("controls", 0, "m1", "constant"),
+            "type": "fixed",
+            "value": 0.5,
+        },
+        {
+            "loc": ("loadings", 1, "m1", "fac1"),
+            "type": "fixed",
+            "value": 3,
+        },
+        {
+            "loc": ("loadings", 0, "m3", "fac2"),
+            "type": "fixed",
+            "value": 1,
         },
     ]
 
@@ -100,16 +123,44 @@ def test_stage_constraints():
 
     expected = [
         {
-            "locs": [("transition", 0), ("transition", 1), ("transition", 2)],
+            "loc": [("transition", 0), ("transition", 1), ("transition", 2)],
             "type": "pairwise_equality",
         },
         {
-            "locs": [("shock_sds", 0), ("shock_sds", 1), ("shock_sds", 2)],
+            "loc": [("shock_sds", 0), ("shock_sds", 1), ("shock_sds", 2)],
             "type": "pairwise_equality",
         },
     ]
 
-    calculated = _get_stage_constraints(stagemap, stages)
+    calculated = _get_stage_constraints(stagemap=stagemap, stages=stages)
+    for c in calculated:
+        del c["description"]
+    assert_list_equal_except_for_order(calculated, expected)
+
+
+def test_stage_constraints_with_endogenous_factors():
+    stages = [0, 1, 2, 3]
+    stagemap = [0, 1, 0, 1, 2, 3]
+    expected = [
+        {
+            "loc": [("transition", 0), ("transition", 2)],
+            "type": "pairwise_equality",
+        },
+        {
+            "loc": [("transition", 1), ("transition", 3)],
+            "type": "pairwise_equality",
+        },
+        {
+            "loc": [("shock_sds", 0), ("shock_sds", 2)],
+            "type": "pairwise_equality",
+        },
+        {
+            "loc": [("shock_sds", 1), ("shock_sds", 3)],
+            "type": "pairwise_equality",
+        },
+    ]
+
+    calculated = _get_stage_constraints(stagemap=stagemap, stages=stages)
     for c in calculated:
         del c["description"]
     assert_list_equal_except_for_order(calculated, expected)
@@ -123,7 +174,7 @@ def test_stage_constraints():
 def test_constant_factor_constraints():
     labels = {
         "latent_factors": ["fac1", "fac2"],
-        "periods": [0, 1, 2],
+        "aug_periods": [0, 1, 2],
         "transition_names": ["bla", "constant"],
     }
 
@@ -169,7 +220,7 @@ def test_trans_coeff_constraints():
     labels = {
         "latent_factors": ["fac1", "fac2", "fac3"],
         "transition_names": ["log_ces", "bla", "blubb"],
-        "periods": [0, 1, 2],
+        "aug_periods": [0, 1, 2],
     }
     labels["all_factors"] = labels["latent_factors"]
 
@@ -265,8 +316,8 @@ def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
         (0, 1),
     )
 
-    for constr in calculated:
-        del constr["description"]
+    for c_t in calculated:
+        del c_t["description"]
 
     expected = [
         {
@@ -305,13 +356,10 @@ def test_anchoring_constraints_for_loadings(anch_uinfo, base_anchoring_info):
         },
     ]
 
-    for constr in calculated:
-        del constr["description"]
+    for c_t in calculated:
+        del c_t["description"]
 
     assert calculated == expected
-
-
-# ======================================================================================
 
 
 def assert_list_equal_except_for_order(list1, list2):
@@ -319,3 +367,40 @@ def assert_list_equal_except_for_order(list1, list2):
         assert item in list2, f"{item} is in list1 but not in list2"
     for item in list2:
         assert item in list1, f"{item} is in list2 but not in list1"
+
+
+@pytest.fixture
+def simplest_augmented_model():
+    with open(TEST_DIR / "simplest_augmented_model.yaml") as y:
+        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+    return process_model(model_dict)
+
+
+def test_get_constraints_for_augmented_periods(simplest_augmented_model):
+    calculated = _get_constraints_for_augmented_periods(
+        labels=simplest_augmented_model["labels"],
+        endogenous_factors_info=simplest_augmented_model["endogenous_factors_info"],
+    )
+    for c in calculated:
+        del c["description"]
+    expected = [
+        {"loc": ("transition", 0, "fac1", "fac1"), "type": "fixed", "value": 1.0},
+        {"loc": ("transition", 0, "fac1", "fac2"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 0, "fac1", "of"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 0, "fac1", "constant"), "type": "fixed", "value": 0.0},
+        {"loc": ("shock_sds", 0, "fac1", "-"), "type": "fixed", "value": 0.00000001},
+        {"loc": ("transition", 2, "fac1", "fac1"), "type": "fixed", "value": 1.0},
+        {"loc": ("transition", 2, "fac1", "fac2"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 2, "fac1", "of"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 2, "fac1", "constant"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 1, "fac2", "fac1"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 1, "fac2", "fac2"), "type": "fixed", "value": 1.0},
+        {"loc": ("transition", 1, "fac2", "of"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 1, "fac2", "constant"), "type": "fixed", "value": 0.0},
+        {"loc": ("shock_sds", 1, "fac2", "-"), "type": "fixed", "value": 0.00000001},
+        {"loc": ("transition", 3, "fac2", "fac1"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 3, "fac2", "fac2"), "type": "fixed", "value": 1.0},
+        {"loc": ("transition", 3, "fac2", "of"), "type": "fixed", "value": 0.0},
+        {"loc": ("transition", 3, "fac2", "constant"), "type": "fixed", "value": 0.0},
+    ]
+    assert_list_equal_except_for_order(calculated, expected)

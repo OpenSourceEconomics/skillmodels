@@ -277,7 +277,7 @@ def _random_state_and_covariance(dim=None):
 
 
 def _random_loadings_measurements_and_meas_sd(state):
-    n_obs, n_mix, dim = state.shape
+    n_obs, _n_mix, dim = state.shape
     loadings = np.random.uniform(size=dim)
     meas_sd = np.random.uniform()
     epsilon = np.random.normal(loc=0, scale=meas_sd, size=(n_obs))
@@ -286,7 +286,7 @@ def _random_loadings_measurements_and_meas_sd(state):
 
 
 def _convert_update_inputs_from_filterpy_to_skillmodels(state, cov):
-    n_obs, n_mix, n_fac = state.shape
+    n_obs, n_mix, _n_fac = state.shape
     sm_state = jnp.array(state)
     sm_chol = np.zeros_like(cov)
     for i in range(n_obs):

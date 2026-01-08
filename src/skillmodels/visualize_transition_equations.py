@@ -141,6 +141,7 @@ def get_transition_plots(
     n_draws=50,
     colorscale="Magenta_r",
     layout_kwargs=None,
+    include_correction_factors=False,
 ):
     """Get dictionary with individual plots of transition equations for each factor.
 
@@ -163,6 +164,8 @@ def get_transition_plots(
         layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs
             defined in the function will be used.
+        include_correction_factors (bool): Whether to include correction factors in the
+            plots. Default False.
 
     Returns:
         plots_dict (dict): Dictionary with individual plots of transition equations
@@ -180,25 +183,35 @@ def get_transition_plots(
             "*period* must be the penultimate period of the model or earlier.",
         )
 
-    latent_factors = model["labels"]["latent_factors"]
+    if (
+        include_correction_factors
+        or not model["endogenous_factors_info"]["has_endogenous_factors"]
+    ):
+        latent_factors = model["labels"]["latent_factors"]
+    else:
+        latent_factors = [
+            lf
+            for lf in model["labels"]["latent_factors"]
+            if not model["endogenous_factors_info"][lf]["is_correction"]
+        ]
     all_factors = model["labels"]["all_factors"]
     states = get_filtered_states(model_dict=model_dict, data=data, params=params)[
         "anchored_states"
     ]["states"]
     plots_dict = _get_dictionary_with_plots(
-        model,
-        data,
-        params,
-        states,
-        state_ranges,
-        latent_factors,
-        all_factors,
-        quantiles_of_other_factors,
-        period,
-        n_points,
-        n_draws,
-        colorscale,
-        layout_kwargs,
+        model=model,
+        data=data,
+        params=params,
+        states=states,
+        state_ranges=state_ranges,
+        latent_factors=latent_factors,
+        all_factors=all_factors,
+        quantiles_of_other_factors=quantiles_of_other_factors,
+        period=period,
+        n_points=n_points,
+        n_draws=n_draws,
+        colorscale=colorscale,
+        layout_kwargs=layout_kwargs,
     )
     return plots_dict
 
@@ -237,7 +250,7 @@ def _get_dictionary_with_plots(
 
         latent_factors (list): Latent factors of the model that are outputs of
             transition factors.
-        all_factors (list): All factors of the model that are the inuts of transition
+        all_factors (list): All factors of the model that are the inputs of transition
             functions.
         quantiles_of_other_factors (float, list or None): Quantiles at which the factors
             that are not varied in a given plot are fixed. If None, those factors are
@@ -268,24 +281,38 @@ def _get_dictionary_with_plots(
         title_kwargs=None,
         showlegend=showlegend,
     )
+    has_endogenous_factors = model["endogenous_factors_info"]["has_endogenous_factors"]
+    if has_endogenous_factors:
+        _aug_periods = model["endogenous_factors_info"]["aug_periods_from_period"](
+            period
+        )
+    else:
+        _aug_periods = [period]
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
         transition_function = model["transition_info"]["individual_functions"][
             output_factor
         ]
+        if (
+            has_endogenous_factors
+            and model["endogenous_factors_info"][output_factor]["is_endogenous"]
+        ):
+            aug_period = min(_aug_periods)
+        else:
+            aug_period = max(_aug_periods)
         transition_params = {
-            output_factor: pardict["transition"][output_factor][period],
+            output_factor: pardict["transition"][output_factor][aug_period]
         }
 
         if quantiles_of_other_factors is not None:
             plot_data = _prepare_data_for_one_plot_fixed_quantile_2d(
                 states_data=states_data,
                 state_ranges=state_ranges,
-                period=period,
+                aug_period=aug_period,
                 input_factor=input_factor,
                 output_factor=output_factor,
-                quantiles_of_other_factors=quantiles_of_other_factors,
                 n_points=n_points,
+                quantiles_of_other_factors=quantiles_of_other_factors,
                 transition_function=transition_function,
                 transition_params=transition_params,
                 all_factors=all_factors,
@@ -295,7 +322,7 @@ def _get_dictionary_with_plots(
             plot_data = _prepare_data_for_one_plot_average_2d(
                 states_data=states_data,
                 state_ranges=state_ranges,
-                period=period,
+                aug_period=aug_period,
                 input_factor=input_factor,
                 output_factor=output_factor,
                 n_points=n_points,
@@ -341,6 +368,9 @@ def _get_pardict(model, params):
         update_info=model["update_info"],
         labels=model["labels"],
         anchoring=model["anchoring"],
+        has_endogenous_factors=model["endogenous_factors_info"][
+            "has_endogenous_factors"
+        ],
     )
 
     _, _, _, pardict = parse_params(
@@ -360,6 +390,7 @@ def _set_index_params(model, params):
         labels=model["labels"],
         dimensions=model["dimensions"],
         transition_info=model["transition_info"],
+        endogenous_factors_info=model["endogenous_factors_info"],
     )
 
     params = params.reindex(params_index)
@@ -369,30 +400,51 @@ def _set_index_params(model, params):
 def _get_states_data(model, period, data, states, observed_factors):
     if observed_factors and data is None:
         raise ValueError(
-            """The model has observed factors. You must pass the empirical data to
-        'visualize_transition_equations' via the keyword *data*.""",
+            "The model has observed factors. You must pass the empirical data to "
+            "'visualize_transition_equations' via the keyword *data*.",
         )
 
     if observed_factors:
-        _, _, _observed_arr = process_data(
+        _observed_arr = process_data(
             df=data,
+            has_endogenous_factors=model["endogenous_factors_info"][
+                "has_endogenous_factors"
+            ],
             labels=model["labels"],
             update_info=model["update_info"],
             anchoring_info=model["anchoring"],
-        )
+        )["observed_factors"]
         # convert from jax to numpy
         _observed_arr = np.array(_observed_arr)
-        observed_data = pd.DataFrame(
-            data=_observed_arr[period],
-            columns=observed_factors,
-        )
-        observed_data["id"] = observed_data.index
-        observed_data["period"] = period
+        if model["endogenous_factors_info"]["has_endogenous_factors"]:
+            both_aug_periods = [
+                aug_p
+                for aug_p, p in model["labels"]["aug_periods_to_periods"].items()
+                if p == period
+            ]
+            to_concat = []
+            for aug_p in both_aug_periods:
+                df = pd.DataFrame(
+                    data=_observed_arr[aug_p],
+                    columns=observed_factors,
+                )
+                df["id"] = df.index
+                df["aug_period"] = aug_p
+                to_concat.append(df)
+            observed_data = pd.concat(to_concat)
+        else:
+            observed_data = pd.DataFrame(
+                data=_observed_arr[period],
+                columns=observed_factors,
+            )
+            observed_data["id"] = observed_data.index
+            observed_data["aug_period"] = period
+        # Do a left merge because we need all periods for the ranges
         states_data = pd.merge(
             left=states,
             right=observed_data,
-            left_on=["id", "period"],
-            right_on=["id", "period"],
+            left_on=["id", "aug_period"],
+            right_on=["id", "aug_period"],
             how="left",
         )
     else:
@@ -403,18 +455,18 @@ def _get_states_data(model, period, data, states, observed_factors):
 def _prepare_data_for_one_plot_fixed_quantile_2d(
     states_data,
     state_ranges,
-    period,
+    aug_period,
     input_factor,
     output_factor,
-    quantiles_of_other_factors,
     n_points,
+    quantiles_of_other_factors,
     transition_function,
     transition_params,
     all_factors,
 ):
-    period_data = states_data.query(f"period == {period}")[all_factors]
-    input_min = state_ranges[input_factor].loc[period]["minimum"]
-    input_max = state_ranges[input_factor].loc[period]["maximum"]
+    period_data = states_data.query(f"aug_period == {aug_period}")[all_factors]
+    input_min = state_ranges[input_factor].loc[aug_period]["minimum"]
+    input_max = state_ranges[input_factor].loc[aug_period]["maximum"]
     to_concat = []
     for quantile in quantiles_of_other_factors:
         input_data = pd.DataFrame()
@@ -447,7 +499,7 @@ def _process_quantiles_of_other_factors(quantiles_of_other_factors):
 def _prepare_data_for_one_plot_average_2d(
     states_data,
     state_ranges,
-    period,
+    aug_period,
     input_factor,
     output_factor,
     n_points,
@@ -456,12 +508,12 @@ def _prepare_data_for_one_plot_average_2d(
     transition_params,
     all_factors,
 ):
-    period_data = states_data.query(f"period == {period}")[all_factors].reset_index()
+    period_data = states_data.query(f"aug_period == {aug_period}")
 
     sampled_factors = [factor for factor in all_factors if factor != input_factor]
     draws = period_data[sampled_factors].sample(n=n_draws)
-    input_min = state_ranges[input_factor].loc[period]["minimum"]
-    input_max = state_ranges[input_factor].loc[period]["maximum"]
+    input_min = state_ranges[input_factor].loc[aug_period]["minimum"]
+    input_max = state_ranges[input_factor].loc[aug_period]["maximum"]
 
     to_concat = []
     for _, draw in draws.iterrows():

@@ -7,7 +7,12 @@ import pandas as pd
 
 import skillmodels.likelihood_function as lf
 import skillmodels.likelihood_function_debug as lfd
-from skillmodels.constraints import add_bounds, get_constraints
+from skillmodels.constraints import (
+    add_bounds,
+    constraints_dicts_to_om,
+    enforce_fixed_constraints,
+    get_constraints_dicts,
+)
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
@@ -18,12 +23,14 @@ from skillmodels.process_model import process_model
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
 
-def get_maximization_inputs(model_dict, data):
+def get_maximization_inputs(model_dict, data, split_dataset=1):
     """Create inputs for optimagic's maximize function.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
         data (DataFrame): dataset in long format.
+        split_dataset(Int): Controls into how many sclices to split the dataset
+            during the gradient computation.
 
     Returns a dictionary with keys:
         loglike (function): A jax jitted function that takes an optimagic-style
@@ -41,28 +48,41 @@ def get_maximization_inputs(model_dict, data):
         constraints (list): List of optimagic constraints that are implied by the
             model specification.
         params_template (pd.DataFrame): Parameter DataFrame with correct index and
-            bounds but with empty value column.
+            bounds. The value column is empty except for the fixed constraints, which
+            are set including the bounds.
+        data_aug (pd.DataFrame): DataFrame with augmented data. If model contains
+            endogenous factors, we double up the number of periods in order to add
+
+
 
     """
     model = process_model(model_dict)
     p_index = get_params_index(
-        model["update_info"],
-        model["labels"],
-        model["dimensions"],
-        model["transition_info"],
+        update_info=model["update_info"],
+        labels=model["labels"],
+        dimensions=model["dimensions"],
+        transition_info=model["transition_info"],
+        endogenous_factors_info=model["endogenous_factors_info"],
     )
 
     parsing_info = create_parsing_info(
-        p_index,
-        model["update_info"],
-        model["labels"],
-        model["anchoring"],
+        params_index=p_index,
+        update_info=model["update_info"],
+        labels=model["labels"],
+        anchoring=model["anchoring"],
+        has_endogenous_factors=model["endogenous_factors_info"][
+            "has_endogenous_factors"
+        ],
     )
-    measurements, controls, observed_factors = process_data(
-        data,
-        model["labels"],
-        model["update_info"],
-        model["anchoring"],
+    processed_data = process_data(
+        df=data,
+        has_endogenous_factors=model["endogenous_factors_info"][
+            "has_endogenous_factors"
+        ],
+        labels=model["labels"],
+        update_info=model["update_info"],
+        anchoring_info=model["anchoring"],
+        purpose="estimation",
     )
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
@@ -84,9 +104,9 @@ def get_maximization_inputs(model_dict, data):
         partialed_loglikes[n] = _partial_some_log_likelihood(
             fun=fun,
             parsing_info=parsing_info,
-            measurements=measurements,
-            controls=controls,
-            observed_factors=observed_factors,
+            measurements=processed_data["measurements"],
+            controls=processed_data["controls"],
+            observed_factors=processed_data["observed_factors"],
             model=model,
             sigma_weights=sigma_weights,
             sigma_scaling_factor=sigma_scaling_factor,
@@ -107,7 +127,27 @@ def get_maximization_inputs(model_dict, data):
     def loglike_and_gradient(params):
         params_vec = partialed_get_jnp_params_vec(params)
         crit = float(_jitted_loglike(params_vec))
-        grad = _to_numpy(_gradient(params_vec))
+        n_obs = processed_data["measurements"].shape[1]
+        _grad = jnp.zeros_like(params_vec)
+        start = 0
+        stop = int(n_obs / split_dataset)
+        step = int(n_obs / split_dataset)
+        for i in range(split_dataset):
+            stop = n_obs if i == split_dataset - 1 else stop
+            measurements_slice = processed_data["measurements"][:, start:stop]
+            controls_slice = processed_data["controls"][:, start:stop, :]
+            observed_factors_slice = processed_data["observed_factors"][
+                :, start:stop, :
+            ]
+            _grad += _gradient(
+                params_vec,
+                measurements=measurements_slice,
+                controls=controls_slice,
+                observed_factors=observed_factors_slice,
+            )
+            start += step
+            stop += step
+        grad = _to_numpy(_grad)
         return crit, grad
 
     def debug_loglike(params):
@@ -117,26 +157,35 @@ def get_maximization_inputs(model_dict, data):
         tmp["value"] = float(tmp["value"])
         return process_debug_data(debug_data=tmp, model=model)
 
-    constr = get_constraints(
+    _constraints_dicts = get_constraints_dicts(
         dimensions=model["dimensions"],
         labels=model["labels"],
         anchoring_info=model["anchoring"],
         update_info=model["update_info"],
         normalizations=model["normalizations"],
+        endogenous_factors_info=model["endogenous_factors_info"],
     )
+
+    constraints = constraints_dicts_to_om(_constraints_dicts)
 
     params_template = pd.DataFrame(columns=["value"], index=p_index)
     params_template = add_bounds(
-        params_template,
-        model["estimation_options"]["bounds_distance"],
+        params=params_template,
+        bounds_distance=model["estimation_options"]["bounds_distance"],
     )
-
+    params_template = enforce_fixed_constraints(
+        params_template=params_template,
+        constraints_dicts=_constraints_dicts,
+    )
+    assert params_template.index.equals(p_index), (
+        "params_template index is not equal to p_index"
+    )
     out = {
         "loglike": loglike,
         "loglikeobs": loglikeobs,
         "debug_loglike": debug_loglike,
         "loglike_and_gradient": loglike_and_gradient,
-        "constraints": constr,
+        "constraints": constraints,
         "params_template": params_template,
     }
 
@@ -155,14 +204,23 @@ def _partial_some_log_likelihood(
 ):
     update_info = model["update_info"]
     is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
-    _periods = pd.Series(update_info.index.get_level_values("period").to_numpy())
-    is_predict_iteration = ((_periods - _periods.shift(-1)) == -1).to_numpy()
-    last_period = model["labels"]["periods"][-1]
+    _aug_periods = pd.Series(
+        update_info.index.get_level_values("aug_period").to_numpy()
+    )
+    is_predict_iteration = ((_aug_periods - _aug_periods.shift(-1)) == -1).to_numpy()
     # iteration_to_period is used as an indexer to loop over arrays of different lengths
-    # in a jax.lax.scan. It needs to work for arrays of length n_periods and not raise
-    # IndexErrors on tracer arrays of length n_periods - 1 (i.e. n_transitions).
-    # To achieve that, we replace the last period by -1.
-    iteration_to_period = _periods.replace(last_period, -1).to_numpy()
+    # in a jax.lax.scan. It needs to work for arrays of length n_aug_periods and not
+    # raise IndexErrors on tracer arrays of length n_aug_periods - 1 (i.e.
+    # n_transitions). To achieve that, we replace the last aug_period by -1. If there
+    # are endogenous factors, the last aug_period is found at index -2 (there should not
+    # be measurements for endogenous factors in the "second half" of the last period).
+    last_aug_period = (
+        model["labels"]["aug_periods"][-2]
+        if parsing_info["has_endogenous_factors"]
+        else model["labels"]["aug_periods"][-1]
+    )
+    iteration_to_period = _aug_periods.replace(last_aug_period, -1).to_numpy()
+    assert max(iteration_to_period) == last_aug_period - 1
 
     return functools.partial(
         fun,

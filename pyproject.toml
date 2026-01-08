@@ -12,12 +12,6 @@ maintainers = [
     { name = "Hans-Martin von Gaudecker", email = "hmgaudecker@uni-bonn.de" },
 ]
 description = "Estimators for skill formation models"
-requires-python = ">=3.12"
-dependencies = [
-    "dags",
-    "numpy",
-    "pandas",
-]
 dynamic = ["version"]
 keywords = [
     "Skill formation",
@@ -38,6 +32,13 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Scientific/Engineering",
 ]
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "dags",
+    "jax>=0.8",
+    "numpy",
+    "pandas",
+]
 
 [project.readme]
 file = "README.md"
@@ -57,7 +58,7 @@ Tracker = "https://github.com/OpenSourceEconomics/skillmodels/issues"
 # ======================================================================================
 
 [build-system]
-requires = ["hatchling", "hatch_vcs"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.hooks.vcs]
@@ -82,44 +83,31 @@ allow-direct-references = true
 # Pixi
 # ======================================================================================
 
-[tool.pixi.project]
+[tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+platforms = ["linux-64", "osx-arm64", "win-64"]
 
 # Development Dependencies (conda)
 # --------------------------------------------------------------------------------------
 
 [tool.pixi.dependencies]
 filterpy = "*"
+ipykernel = "*"
 jupyterlab = "*"
-nbformat = ">=5.10.4,<6"
-optimagic = "*"
-pixi-kernel = ">=0.4.0,<0.5"
-plotly = ">=5.2,<6"
+nbformat = "*"
+networkx = "*"
+numpy = ">=2.3,<2.4"
+# optimagic = "*"
+plotly = ">=6.2"
 pre-commit = "*"
 pybaum = "*"
-python = ">=3.12.5"
-python-kaleido = "*"
-scipy = "<=1.13"
-
-
-# Development Dependencies (pypi)
-# --------------------------------------------------------------------------------------
-
-[tool.pixi.target.unix.dependencies]
-jax = ">=0.4.20"
-jaxlib = ">=0.4.20"
-
-# Development Dependencies (pypi)
-# --------------------------------------------------------------------------------------
+python-kaleido = ">=1.0"
+scipy = "*"
 
 [tool.pixi.pypi-dependencies]
-pdbp = "*"
 skillmodels = {path = ".", editable = true}
-
-[tool.pixi.target.win-64.pypi-dependencies]
-jax = { version = ">=0.4.20", extras = ["cpu"] }
-jaxlib = ">=0.4.20"
+optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main"}
+pdbp = "*"
 
 # Features and Tasks
 # --------------------------------------------------------------------------------------
@@ -128,10 +116,11 @@ jaxlib = ">=0.4.20"
 platforms = ["linux-64"]
 system-requirements = {cuda = "12"}
 
-[tool.pixi.feature.cuda.target.linux-64.dependencies]
+[tool.pixi.feature.cuda.dependencies]
 cuda-nvcc = ">=12"
-jax = ">=0.4.20"
-jaxlib = { version = ">=0.4.20", build = "cuda12*" }
+
+[tool.pixi.feature.cuda.pypi-dependencies]
+jax = {version = ">=0.7", extras = ["cuda12"]}
 
 [tool.pixi.feature.test.dependencies]
 pytest = "*"
@@ -142,6 +131,7 @@ snakeviz = "*"
 [tool.pixi.feature.test.target.unix.dependencies]
 pytest-memray = "*"
 
+
 [tool.pixi.feature.test.tasks]
 tests = "pytest tests"
 tests-with-cov = "pytest tests --cov-report=xml --cov=./"
@@ -151,30 +141,31 @@ mem-on-clean-repo = "git status --porcelain && git diff-index --quiet HEAD -- &&
 [tool.pixi.feature.cuda.tasks]
 mem-cuda = "pytest -x -s --pdb --memray --fail-on-increase tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs"
 
-[tool.pixi.feature.mypy.dependencies]
-mypy = "*"
-pandas-stubs = "*"
+[tool.pixi.feature.ty.pypi-dependencies]
 matplotlib = "*"  # required because of pandas
+pandas-stubs = "*"
+ty = "*"
+types-PyYAML = "*"
+types-pytz = "*"
 
-[tool.pixi.feature.mypy.tasks]
-mypy = "mypy src"
+[tool.pixi.feature.ty.tasks]
+ty = "ty check"
 
 # Environments
 # --------------------------------------------------------------------------------------
 
 [tool.pixi.environments]
 cuda = {features = ["cuda"], solve-group = "cuda"}
-mypy = {features = ["mypy"], solve-group = "default"}
 test-cpu = {features = ["test"], solve-group = "default"}
 test-gpu = {features = ["test", "cuda"], solve-group = "cuda"}
-
+ty = {features = ["test", "ty"], solve-group = "default"}
 
 # ======================================================================================
 # Ruff configuration
 # ======================================================================================
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py313"
 fix = true
 line-length = 88
 
@@ -218,6 +209,9 @@ extend-ignore = [
     # exception must not use an f-string literal
     "EM102",
 
+    # Boolean-typed positional arguments.
+    "FBT001",
+
     # Boolean default positional argument in function definition
     "FBT002",
 
@@ -235,9 +229,6 @@ extend-ignore = [
 
     # pd.merge is fine
     "PD015",
-
-    # df is just fine
-    "PD901",
 
     # Many suggestions to use list comprehension are not helpful
     "PERF401",
@@ -276,12 +267,46 @@ extend-ignore = [
 "src/skillmodels/simulate_data.py" = ["D417"]
 "src/skillmodels/visualize_*.py" = ["BLE001", "D417"]
 "src/skillmodels/*_heatmap*.py" = ["D417"]
-"tests/*" = ["ARG001", "FBT003", "INP001", "PD002", "NPY002", "PTH123", "S506"]
 "**/*.ipynb" = ["B018", "T201", "E402", "PLR2004", "INP001", "PTH100"]
 "docs/**/*" = ["A001", "ERA001", "INP001", "PTH100", "PTH123", "S506"]
+"tests/*" = [
+    "ARG001",
+    "E712",
+    "FBT003",
+    "INP001",
+    "PD002",
+    "PT011",
+    "NPY002",
+    "PTH123",
+    "S506"
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+
+# ======================================================================================
+# ty configuration
+# ======================================================================================
+
+[tool.ty.rules]
+invalid-return-type = "error"
+ambiguous-protocol-member = "error"
+deprecated = "error"
+division-by-zero = "error"
+ignore-comment-unknown-rule = "error"
+invalid-argument-type = "error"
+invalid-ignore-comment = "error"
+possibly-missing-attribute = "error"
+possibly-missing-implicit-call = "error"
+possibly-missing-import = "error"
+possibly-unresolved-reference = "error"
+redundant-cast = "error"
+undefined-reveal = "error"
+unresolved-global = "error"
+unsupported-base = "error"
+unused-ignore-comment = "error"
+useless-overload-body = "error"
 
 
 [tool.pytest.ini_options]
@@ -302,11 +327,3 @@ norecursedirs = ["docs", ".envs"]
 line_length = 88
 sequence_style = "block_style"
 none_representation = "null"
-
-# ======================================================================================
-# mypy configuration
-# ======================================================================================
-
-[[tool.mypy.overrides]]
-module = ["dags", "dags.signature"]
-ignore_missing_imports = true

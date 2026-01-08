@@ -1,4 +1,4 @@
-period,variable,fac1,fac2,fac3,purpose
+aug_period,variable,fac1,fac2,fac3,purpose
 0,y1,True,False,False,measurement
 0,y2,True,False,False,measurement
 0,y3,True,False,False,measurement

@@ -1,7 +1,9 @@
 import pandas as pd
 
 
-def get_params_index(update_info, labels, dimensions, transition_info):
+def get_params_index(
+    update_info, labels, dimensions, transition_info, endogenous_factors_info
+):
     """Generate index for the params_df for optimagic.
 
     The index has four levels. The first is the parameter category. The second is the
@@ -16,29 +18,43 @@ def get_params_index(update_info, labels, dimensions, transition_info):
             factors, periods, controls, stagemap and stages. See :ref:`labels`
         options (dict): Tuning parameters for the estimation.
             See :ref:`estimation_options`.
+        transition_info (dict): Information about the transition equations.
+        endogenous_factors_info (dict): Information about endogenous factors, if any.
 
     Returns:
         params_index (pd.MultiIndex)
 
     """
-    ind_tups = get_control_params_index_tuples(labels["controls"], update_info)
-    ind_tups += get_loadings_index_tuples(labels["latent_factors"], update_info)
-    ind_tups += get_meas_sds_index_tuples(update_info)
-    ind_tups += get_shock_sds_index_tuples(labels["periods"], labels["latent_factors"])
+    ind_tups = get_control_params_index_tuples(
+        controls=labels["controls"], update_info=update_info
+    )
+    ind_tups += get_loadings_index_tuples(
+        factors=labels["latent_factors"], update_info=update_info
+    )
+    ind_tups += get_meas_sds_index_tuples(update_info=update_info)
+    ind_tups += get_shock_sds_index_tuples(
+        aug_periods=labels["aug_periods"],
+        factors=labels["latent_factors"],
+        has_endogenous_factors=endogenous_factors_info["has_endogenous_factors"],
+    )
     ind_tups += initial_mean_index_tuples(
-        dimensions["n_mixtures"],
-        labels["latent_factors"],
+        n_mixtures=dimensions["n_mixtures"],
+        factors=labels["latent_factors"],
     )
-    ind_tups += get_mixture_weights_index_tuples(dimensions["n_mixtures"])
+    ind_tups += get_mixture_weights_index_tuples(n_mixtures=dimensions["n_mixtures"])
     ind_tups += get_initial_cholcovs_index_tuples(
-        dimensions["n_mixtures"],
-        labels["latent_factors"],
+        n_mixtures=dimensions["n_mixtures"],
+        factors=labels["latent_factors"],
     )
-    ind_tups += get_transition_index_tuples(transition_info, labels["periods"])
+    ind_tups += get_transition_index_tuples(
+        transition_info=transition_info,
+        aug_periods=labels["aug_periods"],
+        has_endogenous_factors=endogenous_factors_info["has_endogenous_factors"],
+    )
 
     index = pd.MultiIndex.from_tuples(
         ind_tups,
-        names=["category", "period", "name1", "name2"],
+        names=["category", "aug_period", "name1", "name2"],
     )
     return index
 
@@ -54,9 +70,9 @@ def get_control_params_index_tuples(controls, update_info):
 
     """
     ind_tups = []
-    for period, meas in update_info.index:
+    for aug_period, meas in update_info.index:
         for cont in controls:
-            ind_tups.append(("controls", period, meas, cont))
+            ind_tups.append(("controls", aug_period, meas, cont))
     return ind_tups
 
 
@@ -74,10 +90,10 @@ def get_loadings_index_tuples(factors, update_info):
     """
     mask = update_info[factors].to_numpy()
     ind_tups = []
-    for i, (period, meas) in enumerate(update_info.index):
+    for i, (aug_period, meas) in enumerate(update_info.index):
         for f, factor in enumerate(factors):
             if mask[i, f]:
-                ind_tups.append(("loadings", period, meas, factor))
+                ind_tups.append(("loadings", aug_period, meas, factor))
     return ind_tups
 
 
@@ -93,26 +109,27 @@ def get_meas_sds_index_tuples(update_info):
 
     """
     ind_tups = []
-    for period, meas in update_info.index:
-        ind_tups.append(("meas_sds", period, meas, "-"))
+    for aug_period, meas in update_info.index:
+        ind_tups.append(("meas_sds", aug_period, meas, "-"))
     return ind_tups
 
 
-def get_shock_sds_index_tuples(periods, factors):
+def get_shock_sds_index_tuples(aug_periods, factors, has_endogenous_factors):
     """Index tuples for shock_sd.
 
     Args:
-        periods (list): The periods of the model.
+        aug_periods (list): The augmented periods of the model.
         factors (list): The latent factors of the model.
 
     Returns:
         ind_tups (list)
 
     """
+    end = -2 if has_endogenous_factors else -1
     ind_tups = []
-    for period in periods[:-1]:
+    for aug_period in aug_periods[:end]:
         for factor in factors:
-            ind_tups.append(("shock_sds", period, factor, "-"))
+            ind_tups.append(("shock_sds", aug_period, factor, "-"))
     return ind_tups
 
 
@@ -177,22 +194,24 @@ def get_initial_cholcovs_index_tuples(n_mixtures, factors):
     return ind_tups
 
 
-def get_transition_index_tuples(transition_info, periods):
+def get_transition_index_tuples(transition_info, aug_periods, has_endogenous_factors):
     """Index tuples for transition equation coefficients.
 
     Args:
         latent_factors (list): The latent factors of the model
         all_factors (list): The latent and observed factors of the model.
-        periods (list): The periods of the model
+        aug_periods (list): The augmented periods of the model
         transition_names (list): name of the transition equation of each factor
+        has_endogenous_factors (bool): Whether the model has endogenous factors.
 
     Returns:
         ind_tups (list)
 
     """
+    end = -2 if has_endogenous_factors else -1
     ind_tups = []
     for factor, names in transition_info["param_names"].items():
-        for period in periods[:-1]:
+        for aug_period in aug_periods[:end]:
             for name in names:
-                ind_tups.append(("transition", period, factor, name))
+                ind_tups.append(("transition", aug_period, factor, name))
     return ind_tups

@@ -1,17 +1,19 @@
-import functools
-
 import jax
 import jax.numpy as jnp
 
-array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
+from skillmodels.qr import qr_gpu
 
+array_qr_jax = (
+    jax.vmap(jax.vmap(qr_gpu))
+    if jax.default_backend() == "gpu"
+    else jax.vmap(jax.vmap(jnp.linalg.qr))
+)
 
 # ======================================================================================
 # Update Step
 # ======================================================================================
 
 
-@functools.partial(jax.checkpoint, prevent_cse=False)
 def kalman_update(
     states,
     upper_chols,
@@ -155,7 +157,6 @@ def calculate_sigma_scaling_factor_and_weights(n_states, kappa=2):
     return scaling_factor, weights
 
 
-@functools.partial(jax.checkpoint, static_argnums=0, prevent_cse=False)
 def kalman_predict(
     transition_func,
     states,
@@ -227,7 +228,6 @@ def kalman_predict(
     return predicted_states, predicted_covs
 
 
-@functools.partial(jax.checkpoint, prevent_cse=False)
 def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factors):
     """Calculate the array of sigma_points for the unscented transform.
 

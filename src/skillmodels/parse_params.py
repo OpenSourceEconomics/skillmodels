@@ -5,16 +5,20 @@ import numpy as np
 import pandas as pd
 
 
-def create_parsing_info(params_index, update_info, labels, anchoring):
+def create_parsing_info(
+    params_index, update_info, labels, anchoring, has_endogenous_factors
+):
     """Create a dictionary with information how the parameter vector has to be parsed.
 
     Args:
-        params_index (pandas.MultiIndex): It has the levels ["category", "period",
+        params_index (pandas.MultiIndex): It has the levels ["category", "aug_period",
             "name1", "name2"]
         update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
+        anchoring (dict): Dictionary with anchoring settings.
+        has_endogenous_factors (bool): Whether the model includes endogenous factors.
 
     Returns:
         dict: dictionary that maps model quantities to positions or slices of the
@@ -72,6 +76,9 @@ def create_parsing_info(params_index, update_info, labels, anchoring):
     parsing_info["ignore_constant_when_anchoring"] = anchoring[
         "ignore_constant_when_anchoring"
     ]
+
+    # Add has_endogenous_factors to parsing_info
+    parsing_info["has_endogenous_factors"] = has_endogenous_factors
 
     return parsing_info
 
@@ -206,10 +213,14 @@ def _get_transition_params(params, info, labels):
     """Create a list of arrays with transition equation parameters."""
     trans_params = {}
     t_info = info["transition"]
-    n_periods = len(labels["periods"])
+    n_aug_periods = len(labels["aug_periods"])
+
+    # Use has_endogenous_factors from parsing_info instead of undefined global
+    len_reduction = 2 if info["has_endogenous_factors"] else 1
+
     for factor in labels["latent_factors"]:
         ilocs = t_info[factor]
-        trans_params[factor] = params[ilocs].reshape(n_periods - 1, -1)
+        trans_params[factor] = params[ilocs].reshape(n_aug_periods - len_reduction, -1)
     return trans_params
 
 
@@ -220,10 +231,10 @@ def _get_anchoring_scaling_factors(loadings, info, dimensions):
 
     """
     scaling_factors = jnp.ones(
-        (dimensions["n_periods"], dimensions["n_latent_factors"]),
+        (dimensions["n_aug_periods"], dimensions["n_latent_factors"]),
     )
     free_anchoring_loadings = loadings[info["is_anchoring_loading"]].reshape(
-        dimensions["n_periods"],
+        dimensions["n_aug_periods"],
         -1,
     )
     scaling_factors = scaling_factors.at[:, info["is_anchored_factor"]].set(
@@ -231,7 +242,7 @@ def _get_anchoring_scaling_factors(loadings, info, dimensions):
     )
 
     scaling_for_observed = jnp.ones(
-        (dimensions["n_periods"], dimensions["n_observed_factors"]),
+        (dimensions["n_aug_periods"], dimensions["n_observed_factors"]),
     )
 
     scaling_factors = jnp.hstack([scaling_factors, scaling_for_observed])
@@ -245,16 +256,16 @@ def _get_anchoring_constants(controls, info, dimensions):
     Note: Parameters are not taken from the parameter vector but from the controls.
 
     """
-    constants = jnp.zeros((dimensions["n_periods"], dimensions["n_latent_factors"]))
+    constants = jnp.zeros((dimensions["n_aug_periods"], dimensions["n_latent_factors"]))
     if not info["ignore_constant_when_anchoring"]:
         values = controls[:, 0][info["is_anchoring_update"]].reshape(
-            dimensions["n_periods"],
+            dimensions["n_aug_periods"],
             -1,
         )
         constants = constants.at[:, info["is_anchored_factor"]].set(values)
 
     constants_for_observed = jnp.zeros(
-        (dimensions["n_periods"], dimensions["n_observed_factors"]),
+        (dimensions["n_aug_periods"], dimensions["n_observed_factors"]),
     )
 
     constants = jnp.hstack([constants, constants_for_observed])

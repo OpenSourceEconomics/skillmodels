@@ -132,8 +132,8 @@ def log_likelihood_obs(
         transition_func=transition_func,
         observed_factors=observed_factors,
     )
-
-    static_out = jax.lax.scan(_body, carry, loop_args)[1]
+    _body = jax.checkpoint(_body, prevent_cse=False)
+    static_out = jax.lax.scan(_body, carry, loop_args, unroll=False)[1]
 
     # clip contributions before aggregation to preserve as much information as
     # possible.

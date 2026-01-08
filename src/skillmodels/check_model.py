@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def check_model(model_dict, labels, dimensions, anchoring):
+def check_model(model_dict, labels, dimensions, anchoring, has_endogenous_factors):
     """Check consistency and validity of the model specification.
 
     labels, dimensions and anchoring information are done before the model checking
@@ -15,44 +15,56 @@ def check_model(model_dict, labels, dimensions, anchoring):
         model_dict (dict): The model specification. See: :ref:`model_specs`
         dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
-
         labels (dict): Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
-
         anchoring (dict): Dictionary with information about anchoring.
             See :ref:`anchoring`
+        has_endogenous_factors (bool): Whether the model has any endogenous factors
 
     Raises:
         ValueError
 
     """
-    report = _check_stagemap(
-        labels["stagemap"],
-        labels["stages"],
-        dimensions["n_periods"],
+    report = check_stagemap(
+        stagemap=labels["aug_stagemap"],
+        stages=labels["aug_stages"],
+        n_periods=dimensions["n_aug_periods"],
+        is_augmented=has_endogenous_factors,
     )
     report += _check_anchoring(anchoring)
-    report += _check_measurements(model_dict, labels["latent_factors"])
+    invalid_measurements = _check_measurements(model_dict, labels["latent_factors"])
+    if invalid_measurements:
+        report += invalid_measurements
+    elif has_endogenous_factors:
+        # Make this conditional because the check only works for valid meas.
+        report += _check_no_overlap_in_measurements_of_states_and_inv(
+            model_dict, labels
+        )
     report += _check_normalizations(model_dict, labels["latent_factors"])
 
     report = "\n".join(report)
     if report != "":
-        raise ValueError(f"Invalid model specification:\n{report}")
+        raise ValueError(f"Invalid model specification: {report}")
 
 
-def _check_stagemap(stagemap, stages, n_periods):
+def check_stagemap(stagemap, stages, n_periods, is_augmented):
     report = []
-    if len(stagemap) != n_periods - 1:
+    step_size = 2 if is_augmented else 1
+    if len(stagemap) != n_periods - step_size:
         report.append(
-            "The stagemap needs to be of length n_periods - 1. n_periods is "
-            f"{n_periods}, the stagemap has length {len(stagemap)}.",
+            f"The stagemap needs to be of length n_periods - {step_size}. "
+            f" n_periods is {n_periods}, the stagemap has length {len(stagemap)}.",
         )
-
     if stages != list(range(len(stages))):
         report.append("Stages need to be integers, start at zero and increase by 1.")
 
-    if not np.isin(np.array(stagemap[1:]) - np.array(stagemap[:-1]), (0, 1)).all():
-        report.append("Consecutive entries in stagemap must be equal or increase by 1.")
+    # Hijacking the stagemap for endogenous factors leads to interleaved elements.
+    to_consider = [stagemap] if not is_augmented else [stagemap[0::2], stagemap[1::2]]
+    for sm in to_consider:
+        if not np.isin(np.array(sm[1:]) - np.array(sm[:-1]), (0, step_size)).all():
+            report.append(
+                "Consecutive entries in stagemap must be equal or increase by 1."
+            )
     return report
 
 
@@ -83,7 +95,7 @@ def _check_measurements(model_dict, factors):
         candidate = model_dict["factors"][factor]["measurements"]
         if not _is_list_of(candidate, list):
             report.append(
-                f"measurements must lists of lists. Check measurements of {factor}.",
+                f"measurements must be lists of lists. Check measurements of {factor}.",
             )
         else:
             for period, meas_list in enumerate(candidate):
@@ -93,6 +105,24 @@ def _check_measurements(model_dict, factors):
                             "Measurements need to be valid pandas column names. Check "
                             f"{meas} for {factor} in period {period}.",
                         )
+    return report
+
+
+def _check_no_overlap_in_measurements_of_states_and_inv(model_dict, labels):
+    report = []
+    for period in labels["periods"]:
+        meas = {}
+        for factor in labels["latent_factors"]:
+            props = model_dict["factors"][factor]
+            if props.get("is_endogenous", False):
+                meas["endogenous_factors"] = set(props["measurements"][period])
+            else:
+                meas["states"] = set(props["measurements"][period])
+        if overlap := meas["states"].intersection(meas["endogenous_factors"]):
+            report.append(
+                "Measurements for exogenous and endogenous latent factors must not "
+                f"overlap.\n\nCheck measurements {overlap} in period {period}.",
+            )
     return report
 
 

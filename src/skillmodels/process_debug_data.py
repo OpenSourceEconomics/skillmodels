@@ -95,9 +95,11 @@ def process_debug_data(debug_data, model):
 
 def _create_post_update_states(filtered_states, factors, update_info):
     to_concat = []
-    for (period, meas), data in zip(update_info.index, filtered_states, strict=False):
+    for (aug_period, meas), data in zip(
+        update_info.index, filtered_states, strict=False
+    ):
         df = _convert_state_array_to_df(data, factors)
-        df["period"] = period
+        df["aug_period"] = aug_period
         df["id"] = np.arange(len(df))
         df["measurement"] = meas
         to_concat.append(df)
@@ -128,9 +130,9 @@ def _create_filtered_states(filtered_states, log_mixture_weights, update_info, f
     agg_states = (filtered_states * weights.reshape(*weights.shape, 1)).sum(axis=-2)
 
     keep = []
-    for i, (period, measurement) in enumerate(update_info.index):
+    for i, (aug_period, measurement) in enumerate(update_info.index):
         last_measurement = update_info.query(
-            f"purpose == 'measurement' & period == {period}",
+            f"purpose == 'measurement' & aug_period == {aug_period}",
         ).index[-1][1]
 
         if measurement == last_measurement:
@@ -139,7 +141,7 @@ def _create_filtered_states(filtered_states, log_mixture_weights, update_info, f
     to_concat = []
     for period, i in enumerate(keep):
         df = pd.DataFrame(data=agg_states[i], columns=factors)
-        df["period"] = period
+        df["aug_period"] = period
         df["id"] = np.arange(len(df))
         to_concat.append(df)
 
@@ -150,8 +152,10 @@ def _create_filtered_states(filtered_states, log_mixture_weights, update_info, f
 
 def create_state_ranges(filtered_states, factors):
     ranges = {}
-    minima = filtered_states.groupby("period").min()
-    maxima = filtered_states.groupby("period").max()
+    # Group by whichever period column is present
+    period_col = "aug_period" if "aug_period" in filtered_states.columns else "period"
+    minima = filtered_states.groupby(period_col).min()
+    maxima = filtered_states.groupby(period_col).max()
     for factor in factors:
         df = pd.concat([minima[factor], maxima[factor]], axis=1)
         df.columns = ["minimum", "maximum"]
@@ -162,10 +166,10 @@ def create_state_ranges(filtered_states, factors):
 def _process_residuals(residuals, update_info):
     to_concat = []
     n_obs, n_mixtures = residuals[0].shape
-    for (period, meas), data in zip(update_info.index, residuals, strict=False):
+    for (aug_period, meas), data in zip(update_info.index, residuals, strict=False):
         df = pd.DataFrame(data.reshape(-1, 1), columns=["residual"])
         df["mixture"] = np.full((n_obs, n_mixtures), np.arange(n_mixtures)).flatten()
-        df["period"] = period
+        df["aug_period"] = aug_period
         df["id"] = np.arange(len(df))
         df["measurement"] = meas
         to_concat.append(df)
@@ -183,7 +187,7 @@ def _process_all_contributions(all_contributions, update_info):
     ):
         df = pd.DataFrame(data=contribs.reshape(-1, 1), columns=["contribution"])
         df["measurement"] = meas
-        df["period"] = period
+        df["aug_period"] = period
         df["id"] = np.arange(len(df))
         to_concat.append(df)
     return pd.concat(to_concat)
