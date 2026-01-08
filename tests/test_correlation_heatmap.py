@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from frozendict import frozendict
 from pandas.testing import assert_frame_equal as afe
 
 from skillmodels.correlation_heatmap import (
@@ -252,10 +253,10 @@ def test_process_factors():
             stagemap=(0,),
             stages=(0,),
             aug_periods=(0,),
-            aug_periods_to_periods={0: 0},
+            aug_periods_to_periods=frozendict({0: 0}),
             aug_stagemap=(0,),
             aug_stages=(0,),
-            aug_stages_to_stages={0: 0},
+            aug_stages_to_stages=frozendict({0: 0}),
         ),
     }
     latent_factor = "c"

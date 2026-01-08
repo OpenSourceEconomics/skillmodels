@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from dags import concatenate_functions
 from dags.signature import rename_arguments
+from frozendict import frozendict
 from jax import vmap
 from pandas import DataFrame
 
@@ -75,9 +76,11 @@ def process_model(model_dict):
         _model_dict_aug = model_dict
         endogenous_factors_info = EndogenousFactorsInfo(
             has_endogenous_factors=has_endogenous_factors,
-            aug_periods_to_aug_period_meas_types=_get_aug_periods_to_aug_period_meas_types(
-                aug_periods=labels.aug_periods_to_periods.keys(),
-                has_endogenous_factors=has_endogenous_factors,
+            aug_periods_to_aug_period_meas_types=frozendict(
+                _get_aug_periods_to_aug_period_meas_types(
+                    aug_periods=labels.aug_periods_to_periods.keys(),
+                    has_endogenous_factors=has_endogenous_factors,
+                )
             ),
             bounds_distance=model_dict["estimation_options"].get(
                 "bounds_distance", 1e-3
@@ -86,12 +89,14 @@ def process_model(model_dict):
                 _aug_periods_from_period,
                 aug_periods_to_periods=labels.aug_periods_to_periods,
             ),
-            factor_info={
-                fac: FactorEndogenousInfo(
-                    is_state=True, is_endogenous=False, is_correction=False
-                )
-                for fac in labels.latent_factors
-            },
+            factor_info=frozendict(
+                {
+                    fac: FactorEndogenousInfo(
+                        is_state=True, is_endogenous=False, is_correction=False
+                    )
+                    for fac in labels.latent_factors
+                }
+            ),
         )
     check_model(
         model_dict=_model_dict_aug,
@@ -253,10 +258,10 @@ def _get_labels(
         stagemap=tuple(stagemap),
         stages=tuple(stages),
         aug_periods=tuple(aug_periods_to_periods.keys()),
-        aug_periods_to_periods=aug_periods_to_periods,
+        aug_periods_to_periods=frozendict(aug_periods_to_periods),
         aug_stagemap=tuple(aug_stagemap),
         aug_stages=tuple(sorted(int(v) for v in np.unique(aug_stagemap))),
-        aug_stages_to_stages=aug_stages_to_stages,
+        aug_stages_to_stages=frozendict(aug_stages_to_stages),
     )
 
 
@@ -308,7 +313,7 @@ def _process_anchoring(model_dict: dict) -> Anchoring:
         anch = model_dict["anchoring"]
         return Anchoring(
             anchoring=True,
-            outcomes=anch.get("outcomes", {}),
+            outcomes=frozendict(anch.get("outcomes", {})),
             factors=tuple(anch.get("outcomes", {}).keys()),
             free_controls=anch.get("free_controls", False),
             free_constant=anch.get("free_constant", False),
@@ -320,7 +325,7 @@ def _process_anchoring(model_dict: dict) -> Anchoring:
 
     return Anchoring(
         anchoring=False,
-        outcomes={},
+        outcomes=frozendict({}),
         factors=(),
         free_controls=False,
         free_constant=False,
@@ -446,9 +451,9 @@ def _get_transition_info(model_dict: dict, labels: Labels) -> TransitionInfo:
 
     return TransitionInfo(
         func=transition_function,
-        param_names=dict(zip(latent_factors, param_names, strict=False)),
-        individual_functions=individual_functions,
-        function_names=dict(zip(latent_factors, function_names, strict=False)),
+        param_names=frozendict(zip(latent_factors, param_names, strict=False)),
+        individual_functions=frozendict(individual_functions),
+        function_names=frozendict(zip(latent_factors, function_names, strict=False)),
     )
 
 
@@ -471,16 +476,18 @@ def _get_endogenous_factors_info(
 
     return EndogenousFactorsInfo(
         has_endogenous_factors=has_endogenous_factors,
-        aug_periods_to_aug_period_meas_types=_get_aug_periods_to_aug_period_meas_types(
-            aug_periods=labels.aug_periods_to_periods.keys(),
-            has_endogenous_factors=has_endogenous_factors,
+        aug_periods_to_aug_period_meas_types=frozendict(
+            _get_aug_periods_to_aug_period_meas_types(
+                aug_periods=labels.aug_periods_to_periods.keys(),
+                has_endogenous_factors=has_endogenous_factors,
+            )
         ),
         bounds_distance=bounds_distance,
         aug_periods_from_period=partial(
             _aug_periods_from_period,
             aug_periods_to_periods=labels.aug_periods_to_periods,
         ),
-        factor_info=factor_info,
+        factor_info=frozendict(factor_info),
     )
 
 

@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 import yaml
+from frozendict import frozendict
 
 from skillmodels.params_index import (
     get_control_params_index_tuples,
@@ -185,9 +186,9 @@ def test_trans_coeffs_index_tuples_no_endogenous_factors():
     }
     trans_info = TransitionInfo(
         func=lambda x: x,  # dummy function
-        param_names=param_names,
-        individual_functions={},
-        function_names={},
+        param_names=frozendict(param_names),
+        individual_functions=frozendict({}),
+        function_names=frozendict({}),
     )
 
     expected = [
@@ -228,9 +229,9 @@ def test_trans_coeffs_index_tuples_has_endogenous_factors():
     }
     trans_info = TransitionInfo(
         func=lambda x: x,  # dummy function
-        param_names=param_names,
-        individual_functions={},
-        function_names={},
+        param_names=frozendict(param_names),
+        individual_functions=frozendict({}),
+        function_names=frozendict({}),
     )
 
     expected = [

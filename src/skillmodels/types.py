@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 import pandas as pd
+from frozendict import frozendict
 from jax import Array
 
 
@@ -42,10 +43,10 @@ class Labels:
     stagemap: tuple[int, ...]
     stages: tuple[int, ...]
     aug_periods: tuple[int, ...]
-    aug_periods_to_periods: dict[int, int]
+    aug_periods_to_periods: frozendict[int, int]
     aug_stagemap: tuple[int, ...]
     aug_stages: tuple[int, ...]
-    aug_stages_to_stages: dict[int, int]
+    aug_stages_to_stages: frozendict[int, int]
     transition_names: tuple[str, ...] = ()
 
     @property
@@ -59,7 +60,7 @@ class Anchoring:
     """Information about how latent factors are anchored to observed outcomes."""
 
     anchoring: bool
-    outcomes: dict[str, str]
+    outcomes: frozendict[str, str]
     factors: tuple[str, ...]
     free_controls: bool
     free_constant: bool
@@ -85,9 +86,9 @@ class TransitionInfo:
     """Information about transition functions."""
 
     func: Callable
-    param_names: dict[str, list[str]]
-    individual_functions: dict[str, Callable]
-    function_names: dict[str, str]
+    param_names: frozendict[str, list[str]]
+    individual_functions: frozendict[str, Callable]
+    function_names: frozendict[str, str]
 
 
 @dataclass(frozen=True)
@@ -104,12 +105,12 @@ class EndogenousFactorsInfo:
     """Information about endogenous factors in the model."""
 
     has_endogenous_factors: bool
-    aug_periods_to_aug_period_meas_types: dict[
+    aug_periods_to_aug_period_meas_types: frozendict[
         int, Literal["states", "endogenous_factors"]
     ]
     bounds_distance: float
     aug_periods_from_period: Callable[[int], list[int]]
-    factor_info: dict[str, FactorEndogenousInfo]
+    factor_info: frozendict[str, FactorEndogenousInfo]
 
 
 @dataclass(frozen=True)

@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from frozendict import frozendict
 from numpy.testing import assert_array_equal as aae
 
 from skillmodels.parse_params import create_parsing_info, parse_params
@@ -39,7 +40,7 @@ def parsed_parameters():
     # more meaningful test
     anchoring = Anchoring(
         anchoring=False,
-        outcomes={},
+        outcomes=frozendict({}),
         factors=(),
         free_controls=True,
         free_constant=True,

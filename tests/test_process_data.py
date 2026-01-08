@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from frozendict import frozendict
 from numpy.testing import assert_array_equal as aae
 
 from skillmodels.process_data import (
@@ -131,10 +132,10 @@ def test_generate_controls_array():
         stagemap=(0, 0),
         stages=(0,),
         aug_periods=(0, 1),
-        aug_periods_to_periods={0: 0, 1: 1},
+        aug_periods_to_periods=frozendict({0: 0, 1: 1}),
         aug_stagemap=(0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages={0: 0},
+        aug_stages_to_stages=frozendict({0: 0}),
     )
 
     calculated = _generate_controls_array(data, labels, 2)
@@ -160,10 +161,10 @@ def test_generate_observed_factor_array():
         stagemap=(0, 0),
         stages=(0,),
         aug_periods=(0, 1),
-        aug_periods_to_periods={0: 0, 1: 1},
+        aug_periods_to_periods=frozendict({0: 0, 1: 1}),
         aug_stagemap=(0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages={0: 0},
+        aug_stages_to_stages=frozendict({0: 0}),
     )
 
     calculated = _generate_observed_factor_array(data, labels, 2)

@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from frozendict import frozendict
 from pandas.testing import assert_frame_equal
 
 from skillmodels.constraints import (
@@ -181,10 +182,10 @@ def test_constant_factor_constraints():
         stagemap=(0, 0, 0),
         stages=(0,),
         aug_periods=(0, 1, 2),
-        aug_periods_to_periods={0: 0, 1: 1, 2: 2},
+        aug_periods_to_periods=frozendict({0: 0, 1: 1, 2: 2}),
         aug_stagemap=(0, 0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages={0: 0},
+        aug_stages_to_stages=frozendict({0: 0}),
         transition_names=("bla", "constant"),
     )
 
@@ -235,10 +236,10 @@ def test_trans_coeff_constraints():
         stagemap=(0, 0, 0),
         stages=(0,),
         aug_periods=(0, 1, 2),
-        aug_periods_to_periods={0: 0, 1: 1, 2: 2},
+        aug_periods_to_periods=frozendict({0: 0, 1: 1, 2: 2}),
         aug_stagemap=(0, 0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages={0: 0},
+        aug_stages_to_stages=frozendict({0: 0}),
         transition_names=("log_ces", "bla", "blubb"),
     )
 
@@ -292,7 +293,7 @@ def base_anchoring_info():
     return Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes={"f1": "outcome", "f2": "outcome"},
+        outcomes=frozendict({"f1": "outcome", "f2": "outcome"}),
         free_controls=True,
         free_constant=True,
         free_loadings=True,
@@ -309,7 +310,7 @@ def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes={"f1": "outcome", "f2": "outcome"},
+        outcomes=frozendict({"f1": "outcome", "f2": "outcome"}),
         free_controls=True,
         free_constant=False,
         free_loadings=True,
@@ -338,7 +339,7 @@ def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes={"f1": "outcome", "f2": "outcome"},
+        outcomes=frozendict({"f1": "outcome", "f2": "outcome"}),
         free_controls=False,
         free_constant=True,
         free_loadings=True,
@@ -378,7 +379,7 @@ def test_anchoring_constraints_for_loadings(anch_uinfo, base_anchoring_info):
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes={"f1": "outcome", "f2": "outcome"},
+        outcomes=frozendict({"f1": "outcome", "f2": "outcome"}),
         free_controls=True,
         free_constant=True,
         free_loadings=False,
