@@ -58,32 +58,32 @@ def get_maximization_inputs(model_dict, data, split_dataset=1):
     """
     model = process_model(model_dict)
     p_index = get_params_index(
-        update_info=model["update_info"],
-        labels=model["labels"],
-        dimensions=model["dimensions"],
-        transition_info=model["transition_info"],
-        endogenous_factors_info=model["endogenous_factors_info"],
+        update_info=model.update_info,
+        labels=model.labels,
+        dimensions=model.dimensions,
+        transition_info=model.transition_info,
+        endogenous_factors_info=model.endogenous_factors_info,
     )
 
     parsing_info = create_parsing_info(
         params_index=p_index,
-        update_info=model["update_info"],
-        labels=model["labels"],
-        anchoring=model["anchoring"],
-        has_endogenous_factors=model["endogenous_factors_info"].has_endogenous_factors,
+        update_info=model.update_info,
+        labels=model.labels,
+        anchoring=model.anchoring,
+        has_endogenous_factors=model.endogenous_factors_info.has_endogenous_factors,
     )
     processed_data = process_data(
         df=data,
-        has_endogenous_factors=model["endogenous_factors_info"].has_endogenous_factors,
-        labels=model["labels"],
-        update_info=model["update_info"],
-        anchoring_info=model["anchoring"],
+        has_endogenous_factors=model.endogenous_factors_info.has_endogenous_factors,
+        labels=model.labels,
+        update_info=model.update_info,
+        anchoring_info=model.anchoring,
         purpose="estimation",
     )
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
-        model["dimensions"].n_latent_factors,
-        model["estimation_options"].sigma_points_scale,
+        model.dimensions.n_latent_factors,
+        model.estimation_options.sigma_points_scale,
     )
 
     partialed_get_jnp_params_vec = functools.partial(
@@ -154,12 +154,12 @@ def get_maximization_inputs(model_dict, data, split_dataset=1):
         return process_debug_data(debug_data=tmp, model=model)
 
     _constraints_dicts = get_constraints_dicts(
-        dimensions=model["dimensions"],
-        labels=model["labels"],
-        anchoring_info=model["anchoring"],
-        update_info=model["update_info"],
-        normalizations=model["normalizations"],
-        endogenous_factors_info=model["endogenous_factors_info"],
+        dimensions=model.dimensions,
+        labels=model.labels,
+        anchoring_info=model.anchoring,
+        update_info=model.update_info,
+        normalizations=model.normalizations,
+        endogenous_factors_info=model.endogenous_factors_info,
     )
 
     constraints = constraints_dicts_to_om(_constraints_dicts)
@@ -167,7 +167,7 @@ def get_maximization_inputs(model_dict, data, split_dataset=1):
     params_template = pd.DataFrame(columns=["value"], index=p_index)
     params_template = add_bounds(
         params=params_template,
-        bounds_distance=model["estimation_options"].bounds_distance,
+        bounds_distance=model.estimation_options.bounds_distance,
     )
     params_template = enforce_fixed_constraints(
         params_template=params_template,
@@ -198,7 +198,7 @@ def _partial_some_log_likelihood(
     sigma_weights,
     sigma_scaling_factor,
 ):
-    update_info = model["update_info"]
+    update_info = model.update_info
     is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
     _aug_periods = pd.Series(
         update_info.index.get_level_values("aug_period").to_numpy()
@@ -211,9 +211,9 @@ def _partial_some_log_likelihood(
     # are endogenous factors, the last aug_period is found at index -2 (there should not
     # be measurements for endogenous factors in the "second half" of the last period).
     last_aug_period = (
-        model["labels"].aug_periods[-2]
+        model.labels.aug_periods[-2]
         if parsing_info["has_endogenous_factors"]
-        else model["labels"].aug_periods[-1]
+        else model.labels.aug_periods[-1]
     )
     iteration_to_period = _aug_periods.replace(last_aug_period, -1).to_numpy()
     assert max(iteration_to_period) == last_aug_period - 1
@@ -223,12 +223,12 @@ def _partial_some_log_likelihood(
         parsing_info=parsing_info,
         measurements=measurements,
         controls=controls,
-        transition_func=model["transition_info"].func,
+        transition_func=model.transition_info.func,
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
-        dimensions=model["dimensions"],
-        labels=model["labels"],
-        estimation_options=model["estimation_options"],
+        dimensions=model.dimensions,
+        labels=model.labels,
+        estimation_options=model.estimation_options,
         is_measurement_iteration=is_measurement_iteration,
         is_predict_iteration=is_predict_iteration,
         iteration_to_period=iteration_to_period,

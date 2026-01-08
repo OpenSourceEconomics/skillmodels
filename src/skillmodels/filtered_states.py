@@ -26,7 +26,7 @@ def get_filtered_states(model_dict, data, params):
 
     anchored_ranges = create_state_ranges(
         filtered_states=anchored_states_df,
-        factors=model["labels"].latent_factors,
+        factors=model.labels.latent_factors,
     )
 
     out = {
@@ -58,38 +58,38 @@ def anchor_states_df(states_df, model_dict, params, use_aug_period):
     model = process_model(model_dict)
 
     p_index = get_params_index(
-        update_info=model["update_info"],
-        labels=model["labels"],
-        dimensions=model["dimensions"],
-        transition_info=model["transition_info"],
-        endogenous_factors_info=model["endogenous_factors_info"],
+        update_info=model.update_info,
+        labels=model.labels,
+        dimensions=model.dimensions,
+        transition_info=model.transition_info,
+        endogenous_factors_info=model.endogenous_factors_info,
     )
 
     params = params.loc[p_index]
 
     parsing_info = create_parsing_info(
         params_index=p_index,
-        update_info=model["update_info"],
-        labels=model["labels"],
-        anchoring=model["anchoring"],
-        has_endogenous_factors=model["endogenous_factors_info"].has_endogenous_factors,
+        update_info=model.update_info,
+        labels=model.labels,
+        anchoring=model.anchoring,
+        has_endogenous_factors=model.endogenous_factors_info.has_endogenous_factors,
     )
 
     *_, pardict = parse_params(
         params=jnp.array(params["value"].to_numpy()),
         parsing_info=parsing_info,
-        dimensions=model["dimensions"],
-        labels=model["labels"],
+        dimensions=model.dimensions,
+        labels=model.labels,
         n_obs=1,
     )
 
-    n_latent = model["dimensions"].n_latent_factors
+    n_latent = model.dimensions.n_latent_factors
 
     _scaling_factors = np.array(pardict["anchoring_scaling_factors"][:, :n_latent])
     _constants = np.array(pardict["anchoring_constants"][:, :n_latent])
     if use_aug_period:
         period_arr = states_df["aug_period"].to_numpy()
-        ap_to_p = model["labels"].aug_periods_to_periods
+        ap_to_p = model.labels.aug_periods_to_periods
         scaling_factors = np.empty(shape=(len(ap_to_p), n_latent))
         constants = np.empty(shape=(len(ap_to_p), n_latent))
         for ap, p in ap_to_p.items():
@@ -104,7 +104,7 @@ def anchor_states_df(states_df, model_dict, params, use_aug_period):
     constants_arr = constants[period_arr]
 
     out = states_df.copy(deep=True)
-    for pos, factor in enumerate(model["labels"].latent_factors):
+    for pos, factor in enumerate(model.labels.latent_factors):
         out[factor] = constants_arr[:, pos] + states_df[factor] * scaling_arr[:, pos]
 
     out = out[states_df.columns]

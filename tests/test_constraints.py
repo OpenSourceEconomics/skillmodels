@@ -422,8 +422,8 @@ def simplest_augmented_model():
 
 def test_get_constraints_for_augmented_periods(simplest_augmented_model):
     calculated = _get_constraints_for_augmented_periods(
-        labels=simplest_augmented_model["labels"],
-        endogenous_factors_info=simplest_augmented_model["endogenous_factors_info"],
+        labels=simplest_augmented_model.labels,
+        endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
     )
     for c in calculated:
         del c["description"]

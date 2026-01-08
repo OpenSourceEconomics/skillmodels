@@ -33,9 +33,9 @@ def parsed_parameters():
 
     processed = process_model(model_dict)
 
-    update_info = processed["update_info"]
-    labels = processed["labels"]
-    dimensions = processed["dimensions"]
+    update_info = processed.update_info
+    labels = processed.labels
+    dimensions = processed.dimensions
     # this overwrites the anchoring setting from the model specification to get a
     # more meaningful test
     anchoring = Anchoring(

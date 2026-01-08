@@ -28,11 +28,11 @@ def model2_inputs():
     processed = process_model(model_dict)
 
     out = {
-        "update_info": processed["update_info"],
-        "labels": processed["labels"],
-        "dimensions": processed["dimensions"],
-        "transition_info": processed["transition_info"],
-        "endogenous_factors_info": processed["endogenous_factors_info"],
+        "update_info": processed.update_info,
+        "labels": processed.labels,
+        "dimensions": processed.dimensions,
+        "transition_info": processed.transition_info,
+        "endogenous_factors_info": processed.endogenous_factors_info,
     }
     return out
 

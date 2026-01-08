@@ -20,6 +20,7 @@ from skillmodels.types import (
     EstimationOptions,
     FactorEndogenousInfo,
     Labels,
+    ProcessedModel,
     TransitionInfo,
 )
 
@@ -122,17 +123,16 @@ def process_model(model_dict):
         transition_names=tuple(transition_info.function_names.values()),
     )
 
-    processed = {
-        "dimensions": dims,
-        "labels": labels,
-        "anchoring": anchoring,
-        "estimation_options": _process_estimation_options(_model_dict_aug),
-        "transition_info": transition_info,
-        "update_info": _get_update_info(_model_dict_aug, dims, labels, anchoring),
-        "normalizations": _process_normalizations(_model_dict_aug, dims, labels),
-        "endogenous_factors_info": endogenous_factors_info,
-    }
-    return processed
+    return ProcessedModel(
+        dimensions=dims,
+        labels=labels,
+        anchoring=anchoring,
+        estimation_options=_process_estimation_options(_model_dict_aug),
+        transition_info=transition_info,
+        update_info=_get_update_info(_model_dict_aug, dims, labels, anchoring),
+        normalizations=_process_normalizations(_model_dict_aug, dims, labels),
+        endogenous_factors_info=endogenous_factors_info,
+    )
 
 
 def get_has_endogenous_factors(factors: dict[str, Any]) -> bool:

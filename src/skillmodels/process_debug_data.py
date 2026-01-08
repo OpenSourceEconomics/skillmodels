@@ -51,8 +51,8 @@ def process_debug_data(debug_data, model):
             identify the Kalman Update to which the likelihood contribution corresponds.
 
     """
-    update_info = model["update_info"]
-    factors = model["labels"].latent_factors
+    update_info = model.update_info
+    factors = model.labels.latent_factors
 
     post_update_states = _create_post_update_states(
         debug_data["filtered_states"],

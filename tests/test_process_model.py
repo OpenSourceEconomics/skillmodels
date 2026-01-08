@@ -25,13 +25,11 @@ def model2():
 
 
 def test_has_endogenous_factors(model2):
-    assert (
-        process_model(model2)["endogenous_factors_info"].has_endogenous_factors == False
-    )
+    assert process_model(model2).endogenous_factors_info.has_endogenous_factors == False
 
 
 def test_dimensions(model2):
-    res = process_model(model2)["dimensions"]
+    res = process_model(model2).dimensions
     assert res.n_latent_factors == 3
     assert res.n_observed_factors == 0
     assert res.n_all_factors == 3
@@ -41,7 +39,7 @@ def test_dimensions(model2):
 
 
 def test_labels(model2):
-    res = process_model(model2)["labels"]
+    res = process_model(model2).labels
     assert res.latent_factors == ("fac1", "fac2", "fac3")
     assert res.observed_factors == ()
     assert res.all_factors == ("fac1", "fac2", "fac3")
@@ -52,14 +50,14 @@ def test_labels(model2):
 
 
 def test_estimation_options(model2):
-    res = process_model(model2)["estimation_options"]
+    res = process_model(model2).estimation_options
     assert res.sigma_points_scale == 2
     assert res.robust_bounds
     assert res.bounds_distance == 0.001
 
 
 def test_anchoring(model2):
-    res = process_model(model2)["anchoring"]
+    res = process_model(model2).anchoring
     assert res.outcomes == {"fac1": "Q1"}
     assert res.factors == ("fac1",)
     assert res.free_controls
@@ -68,7 +66,7 @@ def test_anchoring(model2):
 
 
 def test_transition_info(model2):
-    res = process_model(model2)["transition_info"]
+    res = process_model(model2).transition_info
 
     assert isinstance(res, TransitionInfo)
     assert callable(res.func)
@@ -77,7 +75,7 @@ def test_transition_info(model2):
 
 
 def test_update_info(model2):
-    res = process_model(model2)["update_info"]
+    res = process_model(model2).update_info
     test_dir = Path(__file__).parent.resolve()
     expected = pd.read_csv(
         test_dir / "model2_correct_update_info.csv",
@@ -119,7 +117,7 @@ def test_normalizations(model2):
             "intercepts": [{}, {}, {}, {}, {}, {}, {}, {}],
         },
     }
-    res = process_model(model2)["normalizations"]
+    res = process_model(model2).normalizations
 
     assert res == expected
 
@@ -138,17 +136,15 @@ def test_anchoring_and_endogenous_factors_work_together():
     # Should not raise - anchoring and endogenous factors now work together
     result = process_model(model_dict)
     # Verify anchoring is enabled
-    assert result["anchoring"].anchoring
-    assert result["anchoring"].factors == ("fac1",)
+    assert result.anchoring.anchoring
+    assert result.anchoring.factors == ("fac1",)
     # Verify endogenous factors are enabled
-    assert result["endogenous_factors_info"].has_endogenous_factors
+    assert result.endogenous_factors_info.has_endogenous_factors
     # Verify dimensions
-    assert result["dimensions"].n_periods == 8
-    assert result["dimensions"].n_aug_periods == 16
+    assert result.dimensions.n_periods == 8
+    assert result.dimensions.n_aug_periods == 16
     # Verify update_info has anchoring entries for all aug_periods
-    anchoring_updates = result["update_info"][
-        result["update_info"]["purpose"] == "anchoring"
-    ]
+    anchoring_updates = result.update_info[result.update_info["purpose"] == "anchoring"]
     assert (
         len(anchoring_updates) == 16
     )  # One per aug_period for the one anchored factor
@@ -173,9 +169,9 @@ def test_stagemap_with_endogenous_factors():
     model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 3]
     del model_dict["anchoring"]
     model = process_model(model_dict)
-    assert model["labels"].stagemap == tuple(model_dict["stagemap"])
-    assert model["labels"].stages == (0, 1, 2, 3)
-    assert model["labels"].aug_stagemap == (0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 7)
+    assert model.labels.stagemap == tuple(model_dict["stagemap"])
+    assert model.labels.stages == (0, 1, 2, 3)
+    assert model.labels.aug_stagemap == (0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 7)
 
 
 @pytest.fixture
@@ -191,13 +187,12 @@ def model2_inv():
 
 def test_with_endog_has_endogenous_factors(model2_inv):
     assert (
-        process_model(model2_inv)["endogenous_factors_info"].has_endogenous_factors
-        == True
+        process_model(model2_inv).endogenous_factors_info.has_endogenous_factors == True
     )
 
 
 def test_with_endog_dimensions(model2_inv):
-    res = process_model(model2_inv)["dimensions"]
+    res = process_model(model2_inv).dimensions
     assert res.n_latent_factors == 3
     assert res.n_observed_factors == 0
     assert res.n_all_factors == 3
@@ -208,7 +203,7 @@ def test_with_endog_dimensions(model2_inv):
 
 
 def test_with_endog_labels(model2_inv):
-    res = process_model(model2_inv)["labels"]
+    res = process_model(model2_inv).labels
     n_aug_periods = 16
     assert res.latent_factors == ("fac1", "fac2", "fac3")
     assert res.observed_factors == ()
@@ -221,14 +216,14 @@ def test_with_endog_labels(model2_inv):
 
 
 def test_with_endog_estimation_options(model2_inv):
-    res = process_model(model2_inv)["estimation_options"]
+    res = process_model(model2_inv).estimation_options
     assert res.sigma_points_scale == 2
     assert res.robust_bounds
     assert res.bounds_distance == 0.001
 
 
 def test_with_endog_anchoring_is_empty(model2_inv):
-    res = process_model(model2_inv)["anchoring"]
+    res = process_model(model2_inv).anchoring
     assert res.outcomes == {}
     assert res.factors == ()
     assert res.free_controls is False
@@ -237,7 +232,7 @@ def test_with_endog_anchoring_is_empty(model2_inv):
 
 
 def test_with_endog_transition_info(model2_inv):
-    res = process_model(model2_inv)["transition_info"]
+    res = process_model(model2_inv).transition_info
 
     assert isinstance(res, TransitionInfo)
     assert callable(res.func)
@@ -246,7 +241,7 @@ def test_with_endog_transition_info(model2_inv):
 
 
 def test_with_endog_update_info(model2_inv):
-    res = process_model(model2_inv)["update_info"]
+    res = process_model(model2_inv).update_info
     test_dir = Path(__file__).parent.resolve()
     expected = pd.read_csv(
         test_dir / "model2_with_endog_correct_update_info.csv",
@@ -372,7 +367,7 @@ def test_with_endog_normalizations(model2_inv):
             ],
         },
     }
-    res = process_model(model2_inv)["normalizations"]
+    res = process_model(model2_inv).normalizations
 
     assert res == expected
 

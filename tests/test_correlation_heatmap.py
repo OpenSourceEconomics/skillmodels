@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 from frozendict import frozendict
@@ -244,8 +246,8 @@ def test_get_factor_scores_data_with_multiple_period():
 
 
 def test_process_factors():
-    model = {
-        "labels": Labels(
+    model = SimpleNamespace(
+        labels=Labels(
             latent_factors=tuple("abcd"),
             observed_factors=tuple("efg"),
             controls=("constant",),
@@ -258,7 +260,7 @@ def test_process_factors():
             aug_stages=(0,),
             aug_stages_to_stages=frozendict({0: 0}),
         ),
-    }
+    )
     latent_factor = "c"
     observed_factor = "g"
     factors = ["b", "d", "g"]

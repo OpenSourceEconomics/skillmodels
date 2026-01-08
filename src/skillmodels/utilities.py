@@ -344,11 +344,11 @@ def _extend_params(params, model_dict, fill_value):
 def _get_params_index_from_model_dict(model_dict):
     mod = process_model(model_dict)
     index = get_params_index(
-        update_info=mod["update_info"],
-        labels=mod["labels"],
-        dimensions=mod["dimensions"],
-        transition_info=mod["transition_info"],
-        endogenous_factors_info=mod["endogenous_factors_info"],
+        update_info=mod.update_info,
+        labels=mod.labels,
+        dimensions=mod.dimensions,
+        transition_info=mod.transition_info,
+        endogenous_factors_info=mod.endogenous_factors_info,
     )
     return index
 

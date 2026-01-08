@@ -66,13 +66,13 @@ def simplest_augmented():
 def test_augment_data_for_endogenous_factors(simplest_augmented):
     model = process_model(simplest_augmented["model_dict"])
     pre_processed_data = pre_process_data(
-        simplest_augmented["data_input"], model["labels"].periods
+        simplest_augmented["data_input"], model.labels.periods
     )
     pre_processed_data["constant"] = 1
     res = _augment_data_for_endogenous_factors(
         df=pre_processed_data,
-        labels=model["labels"],
-        update_info=model["update_info"],
+        labels=model.labels,
+        update_info=model.update_info,
     )
     cols = ["var", "inv", "constant", "of"]
     pd.testing.assert_frame_equal(res[cols], simplest_augmented["data_exp"][cols])
