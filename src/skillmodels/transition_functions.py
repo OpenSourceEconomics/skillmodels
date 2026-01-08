@@ -88,7 +88,7 @@ def translog(states, params):
 def params_translog(factors):
     """Index tuples for the translog production function."""
     names = (
-        factors
+        list(factors)
         + [f"{factor} ** 2" for factor in factors]
         + [f"{a} * {b}" for a, b in combinations(factors, 2)]
         + ["constant"]
@@ -195,7 +195,7 @@ def linear_and_squares(states, params):
 
 def params_linear_and_squares(factors):
     """Index tuples for the linear_and_squares production function."""
-    names = factors + [f"{factor} ** 2" for factor in factors] + ["constant"]
+    names = list(factors) + [f"{factor} ** 2" for factor in factors] + ["constant"]
     return names
 
 
@@ -236,7 +236,7 @@ def log_ces_general(states, params):
 
 def params_log_ces_general(factors):
     """Index tuples for the generalized log_ces production function."""
-    return factors + [f"sigma_{fac}" for fac in factors] + ["tfp"]
+    return list(factors) + [f"sigma_{fac}" for fac in factors] + ["tfp"]
 
 
 def identity_constraints_log_ces_general(factors, aug_period, all_factors):

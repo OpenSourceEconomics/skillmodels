@@ -12,6 +12,15 @@ from pandas import DataFrame
 import skillmodels.transition_functions as t_f_module
 from skillmodels.check_model import check_model, check_stagemap
 from skillmodels.decorators import extract_params, jax_array_output
+from skillmodels.types import (
+    Anchoring,
+    Dimensions,
+    EndogenousFactorsInfo,
+    EstimationOptions,
+    FactorEndogenousInfo,
+    Labels,
+    TransitionInfo,
+)
 
 pd.set_option("future.no_silent_downcasting", True)  # noqa:  FBT003
 
@@ -64,7 +73,26 @@ def process_model(model_dict):
         )
     else:
         _model_dict_aug = model_dict
-        endogenous_factors_info = {"has_endogenous_factors": has_endogenous_factors}
+        endogenous_factors_info = EndogenousFactorsInfo(
+            has_endogenous_factors=has_endogenous_factors,
+            aug_periods_to_aug_period_meas_types=_get_aug_periods_to_aug_period_meas_types(
+                aug_periods=labels.aug_periods_to_periods.keys(),
+                has_endogenous_factors=has_endogenous_factors,
+            ),
+            bounds_distance=model_dict["estimation_options"].get(
+                "bounds_distance", 1e-3
+            ),
+            aug_periods_from_period=partial(
+                _aug_periods_from_period,
+                aug_periods_to_periods=labels.aug_periods_to_periods,
+            ),
+            factor_info={
+                fac: FactorEndogenousInfo(
+                    is_state=True, is_endogenous=False, is_correction=False
+                )
+                for fac in labels.latent_factors
+            },
+        )
     check_model(
         model_dict=_model_dict_aug,
         labels=labels,
@@ -73,7 +101,21 @@ def process_model(model_dict):
         has_endogenous_factors=has_endogenous_factors,
     )
     transition_info = _get_transition_info(_model_dict_aug, labels)
-    labels["transition_names"] = list(transition_info["function_names"].values())
+    # Create new Labels with transition_names (frozen dataclass requires replacement)
+    labels = Labels(
+        latent_factors=labels.latent_factors,
+        observed_factors=labels.observed_factors,
+        controls=labels.controls,
+        periods=labels.periods,
+        stagemap=labels.stagemap,
+        stages=labels.stages,
+        aug_periods=labels.aug_periods,
+        aug_periods_to_periods=labels.aug_periods_to_periods,
+        aug_stagemap=labels.aug_stagemap,
+        aug_stages=labels.aug_stages,
+        aug_stages_to_stages=labels.aug_stages_to_stages,
+        transition_names=tuple(transition_info.function_names.values()),
+    )
 
     processed = {
         "dimensions": dims,
@@ -115,32 +157,29 @@ def get_has_endogenous_factors(factors: dict[str, Any]) -> bool:
     return endogenous_factors["is_endogenous"].any()  # ty: ignore[invalid-return-type]
 
 
-def get_dimensions(model_dict, has_endogenous_factors):
+def get_dimensions(model_dict: dict, has_endogenous_factors: bool) -> Dimensions:
     """Extract the dimensions of the model.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
-        has_endogenous_factors (bool): Whether endogenous factors are present.
+        model_dict: The model specification. See: :ref:`model_specs`
+        has_endogenous_factors: Whether endogenous factors are present.
 
     Returns:
-        dict: Dimensional information like n_states, n_periods, n_controls,
-            n_mixtures. See :ref:`dimensions`.
+        Dimensions dataclass with all dimensional information.
 
     """
     all_n_periods = [len(d["measurements"]) for d in model_dict["factors"].values()]
     n_periods = max(all_n_periods)
     n_aug_periods = 2 * n_periods if has_endogenous_factors else n_periods
 
-    dims = {
-        "n_latent_factors": len(model_dict["factors"]),
-        "n_observed_factors": len(model_dict.get("observed_factors", [])),
-        "n_controls": len(model_dict.get("controls", [])) + 1,  # plus 1: constant
-        "n_mixtures": model_dict["estimation_options"].get("n_mixtures", 1),
-        "n_aug_periods": n_aug_periods,
-        "n_periods": n_periods,
-    }
-    dims["n_all_factors"] = dims["n_latent_factors"] + dims["n_observed_factors"]
-    return dims
+    return Dimensions(
+        n_latent_factors=len(model_dict["factors"]),
+        n_observed_factors=len(model_dict.get("observed_factors", [])),
+        n_controls=len(model_dict.get("controls", [])) + 1,  # plus 1: constant
+        n_mixtures=model_dict["estimation_options"].get("n_mixtures", 1),
+        n_aug_periods=n_aug_periods,
+        n_periods=n_periods,
+    )
 
 
 def _get_aug_periods_to_periods(
@@ -162,39 +201,39 @@ def _aug_periods_from_period(
     return [ap for ap, p in aug_periods_to_periods.items() if p == period]
 
 
-def _get_labels(model_dict, has_endogenous_factors, dimensions):
+def _get_labels(
+    model_dict: dict, has_endogenous_factors: bool, dimensions: Dimensions
+) -> Labels:
     """Extract labels of the model quantities.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
-        has_endogenous_factors (bool): Whether endogenous factors are present.
-        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
-            n_mixtures. See :ref:`dimensions`.
+        model_dict: The model specification. See: :ref:`model_specs`
+        has_endogenous_factors: Whether endogenous factors are present.
+        dimensions: Dimensional information.
 
     Returns:
-        dict: Dict of lists with labels for the model quantities like
-        factors, periods, controls, stagemap and stages. See :ref:`labels`
+        Labels dataclass with all label information.
 
     """
     aug_periods_to_periods = _get_aug_periods_to_periods(
-        n_aug_periods=dimensions["n_aug_periods"],
+        n_aug_periods=dimensions.n_aug_periods,
         has_endogenous_factors=has_endogenous_factors,
     )
 
-    stagemap = model_dict.get("stagemap", list(range(dimensions["n_periods"] - 1)))
+    stagemap = model_dict.get("stagemap", list(range(dimensions.n_periods - 1)))
     stages = sorted(int(v) for v in np.unique(stagemap))
 
     report = check_stagemap(
         stagemap=stagemap,
         stages=stages,
-        n_periods=dimensions["n_periods"],
+        n_periods=dimensions.n_periods,
         is_augmented=False,
     )
     if report:
         raise ValueError(f"Invalid stage map: {report}")
     if has_endogenous_factors:
-        aug_stagemap = []
-        aug_stages_to_stages = {}
+        aug_stagemap: list[int] = []
+        aug_stages_to_stages: dict[int, int] = {}
         relevant_aug_periods = sorted(aug_periods_to_periods.keys())[:-2]
         for aug_p in relevant_aug_periods:
             p = aug_periods_to_periods[aug_p]
@@ -203,81 +242,91 @@ def _get_labels(model_dict, has_endogenous_factors, dimensions):
             aug_stagemap.append(aug_s)
             aug_stages_to_stages[aug_s] = s
     else:
-        aug_stagemap = stagemap
+        aug_stagemap = list(stagemap)
         aug_stages_to_stages = {s: s for s in stages}
 
-    labels = {
-        "latent_factors": list(model_dict["factors"]),
-        "observed_factors": list(model_dict.get("observed_factors", [])),
-        "controls": ["constant", *list(model_dict.get("controls", []))],
-        "periods": sorted(set(aug_periods_to_periods.values())),
-        "stagemap": stagemap,
-        "stages": stages,
-        "aug_periods": list(aug_periods_to_periods.keys()),
-        "aug_periods_to_periods": aug_periods_to_periods,
-        "aug_stagemap": aug_stagemap,
-        "aug_stages": sorted(int(v) for v in np.unique(aug_stagemap)),
-        "aug_stages_to_stages": aug_stages_to_stages,
-    }
-
-    labels["all_factors"] = labels["latent_factors"] + labels["observed_factors"]  # ty: ignore[unsupported-operator]
-
-    return labels
+    return Labels(
+        latent_factors=tuple(model_dict["factors"]),
+        observed_factors=tuple(model_dict.get("observed_factors", [])),
+        controls=("constant", *model_dict.get("controls", [])),
+        periods=tuple(sorted(set(aug_periods_to_periods.values()))),
+        stagemap=tuple(stagemap),
+        stages=tuple(stages),
+        aug_periods=tuple(aug_periods_to_periods.keys()),
+        aug_periods_to_periods=aug_periods_to_periods,
+        aug_stagemap=tuple(aug_stagemap),
+        aug_stages=tuple(sorted(int(v) for v in np.unique(aug_stagemap))),
+        aug_stages_to_stages=aug_stages_to_stages,
+    )
 
 
-def _process_estimation_options(model_dict):
+def _process_estimation_options(model_dict: dict) -> EstimationOptions:
     """Process options.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
+        model_dict: The model specification. See: :ref:`model_specs`
 
     Returns:
-        dict: Tuning parameters for the estimation. See :ref:`options`.
+        EstimationOptions dataclass with tuning parameters for the estimation.
 
     """
-    default_options = {
-        "sigma_points_scale": 2,
-        "robust_bounds": True,
-        "bounds_distance": 1e-3,
-        "clipping_lower_bound": -1e30,
-        "clipping_upper_bound": None,
-        "clipping_lower_hardness": 1,
-        "clipping_upper_hardness": 1,
-    }
-    default_options.update(model_dict.get("estimation_options", {}))
+    user_opts = model_dict.get("estimation_options", {})
 
-    if not default_options["robust_bounds"]:
-        default_options["bounds_distance"] = 0
+    sigma_points_scale = user_opts.get("sigma_points_scale", 2)
+    robust_bounds = user_opts.get("robust_bounds", True)
+    bounds_distance = user_opts.get("bounds_distance", 1e-3)
+    clipping_lower_bound = user_opts.get("clipping_lower_bound", -1e30)
+    clipping_upper_bound = user_opts.get("clipping_upper_bound", None)
+    clipping_lower_hardness = user_opts.get("clipping_lower_hardness", 1)
+    clipping_upper_hardness = user_opts.get("clipping_upper_hardness", 1)
 
-    return default_options
+    if not robust_bounds:
+        bounds_distance = 0
+
+    return EstimationOptions(
+        sigma_points_scale=sigma_points_scale,
+        robust_bounds=robust_bounds,
+        bounds_distance=bounds_distance,
+        clipping_lower_bound=clipping_lower_bound,
+        clipping_upper_bound=clipping_upper_bound,
+        clipping_lower_hardness=clipping_lower_hardness,
+        clipping_upper_hardness=clipping_upper_hardness,
+    )
 
 
-def _process_anchoring(model_dict):
+def _process_anchoring(model_dict: dict) -> Anchoring:
     """Process the specification that governs how latent factors are anchored.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
+        model_dict: The model specification. See: :ref:`model_specs`
 
     Returns:
-        dict: Dictionary with information about anchoring. See :ref:`anchoring`
+        Anchoring dataclass with information about anchoring.
 
     """
-    anchinfo = {
-        "anchoring": False,
-        "outcomes": {},
-        "factors": [],
-        "free_controls": False,
-        "free_constant": False,
-        "free_loadings": False,
-        "ignore_constant_when_anchoring": False,
-    }
-
     if "anchoring" in model_dict:
-        anchinfo.update(model_dict["anchoring"])
-        anchinfo["anchoring"] = True
-        anchinfo["factors"] = list(anchinfo["outcomes"])  # ty: ignore[invalid-argument-type]
+        anch = model_dict["anchoring"]
+        return Anchoring(
+            anchoring=True,
+            outcomes=anch.get("outcomes", {}),
+            factors=tuple(anch.get("outcomes", {}).keys()),
+            free_controls=anch.get("free_controls", False),
+            free_constant=anch.get("free_constant", False),
+            free_loadings=anch.get("free_loadings", False),
+            ignore_constant_when_anchoring=anch.get(
+                "ignore_constant_when_anchoring", False
+            ),
+        )
 
-    return anchinfo
+    return Anchoring(
+        anchoring=False,
+        outcomes={},
+        factors=(),
+        free_controls=False,
+        free_constant=False,
+        free_loadings=False,
+        ignore_constant_when_anchoring=False,
+    )
 
 
 def _insert_empty_elements_into_list(old, insert_at_modulo, to_insert, aug_p_to_p):
@@ -288,16 +337,14 @@ def _insert_empty_elements_into_list(old, insert_at_modulo, to_insert, aug_p_to_
 
 
 def _augment_periods_for_endogenous_factors(
-    model_dict: dict[str, Any], dimensions: dict[str, Any], labels: dict[str, Any]
+    model_dict: dict[str, Any], dimensions: Dimensions, labels: Labels
 ) -> dict[str, Any]:
     """Augment periods if endogenous factors are present.
 
     Args:
         model_dict: The model specification. See: :ref:`model_specs`
-        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
-            n_mixtures. See :ref:`dimensions`.
-        labels (dict): Dict of lists with labels for the model quantities like
-            factors, periods, controls, stagemap and stages. See :ref:`labels`
+        dimensions: Dimensional information.
+        labels: Labels for model quantities.
 
     Returns:
         Model dictionary with twice the amount of periods
@@ -308,7 +355,7 @@ def _augment_periods_for_endogenous_factors(
         insert_at_modulo = 0 if v.get("is_endogenous", False) else 1
 
         # Insert empty elements into measurements when we do not have those.
-        if len(v["measurements"]) != dimensions["n_periods"]:
+        if len(v["measurements"]) != dimensions.n_periods:
             raise ValueError(
                 "Measurements must be of length `n_periods`, "
                 f"got {v['measurements']} for {fac}"
@@ -317,12 +364,12 @@ def _augment_periods_for_endogenous_factors(
             old=v["measurements"],
             insert_at_modulo=insert_at_modulo,
             to_insert=[],
-            aug_p_to_p=labels["aug_periods_to_periods"],
+            aug_p_to_p=labels.aug_periods_to_periods,
         )
 
         # Insert empty elements into normalizations when we do not have those.
         for norm_type, normalizations in v.get("normalizations", {}).items():
-            if not len(normalizations) == dimensions["n_periods"]:
+            if not len(normalizations) == dimensions.n_periods:
                 raise ValueError(
                     "Normalizations must be lists of length `n_periods`, "
                     f"got {normalizations} for {fac}['normalizations']['{norm_type}']"
@@ -332,17 +379,17 @@ def _augment_periods_for_endogenous_factors(
                     old=normalizations,
                     insert_at_modulo=insert_at_modulo,
                     to_insert={},
-                    aug_p_to_p=labels["aug_periods_to_periods"],
+                    aug_p_to_p=labels.aug_periods_to_periods,
                 )
             )
     return aug
 
 
-def _get_transition_info(model_dict, labels):
+def _get_transition_info(model_dict: dict, labels: Labels) -> TransitionInfo:
     """Collect information about transition functions."""
     func_list, param_names = [], []
-    latent_factors = labels["latent_factors"]
-    all_factors = labels["all_factors"]
+    latent_factors = labels.latent_factors
+    all_factors = labels.all_factors
 
     for factor in latent_factors:
         spec = model_dict["factors"][factor]["transition_function"]
@@ -379,7 +426,7 @@ def _get_transition_info(model_dict, labels):
     def _extract_factor(states, pos):
         return states[pos]
 
-    for i, factor in enumerate(labels["all_factors"]):
+    for i, factor in enumerate(labels.all_factors):
         functions[factor] = partial(_extract_factor, pos=i)
 
     transition_function = concatenate_functions(
@@ -397,47 +444,48 @@ def _get_transition_info(model_dict, labels):
         func = vmap(func, in_axes=(None, 0))
         individual_functions[factor] = func
 
-    out = {
-        "func": transition_function,
-        "param_names": dict(zip(latent_factors, param_names, strict=False)),
-        "individual_functions": individual_functions,
-        "function_names": dict(zip(latent_factors, function_names, strict=False)),
-    }
-    return out
+    return TransitionInfo(
+        func=transition_function,
+        param_names=dict(zip(latent_factors, param_names, strict=False)),
+        individual_functions=individual_functions,
+        function_names=dict(zip(latent_factors, function_names, strict=False)),
+    )
 
 
 def _get_endogenous_factors_info(
     has_endogenous_factors: bool,
     model_dict: dict[str, Any],
-    labels: dict[str, Any],
+    labels: Labels,
     bounds_distance: float,
-) -> dict[str, Any]:
+) -> EndogenousFactorsInfo:
     """Collect information about endogenous factors."""
-    endogenous_factors_info = {
-        "has_endogenous_factors": has_endogenous_factors,
-        "aug_periods_to_aug_period_meas_types": _get_aug_periods_to_aug_period_meas_types(  # noqa: E501
-            aug_periods=labels["aug_periods_to_periods"].keys(),
-            has_endogenous_factors=has_endogenous_factors,
-        ),
-        "bounds_distance": bounds_distance,
-        "aug_periods_from_period": partial(
-            _aug_periods_from_period,
-            aug_periods_to_periods=labels["aug_periods_to_periods"],
-        ),
-    }
+    factor_info = {}
     for fac, v in model_dict["factors"].items():
-        endogenous_factors_info[fac] = {
-            "is_state": (
+        factor_info[fac] = FactorEndogenousInfo(
+            is_state=(
                 not v.get("is_endogenous", False) and not v.get("is_correction", False)
             ),
-            "is_endogenous": v.get("is_endogenous", False),
-            "is_correction": v.get("is_correction", False),
-        }
-    return endogenous_factors_info
+            is_endogenous=v.get("is_endogenous", False),
+            is_correction=v.get("is_correction", False),
+        )
+
+    return EndogenousFactorsInfo(
+        has_endogenous_factors=has_endogenous_factors,
+        aug_periods_to_aug_period_meas_types=_get_aug_periods_to_aug_period_meas_types(
+            aug_periods=labels.aug_periods_to_periods.keys(),
+            has_endogenous_factors=has_endogenous_factors,
+        ),
+        bounds_distance=bounds_distance,
+        aug_periods_from_period=partial(
+            _aug_periods_from_period,
+            aug_periods_to_periods=labels.aug_periods_to_periods,
+        ),
+        factor_info=factor_info,
+    )
 
 
 def _get_aug_periods_to_aug_period_meas_types(
-    aug_periods: list[int], has_endogenous_factors: bool
+    aug_periods, has_endogenous_factors: bool
 ) -> dict[int, Literal["states", "endogenous_factors"]]:
     if has_endogenous_factors:
         return {
@@ -447,43 +495,42 @@ def _get_aug_periods_to_aug_period_meas_types(
     return dict.fromkeys(aug_periods, "states")
 
 
-def _get_update_info(model_dict, dimensions, labels, anchoring_info):
+def _get_update_info(
+    model_dict: dict, dimensions: Dimensions, labels: Labels, anchoring_info: Anchoring
+) -> DataFrame:
     """Construct a DataFrame with information on each Kalman update.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
-        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
-            n_mixtures. See :ref:`dimensions`.
-        labels (dict): Dict of lists with labels for the model quantities like
-            factors, periods, controls, stagemap and stages. See :ref:`labels`
-        anchoring_info (dict): Information about anchoring. See :ref:`anchoring`
+        model_dict: The model specification. See: :ref:`model_specs`
+        dimensions: Dimensional information.
+        labels: Labels for model quantities.
+        anchoring_info: Information about anchoring. See :ref:`anchoring`
 
     Returns:
-        pandas.DataFrame: DataFrame with one row per Kalman update needed in
-            the likelihood function. See :ref:`update_info`.
+        DataFrame with one row per Kalman update needed in the likelihood function.
 
     """
     index = pd.MultiIndex(
         levels=[[], []], codes=[[], []], names=["aug_period", "variable"]
     )
-    uinfo = DataFrame(index=index, columns=labels["latent_factors"] + ["purpose"])
+    uinfo = DataFrame(index=index, columns=[*labels.latent_factors, "purpose"])
 
     measurements = {}
-    for factor in labels["latent_factors"]:
+    for factor in labels.latent_factors:
         measurements[factor] = model_dict["factors"][factor]["measurements"]
-        if len(measurements[factor]) != dimensions["n_aug_periods"]:
+        if len(measurements[factor]) != dimensions.n_aug_periods:
             raise ValueError(
                 "Measurements must be of length `n_aug_periods`, "
                 f"got {measurements[factor]} for {factor}"
             )
 
-    for aug_period in labels["aug_periods"]:
-        for factor in labels["latent_factors"]:
+    for aug_period in labels.aug_periods:
+        for factor in labels.latent_factors:
             for meas in measurements[factor][aug_period]:
                 uinfo.loc[(aug_period, meas), factor] = True
                 uinfo.loc[(aug_period, meas), "purpose"] = "measurement"
-        for factor in anchoring_info["factors"]:
-            outcome = anchoring_info["outcomes"][factor]
+        for factor in anchoring_info.factors:
+            outcome = anchoring_info.outcomes[factor]
             name = f"{outcome}_{factor}"
             uinfo.loc[(aug_period, name), factor] = True
             uinfo.loc[(aug_period, name), "purpose"] = "anchoring"
@@ -493,30 +540,30 @@ def _get_update_info(model_dict, dimensions, labels, anchoring_info):
     return uinfo
 
 
-def _process_normalizations(model_dict, dimensions, labels):
+def _process_normalizations(
+    model_dict: dict, dimensions: Dimensions, labels: Labels
+) -> dict[str, dict[str, list]]:
     """Process the normalizations of intercepts and factor loadings.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
-        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
-            n_mixtures. See :ref:`dimensions`.
-        labels (dict): Dict of lists with labels for the model quantities like
-            factors, periods, controls, stagemap and stages. See :ref:`labels`
+        model_dict: The model specification. See: :ref:`model_specs`
+        dimensions: Dimensional information.
+        labels: Labels for model quantities.
 
     Returns:
-        normalizations (dict): Nested dictionary with information on normalized factor
-            loadings and intercepts for each factor. See :ref:`normalizations`.
+        Nested dictionary with information on normalized factor loadings and
+        intercepts for each factor.
 
     """
     normalizations = {}
-    for factor in labels["latent_factors"]:
+    for factor in labels.latent_factors:
         normalizations[factor] = {}
         norminfo = model_dict["factors"][factor].get("normalizations", {})
         for norm_type in ["loadings", "intercepts"]:
             candidate = norminfo.get(
-                norm_type, [{} for _ in range(dimensions["n_aug_periods"])]
+                norm_type, [{} for _ in range(dimensions.n_aug_periods)]
             )
-            if not len(candidate) == dimensions["n_aug_periods"]:
+            if not len(candidate) == dimensions.n_aug_periods:
                 raise ValueError(
                     "Normalizations must be of length `n_aug_periods`, "
                     f"got {norminfo} for {factor}['{norm_type}']"

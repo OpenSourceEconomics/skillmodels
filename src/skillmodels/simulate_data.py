@@ -41,20 +41,20 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
 
     model = process_model(model_dict)
 
-    if model["labels"]["observed_factors"] and data is None:
+    if model["labels"].observed_factors and data is None:
         raise ValueError(
             "To simulate a model with observed factors, data cannot be None.",
         )
 
-    if model["labels"]["controls"] != ["constant"] and data is None:
+    if model["labels"].controls != ["constant"] and data is None:
         raise ValueError("To simulate a model with controls, data cannot be None.")
 
     if data is not None:
         processed_data = process_data(
             df=data,
-            has_endogenous_factors=model["endogenous_factors_info"][
-                "has_endogenous_factors"
-            ],
+            has_endogenous_factors=model[
+                "endogenous_factors_info"
+            ].has_endogenous_factors,
             labels=model["labels"],
             update_info=model["update_info"],
             anchoring_info=model["anchoring"],
@@ -73,7 +73,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
 
     else:
         control_data = jnp.ones((n_obs, 1))
-        n_periods = model["dimensions"]["n_periods"]
+        n_periods = model["dimensions"].n_periods
         observed_factors = jnp.zeros((n_periods, n_obs, 0))
 
     params_index = get_params_index(
@@ -91,9 +91,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         update_info=model["update_info"],
         labels=model["labels"],
         anchoring=model["anchoring"],
-        has_endogenous_factors=model["endogenous_factors_info"][
-            "has_endogenous_factors"
-        ],
+        has_endogenous_factors=model["endogenous_factors_info"].has_endogenous_factors,
     )
 
     states, covs, log_weights, pardict = parse_params(
@@ -112,9 +110,7 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
         labels=model["labels"],
         dimensions=model["dimensions"],
         n_obs=n_obs,
-        has_endogenous_factors=model["endogenous_factors_info"][
-            "has_endogenous_factors"
-        ],
+        has_endogenous_factors=model["endogenous_factors_info"].has_endogenous_factors,
         update_info=model["update_info"],
         control_data=control_data,
         observed_factors=observed_factors,
@@ -125,8 +121,8 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
     # Create collapsed versions with user-facing periods
     latent_data = _collapse_aug_periods_to_periods(
         df=aug_latent_data,
-        factors=model["labels"]["latent_factors"],
-        aug_periods_to_periods=model["labels"]["aug_periods_to_periods"],
+        factors=model["labels"].latent_factors,
+        aug_periods_to_periods=model["labels"].aug_periods_to_periods,
         endogenous_factors_info=model["endogenous_factors_info"],
     )
 
@@ -143,21 +139,21 @@ def simulate_dataset(model_dict, params, n_obs=None, data=None, policies=None):
             "states": latent_data,
             "state_ranges": create_state_ranges(
                 latent_data,
-                model["labels"]["latent_factors"],
+                model["labels"].latent_factors,
             ),
         },
         "anchored_states": {
             "states": anchored_latent_data,
             "state_ranges": create_state_ranges(
                 anchored_latent_data,
-                model["labels"]["latent_factors"],
+                model["labels"].latent_factors,
             ),
         },
         "aug_unanchored_states": {
             "states": aug_latent_data,
             "state_ranges": create_state_ranges(
                 aug_latent_data,
-                model["labels"]["latent_factors"],
+                model["labels"].latent_factors,
             ),
         },
         "aug_measurements": aug_measurements,
@@ -192,23 +188,23 @@ def _simulate_dataset(
     """
     policies = policies if policies is not None else []
 
-    n_states = dimensions["n_latent_factors"]
+    n_states = dimensions.n_latent_factors
     if has_endogenous_factors:
-        n_aug_periods = dimensions["n_aug_periods"] - 1
+        n_aug_periods = dimensions.n_aug_periods - 1
     else:
-        n_aug_periods = dimensions["n_aug_periods"]
+        n_aug_periods = dimensions.n_aug_periods
 
     weights = np.exp(log_weights)[0]
     loadings_df = pd.DataFrame(
         data=pardict["loadings"],
         index=update_info.index,
-        columns=labels["latent_factors"],
+        columns=labels.latent_factors,
     )
 
     control_params_df = pd.DataFrame(
         data=pardict["controls"],
         index=update_info.index,
-        columns=labels["controls"],
+        columns=labels.controls,
     )
     meas_sds = pd.DataFrame(
         data=pardict["meas_sds"].reshape(-1, 1),
@@ -219,7 +215,7 @@ def _simulate_dataset(
     shock_sds = pardict["shock_sds"]
 
     dist_args = []
-    for mixture in range(dimensions["n_mixtures"]):
+    for mixture in range(dimensions.n_mixtures):
         args = {
             "mean": latent_states[0][mixture],
             "cov": covs[0][mixture].T @ covs[0][mixture],
@@ -233,7 +229,7 @@ def _simulate_dataset(
         # if there is a shock in period t, add it here
         policies_t = [p for p in policies if p["aug_period"] == t]
         for policy in policies_t:
-            position = labels["latent_factors"].index(policy["factor"])
+            position = labels.latent_factors.index(policy["factor"])
             latent_states[t, :, position] += _get_shock(
                 mean=policy["effect_size"],
                 sd=policy["standard_deviation"],
@@ -260,7 +256,7 @@ def _simulate_dataset(
         next_states = np.array(
             transform_sigma_points(
                 sigma_points=states,
-                transition_func=transition_info["func"],
+                transition_func=transition_info.func,
                 trans_coeffs=trans_coeffs,
                 anchoring_scaling_factors=anchoring_scaling_factors,
                 anchoring_constants=anchoring_constants,
@@ -298,7 +294,7 @@ def _simulate_dataset(
 
     latent_data_by_period = []
     for t in range(n_aug_periods):
-        lat = pd.DataFrame(data=latent_states[t], columns=labels["latent_factors"])
+        lat = pd.DataFrame(data=latent_states[t], columns=labels.latent_factors)
         lat["aug_period"] = t
         latent_data_by_period.append(lat)
 
@@ -325,16 +321,16 @@ def _collapse_aug_periods_to_periods(
         pd.DataFrame: DataFrame with "period" column instead of "aug_period"
     """
     df = df.copy()
-    if not endogenous_factors_info["has_endogenous_factors"]:
+    if not endogenous_factors_info.has_endogenous_factors:
         return df.rename(columns={"aug_period": "period"})
 
     df["period"] = df["aug_period"].map(aug_periods_to_periods)
     df["_aug_period_meas_type"] = df["aug_period"].map(
-        endogenous_factors_info["aug_periods_to_aug_period_meas_types"]
+        endogenous_factors_info.aug_periods_to_aug_period_meas_types
     )
 
     endogenous_cols = [
-        fac for fac in factors if endogenous_factors_info[fac]["is_endogenous"]
+        fac for fac in factors if endogenous_factors_info.factor_info[fac].is_endogenous
     ]
     state_cols = [fac for fac in factors if fac not in endogenous_cols]
 
@@ -385,7 +381,7 @@ def generate_start_states(n_obs, dimensions, dist_args, weights):
         controls (np.ndarray): shape (n_obs, n_controls),
 
     """
-    n_states = dimensions["n_latent_factors"]
+    n_states = dimensions.n_latent_factors
     if np.size(weights) == 1:
         out = multivariate_normal(size=n_obs, **dist_args[0])
     else:

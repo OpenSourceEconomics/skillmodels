@@ -139,10 +139,10 @@ def log_likelihood_obs(
     # possible.
     return soft_clipping(
         arr=static_out["loglikes"],
-        lower=estimation_options["clipping_lower_bound"],
-        upper=estimation_options["clipping_upper_bound"],
-        lower_hardness=estimation_options["clipping_lower_hardness"],
-        upper_hardness=estimation_options["clipping_upper_hardness"],
+        lower=estimation_options.clipping_lower_bound,
+        upper=estimation_options.clipping_upper_bound,
+        lower_hardness=estimation_options.clipping_lower_hardness,
+        upper_hardness=estimation_options.clipping_upper_hardness,
     ).sum(axis=0)
 
 

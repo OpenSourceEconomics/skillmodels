@@ -221,7 +221,7 @@ def univariate_densities(
         states=states,
         period=period,
         factors=factors,
-        aug_periods_to_periods=model["labels"]["aug_periods_to_periods"],
+        aug_periods_to_periods=model["labels"].aug_periods_to_periods,
         observed_states=observed_states,
     )
     scenarios = df["scenario"].unique()
@@ -332,7 +332,7 @@ def bivariate_density_contours(
         states=states,
         period=period,
         factors=factors,
-        aug_periods_to_periods=model["labels"]["aug_periods_to_periods"],
+        aug_periods_to_periods=model["labels"].aug_periods_to_periods,
         observed_states=observed_states,
     )
     plots_dict = {}
@@ -457,7 +457,7 @@ def bivariate_density_surfaces(
         states=states,
         period=period,
         factors=factors,
-        aug_periods_to_periods=model["labels"]["aug_periods_to_periods"],
+        aug_periods_to_periods=model["labels"].aug_periods_to_periods,
         observed_states=observed_states,
     )
     plots_dict = {}
@@ -666,9 +666,9 @@ def _get_factors(factors, observed_factors, model):
     """Proccess factor names to return list of strings."""
     if factors is None:
         if observed_factors:
-            factors = model["labels"]["all_factors"]
+            factors = model["labels"].all_factors
         else:
-            factors = model["labels"]["latent_factors"]
+            factors = model["labels"].latent_factors
     return factors
 
 

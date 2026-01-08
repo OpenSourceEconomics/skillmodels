@@ -18,6 +18,7 @@ from skillmodels.constraints import (
     add_bounds,
 )
 from skillmodels.process_model import process_model
+from skillmodels.types import Anchoring, Labels
 
 # importing the TEST_DIR from config does not work for test run in conda build
 TEST_DIR = Path(__file__).parent.resolve()
@@ -172,11 +173,20 @@ def test_stage_constraints_with_endogenous_factors():
 
 
 def test_constant_factor_constraints():
-    labels = {
-        "latent_factors": ["fac1", "fac2"],
-        "aug_periods": [0, 1, 2],
-        "transition_names": ["bla", "constant"],
-    }
+    labels = Labels(
+        latent_factors=("fac1", "fac2"),
+        observed_factors=(),
+        controls=("constant",),
+        periods=(0, 1, 2),
+        stagemap=(0, 0, 0),
+        stages=(0,),
+        aug_periods=(0, 1, 2),
+        aug_periods_to_periods={0: 0, 1: 1, 2: 2},
+        aug_stagemap=(0, 0, 0),
+        aug_stages=(0,),
+        aug_stages_to_stages={0: 0},
+        transition_names=("bla", "constant"),
+    )
 
     expected = [
         {"loc": ("shock_sds", 0, "fac2", "-"), "type": "fixed", "value": 0.0},
@@ -217,12 +227,20 @@ def test_initial_mean_constraints():
 
 
 def test_trans_coeff_constraints():
-    labels = {
-        "latent_factors": ["fac1", "fac2", "fac3"],
-        "transition_names": ["log_ces", "bla", "blubb"],
-        "aug_periods": [0, 1, 2],
-    }
-    labels["all_factors"] = labels["latent_factors"]
+    labels = Labels(
+        latent_factors=("fac1", "fac2", "fac3"),
+        observed_factors=(),
+        controls=("constant",),
+        periods=(0, 1, 2),
+        stagemap=(0, 0, 0),
+        stages=(0,),
+        aug_periods=(0, 1, 2),
+        aug_periods_to_periods={0: 0, 1: 1, 2: 2},
+        aug_stagemap=(0, 0, 0),
+        aug_stages=(0,),
+        aug_stages_to_stages={0: 0},
+        transition_names=("log_ces", "bla", "blubb"),
+    )
 
     expected = [
         {
@@ -271,14 +289,15 @@ def anch_uinfo():
 
 @pytest.fixture
 def base_anchoring_info():
-    anch_info = {
-        "factors": ["f1", "f2"],
-        "outcomes": {"f1": "outcome", "f2": "outcome"},
-        "free_controls": True,
-        "free_constant": True,
-        "free_loadings": True,
-    }
-    return anch_info
+    return Anchoring(
+        anchoring=True,
+        factors=("f1", "f2"),
+        outcomes={"f1": "outcome", "f2": "outcome"},
+        free_controls=True,
+        free_constant=True,
+        free_loadings=True,
+        ignore_constant_when_anchoring=False,
+    )
 
 
 def test_anchoring_constraints_no_constraint_needed(anch_uinfo, base_anchoring_info):
@@ -287,8 +306,16 @@ def test_anchoring_constraints_no_constraint_needed(anch_uinfo, base_anchoring_i
 
 
 def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
-    base_anchoring_info["free_constant"] = False
-    calculated = _get_anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
+    anchoring_info = Anchoring(
+        anchoring=True,
+        factors=("f1", "f2"),
+        outcomes={"f1": "outcome", "f2": "outcome"},
+        free_controls=True,
+        free_constant=False,
+        free_loadings=True,
+        ignore_constant_when_anchoring=False,
+    )
+    calculated = _get_anchoring_constraints(anch_uinfo, [], anchoring_info, (0, 1))
 
     del calculated[0]["description"]
     expected = [
@@ -308,11 +335,19 @@ def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
 
 
 def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
-    base_anchoring_info["free_controls"] = False
+    anchoring_info = Anchoring(
+        anchoring=True,
+        factors=("f1", "f2"),
+        outcomes={"f1": "outcome", "f2": "outcome"},
+        free_controls=False,
+        free_constant=True,
+        free_loadings=True,
+        ignore_constant_when_anchoring=False,
+    )
     calculated = _get_anchoring_constraints(
         anch_uinfo,
         ["c1", "c2"],
-        base_anchoring_info,
+        anchoring_info,
         (0, 1),
     )
 
@@ -340,8 +375,16 @@ def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
 
 
 def test_anchoring_constraints_for_loadings(anch_uinfo, base_anchoring_info):
-    base_anchoring_info["free_loadings"] = False
-    calculated = _get_anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
+    anchoring_info = Anchoring(
+        anchoring=True,
+        factors=("f1", "f2"),
+        outcomes={"f1": "outcome", "f2": "outcome"},
+        free_controls=True,
+        free_constant=True,
+        free_loadings=False,
+        ignore_constant_when_anchoring=False,
+    )
+    calculated = _get_anchoring_constraints(anch_uinfo, [], anchoring_info, (0, 1))
 
     expected = [
         {

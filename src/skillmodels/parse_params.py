@@ -42,7 +42,7 @@ def create_parsing_info(
         parsing_info[quantity] = _get_positional_selector_from_loc(range_sr, quantity)
 
     # loadings:
-    mask = update_info[labels["latent_factors"]].to_numpy()
+    mask = update_info[list(labels.latent_factors)].to_numpy()
     helper = np.arange(mask.size).reshape(mask.shape)
     flat_indices = helper[mask]
 
@@ -55,7 +55,7 @@ def create_parsing_info(
 
     # "trans_coeffs"
     pos_dict = {}
-    for factor in labels["latent_factors"]:
+    for factor in list(labels.latent_factors):
         helper = pd.DataFrame(index=params_index)
         loc = helper.query(f"category == 'transition' & name1 == '{factor}'").index
         pos_dict[factor] = _get_positional_selector_from_loc(range_sr, loc)
@@ -63,19 +63,19 @@ def create_parsing_info(
     parsing_info["transition"] = pos_dict
 
     # anchoring_scaling_factors
-    is_free_loading = update_info[labels["latent_factors"]].to_numpy()
+    is_free_loading = update_info[list(labels.latent_factors)].to_numpy()
     is_anchoring = (update_info["purpose"] == "anchoring").to_numpy().reshape(-1, 1)
     is_anchoring_loading = jnp.array(is_free_loading & is_anchoring)
     parsing_info["is_anchoring_loading"] = is_anchoring_loading
     parsing_info["is_anchored_factor"] = jnp.array(
-        update_info.query("purpose == 'anchoring'")[labels["latent_factors"]].any(
+        update_info.query("purpose == 'anchoring'")[list(labels.latent_factors)].any(
             axis=0,
         ),
     )
     parsing_info["is_anchoring_update"] = is_anchoring.flatten()
-    parsing_info["ignore_constant_when_anchoring"] = anchoring[
-        "ignore_constant_when_anchoring"
-    ]
+    parsing_info["ignore_constant_when_anchoring"] = (
+        anchoring.ignore_constant_when_anchoring
+    )
 
     # Add has_endogenous_factors to parsing_info
     parsing_info["has_endogenous_factors"] = has_endogenous_factors
@@ -157,8 +157,8 @@ def _get_initial_states(params, info, dimensions, n_obs):
     """Create the array of initial states."""
     state = params[info["initial_states"]].reshape(
         1,
-        dimensions["n_mixtures"],
-        dimensions["n_latent_factors"],
+        dimensions.n_mixtures,
+        dimensions.n_latent_factors,
     )
     return jnp.repeat(state, n_obs, axis=0)
 
@@ -169,7 +169,7 @@ def _get_initial_upper_chols(params, info, dimensions, n_obs):
     Note: The matrices contain the transpose of the lower triangular cholesky factors.
 
     """
-    n_states, n_mixtures = dimensions["n_latent_factors"], dimensions["n_mixtures"]
+    n_states, n_mixtures = dimensions.n_latent_factors, dimensions.n_mixtures
     chol_params = params[info["initial_cholcovs"]].reshape(n_mixtures, -1)
     upper_chols = jnp.zeros((n_obs, n_mixtures, n_states, n_states))
     for i in range(n_mixtures):
@@ -187,7 +187,7 @@ def _get_initial_log_mixture_weights(params, info, n_obs):
 
 def _get_control_params(params, info, dimensions):
     """Create the parameters for control variables in measurement equations."""
-    return params[info["controls"]].reshape(-1, dimensions["n_controls"])
+    return params[info["controls"]].reshape(-1, dimensions.n_controls)
 
 
 def _get_loadings(params, info):
@@ -206,19 +206,19 @@ def _get_meas_sds(params, info):
 
 def _get_shock_sds(params, info, dimensions):
     """Create the array of standard deviations of the shocks in transition functions."""
-    return params[info["shock_sds"]].reshape(-1, dimensions["n_latent_factors"])
+    return params[info["shock_sds"]].reshape(-1, dimensions.n_latent_factors)
 
 
 def _get_transition_params(params, info, labels):
     """Create a list of arrays with transition equation parameters."""
     trans_params = {}
     t_info = info["transition"]
-    n_aug_periods = len(labels["aug_periods"])
+    n_aug_periods = len(labels.aug_periods)
 
     # Use has_endogenous_factors from parsing_info instead of undefined global
     len_reduction = 2 if info["has_endogenous_factors"] else 1
 
-    for factor in labels["latent_factors"]:
+    for factor in list(labels.latent_factors):
         ilocs = t_info[factor]
         trans_params[factor] = params[ilocs].reshape(n_aug_periods - len_reduction, -1)
     return trans_params
@@ -231,10 +231,10 @@ def _get_anchoring_scaling_factors(loadings, info, dimensions):
 
     """
     scaling_factors = jnp.ones(
-        (dimensions["n_aug_periods"], dimensions["n_latent_factors"]),
+        (dimensions.n_aug_periods, dimensions.n_latent_factors),
     )
     free_anchoring_loadings = loadings[info["is_anchoring_loading"]].reshape(
-        dimensions["n_aug_periods"],
+        dimensions.n_aug_periods,
         -1,
     )
     scaling_factors = scaling_factors.at[:, info["is_anchored_factor"]].set(
@@ -242,7 +242,7 @@ def _get_anchoring_scaling_factors(loadings, info, dimensions):
     )
 
     scaling_for_observed = jnp.ones(
-        (dimensions["n_aug_periods"], dimensions["n_observed_factors"]),
+        (dimensions.n_aug_periods, dimensions.n_observed_factors),
     )
 
     scaling_factors = jnp.hstack([scaling_factors, scaling_for_observed])
@@ -256,16 +256,16 @@ def _get_anchoring_constants(controls, info, dimensions):
     Note: Parameters are not taken from the parameter vector but from the controls.
 
     """
-    constants = jnp.zeros((dimensions["n_aug_periods"], dimensions["n_latent_factors"]))
+    constants = jnp.zeros((dimensions.n_aug_periods, dimensions.n_latent_factors))
     if not info["ignore_constant_when_anchoring"]:
         values = controls[:, 0][info["is_anchoring_update"]].reshape(
-            dimensions["n_aug_periods"],
+            dimensions.n_aug_periods,
             -1,
         )
         constants = constants.at[:, info["is_anchored_factor"]].set(values)
 
     constants_for_observed = jnp.zeros(
-        (dimensions["n_aug_periods"], dimensions["n_observed_factors"]),
+        (dimensions.n_aug_periods, dimensions.n_observed_factors),
     )
 
     constants = jnp.hstack([constants, constants_for_observed])

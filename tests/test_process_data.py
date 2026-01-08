@@ -18,6 +18,7 @@ from skillmodels.process_data import (
     pre_process_data,
 )
 from skillmodels.process_model import process_model
+from skillmodels.types import Labels
 
 # importing the TEST_DIR from config does not work for test run in conda build
 TEST_DIR = Path(__file__).parent.resolve()
@@ -64,7 +65,7 @@ def simplest_augmented():
 def test_augment_data_for_endogenous_factors(simplest_augmented):
     model = process_model(simplest_augmented["model_dict"])
     pre_processed_data = pre_process_data(
-        simplest_augmented["data_input"], model["labels"]["periods"]
+        simplest_augmented["data_input"], model["labels"].periods
     )
     pre_processed_data["constant"] = 1
     res = _augment_data_for_endogenous_factors(
@@ -122,7 +123,19 @@ def test_generate_controls_array():
     """
     data = _read_csv_string(csv, ["id", "aug_period"])
 
-    labels = {"controls": ["c1", "c2"], "aug_periods": [0, 1]}
+    labels = Labels(
+        latent_factors=(),
+        observed_factors=(),
+        controls=("c1", "c2"),
+        periods=(0, 1),
+        stagemap=(0, 0),
+        stages=(0,),
+        aug_periods=(0, 1),
+        aug_periods_to_periods={0: 0, 1: 1},
+        aug_stagemap=(0, 0),
+        aug_stages=(0,),
+        aug_stages_to_stages={0: 0},
+    )
 
     calculated = _generate_controls_array(data, labels, 2)
     expected = jnp.array([[[1, 2], [5, 8]], [[3, 4], [7, 8]]])
@@ -139,7 +152,19 @@ def test_generate_observed_factor_array():
     """
     data = _read_csv_string(csv, ["id", "aug_period"])
 
-    labels = {"observed_factors": ["v1", "v2"], "aug_periods": [0, 1]}
+    labels = Labels(
+        latent_factors=(),
+        observed_factors=("v1", "v2"),
+        controls=("constant",),
+        periods=(0, 1),
+        stagemap=(0, 0),
+        stages=(0,),
+        aug_periods=(0, 1),
+        aug_periods_to_periods={0: 0, 1: 1},
+        aug_stagemap=(0, 0),
+        aug_stages=(0,),
+        aug_stages_to_stages={0: 0},
+    )
 
     calculated = _generate_observed_factor_array(data, labels, 2)
     expected = jnp.array([[[1, 2], [5, 8]], [[3, 4], [7, 8]]])

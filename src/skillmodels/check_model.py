@@ -1,7 +1,15 @@
 import numpy as np
 
+from skillmodels.types import Anchoring, Dimensions, Labels
 
-def check_model(model_dict, labels, dimensions, anchoring, has_endogenous_factors):
+
+def check_model(
+    model_dict: dict,
+    labels: Labels,
+    dimensions: Dimensions,
+    anchoring: Anchoring,
+    has_endogenous_factors: bool,
+) -> None:
     """Check consistency and validity of the model specification.
 
     labels, dimensions and anchoring information are done before the model checking
@@ -12,27 +20,24 @@ def check_model(model_dict, labels, dimensions, anchoring, has_endogenous_factor
     that the assumptions we make during the processing are fulfilled.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
-        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
-            n_mixtures. See :ref:`dimensions`.
-        labels (dict): Dict of lists with labels for the model quantities like
-            factors, periods, controls, stagemap and stages. See :ref:`labels`
-        anchoring (dict): Dictionary with information about anchoring.
-            See :ref:`anchoring`
-        has_endogenous_factors (bool): Whether the model has any endogenous factors
+        model_dict: The model specification. See: :ref:`model_specs`
+        dimensions: Dimensional information.
+        labels: Labels for model quantities.
+        anchoring: Information about anchoring.
+        has_endogenous_factors: Whether the model has any endogenous factors
 
     Raises:
         ValueError
 
     """
     report = check_stagemap(
-        stagemap=labels["aug_stagemap"],
-        stages=labels["aug_stages"],
-        n_periods=dimensions["n_aug_periods"],
+        stagemap=labels.aug_stagemap,
+        stages=labels.aug_stages,
+        n_periods=dimensions.n_aug_periods,
         is_augmented=has_endogenous_factors,
     )
     report += _check_anchoring(anchoring)
-    invalid_measurements = _check_measurements(model_dict, labels["latent_factors"])
+    invalid_measurements = _check_measurements(model_dict, labels.latent_factors)
     if invalid_measurements:
         report += invalid_measurements
     elif has_endogenous_factors:
@@ -40,7 +45,7 @@ def check_model(model_dict, labels, dimensions, anchoring, has_endogenous_factor
         report += _check_no_overlap_in_measurements_of_states_and_inv(
             model_dict, labels
         )
-    report += _check_normalizations(model_dict, labels["latent_factors"])
+    report += _check_normalizations(model_dict, labels.latent_factors)
 
     report = "\n".join(report)
     if report != "":
@@ -55,7 +60,8 @@ def check_stagemap(stagemap, stages, n_periods, is_augmented):
             f"The stagemap needs to be of length n_periods - {step_size}. "
             f" n_periods is {n_periods}, the stagemap has length {len(stagemap)}.",
         )
-    if stages != list(range(len(stages))):
+    # Convert to list for comparison (stages may be a tuple from dataclass)
+    if list(stages) != list(range(len(stages))):
         report.append("Stages need to be integers, start at zero and increase by 1.")
 
     # Hijacking the stagemap for endogenous factors leads to interleaved elements.
@@ -68,24 +74,24 @@ def check_stagemap(stagemap, stages, n_periods, is_augmented):
     return report
 
 
-def _check_anchoring(anchoring):
+def _check_anchoring(anchoring: Anchoring) -> list[str]:
     report = []
-    if not isinstance(anchoring["anchoring"], bool):
-        report.append("anchoring['anchoring'] must be a bool.")
-    if not isinstance(anchoring["outcomes"], dict):
-        report.append("anchoring['outcomes'] must be a dict")
+    if not isinstance(anchoring.anchoring, bool):
+        report.append("anchoring.anchoring must be a bool.")
+    if not isinstance(anchoring.outcomes, dict):
+        report.append("anchoring.outcomes must be a dict")
     else:
-        variables = list(anchoring["outcomes"].values())
+        variables = list(anchoring.outcomes.values())
         for var in variables:
             if not isinstance(var, str | int | tuple):
                 report.append("Outcomes variables have to be valid variable names.")
 
-    if not isinstance(anchoring["free_controls"], bool):
-        report.append("anchoring['use_controls'] must be a bool")
-    if not isinstance(anchoring["free_constant"], bool):
-        report.append("anchoring['use_constant'] must be a bool.")
-    if not isinstance(anchoring["free_loadings"], bool):
-        report.append("anchoring['free_loadings'] must be a bool.")
+    if not isinstance(anchoring.free_controls, bool):
+        report.append("anchoring.free_controls must be a bool")
+    if not isinstance(anchoring.free_constant, bool):
+        report.append("anchoring.free_constant must be a bool.")
+    if not isinstance(anchoring.free_loadings, bool):
+        report.append("anchoring.free_loadings must be a bool.")
     return report
 
 
@@ -108,11 +114,13 @@ def _check_measurements(model_dict, factors):
     return report
 
 
-def _check_no_overlap_in_measurements_of_states_and_inv(model_dict, labels):
+def _check_no_overlap_in_measurements_of_states_and_inv(
+    model_dict: dict, labels: Labels
+) -> list[str]:
     report = []
-    for period in labels["periods"]:
+    for period in labels.periods:
         meas = {}
-        for factor in labels["latent_factors"]:
+        for factor in labels.latent_factors:
             props = model_dict["factors"][factor]
             if props.get("is_endogenous", False):
                 meas["endogenous_factors"] = set(props["measurements"][period])

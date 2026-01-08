@@ -16,6 +16,7 @@ from skillmodels.params_index import (
     initial_mean_index_tuples,
 )
 from skillmodels.process_model import process_model
+from skillmodels.types import TransitionInfo
 
 
 @pytest.fixture
@@ -182,7 +183,12 @@ def test_trans_coeffs_index_tuples_no_endogenous_factors():
         "fac2": [],
         "fac3": ["fac1", "fac2", "fac3", "phi"],
     }
-    trans_info = {"param_names": param_names}
+    trans_info = TransitionInfo(
+        func=lambda x: x,  # dummy function
+        param_names=param_names,
+        individual_functions={},
+        function_names={},
+    )
 
     expected = [
         ("transition", 0, "fac1", "fac1"),
@@ -220,7 +226,12 @@ def test_trans_coeffs_index_tuples_has_endogenous_factors():
         "fac2": [],
         "fac3": ["fac1", "fac2", "fac3", "phi"],
     }
-    trans_info = {"param_names": param_names}
+    trans_info = TransitionInfo(
+        func=lambda x: x,  # dummy function
+        param_names=param_names,
+        individual_functions={},
+        function_names={},
+    )
 
     expected = [
         ("transition", 0, "fac1", "fac1"),

@@ -104,7 +104,7 @@ def remove_factors(factors, model_dict, params=None):
     # Remove periods if necessary, but only if no endogenous factors are present.
     # (else we would mess up the mapping between raw periods model periods)
     if not has_endogenous_factors:
-        new_n_periods = get_dimensions(out, has_endogenous_factors)["n_periods"]
+        new_n_periods = get_dimensions(out, has_endogenous_factors).n_periods
         out = reduce_n_periods(out, new_n_periods)
 
     if params is not None:

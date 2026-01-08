@@ -7,6 +7,7 @@ import yaml
 from pandas.testing import assert_frame_equal
 
 from skillmodels.process_model import get_has_endogenous_factors, process_model
+from skillmodels.types import TransitionInfo
 
 # ======================================================================================
 # Integration test with model2 from the replication files of CHS2010
@@ -25,55 +26,54 @@ def model2():
 
 def test_has_endogenous_factors(model2):
     assert (
-        process_model(model2)["endogenous_factors_info"]["has_endogenous_factors"]
-        == False
+        process_model(model2)["endogenous_factors_info"].has_endogenous_factors == False
     )
 
 
 def test_dimensions(model2):
     res = process_model(model2)["dimensions"]
-    assert res["n_latent_factors"] == 3
-    assert res["n_observed_factors"] == 0
-    assert res["n_all_factors"] == 3
-    assert res["n_periods"] == 8
-    assert res["n_controls"] == 2
-    assert res["n_mixtures"] == 1
+    assert res.n_latent_factors == 3
+    assert res.n_observed_factors == 0
+    assert res.n_all_factors == 3
+    assert res.n_periods == 8
+    assert res.n_controls == 2
+    assert res.n_mixtures == 1
 
 
 def test_labels(model2):
     res = process_model(model2)["labels"]
-    assert res["latent_factors"] == ["fac1", "fac2", "fac3"]
-    assert res["observed_factors"] == []
-    assert res["all_factors"] == ["fac1", "fac2", "fac3"]
-    assert res["controls"] == ["constant", "x1"]
-    assert res["periods"] == [0, 1, 2, 3, 4, 5, 6, 7]
-    assert res["stagemap"] == [0, 0, 0, 0, 0, 0, 0]
-    assert res["stages"] == [0]
+    assert res.latent_factors == ("fac1", "fac2", "fac3")
+    assert res.observed_factors == ()
+    assert res.all_factors == ("fac1", "fac2", "fac3")
+    assert res.controls == ("constant", "x1")
+    assert res.periods == (0, 1, 2, 3, 4, 5, 6, 7)
+    assert res.stagemap == (0, 0, 0, 0, 0, 0, 0)
+    assert res.stages == (0,)
 
 
 def test_estimation_options(model2):
     res = process_model(model2)["estimation_options"]
-    assert res["sigma_points_scale"] == 2
-    assert res["robust_bounds"]
-    assert res["bounds_distance"] == 0.001
+    assert res.sigma_points_scale == 2
+    assert res.robust_bounds
+    assert res.bounds_distance == 0.001
 
 
 def test_anchoring(model2):
     res = process_model(model2)["anchoring"]
-    assert res["outcomes"] == {"fac1": "Q1"}
-    assert res["factors"] == ["fac1"]
-    assert res["free_controls"]
-    assert res["free_constant"]
-    assert res["free_loadings"]
+    assert res.outcomes == {"fac1": "Q1"}
+    assert res.factors == ("fac1",)
+    assert res.free_controls
+    assert res.free_constant
+    assert res.free_loadings
 
 
 def test_transition_info(model2):
     res = process_model(model2)["transition_info"]
 
-    assert isinstance(res, dict)
-    assert callable(res["func"])
+    assert isinstance(res, TransitionInfo)
+    assert callable(res.func)
 
-    assert list(inspect.signature(res["func"]).parameters) == ["params", "states"]
+    assert list(inspect.signature(res.func).parameters) == ["params", "states"]
 
 
 def test_update_info(model2):
@@ -138,13 +138,13 @@ def test_anchoring_and_endogenous_factors_work_together():
     # Should not raise - anchoring and endogenous factors now work together
     result = process_model(model_dict)
     # Verify anchoring is enabled
-    assert result["anchoring"]["anchoring"]
-    assert result["anchoring"]["factors"] == ["fac1"]
+    assert result["anchoring"].anchoring
+    assert result["anchoring"].factors == ("fac1",)
     # Verify endogenous factors are enabled
-    assert result["endogenous_factors_info"]["has_endogenous_factors"]
+    assert result["endogenous_factors_info"].has_endogenous_factors
     # Verify dimensions
-    assert result["dimensions"]["n_periods"] == 8
-    assert result["dimensions"]["n_aug_periods"] == 16
+    assert result["dimensions"].n_periods == 8
+    assert result["dimensions"].n_aug_periods == 16
     # Verify update_info has anchoring entries for all aug_periods
     anchoring_updates = result["update_info"][
         result["update_info"]["purpose"] == "anchoring"
@@ -173,9 +173,9 @@ def test_stagemap_with_endogenous_factors():
     model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 3]
     del model_dict["anchoring"]
     model = process_model(model_dict)
-    assert model["labels"]["stagemap"] == model_dict["stagemap"]
-    assert model["labels"]["stages"] == [0, 1, 2, 3]
-    assert model["labels"]["aug_stagemap"] == [0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 7]
+    assert model["labels"].stagemap == tuple(model_dict["stagemap"])
+    assert model["labels"].stages == (0, 1, 2, 3)
+    assert model["labels"].aug_stagemap == (0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 7)
 
 
 @pytest.fixture
@@ -191,58 +191,58 @@ def model2_inv():
 
 def test_with_endog_has_endogenous_factors(model2_inv):
     assert (
-        process_model(model2_inv)["endogenous_factors_info"]["has_endogenous_factors"]
+        process_model(model2_inv)["endogenous_factors_info"].has_endogenous_factors
         == True
     )
 
 
 def test_with_endog_dimensions(model2_inv):
     res = process_model(model2_inv)["dimensions"]
-    assert res["n_latent_factors"] == 3
-    assert res["n_observed_factors"] == 0
-    assert res["n_all_factors"] == 3
-    assert res["n_aug_periods"] == 16
-    assert res["n_periods"] == 8
-    assert res["n_controls"] == 2
-    assert res["n_mixtures"] == 1
+    assert res.n_latent_factors == 3
+    assert res.n_observed_factors == 0
+    assert res.n_all_factors == 3
+    assert res.n_aug_periods == 16
+    assert res.n_periods == 8
+    assert res.n_controls == 2
+    assert res.n_mixtures == 1
 
 
 def test_with_endog_labels(model2_inv):
     res = process_model(model2_inv)["labels"]
     n_aug_periods = 16
-    assert res["latent_factors"] == ["fac1", "fac2", "fac3"]
-    assert res["observed_factors"] == []
-    assert res["all_factors"] == ["fac1", "fac2", "fac3"]
-    assert res["controls"] == ["constant", "x1"]
-    assert res["aug_periods"] == list(range(n_aug_periods))
-    assert res["periods"] == [0, 1, 2, 3, 4, 5, 6, 7]
-    assert res["aug_stagemap"] == list(range(n_aug_periods - 2))
-    assert res["aug_stages"] == list(range(n_aug_periods - 2))
+    assert res.latent_factors == ("fac1", "fac2", "fac3")
+    assert res.observed_factors == ()
+    assert res.all_factors == ("fac1", "fac2", "fac3")
+    assert res.controls == ("constant", "x1")
+    assert res.aug_periods == tuple(range(n_aug_periods))
+    assert res.periods == (0, 1, 2, 3, 4, 5, 6, 7)
+    assert res.aug_stagemap == tuple(range(n_aug_periods - 2))
+    assert res.aug_stages == tuple(range(n_aug_periods - 2))
 
 
 def test_with_endog_estimation_options(model2_inv):
     res = process_model(model2_inv)["estimation_options"]
-    assert res["sigma_points_scale"] == 2
-    assert res["robust_bounds"]
-    assert res["bounds_distance"] == 0.001
+    assert res.sigma_points_scale == 2
+    assert res.robust_bounds
+    assert res.bounds_distance == 0.001
 
 
 def test_with_endog_anchoring_is_empty(model2_inv):
     res = process_model(model2_inv)["anchoring"]
-    assert res["outcomes"] == {}
-    assert res["factors"] == []
-    assert res["free_controls"] is False
-    assert res["free_constant"] is False
-    assert res["free_loadings"] is False
+    assert res.outcomes == {}
+    assert res.factors == ()
+    assert res.free_controls is False
+    assert res.free_constant is False
+    assert res.free_loadings is False
 
 
 def test_with_endog_transition_info(model2_inv):
     res = process_model(model2_inv)["transition_info"]
 
-    assert isinstance(res, dict)
-    assert callable(res["func"])
+    assert isinstance(res, TransitionInfo)
+    assert callable(res.func)
 
-    assert list(inspect.signature(res["func"]).parameters) == ["params", "states"]
+    assert list(inspect.signature(res.func).parameters) == ["params", "states"]
 
 
 def test_with_endog_update_info(model2_inv):

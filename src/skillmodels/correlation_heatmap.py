@@ -279,7 +279,7 @@ def _get_update_info_for_periods(model):
 
     # Replace period level with user-provided period using set_codes
     period_values = update_info.index.get_level_values("aug_period").map(
-        model["labels"]["aug_periods_to_periods"]
+        model["labels"].aug_periods_to_periods
     )
     update_info.index = update_info.index.set_codes(period_values, level="aug_period")
     update_info.index = update_info.index.set_names(["period", "variable"])
@@ -629,7 +629,7 @@ def _get_factor_scores_data_for_single_period(
         df (pd.DataFrame): Processed DataFrame to calculate correlations over.
 
     """
-    aug_periods = model["endogenous_factors_info"]["aug_periods_from_period"](period)
+    aug_periods = model["endogenous_factors_info"].aug_periods_from_period(period)
     df = pd.concat(
         [
             _get_factor_scores_data_for_single_model_period(
@@ -757,22 +757,22 @@ def _get_factor_scores_data_for_multiple_periods(
 def _process_factors(model, factors):
     """Process factors to get a tuple of lists."""
     if not factors:
-        latent_factors = model["labels"]["latent_factors"]
-        observed_factors = model["labels"]["observed_factors"]
+        latent_factors = list(model["labels"].latent_factors)
+        observed_factors = list(model["labels"].observed_factors)
     elif isinstance(factors, str):
-        if factors in model["labels"]["latent_factors"]:
+        if factors in model["labels"].latent_factors:
             latent_factors = [factors]
             observed_factors = []
-        elif factors in model["labels"]["observed_factors"]:
+        elif factors in model["labels"].observed_factors:
             observed_factors = [factors]
             latent_factors = []
     else:
         observed_factors = []
         latent_factors = []
         for factor in factors:
-            if factor in model["labels"]["latent_factors"]:
+            if factor in model["labels"].latent_factors:
                 latent_factors.append(factor)
-            elif factor in model["labels"]["observed_factors"]:
+            elif factor in model["labels"].observed_factors:
                 observed_factors.append(factor)
     return latent_factors, observed_factors  # ty: ignore[possibly-unresolved-reference]
 
@@ -780,7 +780,7 @@ def _process_factors(model, factors):
 def _process_periods(periods, model):
     """Process periods to get a list."""
     if periods is None:
-        periods = list(range(model["dimensions"]["n_periods"]))
+        periods = list(range(model["dimensions"].n_periods))
     elif isinstance(periods, int | float):
         periods = [periods]
     return periods

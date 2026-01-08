@@ -10,6 +10,7 @@ from skillmodels.correlation_heatmap import (
     _get_quasi_factor_scores_data_for_single_period,
     _process_factors,
 )
+from skillmodels.types import Labels
 
 
 def test_get_measurement_data_with_single_period():
@@ -243,7 +244,19 @@ def test_get_factor_scores_data_with_multiple_period():
 
 def test_process_factors():
     model = {
-        "labels": {"latent_factors": list("abcd"), "observed_factors": list("efg")},
+        "labels": Labels(
+            latent_factors=tuple("abcd"),
+            observed_factors=tuple("efg"),
+            controls=("constant",),
+            periods=(0,),
+            stagemap=(0,),
+            stages=(0,),
+            aug_periods=(0,),
+            aug_periods_to_periods={0: 0},
+            aug_stagemap=(0,),
+            aug_stages=(0,),
+            aug_stages_to_stages={0: 0},
+        ),
     }
     latent_factor = "c"
     observed_factor = "g"

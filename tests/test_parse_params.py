@@ -16,6 +16,7 @@ from numpy.testing import assert_array_equal as aae
 
 from skillmodels.parse_params import create_parsing_info, parse_params
 from skillmodels.process_model import process_model
+from skillmodels.types import Anchoring
 
 
 @pytest.fixture
@@ -36,7 +37,15 @@ def parsed_parameters():
     dimensions = processed["dimensions"]
     # this overwrites the anchoring setting from the model specification to get a
     # more meaningful test
-    anchoring = {"ignore_constant_when_anchoring": False}
+    anchoring = Anchoring(
+        anchoring=False,
+        outcomes={},
+        factors=(),
+        free_controls=True,
+        free_constant=True,
+        free_loadings=True,
+        ignore_constant_when_anchoring=False,
+    )
 
     parsing_info = create_parsing_info(
         params_index=p_index,

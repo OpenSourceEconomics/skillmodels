@@ -178,23 +178,23 @@ def get_transition_plots(
 
     model = process_model(model_dict)
 
-    if period >= model["labels"]["periods"][-1]:
+    if period >= model["labels"].periods[-1]:
         raise ValueError(
             "*period* must be the penultimate period of the model or earlier.",
         )
 
     if (
         include_correction_factors
-        or not model["endogenous_factors_info"]["has_endogenous_factors"]
+        or not model["endogenous_factors_info"].has_endogenous_factors
     ):
-        latent_factors = model["labels"]["latent_factors"]
+        latent_factors = model["labels"].latent_factors
     else:
         latent_factors = [
             lf
-            for lf in model["labels"]["latent_factors"]
-            if not model["endogenous_factors_info"][lf]["is_correction"]
+            for lf in model["labels"].latent_factors
+            if not model["endogenous_factors_info"].factor_info[lf].is_correction
         ]
-    all_factors = model["labels"]["all_factors"]
+    all_factors = model["labels"].all_factors
     states = get_filtered_states(model_dict=model_dict, data=data, params=params)[
         "anchored_states"
     ]["states"]
@@ -270,7 +270,7 @@ def _get_dictionary_with_plots(
             for each input and output factors.
 
     """
-    observed_factors = model["labels"]["observed_factors"]
+    observed_factors = model["labels"].observed_factors
     states_data = _get_states_data(model, period, data, states, observed_factors)
     params = _set_index_params(model, params)
     pardict = _get_pardict(model, params)
@@ -281,21 +281,21 @@ def _get_dictionary_with_plots(
         title_kwargs=None,
         showlegend=showlegend,
     )
-    has_endogenous_factors = model["endogenous_factors_info"]["has_endogenous_factors"]
+    has_endogenous_factors = model["endogenous_factors_info"].has_endogenous_factors
     if has_endogenous_factors:
-        _aug_periods = model["endogenous_factors_info"]["aug_periods_from_period"](
-            period
-        )
+        _aug_periods = model["endogenous_factors_info"].aug_periods_from_period(period)
     else:
         _aug_periods = [period]
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
-        transition_function = model["transition_info"]["individual_functions"][
+        transition_function = model["transition_info"].individual_functions[
             output_factor
         ]
         if (
             has_endogenous_factors
-            and model["endogenous_factors_info"][output_factor]["is_endogenous"]
+            and model["endogenous_factors_info"]
+            .factor_info[output_factor]
+            .is_endogenous
         ):
             aug_period = min(_aug_periods)
         else:
@@ -368,9 +368,7 @@ def _get_pardict(model, params):
         update_info=model["update_info"],
         labels=model["labels"],
         anchoring=model["anchoring"],
-        has_endogenous_factors=model["endogenous_factors_info"][
-            "has_endogenous_factors"
-        ],
+        has_endogenous_factors=model["endogenous_factors_info"].has_endogenous_factors,
     )
 
     _, _, _, pardict = parse_params(
@@ -407,19 +405,19 @@ def _get_states_data(model, period, data, states, observed_factors):
     if observed_factors:
         _observed_arr = process_data(
             df=data,
-            has_endogenous_factors=model["endogenous_factors_info"][
-                "has_endogenous_factors"
-            ],
+            has_endogenous_factors=model[
+                "endogenous_factors_info"
+            ].has_endogenous_factors,
             labels=model["labels"],
             update_info=model["update_info"],
             anchoring_info=model["anchoring"],
         )["observed_factors"]
         # convert from jax to numpy
         _observed_arr = np.array(_observed_arr)
-        if model["endogenous_factors_info"]["has_endogenous_factors"]:
+        if model["endogenous_factors_info"].has_endogenous_factors:
             both_aug_periods = [
                 aug_p
-                for aug_p, p in model["labels"]["aug_periods_to_periods"].items()
+                for aug_p, p in model["labels"].aug_periods_to_periods.items()
                 if p == period
             ]
             to_concat = []
@@ -464,7 +462,7 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
     transition_params,
     all_factors,
 ):
-    period_data = states_data.query(f"aug_period == {aug_period}")[all_factors]
+    period_data = states_data.query(f"aug_period == {aug_period}")[list(all_factors)]
     input_min = state_ranges[input_factor].loc[aug_period]["minimum"]
     input_max = state_ranges[input_factor].loc[aug_period]["maximum"]
     to_concat = []
@@ -474,7 +472,7 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
         fixed_quantiles = period_data.drop(columns=input_factor).quantile(quantile)
         for col, val in fixed_quantiles.items():
             input_data[col] = val
-        input_arr = jnp.array(input_data[all_factors].to_numpy())
+        input_arr = jnp.array(input_data[list(all_factors)].to_numpy())
         # convert from jax to numpy array
         output_arr = np.array(transition_function(transition_params, input_arr))
         quantile_data = pd.DataFrame()
@@ -521,7 +519,7 @@ def _prepare_data_for_one_plot_average_2d(
         input_data[input_factor] = np.linspace(input_min, input_max, n_points)
         for col, val in draw.items():
             input_data[col] = val
-        input_arr = jnp.array(input_data[all_factors].to_numpy())
+        input_arr = jnp.array(input_data[list(all_factors)].to_numpy())
         # convert from jax to numpy array
         output_arr = np.array(transition_function(transition_params, input_arr))
         draw_data = pd.DataFrame()

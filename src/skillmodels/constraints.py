@@ -49,26 +49,26 @@ def get_constraints_dicts(
     constraints_dicts = []
 
     constraints_dicts += _get_normalization_constraints(
-        normalizations, labels["latent_factors"]
+        normalizations, labels.latent_factors
     )
-    constraints_dicts += _get_mixture_weights_constraints(dimensions["n_mixtures"])
+    constraints_dicts += _get_mixture_weights_constraints(dimensions.n_mixtures)
     constraints_dicts += _get_stage_constraints(
-        stagemap=labels["aug_stagemap"],
-        stages=labels["aug_stages"],
+        stagemap=labels.aug_stagemap,
+        stages=labels.aug_stages,
     )
     constraints_dicts += _get_constant_factors_constraints(labels=labels)
     constraints_dicts += _get_initial_states_constraints(
-        n_mixtures=dimensions["n_mixtures"],
-        factors=labels["latent_factors"],
+        n_mixtures=dimensions.n_mixtures,
+        factors=labels.latent_factors,
     )
     constraints_dicts += _get_transition_constraints(labels=labels)
     constraints_dicts += _get_anchoring_constraints(
         update_info=update_info,
-        controls=labels["controls"],
+        controls=labels.controls,
         anchoring_info=anchoring_info,
-        periods=labels["aug_periods"],
+        periods=labels.aug_periods,
     )
-    if endogenous_factors_info["has_endogenous_factors"]:
+    if endogenous_factors_info.has_endogenous_factors:
         constraints_dicts += _get_constraints_for_augmented_periods(
             labels=labels,
             endogenous_factors_info=endogenous_factors_info,
@@ -244,10 +244,10 @@ def _get_constant_factors_constraints(labels) -> list[dict]:
 
     """
     constraints_dicts = []
-    for f, factor in enumerate(labels["latent_factors"]):
-        if labels["transition_names"][f] == "constant":
+    for f, factor in enumerate(labels.latent_factors):
+        if labels.transition_names[f] == "constant":
             msg = f"This constraint was generated because {factor} is constant."
-            for aug_period in labels["aug_periods"][:-1]:
+            for aug_period in labels.aug_periods[:-1]:
                 constraints_dicts.append(
                     {
                         "loc": ("shock_sds", aug_period, factor, "-"),
@@ -302,14 +302,14 @@ def _get_transition_constraints(labels) -> list[dict]:
 
     """
     constraints_dicts = []
-    for f, factor in enumerate(labels["latent_factors"]):
-        tname = labels["transition_names"][f]
+    for f, factor in enumerate(labels.latent_factors):
+        tname = labels.transition_names[f]
         msg = f"This constraint is inherent to the {tname} production function."
-        for aug_period in labels["aug_periods"][:-1]:
+        for aug_period in labels.aug_periods[:-1]:
             funcname = f"constraints_{tname}"
             if func := getattr(t_f_module, funcname, False):
                 c = func(  # ty: ignore[call-non-callable]
-                    factor=factor, factors=labels["all_factors"], aug_period=aug_period
+                    factor=factor, factors=labels.all_factors, aug_period=aug_period
                 )
                 if "description" not in c:
                     c["description"] = msg
@@ -336,7 +336,7 @@ def _get_anchoring_constraints(
     anchoring_updates = update_info[update_info["purpose"] == "anchoring"].index
 
     constraints_dicts = []
-    if not anchoring_info["free_constant"]:
+    if not anchoring_info.free_constant:
         msg = (
             "This constraint was generated because free_constant in the anchoring "
             "section of the model specification is set to False."
@@ -348,7 +348,7 @@ def _get_anchoring_constraints(
             {"loc": locs, "type": "fixed", "value": 0, "description": msg},
         )
 
-    if not anchoring_info["free_controls"]:
+    if not anchoring_info.free_controls:
         msg = (
             "This constraint was generated because free_controls in the anchoring "
             "section of the model specification is set to False."
@@ -361,15 +361,15 @@ def _get_anchoring_constraints(
             {"loc": ind_tups, "type": "fixed", "value": 0, "description": msg},
         )
 
-    if not anchoring_info["free_loadings"]:
+    if not anchoring_info.free_loadings:
         msg = (
             "This constraint was generated because free_loadings in the anchoring "
             "section of the model specification is set to False."
         )
         ind_tups = []
         for period in periods:
-            for factor in anchoring_info["factors"]:
-                outcome = anchoring_info["outcomes"][factor]
+            for factor in anchoring_info.factors:
+                outcome = anchoring_info.outcomes[factor]
                 meas = f"{outcome}_{factor}"
                 ind_tups.append(("loadings", period, meas, factor))
 
@@ -402,22 +402,23 @@ def _get_constraints_for_augmented_periods(
 
     """
     constraints_dicts = []
-    for f, factor in enumerate(labels["latent_factors"]):
-        tname = labels["transition_names"][f]
+    for f, factor in enumerate(labels.latent_factors):
+        tname = labels.transition_names[f]
         if tname == "constant":
             continue
         # We are restricting transitions and shocks, not measurements. So this might
         # look counterintuitive...
         aug_period_meas_type_to_constrain = (
             "states"
-            if endogenous_factors_info[factor]["is_state"]
+            if endogenous_factors_info.factor_info[factor].is_state
             else "endogenous_factors"
+        )
+        aug_period_meas_types = (
+            endogenous_factors_info.aug_periods_to_aug_period_meas_types
         )
         aug_periods_to_constrain = [
             k
-            for k, v in endogenous_factors_info[
-                "aug_periods_to_aug_period_meas_types"
-            ].items()
+            for k, v in aug_period_meas_types.items()
             if v == aug_period_meas_type_to_constrain
         ]
         for aug_period in aug_periods_to_constrain:
@@ -425,14 +426,14 @@ def _get_constraints_for_augmented_periods(
                 constraints_dicts += func(  # ty: ignore[call-non-callable]
                     factor=factor,
                     aug_period=aug_period,
-                    all_factors=labels["all_factors"],
+                    all_factors=labels.all_factors,
                 )
         for aug_period in aug_periods_to_constrain[:-1]:
             constraints_dicts.append(
                 {
                     "loc": ("shock_sds", aug_period, factor, "-"),
                     "type": "fixed",
-                    "value": endogenous_factors_info["bounds_distance"],
+                    "value": endogenous_factors_info.bounds_distance,
                     "description": "Identity constraint.",
                 }
             )
