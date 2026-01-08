@@ -537,7 +537,7 @@ def _get_update_info(
                 uinfo.loc[(aug_period, meas), factor] = True
                 uinfo.loc[(aug_period, meas), "purpose"] = "measurement"
         for factor in anchoring_info.factors:
-            outcome = anchoring_info.outcomes[factor]
+            outcome = anchoring_info.outcomes[factor]  # ty: ignore[invalid-argument-type]
             name = f"{outcome}_{factor}"
             uinfo.loc[(aug_period, name), factor] = True
             uinfo.loc[(aug_period, name), "purpose"] = "anchoring"
