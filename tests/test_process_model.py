@@ -129,17 +129,29 @@ def test_normalizations(model2):
 # ======================================================================================
 
 
-def test_anchoring_and_endogenous_factors_conflict():
+def test_anchoring_and_endogenous_factors_work_together():
     with open(TEST_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     # Set fac3 to be endogenous
     model_dict["factors"]["fac3"]["is_endogenous"] = True
     del model_dict["stagemap"]
-    with pytest.raises(
-        ValueError,
-        match=r"anchoring is not supported when endogenous factors are present.",
-    ):
-        process_model(model_dict)
+    # Should not raise - anchoring and endogenous factors now work together
+    result = process_model(model_dict)
+    # Verify anchoring is enabled
+    assert result["anchoring"]["anchoring"]
+    assert result["anchoring"]["factors"] == ["fac1"]
+    # Verify endogenous factors are enabled
+    assert result["endogenous_factors_info"]["has_endogenous_factors"]
+    # Verify dimensions
+    assert result["dimensions"]["n_periods"] == 8
+    assert result["dimensions"]["n_aug_periods"] == 16
+    # Verify update_info has anchoring entries for all aug_periods
+    anchoring_updates = result["update_info"][
+        result["update_info"]["purpose"] == "anchoring"
+    ]
+    assert (
+        len(anchoring_updates) == 16
+    )  # One per aug_period for the one anchored factor
 
 
 def test_stagemap_with_endogenous_factors_wrong_labels():

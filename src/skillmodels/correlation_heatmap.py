@@ -774,7 +774,7 @@ def _process_factors(model, factors):
                 latent_factors.append(factor)
             elif factor in model["labels"]["observed_factors"]:
                 observed_factors.append(factor)
-    return latent_factors, observed_factors
+    return latent_factors, observed_factors  # ty: ignore[possibly-unresolved-reference]
 
 
 def _process_periods(periods, model):

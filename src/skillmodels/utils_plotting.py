@@ -30,7 +30,7 @@ def get_layout_kwargs(
     if title_kwargs:
         default_kwargs["title"] = title_kwargs
     if legend_kwargs:
-        default_kwargs["legend"].update(legend_kwargs)
+        default_kwargs["legend"].update(legend_kwargs)  # ty: ignore[possibly-missing-attribute]
     if layout_kwargs:
         default_kwargs.update(layout_kwargs)
     return default_kwargs

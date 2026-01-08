@@ -88,7 +88,7 @@ def test_handle_controls_with_missings():
     df["__old_period__"] = df["aug_period"] + 1
     df.set_index(["id", "aug_period"], inplace=True)
 
-    with pytest.warns(UserWarning):
+    with pytest.warns(UserWarning):  # noqa: PT030
         calculated = _handle_controls_with_missings(df, controls, update_info)
     assert calculated.loc[(2, 0)].isna().all()
 

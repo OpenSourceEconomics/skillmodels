@@ -308,7 +308,7 @@ def _get_transition_constraints(labels) -> list[dict]:
         for aug_period in labels["aug_periods"][:-1]:
             funcname = f"constraints_{tname}"
             if func := getattr(t_f_module, funcname, False):
-                c = func(
+                c = func(  # ty: ignore[call-non-callable]
                     factor=factor, factors=labels["all_factors"], aug_period=aug_period
                 )
                 if "description" not in c:
@@ -422,7 +422,7 @@ def _get_constraints_for_augmented_periods(
         ]
         for aug_period in aug_periods_to_constrain:
             if func := getattr(t_f_module, f"identity_constraints_{tname}", False):
-                constraints_dicts += func(
+                constraints_dicts += func(  # ty: ignore[call-non-callable]
                     factor=factor,
                     aug_period=aug_period,
                     all_factors=labels["all_factors"],

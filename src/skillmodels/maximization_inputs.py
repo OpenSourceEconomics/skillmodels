@@ -209,11 +209,11 @@ def _partial_some_log_likelihood(
     )
     is_predict_iteration = ((_aug_periods - _aug_periods.shift(-1)) == -1).to_numpy()
     # iteration_to_period is used as an indexer to loop over arrays of different lengths
-    # in a jax.lax.scan. It needs to work for arrays of length n_aug_periods and not raise
-    # IndexErrors on tracer arrays of length n_aug_periods - 1 (i.e. n_transitions).
-    # To achieve that, we replace the last aug_period by -1. If there are endogenous factors,
-    # the last aug_period is found at index -2 (there should not be measurements for
-    # endogenous factors in the "second half" of the last period).
+    # in a jax.lax.scan. It needs to work for arrays of length n_aug_periods and not
+    # raise IndexErrors on tracer arrays of length n_aug_periods - 1 (i.e.
+    # n_transitions). To achieve that, we replace the last aug_period by -1. If there
+    # are endogenous factors, the last aug_period is found at index -2 (there should not
+    # be measurements for endogenous factors in the "second half" of the last period).
     last_aug_period = (
         model["labels"]["aug_periods"][-2]
         if parsing_info["has_endogenous_factors"]

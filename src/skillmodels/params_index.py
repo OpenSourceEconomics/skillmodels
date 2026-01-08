@@ -19,7 +19,7 @@ def get_params_index(
         options (dict): Tuning parameters for the estimation.
             See :ref:`estimation_options`.
         transition_info (dict): Information about the transition equations.
-        endogenous_factors_info (dict): Information about the endogenous factors, if any.
+        endogenous_factors_info (dict): Information about endogenous factors, if any.
 
     Returns:
         params_index (pd.MultiIndex)

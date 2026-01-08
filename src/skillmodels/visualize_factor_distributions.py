@@ -1,5 +1,5 @@
+import warnings
 from copy import deepcopy
-from logging import warnings
 
 import numpy as np
 import pandas as pd

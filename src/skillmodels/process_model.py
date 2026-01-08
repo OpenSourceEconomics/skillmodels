@@ -49,7 +49,7 @@ def process_model(model_dict):
         has_endogenous_factors=has_endogenous_factors,
         dimensions=dims,
     )
-    anchoring = _process_anchoring(model_dict, has_endogenous_factors)
+    anchoring = _process_anchoring(model_dict)
     if has_endogenous_factors:
         _model_dict_aug = _augment_periods_for_endogenous_factors(
             model_dict=model_dict,
@@ -112,7 +112,7 @@ def get_has_endogenous_factors(factors: dict[str, Any]) -> bool:
             "A factor cannot be a correction and not endogenous, got:\n"
             f"{endogenous_factors}"
         )
-    return endogenous_factors["is_endogenous"].any()
+    return endogenous_factors["is_endogenous"].any()  # ty: ignore[invalid-return-type]
 
 
 def get_dimensions(model_dict, has_endogenous_factors):
@@ -220,7 +220,7 @@ def _get_labels(model_dict, has_endogenous_factors, dimensions):
         "aug_stages_to_stages": aug_stages_to_stages,
     }
 
-    labels["all_factors"] = labels["latent_factors"] + labels["observed_factors"]
+    labels["all_factors"] = labels["latent_factors"] + labels["observed_factors"]  # ty: ignore[unsupported-operator]
 
     return labels
 
@@ -252,22 +252,16 @@ def _process_estimation_options(model_dict):
     return default_options
 
 
-def _process_anchoring(model_dict, has_endogenous_factors):
+def _process_anchoring(model_dict):
     """Process the specification that governs how latent factors are anchored.
 
     Args:
         model_dict (dict): The model specification. See: :ref:`model_specs`
-        has_endogenous_factors (bool): Whether the model has any endogenous factors.
 
     Returns:
         dict: Dictionary with information about anchoring. See :ref:`anchoring`
 
     """
-    if "anchoring" in model_dict and has_endogenous_factors:
-        raise ValueError(
-            "anchoring is not supported when endogenous factors are present."
-        )
-
     anchinfo = {
         "anchoring": False,
         "outcomes": {},
@@ -281,7 +275,7 @@ def _process_anchoring(model_dict, has_endogenous_factors):
     if "anchoring" in model_dict:
         anchinfo.update(model_dict["anchoring"])
         anchinfo["anchoring"] = True
-        anchinfo["factors"] = list(anchinfo["outcomes"])
+        anchinfo["factors"] = list(anchinfo["outcomes"])  # ty: ignore[invalid-argument-type]
 
     return anchinfo
 
@@ -445,12 +439,12 @@ def _get_endogenous_factors_info(
 def _get_aug_periods_to_aug_period_meas_types(
     aug_periods: list[int], has_endogenous_factors: bool
 ) -> dict[int, Literal["states", "endogenous_factors"]]:
-    return {
-        aug_p: ("states" if aug_p % 2 == 0 else "endogenous_factors")
-        if has_endogenous_factors
-        else {aug_p: "states"}
-        for aug_p in aug_periods
-    }
+    if has_endogenous_factors:
+        return {
+            aug_p: ("states" if aug_p % 2 == 0 else "endogenous_factors")
+            for aug_p in aug_periods
+        }
+    return dict.fromkeys(aug_periods, "states")
 
 
 def _get_update_info(model_dict, dimensions, labels, anchoring_info):

@@ -231,10 +231,10 @@ def _get_anchoring_scaling_factors(loadings, info, dimensions):
 
     """
     scaling_factors = jnp.ones(
-        (dimensions["n_periods"], dimensions["n_latent_factors"]),
+        (dimensions["n_aug_periods"], dimensions["n_latent_factors"]),
     )
     free_anchoring_loadings = loadings[info["is_anchoring_loading"]].reshape(
-        dimensions["n_periods"],
+        dimensions["n_aug_periods"],
         -1,
     )
     scaling_factors = scaling_factors.at[:, info["is_anchored_factor"]].set(
@@ -242,7 +242,7 @@ def _get_anchoring_scaling_factors(loadings, info, dimensions):
     )
 
     scaling_for_observed = jnp.ones(
-        (dimensions["n_periods"], dimensions["n_observed_factors"]),
+        (dimensions["n_aug_periods"], dimensions["n_observed_factors"]),
     )
 
     scaling_factors = jnp.hstack([scaling_factors, scaling_for_observed])
@@ -256,16 +256,16 @@ def _get_anchoring_constants(controls, info, dimensions):
     Note: Parameters are not taken from the parameter vector but from the controls.
 
     """
-    constants = jnp.zeros((dimensions["n_periods"], dimensions["n_latent_factors"]))
+    constants = jnp.zeros((dimensions["n_aug_periods"], dimensions["n_latent_factors"]))
     if not info["ignore_constant_when_anchoring"]:
         values = controls[:, 0][info["is_anchoring_update"]].reshape(
-            dimensions["n_periods"],
+            dimensions["n_aug_periods"],
             -1,
         )
         constants = constants.at[:, info["is_anchored_factor"]].set(values)
 
     constants_for_observed = jnp.zeros(
-        (dimensions["n_periods"], dimensions["n_observed_factors"]),
+        (dimensions["n_aug_periods"], dimensions["n_observed_factors"]),
     )
 
     constants = jnp.hstack([constants, constants_for_observed])
