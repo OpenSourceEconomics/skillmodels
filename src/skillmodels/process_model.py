@@ -18,7 +18,7 @@ from skillmodels.types import (
     Dimensions,
     EndogenousFactorsInfo,
     EstimationOptions,
-    FactorEndogenousInfo,
+    FactorInfo,
     Labels,
     ProcessedModel,
     TransitionInfo,
@@ -92,7 +92,7 @@ def process_model(model_dict):
             ),
             factor_info=frozendict(
                 {
-                    fac: FactorEndogenousInfo(
+                    fac: FactorInfo(
                         is_state=True, is_endogenous=False, is_correction=False
                     )
                     for fac in labels.latent_factors
@@ -466,7 +466,7 @@ def _get_endogenous_factors_info(
     """Collect information about endogenous factors."""
     factor_info = {}
     for fac, v in model_dict["factors"].items():
-        factor_info[fac] = FactorEndogenousInfo(
+        factor_info[fac] = FactorInfo(
             is_state=(
                 not v.get("is_endogenous", False) and not v.get("is_correction", False)
             ),

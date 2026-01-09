@@ -92,7 +92,7 @@ class TransitionInfo:
 
 
 @dataclass(frozen=True)
-class FactorEndogenousInfo:
+class FactorInfo:
     """Endogeneity information for a single factor."""
 
     is_state: bool
@@ -110,7 +110,7 @@ class EndogenousFactorsInfo:
     ]
     bounds_distance: float
     aug_periods_from_period: Callable[[int], list[int]]
-    factor_info: frozendict[str, FactorEndogenousInfo]
+    factor_info: frozendict[str, FactorInfo]
 
 
 @dataclass(frozen=True)
