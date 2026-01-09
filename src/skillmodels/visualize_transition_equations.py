@@ -1,5 +1,5 @@
 import itertools
-from collections.abc import Callable
+from collections.abc import Callable  # noqa: TC003
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
@@ -41,38 +41,38 @@ def combine_transition_plots(
     Use dictionary with plotly images as values to build plotly figure with subplots.
 
     Args:
-        plots_dict (dict): Dictionary with plots of transition functions for each
+        plots_dict: Dictionary with plots of transition functions for each
             factor.
-        column_order (list, str or NoneType): List of (output) factor names according
+        column_order: List of (output) factor names according
             to which transition plots should be ordered horizontally. If None, infer
             from the keys of of plots_dict
-        row_order (list, str or NoneType): List of (input) factor names according
+        row_order: List of (input) factor names according
             to which transition plots should be ordered vertically. If None, infer
             from the keys of of plots_dict
-        factor_mapping (dict or NoneType): A dictionary with custom factor names to
+        factor_mapping: A dictionary with custom factor names to
             display as axes labels.
-        make_subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
+        make_subplot_kwargs: Dictionary of keyword arguments used
             to instantiate plotly Figure with multiple subplots. Is used to define
             properties such as, for example, the spacing between subplots. If None,
             default arguments defined in the function are used.
-        sharex (bool): Whether to share the properties of x-axis across subplots.
+        sharex: Whether to share the properties of x-axis across subplots.
             Default False.
-        sharey (bool): Whether to share the properties ofy-axis across subplots.
+        sharey: Whether to share the properties ofy-axis across subplots.
             Default True.
-        showlegend (bool): Display legend if True.
-        layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
+        showlegend: Display legend if True.
+        layout_kwargs: Dictionary of key word arguments used to
             update layout of plotly Figure object. If None, the default kwargs defined
             in the function will be used.
-        legend_kwargs (dict or NoneType): Dictionary of key word arguments used to
+        legend_kwargs: Dictionary of key word arguments used to
             update position, orientation and title of figure legend. If None, default
             position and orientation will be used with no title.
-        title_kwargs (dict or NoneType): Dictionary of key word arguments used to
+        title_kwargs: Dictionary of key word arguments used to
             update properties of the figure title. Use {'text': '<desired title>'}
             to set figure title. If None, infers title based on the value of
             `quntiles_of_other_factors`.
 
     Returns:
-        fig (plotly.Figure): Plotly figure with subplots that combines individual
+        fig: Plotly figure with subplots that combines individual
             transition functions.
 
     """
@@ -156,29 +156,29 @@ def get_transition_plots(
     """Get dictionary with individual plots of transition equations for each factor.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
-        params (pandas.DataFrame): DataFrame with model parameters.
-        data (pd.DataFrame): Empirical dataset that is used to estimate the model.
-        period (int): The start period of the transition equations that are plotted.
-        state_ranges (dict or NoneType): The keys are the names of the latent factors.
+        model_dict: The model specification. See: :ref:`model_specs`
+        params: DataFrame with model parameters.
+        data: Empirical dataset that is used to estimate the model.
+        period: The start period of the transition equations that are plotted.
+        state_ranges: The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
             The state_ranges are used to define the axis limits of the plots.
-        quantiles_of_other_factors (float, list or None): Quantiles at which the factors
+        quantiles_of_other_factors: Quantiles at which the factors
             that are not varied in a given plot are fixed. If None, those factors are
             not fixed but integrated out.
-        n_points (int): Number of grid points per input. Default 50.
-        n_draws (int): Number of randomly drawn values of the factors that are averaged
+        n_points: Number of grid points per input. Default 50.
+        n_draws: Number of randomly drawn values of the factors that are averaged
             out. Only relevant if quantiles_of_other_factors is *None*. Default 50.
-        colorscale (str): The color scale to use for line legends. Must be a valid
+        colorscale: The color scale to use for line legends. Must be a valid
             plotly.express.colors.sequential attribute. Default 'Magenta_r'.
-        layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
+        layout_kwargs: Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs
             defined in the function will be used.
-        include_correction_factors (bool): Whether to include correction factors in the
+        include_correction_factors: Whether to include correction factors in the
             plots. Default False.
 
     Returns:
-        plots_dict (dict): Dictionary with individual plots of transition equations
+        plots_dict: Dictionary with individual plots of transition equations
             for each combination of input and output factors.
 
     """
@@ -248,35 +248,37 @@ def _get_dictionary_with_plots(
     and output factors.
 
     Args:
-        model (dict): The model specification. See: :ref:`model_specs`
-        params (pandas.DataFrame): DataFrame with model parameters.
-        states (pandas.DataFrame): Tidy DataFrame with filtered or simulated states.
+        model: The model specification. See: :ref:`model_specs`
+        data: Panel dataset in long format for getting observed factors.
+        params: DataFrame with model parameters.
+        states: Tidy DataFrame with filtered or simulated states.
             They are used to estimate the state ranges in each period (if state_ranges
             are not given explicitly) and to estimate the distribution of the factors
             that are not visualized.
-        state_ranges (dict): The keys are the names of the latent factors.
+        state_ranges: The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
             The state_ranges are used to define the axis limits of the plots.
 
-        latent_factors (list): Latent factors of the model that are outputs of
+        latent_factors: Latent factors of the model that are outputs of
             transition factors.
-        all_factors (list): All factors of the model that are the inputs of transition
+        all_factors: All factors of the model that are the inputs of transition
             functions.
-        quantiles_of_other_factors (float, list or None): Quantiles at which the factors
+        quantiles_of_other_factors: Quantiles at which the factors
             that are not varied in a given plot are fixed. If None, those factors are
             not fixed but integrated out.
-        period (int): The start period of the transition equations that are plotted.
-        n_points (int): Number of grid points per input. Default 50.
-        n_draws (int): Number of randomly drawn values of the factors that are averaged
+        period: The start period of the transition equations that are plotted.
+        n_points: Number of grid points per input. Default 50.
+        n_draws: Number of randomly drawn values of the factors that are averaged
             out. Only relevant if quantiles_of_other_factors is *None*. Default 50.
-        colorscale (str): The color scale to use for line legends. Must be a valid
+        colorscale: The color scale to use for line legends. Must be a valid
             plotly.express.colors.sequential attribute. Default 'Magenta_r'.
-        subfig_kwargs (dict or NoneType): Dictionary of key word arguments used to
+        layout_kwargs: Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs defined
             in the function will be used.
+        showlegend: Display legend if True. Default True.
 
     Returns:
-        plots_dict (dict): Dictionary with individual plots of transition functions
+        plots_dict: Dictionary with individual plots of transition functions
             for each input and output factors.
 
     """

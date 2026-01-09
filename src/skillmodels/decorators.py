@@ -1,5 +1,5 @@
 import functools
-from collections.abc import Callable
+from collections.abc import Callable  # noqa: TC003
 from typing import Any
 
 import jax.numpy as jnp
@@ -17,9 +17,10 @@ def extract_params(
     Note: The resulting function is keyword only!
 
     Args:
-        key (str or None): If key is not None, we assume params is a dictionary of which
+        func: The function to be decorated, or None if using decorator with arguments.
+        key: If key is not None, we assume params is a dictionary of which
             only the params[key] should be passed into func.
-        names (list or None): If names is provided, we assume that params
+        names: If names is provided, we assume that params
             (or params[key]) should be converted to a dictionary with names as keys
             before passing them to func.
 

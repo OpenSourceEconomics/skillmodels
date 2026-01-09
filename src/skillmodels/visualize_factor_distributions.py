@@ -1,5 +1,4 @@
 import warnings
-from collections.abc import Mapping
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
@@ -8,7 +7,6 @@ import pandas as pd
 import plotly.express as px
 import plotly.figure_factory as ff
 import plotly.graph_objects as go
-from numpy.typing import NDArray
 from plotly.subplots import make_subplots
 from scipy.stats import gaussian_kde
 
@@ -17,6 +15,10 @@ from skillmodels.process_model import process_model
 from skillmodels.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from numpy.typing import NDArray
+
     from skillmodels.types import ProcessedModel
 
 
@@ -43,38 +45,41 @@ def combine_distribution_plots(
     Uses dictionary with plotly images as values to build plotly Figure with subplots.
 
     Args:
-        kde_plots (dict): Dictionary with plots of indivudal factor kde plots.
-        contour_plots (dict): Dictionary with plots of pairwise factor density
+        kde_plots: Dictionary with plots of indivudal factor kde plots.
+        contour_plots: Dictionary with plots of pairwise factor density
             contours.
-        surface_plots (dict): Dictionary with plots of pairwise factor density
+        surface_plots: Dictionary with plots of pairwise factor density
             3d plots.
-        make_subplot_kwargs (dict or NoneType): Dictionary of keyword arguments used
+        factor_order: List of factor names to define the order of
+            subplots. If None, uses the order from kde_plots keys.
+        make_subplot_kwargs: Dictionary of keyword arguments used
             to instantiate plotly Figure with multiple subplots. Is used to define
             properties such as, for example, the spacing between subplots. If None,
             default arguments defined in the function are used.
-        factor_mapping (dct): Dictionary to change displayed factor names.
-        sharex (bool): Whether to share the properties of x-axis across subplots.
+        factor_mapping: Dictionary to change displayed factor names.
+        sharex: Whether to share the properties of x-axis across subplots.
             Default False.
-        sharey (bool): Whether to share the properties ofy-axis across subplots.
+        sharey: Whether to share the properties ofy-axis across subplots.
             Default True.
-        line_width (float): A float used to set same line width across subplots.
-        showlegend (bool): Display legend if True.
-        layout_kwargs (dict or NoneType): Dictionary of key word arguments used to
+        line_width: A float used to set same line width across subplots.
+        showlegend: Display legend if True.
+        layout_kwargs: Dictionary of key word arguments used to
             update layout of plotly Figure object. If None, the default kwargs defined
             in the function will be used.
-        legend_kwargs (dict or NoneType): Dictionary of key word arguments used to
+        legend_kwargs: Dictionary of key word arguments used to
             update position, orientation and title of figure legend. If None, default
             position and orientation will be used with no title.
-        title_kwargs (dict or NoneType): Dictionary of key word arguments used to
+        title_kwargs: Dictionary of key word arguments used to
             update properties of the figure title. Use {'text': '<desired title>'}
             to set figure title. If None, infers title based on the value of
             `quntiles_of_other_factors`.
-        eye_x, eye_y and eye_z (float): Control camera (view point) of the 3d plots.
-            Together they form the a norm, and the larger the norm, the more zoomed out
-            is the view. Setting eye_z to a lower value lowers the view point.
+        eye_x: Control camera x position for the 3d plots. Default 2.2.
+        eye_y: Control camera y position for the 3d plots. Default 2.2.
+        eye_z: Control camera z position for the 3d plots. Default 1.
+            Setting eye_z to a lower value lowers the view point.
 
     Returns:
-        fig (plotly.Figure): Plotly figure with subplots that combines pairwise
+        fig: Plotly figure with subplots that combines pairwise
             distrubtion plots.
 
     """
@@ -177,39 +182,39 @@ def univariate_densities(
     with factor names as keys.
 
     Args:
-        data (DataFrame): Model estimation input data.
-        model_dict (dict): Dictionary with model specifications.
-        params (DataFrame): DataFrame with estimated parameter values.
-        period (int or float): Model period for which to plot the distributions for.
-        factors (list or NoneType): List of factors for which to plot the densities.
+        data: Model estimation input data.
+        model_dict: Dictionary with model specifications.
+        params: DataFrame with estimated parameter values.
+        period: Model period for which to plot the distributions for.
+        factors: List of factors for which to plot the densities.
             If None, plot pairwise distributions for all latent factors.
-        observed_factors (bool): If True, plot densities of observed factors too.
-        states (dict, list, pd.DataFrame or NoneType): List or dictionary with tidy
+        observed_factors: If True, plot densities of observed factors too.
+        states: List or dictionary with tidy
             DataFrames with filtered or simulated states or only one DataFrame with
             filtered or simulated states. If None, retrieve data frame with filtered
             states using model_dict and data. States are used to estimate the state
             ranges in each period (if state_ranges are not given explicitly) and to
             estimate the distribution of the latent factors.
-        show_hist (bool): Add histogram to the distplot.
-        show_curve (bool): Add density curve to the displot.
-        show_rug (bool): Add rug to the distplot.
-        curve_type (str): Curve type, 'normal' or 'kde', to add to the distplot.
-        colorscale (str): The color palette used when plotting multiple data. Must be
+        show_hist: Add histogram to the distplot.
+        show_curve: Add density curve to the displot.
+        show_rug: Add rug to the distplot.
+        curve_type: Curve type, 'normal' or 'kde', to add to the distplot.
+        colorscale: The color palette used when plotting multiple data. Must be
             a valid attribute of px.colors.qualitative.
-        bin_size (float): Size of the histogram bins.
-        distplot_kwargs (NoneType or dict): Dictionary with additional keyword
+        bin_size: Size of the histogram bins.
+        distplot_kwargs: Dictionary with additional keyword
             arguments passed to ff.create_distplot() to initiate
             the distplot.
-        layout_kwargs (NoneType or dict): Dictionary of keyword arguments to update
+        layout_kwargs: Dictionary of keyword arguments to update
             layout of the plot figures. Some essential layout kwargs are:
-            - xaxis_title (str): label label
-            - yaxis_title (str): label of y axis
-            - xaxis_showgrid (bool): display axis grid
-            - yaxis_showgrid (bool): display axis grid
-            - template (str): figure background theme
-            - showlegend (bool): add legend
+            - xaxis_title: label label
+            - yaxis_title: label of y axis
+            - xaxis_showgrid: display axis grid
+            - yaxis_showgrid: display axis grid
+            - template: figure background theme
+            - showlegend: add legend
     Returns:
-        plots_dict (dict): Dictionary with density plots.
+        plots_dict: Dictionary with density plots.
 
     """
     if states is None:
@@ -285,24 +290,24 @@ def bivariate_density_contours(
     and collects them in a dictionary with factor combinations as keys.
 
     Args:
-        data (DataFrame): Model estimation input data.
-        model_dict (dict): Dictionary with model specifications.
-        params (DataFrame): DataFrame with estimated parameter values.
-        period (int or float): Model period for which to plot the distributions for.
-        factors (list or NoneType): List of factors for which to plot the densities.
+        data: Model estimation input data.
+        model_dict: Dictionary with model specifications.
+        params: DataFrame with estimated parameter values.
+        period: Model period for which to plot the distributions for.
+        factors: List of factors for which to plot the densities.
             If None, plot pairwise distributions for all latent factors.
-        observed_factors (bool): If True, plot densities of observed factors too.
-        states (dict, list, pd.DataFrame or NoneType): List or dictionary with tidy
+        observed_factors: If True, plot densities of observed factors too.
+        states: List or dictionary with tidy
             DataFrames with filtered or simulated states or only one DataFrame with
             filtered or simulated states. If None, retrieve data frame with filtered
             states using model_dict and data. States are used to estimate the state
             ranges in each period (if state_ranges are not given explicitly) and to
             estimate the distribution of the latent factors.
-        n_points (int): Number of grid points used to create the mesh for calculation
+        n_points: Number of grid points used to create the mesh for calculation
             of kernel densities.
-        contour_kwargs (dict or NoneType): Dictionary with keyword arguments to set
+        contour_kwargs: Dictionary with keyword arguments to set
             contour line properties (such as annotation, colorscale).
-        layout_kwargs (dict or NoneType): Dictionary with keyword arguments to set
+        layout_kwargs: Dictionary with keyword arguments to set
             figure layout properties.
 
         The following are various essential keyword arguments defining various features
@@ -310,16 +315,19 @@ def bivariate_density_contours(
         'update_traces'. Some default figure layout properties (such as background
         theme) are defined if layout_kwargs is None.
 
-        contours_showlabels (bool): If True, annotate density contours.
-        contours_coloring (str): Defines how to apply color scale to density contours.
+        contours_showlabels: If True, annotate density contours.
+        contours_coloring: Defines how to apply color scale to density contours.
             Possible values are in ['lines', 'fill', 'heatmap', 'none']. Default is
             'none' which implies no colorscale.
-        contours_colorscale (str): The color scale to use for line legends. Must be
+        contours_colorscale: The color scale to use for line legends. Must be
             a valid plotly.express.colors.sequential attribute. Default 'RdBu_r'.
-        showcolorbar (bool): A boolean variable for displaying color bar.
+        lines_colorscale: The color palette used for contour lines when plotting
+            multiple scenarios. Must be a valid px.colors.qualitative attribute.
+            Default 'D3'.
+        showcolorbar: A boolean variable for displaying color bar.
 
     Returns:
-        plots_dict (dict): Dictionary with factor combinations as keys and respective
+        plots_dict: Dictionary with factor combinations as keys and respective
             pariwise plots of density contours as values.
 
     """
@@ -411,38 +419,40 @@ def bivariate_density_surfaces(
     and collects them in a dictionary with factor name combinations keys.
 
     Args:
-        data (DataFrame): Model estimation input data.
-        model_dict (dict): Dictionary with model specifications.
-        params (DataFrame): DataFrame with estimated parameter values.
-        period (int or float): Model period for which to plot the distributions for.
-        factors (list or NoneType): List of factors for which to plot the densities.
+        data: Model estimation input data.
+        model_dict: Dictionary with model specifications.
+        params: DataFrame with estimated parameter values.
+        period: Model period for which to plot the distributions for.
+        factors: List of factors for which to plot the densities.
             If None, plot pairwise distributions for all latent factors.
-        observed_factors (bool): If True, plot densities of observed factors too.
-        states (dict, list, pd.DataFrame or NoneType): List or dictionary with tidy
+        observed_factors: If True, plot densities of observed factors too.
+        states: List or dictionary with tidy
             DataFrames with filtered or simulated states or only one DataFrame with
             filtered or simulated states. If None, retrieve data frame with filtered
             states using model_dict and data. States are used to estimate the state
             ranges in each period (if state_ranges are not given explicitly) and to
             estimate the distribution of the latent factors.
-        n_points (int): Number of grid points used to create the mesh for calculation
+        n_points: Number of grid points used to create the mesh for calculation
             of kernel densities.
+
         The following are various essential keyword arguments defining various features
         of plots. All features can also be changed ex-post via 'update_layout' or
         'update_traces'. Some default figure layout properties (such as background
         theme) are defined if layout_kwargs is None.
 
-        layout_kwargs (dict or NoneType): Dictionary with keyword arguments to set
+        layout_kwargs: Dictionary with keyword arguments to set
             figure layout properties.
-        colorscale (str): The color scale to use for line legends. Must be a valid
+        colorscale: The color scale to use for line legends. Must be a valid
             plotly.express.colors.sequential attribute. Default 'RdBu_r'.
-        showcolorbar (bool): A boolean variable for displaying the colorbar associated
+        opacity: Opacity of the surface. Default 0.9.
+        showcolorbar: A boolean variable for displaying the colorbar associated
             with the surface color scale.
-        showgrids (bool): A boolean variable for showing axes grids.
-        showaxlines (bool): A boolean variable for showing axes lines.
-        showlabels (bool): A boolean variable for displaying axes labels.
+        showgrids: A boolean variable for showing axes grids.
+        showaxlines: A boolean variable for showing axes lines.
+        showlabels: A boolean variable for displaying axes labels.
 
     Returns:
-        plots_dict (dict): Dictionary with factor combinations as keys and respective
+        plots_dict: Dictionary with factor combinations as keys and respective
             pariwise plots of 3d density plots as values.
 
     """

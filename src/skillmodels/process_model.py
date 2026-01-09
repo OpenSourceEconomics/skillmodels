@@ -1,7 +1,6 @@
-from collections.abc import KeysView, Mapping
 from copy import deepcopy
 from functools import partial
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -25,6 +24,9 @@ from skillmodels.types import (
     TransitionInfo,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import KeysView, Mapping
+
 pd.set_option("future.no_silent_downcasting", True)  # noqa:  FBT003
 
 
@@ -36,19 +38,19 @@ def process_model(model_dict: dict) -> ProcessedModel:
     Set default values and extend the model specification where necessary.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
+        model_dict: The model specification. See: :ref:`model_specs`
 
     Returns:
         dict: nested dictionary of model specs. It has the following entries:
-        - dimensions (dict): Dimensional information like n_states, n_periods,
+        - dimensions: Dimensional information like n_states, n_periods,
           n_controls, n_mixtures. See :ref:`dimensions`.
-        - labels (dict): Dict of lists with labels for the model quantities like
+        - labels: Dict of lists with labels for the model quantities like
           factors, periods, controls, stagemap and stages. See :ref:`labels`
-        - anchoring (dict): Information about anchoring. See :ref:`anchoring`
-        - transition_info (dict): Everything related to transition functions.
-        - update_info (pandas.DataFrame): DataFrame with one row per Kalman update
+        - anchoring: Information about anchoring. See :ref:`anchoring`
+        - transition_info: Everything related to transition functions.
+        - update_info: DataFrame with one row per Kalman update
           needed in the likelihood function. See :ref:`update_info`.
-        - normalizations (dict): Nested dictionary with information on normalized factor
+        - normalizations: Nested dictionary with information on normalized factor
           loadings and intercepts for each factor. See :ref:`normalizations`.
 
     """

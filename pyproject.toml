@@ -150,7 +150,7 @@ types-PyYAML = "*"
 types-pytz = "*"
 
 [tool.pixi.feature.ty.tasks]
-ty = "ty check"
+ty = "ty check src tests docs"
 
 # Environments
 # --------------------------------------------------------------------------------------
@@ -174,88 +174,34 @@ line-length = 88
 [tool.ruff.lint]
 select = ["ALL"]
 extend-ignore = [
-    # Dynamically typed expressions (typing.Any) are disallowed - too strict
-    "ANN401",
-
-    # No explicit `stacklevel` keyword argument found
-    "B028",
-
-    # In conflict with formatter
-    "COM812",
-
-    # Missing docstring in public module
-    "D100",
-
-    # missing docstring in public function
-    "D103",
-
-    # missing docstring in public package
-    "D104",
-
-    # exception must not use a string literal
-    "EM101",
-
-    # exception must not use an f-string literal
-    "EM102",
-
-    # Boolean-typed positional arguments.
-    "FBT001",
-
-    # Boolean default positional argument in function definition
-    "FBT002",
-
-    # line contains a todo
-    "FIX002",
-
-    # In conflict with formatter
-    "ISC001",
-
-    # Leave Numpy's legacy RNG
-    "NPY002",
-
-    # array.at is perfectly valid Jax, but linter thinks it's Pandas...
-    "PD008",
-
-    # pd.merge is fine
-    "PD015",
-
-    # Many suggestions to use list comprehension are not helpful
-    "PERF401",
-
-    # Magic values are fine
-    "PLR2004",
-
-    # Too many arguments to function call
-    "PLR0913",
-
-    # Assignment before return statement is fine.
-    "RET504",
-
-    # use of `assert` detected
-    "S101",
-
-    # `pickle` module is unsafe
-    "S301",
-
-    # Private member accessed: `_stochastic_info`
-    "SLF001",
-
-    # long messages outside the exception class
-    "TRY003",
+    "ANN401", # Dynamically typed expressions (typing.Any) are disallowed - too strict
+    "B028", # No explicit `stacklevel` keyword argument found
+    "COM812", # In conflict with formatter
+    "D100", # Missing docstring in public module
+    "D103", # missing docstring in public function
+    "D104", # missing docstring in public package
+    "EM101", # exception must not use a string literal
+    "EM102", # exception must not use an f-string literal
+    "FBT001", # Boolean-typed positional arguments.
+    "FBT002", # Boolean default positional argument in function definition
+    "FIX002", # line contains a todo
+    "ISC001", # In conflict with formatter
+    "NPY002", # Leave Numpy's legacy RNG
+    "PD008", # array.at is perfectly valid Jax, but linter thinks it's Pandas...
+    "PD015", # pd.merge is fine
+    "PERF401", # Many suggestions to use list comprehension are not helpful
+    "PLR2004", # Magic values are fine
+    "PLR0913", # Too many arguments to function call
+    "RET504", # Assignment before return statement is fine.
+    "S101", # use of `assert` detected
+    "S301", # `pickle` module is unsafe
+    "SLF001", # Private member accessed: `_stochastic_info`
+    "TRY003", # long messages outside the exception class
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/skillmodels/constraints.py" = ["D417"]
-"src/skillmodels/decorators.py" = ["D417"]
-"src/skillmodels/kalman_filters.py" = ["D417"]
-"src/skillmodels/likelihood_function.py" = ["D417"]
-"src/skillmodels/likelihood_function_debug.py" = ["D417"]
-"src/skillmodels/params_index.py" = ["D417"]
-"src/skillmodels/parse_params.py" = ["D417"]
-"src/skillmodels/process_data.py" = ["D417"]
-"src/skillmodels/simulate_data.py" = ["D417"]
-"src/skillmodels/visualize_*.py" = ["BLE001", "D417"]
-"src/skillmodels/*_heatmap*.py" = ["D417"]
+"src/skillmodels/types.py" = ["TC"]  # Dataclasses need types at runtime
+"src/skillmodels/visualize_*.py" = ["BLE001"]
 "**/*.ipynb" = ["B018", "T201", "E402", "PLR2004", "INP001", "PTH100"]
 "docs/**/*" = ["A001", "ERA001", "INP001", "PTH100", "PTH123", "S506"]
 "tests/*" = [

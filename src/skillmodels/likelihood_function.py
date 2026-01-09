@@ -1,5 +1,5 @@
 import functools
-from collections.abc import Callable
+from collections.abc import Callable  # noqa: TC003
 from typing import Any
 
 import jax
@@ -12,7 +12,7 @@ from skillmodels.kalman_filters import (
     kalman_update,
 )
 from skillmodels.parse_params import parse_params
-from skillmodels.types import Dimensions, EstimationOptions, Labels
+from skillmodels.types import Dimensions, EstimationOptions, Labels  # noqa: TC001
 
 
 def log_likelihood(
@@ -31,6 +31,38 @@ def log_likelihood(
     iteration_to_period: Array,
     observed_factors: Array,
 ) -> Array:
+    """Aggregated log likelihood of a skill formation model.
+
+    Wrapper around log_likelihood_obs that sums contributions across observations.
+
+    Args:
+        params: 1d array with model parameters.
+        parsing_info: Contains information how to parse parameter vector.
+        measurements: Array of shape (n_updates, n_obs) with data on
+            observed measurements. NaN if the measurement was not observed.
+        controls: Array of shape (n_periods, n_obs, n_controls)
+            with observed control variables for the measurement equations.
+        transition_func: The transition function.
+        sigma_scaling_factor: A scaling factor that controls the spread of the
+            sigma points.
+        sigma_weights: 1d array of length n_sigma with non-negative sigma weights.
+        dimensions: Dimensional information like n_states, n_periods, n_controls,
+            n_mixtures.
+        labels: Labels for the model quantities like factors, periods, controls,
+            stagemap and stages.
+        estimation_options: Options for estimation including clipping bounds.
+        is_measurement_iteration: Boolean array indicating which iterations are
+            measurement updates.
+        is_predict_iteration: Boolean array indicating which iterations are predict
+            steps.
+        iteration_to_period: Array mapping iteration index to period.
+        observed_factors: Array of shape (n_periods, n_obs, n_observed_factors) with
+            data on the observed factors.
+
+    Returns:
+        Scalar aggregated log likelihood.
+
+    """
     return log_likelihood_obs(
         params=params,
         parsing_info=parsing_info,
@@ -77,25 +109,29 @@ def log_likelihood_obs(
     with Jax.
 
     Args:
-        params (jax.numpy.array): 1d array with model parameters.
-        parsing_info (dict): Contains information how to parse parameter vector.
-        update_info (pandas.DataFrame): Contains information about number of updates in
-            each period and purpose of each update.
-        measurements (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
+        params: 1d array with model parameters.
+        parsing_info: Contains information how to parse parameter vector.
+        measurements: Array of shape (n_updates, n_obs) with data on
             observed measurements. NaN if the measurement was not observed.
-        controls (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
+        controls: Array of shape (n_periods, n_obs, n_controls)
             with observed control variables for the measurement equations.
-        transition_func (Callable): The transition function.
-        sigma_scaling_factor (float): A scaling factor that controls the spread of the
+        transition_func: The transition function.
+        sigma_scaling_factor: A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
-        sigma_weights (jax.numpy.array): 1d array of length n_sigma with non-negative
+        sigma_weights: 1d array of length n_sigma with non-negative
             sigma weights.
-        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
+        dimensions: Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
-        labels (dict): Dict of lists with labels for the model quantities like
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
-        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
+        estimation_options: Options for estimation including clipping bounds.
+        is_measurement_iteration: Boolean array indicating which
+            iterations are measurement updates.
+        is_predict_iteration: Boolean array indicating which
+            iterations are predict steps.
+        iteration_to_period: Array mapping iteration index to period.
+        observed_factors: Array of shape (n_periods, n_obs,
             n_observed_factors) with data on the observed factors.
 
     Returns:

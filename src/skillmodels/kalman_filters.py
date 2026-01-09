@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable  # noqa: TC003
 
 import jax
 import jax.numpy as jnp
@@ -12,11 +12,10 @@ array_qr_jax = (
     else jax.vmap(jax.vmap(jnp.linalg.qr))
 )
 
+
 # ======================================================================================
 # Update Step
 # ======================================================================================
-
-
 def kalman_update(
     states: Array,
     upper_chols: Array,
@@ -30,26 +29,26 @@ def kalman_update(
     """Perform a Kalman update with likelihood evaluation.
 
     Args:
-        states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states) with
+        states: Array of shape (n_obs, n_mixtures, n_states) with
             pre-update states estimates.
-        upper_chols (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states,
+        upper_chols: Array of shape (n_obs, n_mixtures, n_states,
             n_states) with the transpose of the lower triangular cholesky factor
             of the pre-update covariance matrix of the state estimates.
-        loadings (jax.numpy.array): 1d array of length n_states with factor loadings.
-        control_params (jax.numpy.array): 1d array of length n_controls.
-        meas_sd (float): Standard deviation of the measurement error.
-        measurements (jax.numpy.array): 1d array of length n_obs with measurements.
+        loadings: 1d array of length n_states with factor loadings.
+        control_params: 1d array of length n_controls.
+        meas_sd: Standard deviation of the measurement error.
+        measurements: 1d array of length n_obs with measurements.
             May contain NaNs if no measurement was observed.
-        controls (jax.numpy.array): Array of shape (n_obs, n_controls) with data on the
+        controls: Array of shape (n_obs, n_controls) with data on the
             control variables.
-        log_mixture_weights (jax.numpy.array): Array of shape (n_obs, n_mixtures) with
+        log_mixture_weights: Array of shape (n_obs, n_mixtures) with
             the natural logarithm of the weights of each element of the mixture of
             normals distribution.
 
     Returns:
-        states (jax.numpy.array): Same format as states.
-        new_states (jax.numpy.array): Same format as states.
-        new_upper_chols (jax.numpy.array): Same format as upper_chols
+        states: Same format as states.
+        new_states: Same format as states.
+        new_upper_chols: Same format as upper_chols
         new_log_mixture_weights: (jax.numpy.array): Same format as log_mixture_weights
         new_loglikes: (jax.numpy.array): 1d array of length n_obs
 
@@ -136,8 +135,6 @@ def kalman_update(
 # ======================================================================================
 # Predict Step
 # ======================================================================================
-
-
 def calculate_sigma_scaling_factor_and_weights(
     n_states: int,
     kappa: float = 2,
@@ -148,8 +145,8 @@ def calculate_sigma_scaling_factor_and_weights(
     weights which makes the unscented predict step more complicated.
 
     Args:
-        n_states (int): Number of states.
-        kappa (float): Spreading factor of the sigma points.
+        n_states: Number of states.
+        kappa: Spreading factor of the sigma points.
 
     Returns:
         float: Scaling factor
@@ -178,25 +175,27 @@ def kalman_predict(
     """Make a unscented Kalman predict.
 
     Args:
-        transition_func (Callable): The transition function.
-        states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states) with
+        transition_func: The transition function.
+        states: Array of shape (n_obs, n_mixtures, n_states) with
             pre-update states estimates.
-        upper_chols (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states,
+        upper_chols: Array of shape (n_obs, n_mixtures, n_states,
             n_states) with the transpose of the lower triangular cholesky factor
             of the pre-update covariance matrix of the state estimates.
-        sigma_scaling_factor (float): A scaling factor that controls the spread of the
+        sigma_scaling_factor: A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
-        sigma_weights (jax.numpy.array): 1d array of length n_sigma with non-negative
+        sigma_weights: 1d array of length n_sigma with non-negative
             sigma weights.
-        trans_coeffs (tuple): Tuple of 1d jax.numpy.arrays with transition parameters.
-        anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_fac) with
+        trans_coeffs: Tuple of 1d jax.numpy.arrays with transition parameters.
+        shock_sds: 1d array of length n_fac with shock standard
+            deviations.
+        anchoring_scaling_factors: Array of shape (2, n_fac) with
             the scaling factors for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
-        anchoring_constants (jax.numpy.array): Array of shape (2, n_states) with the
+        anchoring_constants: Array of shape (2, n_states) with the
             constants for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
-        observed_factors (jax.numpy.array): Array of shape (n_obs, n_observed_factors)
+        observed_factors: Array of shape (n_obs, n_observed_factors)
             with data on the observed factors in period t.
 
     Returns:
@@ -243,15 +242,15 @@ def _calculate_sigma_points(
     """Calculate the array of sigma_points for the unscented transform.
 
     Args:
-        states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states) with
+        states: Array of shape (n_obs, n_mixtures, n_states) with
             pre-update states estimates.
-        upper_chols (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states,
+        upper_chols: Array of shape (n_obs, n_mixtures, n_states,
             n_states) with the transpose of the lower triangular cholesky factor
             of the pre-update covariance matrix of the state estimates.
-        scaling_factor (float): A scaling factor that controls the spread of the
+        scaling_factor: A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
-        observed_factors (jax.numpy.array): Array of shape (n_obs, n_observed_factors)
+        observed_factors: Array of shape (n_obs, n_observed_factors)
             with data on the observed factors in period t.
 
     Returns:
@@ -294,13 +293,13 @@ def transform_sigma_points(
     """Anchor sigma points, transform them and unanchor the transformed sigma points.
 
     Args:
-        sigma_points (jax.numpy.array) of shape n_obs, n_mixtures, n_sigma, n_fac.
-        transition_func (Callable): The transition function.
-        trans_coeffs (tuple): Tuple of 1d jax.numpy.arrays with transition parameters.
-        anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_states) with
+        sigma_points: Array of shape n_obs, n_mixtures, n_sigma, n_fac.
+        transition_func: The transition function.
+        trans_coeffs: Tuple of 1d jax.numpy.arrays with transition parameters.
+        anchoring_scaling_factors: Array of shape (2, n_states) with
             the scaling factors for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
-        anchoring_constants (jax.numpy.array): Array of shape (2, n_states) with the
+        anchoring_constants: Array of shape (2, n_states) with the
             constants for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
 

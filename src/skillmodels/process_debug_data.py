@@ -2,10 +2,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
-from jax import Array
-from numpy.typing import NDArray
 
 if TYPE_CHECKING:
+    from jax import Array
+    from numpy.typing import NDArray
+
     from skillmodels.types import ProcessedModel
 
 
@@ -16,26 +17,26 @@ def process_debug_data(
     """Process the raw debug data into pandas objects that make visualization easy.
 
     Args:
-        debug_data (dict): Dictionary containing the following entries (
+        debug_data: Dictionary containing the following entries (
         and potentially others which are not modified):
-        - filtered_states (jax.numpy.array): Array of shape (n_updates, n_obs,
+        - filtered_states: Array of shape (n_updates, n_obs,
             n_mixtures, n_states) containing the filtered states after each Kalman
             update.
-        - initial_states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states)
+        - initial_states: Array of shape (n_obs, n_mixtures, n_states)
             with the state estimates before the first Kalman update.
-        - residuals (jax.numpy.array): Array of shape (n_updates, n_obs, n_mixtures)
+        - residuals: Array of shape (n_updates, n_obs, n_mixtures)
             containing the residuals of a Kalman update.
-        - residual_sds (jax.numpy.ndarray): Array of shape (n_updates, n_obs,
+        - residual_sds: Array of shape (n_updates, n_obs,
             n_mixtures) containing the theoretical standard deviation of the residuals.
-        - all_contributions (jax.numpy.array): Array of shape (n_updates, n_obs) with
+        - all_contributions: Array of shape (n_updates, n_obs) with
             the likelihood contributions per update and individual.
-        - log_mixture_weights (jax.numpy.array): Array of shape (n_updates, n_obs,
+        - log_mixture_weights: Array of shape (n_updates, n_obs,
             n_mixtures) containing the log mixture weights after each update.
-        - initial_log_mixture_weights (jax.numpy.array): Array of shape (n_obs,
+        - initial_log_mixture_weights: Array of shape (n_obs,
             n_mixtures) containing the log mixture weights before the first
             kalman update.
 
-        model (dict): Processed model dictionary.
+        model: Processed model dictionary.
 
     Returns:
         dict: Dictionary with processed debug data. It has the following entries:
@@ -46,16 +47,16 @@ def process_debug_data(
             after the last update of each period. The columns are the factor names,
             "period" and "id". The filtered states are already aggregated over
             mixture distributions.
-        - state_ranges (dict): The keys are the names of the latent factors.
+        - state_ranges: The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
             Note that this aggregates over mixture distributions.
-        - residuals (pd.DataFrame): Tidy DataFrame with residuals of each Kalman update.
+        - residuals: Tidy DataFrame with residuals of each Kalman update.
             Columns are "residual", "mixture", "period", "measurement" and "id".
             "period" and "measurement" identify the Kalman update to which the residual
             belongs.
-        - residual_sds (pd.DataFrame): As residuals but containing the theoretical
+        - residual_sds: As residuals but containing the theoretical
             standard deviation of the corresponding residual.
-        - all_contributions (pd.DataFrame): Tidy DataFrame with log likelihood
+        - all_contributions: Tidy DataFrame with log likelihood
             contribution per individual and Kalman Update. The columns are
             "contribution", "period", "measurement" and "id". "period" and "measurement"
             identify the Kalman Update to which the likelihood contribution corresponds.
@@ -130,8 +131,8 @@ def _convert_state_array_to_df(
     """Convert a 3d state array into a 2d DataFrame.
 
     Args:
-        arr (np.ndarray): Array of shape (n_obs, n_mixtures, n_states)
-        factor_names (list): Names of the latent factors.
+        arr: Array of shape (n_obs, n_mixtures, n_states)
+        factor_names: Names of the latent factors.
     """
     n_obs, n_mixtures, n_states = arr.shape
     df = pd.DataFrame(data=arr.reshape(-1, n_states), columns=list(factor_names))

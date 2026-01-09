@@ -7,11 +7,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import optimagic as om
-import pandas as pd
 
 import skillmodels.transition_functions as t_f_module
 
 if TYPE_CHECKING:
+    import pandas as pd
+
     from skillmodels.types import Anchoring, Dimensions, EndogenousFactorsInfo, Labels
 
 
@@ -28,16 +29,16 @@ def get_constraints_dicts(
     The result can easily be converted to optimagic-style constraints.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
-        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
+        dimensions: Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
-        labels (dict): Dict of lists with labels for the model quantities like
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
-        anchoring (dict): Information about anchoring. See :ref:`anchoring`
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
+        anchoring_info: Information about anchoring. See :ref:`anchoring`
+        update_info: DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
-        normalizations (dict): Nested dictionary with information on normalized factor
+        normalizations: Nested dictionary with information on normalized factor
             loadings and intercepts for each factor. See :ref:`normalizations`.
+        endogenous_factors_info: Information about endogenous factors in the model.
 
     Returns:
         A list of constraints dictionaries with entries:
@@ -140,8 +141,9 @@ def _get_normalization_constraints(
     """List of constraints to enforce normalizations.
 
     Args:
-        normalizations (dict): Nested dictionary with information on normalized factor
-        loadings and intercepts for each factor. See :ref:`normalizations`.
+        normalizations: Nested dictionary with information on normalized factor
+            loadings and intercepts for each factor. See :ref:`normalizations`.
+        factors: Tuple of factor names to process.
 
     Returns:
         constraints_dicts
@@ -204,8 +206,8 @@ def _get_stage_constraints(
     """Equality constraints for transition and shock parameters within stages.
 
     Args:
-        stagemap (list): map aug_periods to aug_stages
-        stages (list): aug_stages
+        stagemap: map aug_periods to aug_stages
+        stages: aug_stages
     Returns:
         constraints_dicts
 
@@ -245,7 +247,7 @@ def _get_constant_factors_constraints(labels: Labels) -> list[dict]:
     """Fix shock variances of constant factors to `bounds_distance`.
 
     Args:
-        labels (dict): Dict of lists with labels for the model quantities like
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
 
     Returns:
@@ -277,8 +279,8 @@ def _get_initial_states_constraints(
     Otherwise the model would only be identified up to the order of the start factors.
 
     Args:
-        n_mixtures (int): number of elements in the mixture of normal of the factors.
-        factors (list): the latent factors of the model
+        n_mixtures: number of elements in the mixture of normal of the factors.
+        factors: the latent factors of the model
 
     Returns:
         constraints_dicts
@@ -306,7 +308,7 @@ def _get_transition_constraints(labels: Labels) -> list[dict]:
     """Collect possible constraints on transition parameters.
 
     Args:
-        labels (dict): Dict of lists with labels for the model quantities like
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
 
     Returns:
@@ -338,11 +340,11 @@ def _get_anchoring_constraints(
     """Constraints on anchoring parameters.
 
     Args:
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
+        update_info: DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
-        controls (list): List of control variables
-        anchoring_info (dict): Information about anchoring. See :ref:`anchoring`
-        periods (list): Period of the model
+        controls: List of control variables
+        anchoring_info: Information about anchoring. See :ref:`anchoring`
+        periods: Period of the model
 
     Returns:
         constraints_dicts
@@ -410,8 +412,10 @@ def _get_constraints_for_augmented_periods(
     Both depend on the transition function.
 
     Args:
-        labels (dict): Dict of lists with labels for the model quantities like
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
+        endogenous_factors_info: Information about endogenous factors and their
+            relationship to augmented periods.
 
     Returns:
         constraints_dicts
@@ -533,7 +537,7 @@ def constraints_dicts_to_om(
     """Convert constraints provided in dictionary form to optimagic constraints.
 
     Args:
-        constraints_dicts (list): see :ref:`get_constraints_dicts`.
+        constraints_dicts: see :ref:`get_constraints_dicts`.
 
     Returns:
         List of optimagic constraints.
@@ -572,8 +576,8 @@ def enforce_fixed_constraints(
     This means that any robust bounds will be overridden for fixed parameters.
 
     Args:
-        params_template (pd.DataFrame): see :ref:`params_df`.
-        constraints_dicts (list): see :ref:`get_constraints_dicts`.
+        params_template: see :ref:`params_df`.
+        constraints_dicts: see :ref:`get_constraints_dicts`.
 
     Returns:
         pd.DataFrame: modified copy of params_template

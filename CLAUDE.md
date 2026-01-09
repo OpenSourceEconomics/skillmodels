@@ -86,10 +86,12 @@ The main package exports three functions:
 
 ## Code Style
 
-- Uses Ruff for linting (target: Python 3.13, line length: 88)
+- Require Python 3.14
+- Uses Ruff for linting (target: Python 3.14, line length: 88)
 - Google-style docstrings
 - Pre-commit hooks enforce formatting and linting
 - Type checking via `ty` with strict rules
+- Do not use `from __future__ import annotations`
 
 ## Testing
 

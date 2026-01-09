@@ -23,9 +23,9 @@ def extract_factors(
     If provided, a params DataFrame is also reduced correspondingly.
 
     Args:
-        factors (str or list): Name(s) of the factor(s) to extract.
-        model_dict (dict): The model specification. See: :ref:`model_specs`.
-        params (pandas.DataFrame or None): The params DataFrame for the full model.
+        factors: Name(s) of the factor(s) to extract.
+        model_dict: The model specification. See: :ref:`model_specs`.
+        params: The params DataFrame for the full model.
 
     Returns:
         dict: The reduced model dictionary
@@ -47,8 +47,8 @@ def update_parameter_values(
     """Update the "value" column of params with values from other.
 
     Args:
-        params (pandas.DataFrame or None): The params DataFrame for the full model.
-        others (pandas.DataFrame or list): Another DataFrame with parameters or list
+        params: The params DataFrame for the full model.
+        others: Another DataFrame with parameters or list
             of thereof. The values from other are used to update the value column
             of ``params``. If other is a list, the updates will be in order, i.e.
             later elements overwrite earlier ones.
@@ -88,9 +88,9 @@ def remove_factors(
     This happens if the remaining factors do not have measurements in later periods.
 
     Args:
-        factors (str or list): Name(s) of the factor(s) to remove.
-        model_dict (dict): The model specification. See: :ref:`model_specs`.
-        params (pandas.DataFrame or None): The params DataFrame for the full model.
+        factors: Name(s) of the factor(s) to remove.
+        model_dict: The model specification. See: :ref:`model_specs`.
+        params: The params DataFrame for the full model.
 
     Returns:
         dict: The reduced model dictionary
@@ -136,9 +136,9 @@ def remove_measurements(
     If provided, a params DataFrame is also reduced correspondingly.
 
     Args:
-        measurements (str or list): Name(s) of the measurement(s) to remove.
-        model_dict (dict): The model specification. See: :ref:`model_specs`.
-        params (pandas.DataFrame or None): The params DataFrame for the full model.
+        measurements: Name(s) of the measurement(s) to remove.
+        model_dict: The model specification. See: :ref:`model_specs`.
+        params: The params DataFrame for the full model.
 
     Returns:
         dict: The reduced model dictionary
@@ -187,9 +187,9 @@ def remove_controls(
     If provided, a params DataFrame is also reduced correspondingly.
 
     Args:
-        controls (str or list): Name(s) of the contral variable(s) to remove.
-        model_dict (dict): The model specification. See: :ref:`model_specs`.
-        params (pandas.DataFrame or None): The params DataFrame for the full model.
+        controls: Name(s) of the contral variable(s) to remove.
+        model_dict: The model specification. See: :ref:`model_specs`.
+        params: The params DataFrame for the full model.
 
     Returns:
         dict: The reduced model dictionary
@@ -218,8 +218,8 @@ def switch_translog_to_linear(
     If provided, a params DataFrame is also reduced correspondingly.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`.
-        params (pandas.DataFrame or None): The params DataFrame for the full model.
+        model_dict: The model specification. See: :ref:`model_specs`.
+        params: The params DataFrame for the full model.
 
     Returns:
         dict: The reduced model dictionary
@@ -251,8 +251,8 @@ def switch_linear_to_translog(
     the additional parameters are not initialized at zero.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`.
-        params (pandas.DataFrame or None): The params DataFrame for the full model.
+        model_dict: The model specification. See: :ref:`model_specs`.
+        params: The params DataFrame for the full model.
 
     Returns:
         dict: The reduced model dictionary
@@ -278,9 +278,9 @@ def reduce_n_periods(
     """Remove all periods after n_periods.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`.
-        new_n_periods (int): The new number of periods.
-        params (pandas.DataFrame or None): The params DataFrame for the full model.
+        model_dict: The model specification. See: :ref:`model_specs`.
+        new_n_periods: The new number of periods.
+        params: The params DataFrame for the full model.
 
     Returns:
         dict: The reduced model dictionary
@@ -345,9 +345,9 @@ def _reduce_params(
     DataFrame was constructed.
 
     Args:
-        params (pandas.DataFrame or None): The params DataFrame for the full model.
-        model_dict (dict): The model specification. See: :ref:`model_specs`.
-        has_endogenous_factors (bool): Whether the model has endogenous factors.
+        params: The params DataFrame for the full model.
+        model_dict: The model specification. See: :ref:`model_specs`.
+        has_endogenous_factors: Whether the model has endogenous factors.
 
     Returns:
         pandas.DataFrame: The reduced parameters DataFrame.

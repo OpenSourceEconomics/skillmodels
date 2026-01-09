@@ -26,14 +26,13 @@ def soft_clipping(
     ``scipy.special.logsumexp``. ``scipy.special.softmax`` is the gradient of
     ``scipy.special.logsumexp``.
 
-
     Args:
-        arr (jax.numpy.array): Array that is clipped elementwise.
-        lower (float): The value at which the array is clipped from below.
-        upper (float): The value at which the array is clipped from above.
-        lower_hardness (float): Scaling factor that is applied inside the soft maximum.
+        arr: Array that is clipped elementwise.
+        lower: The value at which the array is clipped from below.
+        upper: The value at which the array is clipped from above.
+        lower_hardness: Scaling factor that is applied inside the soft maximum.
             High values imply a closer approximation of the real maximum.
-        upper_hardness (float): Scaling factor that is applied inside the soft maximum.
+        upper_hardness: Scaling factor that is applied inside the soft maximum.
             High values imply a closer approximation of the real maximum.
 
     """

@@ -1,11 +1,14 @@
+from typing import TYPE_CHECKING
+
 import pandas as pd
 
-from skillmodels.types import (
-    Dimensions,
-    EndogenousFactorsInfo,
-    Labels,
-    TransitionInfo,
-)
+if TYPE_CHECKING:
+    from skillmodels.types import (
+        Dimensions,
+        EndogenousFactorsInfo,
+        Labels,
+        TransitionInfo,
+    )
 
 
 def get_params_index(

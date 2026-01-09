@@ -21,24 +21,24 @@ def process_data(
     """Process the data for estimation.
 
     Args:
-        df (DataFrame): panel dataset in long format. It has a MultiIndex
+        df: panel dataset in long format. It has a MultiIndex
             where the first level indicates the period and the second the individual.
-        has_endogenous_factors (bool):
-        labels (dict): Dict of lists with labels for the model quantities like
+        has_endogenous_factors: Whether the model includes endogenous factors.
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
+        update_info: DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
-        anchoring_qinfo (dict): Information about anchoring. See :ref:`anchoring`
-        purpose (Literal["estimation", "anything"]): Whether the data is used for
+        anchoring_info: Information about anchoring. See :ref:`anchoring`
+        purpose: Whether the data is used for
             estimation (default, includes measurement data) or not.
 
     Returns a dictionary with keys:
-        measurements (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
+        measurements: Array of shape (n_updates, n_obs) with data on
             observed measurements. NaN if the measurement was not observed. Only
             returned if estimation==True
-        controls (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls) with
+        controls: Array of shape (n_periods, n_obs, n_controls) with
             observed control variables for the measurement equations.
-        observed_factors (jax.numpy.array): Array of shape
+        observed_factors: Array of shape
             (n_periods, n_obs, n_observed_factors) with data on the observed factors.
             Only returned if estimation==True
 
@@ -71,12 +71,13 @@ def pre_process_data(
     """Balance panel data in long format, drop unnecessary periods and set index.
 
     Args:
-        df (DataFrame): panel dataset in long format. It has a MultiIndex
+        df: panel dataset in long format. It has a MultiIndex
             where the first level indicates the period and the second
             the individual.
+        periods: The periods to keep in the balanced panel.
 
     Returns:
-        balanced (DataFrame): balanced panel. It has a MultiIndex. The first
+        balanced: balanced panel. It has a MultiIndex. The first
             enumerates individuals. The second level counts periods, starting at 0.
 
     """

@@ -1,6 +1,6 @@
 import functools
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable  # noqa: TC003
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -10,9 +10,7 @@ from skillmodels.clipping import soft_clipping
 from skillmodels.kalman_filters import kalman_predict
 from skillmodels.kalman_filters_debug import kalman_update
 from skillmodels.parse_params import parse_params
-
-if TYPE_CHECKING:
-    from skillmodels.types import Dimensions, EstimationOptions, Labels
+from skillmodels.types import Dimensions, EstimationOptions, Labels  # noqa: TC001
 
 
 def log_likelihood(
@@ -36,39 +34,33 @@ def log_likelihood(
     This function is jax-differentiable and jax-jittable as long as all but the first
     argument are marked as static.
 
-    The function returns both a tuple (float, dict). The first entry is the aggregated
-    log likelihood value. The second additional information like the log likelihood
-    contribution of each individual. Note that the dict also contains the aggregated
-    value. Returning that value separately is only needed to calculate a gradient with
-    Jax.
-
     Args:
-        params (jax.numpy.array): 1d array with model parameters. parsing_info (dict):
-        Contains information how to parse parameter vector. update_info
-        (pandas.DataFrame): Contains information about number of updates in
-            each period and purpose of each update.
-        measurements (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
-            observed measurements. NaN if the measurement was not observed.
-        controls (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
-            with observed control variables for the measurement equations.
-        transition_func (dict): Dict with the entries "func" (the actual transition
-            function) and "columns" (a dictionary mapping factors that are needed as
-            individual columns to positions in the factor array).
-        sigma_scaling_factor (float): A scaling factor that controls the spread of the
-            sigma points. Bigger means that sigma points are further apart. Depends on
-            the sigma_point algorithm chosen.
-        sigma_weights (jax.numpy.array): 1d array of length n_sigma with non-negative
-            sigma weights.
-        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
-            n_mixtures. See :ref:`dimensions`.
-        labels (dict): Dict of lists with labels for the model quantities like
-            factors, periods, controls, stagemap and stages. See :ref:`labels`
-        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
-            n_observed_factors) with data on the observed factors.
+        params: 1d array with model parameters.
+        parsing_info: Contains information how to parse parameter vector.
+        measurements: Array of shape (n_updates, n_obs) with data on observed
+            measurements. NaN if the measurement was not observed.
+        controls: Array of shape (n_periods, n_obs, n_controls) with observed
+            control variables for the measurement equations.
+        transition_func: The transition function.
+        sigma_scaling_factor: A scaling factor that controls the spread of the
+            sigma points. Bigger means that sigma points are further apart.
+        sigma_weights: 1d array of length n_sigma with non-negative sigma weights.
+        dimensions: Dimensional information like n_states, n_periods, n_controls,
+            n_mixtures.
+        labels: Labels for the model quantities like factors, periods, controls,
+            stagemap and stages.
+        estimation_options: Options for estimation including clipping bounds.
+        is_measurement_iteration: Boolean array indicating which iterations are
+            measurement updates.
+        is_predict_iteration: Boolean array indicating which iterations are predict
+            steps.
+        iteration_to_period: Array mapping iteration index to period.
+        observed_factors: Array of shape (n_periods, n_obs, n_observed_factors) with
+            data on the observed factors.
 
     Returns:
-        dict: All data relevant for debugging, e.g. the log likelihood contribution of
-            each Kalman update and additional information like the filtered states.
+        All data relevant for debugging, e.g. the log likelihood contribution of
+        each Kalman update and additional information like the filtered states.
 
     """
     n_obs = measurements.shape[1]

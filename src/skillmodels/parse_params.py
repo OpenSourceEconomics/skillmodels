@@ -1,12 +1,13 @@
 import warnings
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from jax import Array
 
-from skillmodels.types import Anchoring, Dimensions, Labels
+if TYPE_CHECKING:
+    from skillmodels.types import Anchoring, Dimensions, Labels
 
 
 def create_parsing_info(
@@ -19,14 +20,14 @@ def create_parsing_info(
     """Create a dictionary with information how the parameter vector has to be parsed.
 
     Args:
-        params_index (pandas.MultiIndex): It has the levels ["category", "aug_period",
+        params_index: It has the levels ["category", "aug_period",
             "name1", "name2"]
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
+        update_info: DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
-        labels (dict): Dict of lists with labels for the model quantities like
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
-        anchoring (dict): Dictionary with anchoring settings.
-        has_endogenous_factors (bool): Whether the model includes endogenous factors.
+        anchoring: Dictionary with anchoring settings.
+        has_endogenous_factors: Whether the model includes endogenous factors.
 
     Returns:
         dict: dictionary that maps model quantities to positions or slices of the
@@ -119,12 +120,14 @@ def parse_params(
     """Parse params into the quantities that depend on it.
 
     Args:
-        params (jax.numpy.array): 1d array with model parameters.
-        parsing_info (dict): Dictionary with information on how the parameters
+        params: 1d array with model parameters.
+        parsing_info: Dictionary with information on how the parameters
             have to be parsed.
-        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
+        dimensions: Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
-        n_obs (int): Number of observations.
+        labels: Dict of lists with labels for the model quantities like
+            factors, periods, controls, stagemap and stages. See :ref:`labels`
+        n_obs: Number of observations.
 
     Returns:
         jax.numpy.array: Array of shape (n_obs, n_mixtures, n_states) with initial

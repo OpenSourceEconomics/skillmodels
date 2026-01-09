@@ -1,6 +1,9 @@
+from typing import TYPE_CHECKING
+
 import numpy as np
 
-from skillmodels.types import Anchoring, Dimensions, Labels
+if TYPE_CHECKING:
+    from skillmodels.types import Anchoring, Dimensions, Labels
 
 
 def check_model(

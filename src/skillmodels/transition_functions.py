@@ -14,8 +14,6 @@ Args:
 
 Returns:
         * float
-
-
 **names_example_func(** *factors* **)**:
 
     Generate a list of names for the params of the transition function.

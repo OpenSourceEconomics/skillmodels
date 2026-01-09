@@ -1,13 +1,12 @@
 import functools
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable  # noqa: TC003
+from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from jax import Array
-from numpy.typing import NDArray
 
 import skillmodels.likelihood_function as lf
 import skillmodels.likelihood_function_debug as lfd
@@ -23,7 +22,11 @@ from skillmodels.parse_params import create_parsing_info
 from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
-from skillmodels.types import ProcessedModel
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
+    from skillmodels.types import ProcessedModel
 
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
@@ -36,33 +39,31 @@ def get_maximization_inputs(
     """Create inputs for optimagic's maximize function.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
-        data (DataFrame): dataset in long format.
+        model_dict: The model specification. See: :ref:`model_specs`
+        data: dataset in long format.
         split_dataset(Int): Controls into how many sclices to split the dataset
             during the gradient computation.
 
     Returns a dictionary with keys:
-        loglike (function): A jax jitted function that takes an optimagic-style
+        loglike: A jax jitted function that takes an optimagic-style
             params dataframe as only input and returns a dict with entries:
             - "value": The scalar log likelihood
             - "contributions": An array with the log likelihood per observation
-        debug_loglike (function): Similar to loglike, with the following differences:
+        debug_loglike: Similar to loglike, with the following differences:
             - It is not jitted and thus faster on the first call and debuggable
             - It will add intermediate results as additional entries in the returned
               dictionary. Those can be used for debugging and plotting.
-        gradient (function): The gradient of the scalar log likelihood
+        gradient: The gradient of the scalar log likelihood
             function with respect to the parameters.
-        loglike_and_gradient (function): Combination of loglike and
+        loglike_and_gradient: Combination of loglike and
             loglike_gradient that is faster than calling the two functions separately.
-        constraints (list): List of optimagic constraints that are implied by the
+        constraints: List of optimagic constraints that are implied by the
             model specification.
-        params_template (pd.DataFrame): Parameter DataFrame with correct index and
+        params_template: Parameter DataFrame with correct index and
             bounds. The value column is empty except for the fixed constraints, which
             are set including the bounds.
-        data_aug (pd.DataFrame): DataFrame with augmented data. If model contains
+        data_aug: DataFrame with augmented data. If model contains
             endogenous factors, we double up the number of periods in order to add
-
-
 
     """
     model = process_model(model_dict)
