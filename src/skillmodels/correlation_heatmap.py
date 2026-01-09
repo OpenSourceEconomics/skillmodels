@@ -1,32 +1,36 @@
+from typing import Any
+
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 from plotly import graph_objects as go
 
 from skillmodels.process_data import pre_process_data
 from skillmodels.process_model import process_model
+from skillmodels.types import ProcessedModel
 
 
 def plot_correlation_heatmap(
-    corr,
-    heatmap_kwargs=None,
-    layout_kwargs=None,
-    rounding=2,
-    zmax=None,
-    zmin=None,
-    zmid=None,
-    colorscale="RdBu_r",
-    show_color_bar=True,
-    show_diagonal=True,
-    show_upper_triangle=True,
-    trim_heatmap=False,
-    annotate=True,
-    annotation_fontsize=13,
-    annotation_text_color="black",
-    annotation_text_angle=0,
-    axes_tick_fontsize=(12, 12),
-    axes_tick_label_angle=(90, 0),
-    axes_tick_label_color=("black", "black"),
-):
+    corr: pd.DataFrame,
+    heatmap_kwargs: dict[str, Any] | None = None,
+    layout_kwargs: dict[str, Any] | None = None,
+    rounding: int = 2,
+    zmax: float | None = None,
+    zmin: float | None = None,
+    zmid: float | None = None,
+    colorscale: str = "RdBu_r",
+    show_color_bar: bool = True,
+    show_diagonal: bool = True,
+    show_upper_triangle: bool = True,
+    trim_heatmap: bool = False,
+    annotate: bool = True,
+    annotation_fontsize: int = 13,
+    annotation_text_color: str = "black",
+    annotation_text_angle: float = 0,
+    axes_tick_fontsize: tuple[int, int] = (12, 12),
+    axes_tick_label_angle: tuple[float, float] = (90, 0),
+    axes_tick_label_color: tuple[str, str] = ("black", "black"),
+) -> go.Figure:
     """Plot correlation heatmaps for factor measurements.
 
     Args:
@@ -122,7 +126,12 @@ def plot_correlation_heatmap(
     return fig
 
 
-def get_measurements_corr(data, model_dict, factors, periods):
+def get_measurements_corr(
+    data: pd.DataFrame,
+    model_dict: dict,
+    factors: list[str] | str | None,
+    periods: float | list[int] | None,
+) -> pd.DataFrame:
     """Get data frame with measurement correlations.
 
     Process data to retrieve measurements for each period and calculate correlations
@@ -160,7 +169,12 @@ def get_measurements_corr(data, model_dict, factors, periods):
     return corr
 
 
-def get_quasi_scores_corr(data, model_dict, factors, periods):
+def get_quasi_scores_corr(
+    data: pd.DataFrame,
+    model_dict: dict,
+    factors: list[str] | str | None,
+    periods: float | list[int] | None,
+) -> pd.DataFrame:
     """Get data frame with correlations of factor scores.
 
     Process data to retrieve measurements for each period, standardize measurements
@@ -201,7 +215,13 @@ def get_quasi_scores_corr(data, model_dict, factors, periods):
     return corr
 
 
-def get_scores_corr(data, params, model_dict, factors, periods):
+def get_scores_corr(
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    model_dict: dict,
+    factors: list[str] | str | None,
+    periods: float | list[int] | None,
+) -> pd.DataFrame:
     """Get data frame with correlations of factor scores.
 
     Process data to retrieve measurements for each period, standardize measurements
@@ -243,12 +263,12 @@ def get_scores_corr(data, params, model_dict, factors, periods):
 
 
 def _process_corr_data_for_plotting(
-    corr,
-    rounding,
-    show_upper_triangle,
-    show_diagonal,
-    trim_heatmap,
-):
+    corr: pd.DataFrame,
+    rounding: int,
+    show_upper_triangle: bool,
+    show_diagonal: bool,
+    trim_heatmap: bool,
+) -> pd.DataFrame:
     """Apply mask and rounding to correlation DataFrame."""
     mask = _get_mask(corr, show_upper_triangle, show_diagonal)
     corr = corr.where(mask).round(rounding)
@@ -262,7 +282,11 @@ def _process_corr_data_for_plotting(
     return corr
 
 
-def _get_mask(corr, show_upper_triangle, show_diagonal):
+def _get_mask(
+    corr: pd.DataFrame,
+    show_upper_triangle: bool,
+    show_diagonal: bool,
+) -> NDArray[np.bool_]:
     """Get array to mask the correlation DataFrame."""
     mask = np.zeros_like(corr, dtype=bool)
     mask[np.tril_indices_from(mask, k=-1)] = True
@@ -273,7 +297,7 @@ def _get_mask(corr, show_upper_triangle, show_diagonal):
     return mask
 
 
-def _get_update_info_for_periods(model):
+def _get_update_info_for_periods(model: ProcessedModel) -> pd.DataFrame:
     """Return update_info with user-provided periods instead of augmented periods."""
     update_info = model.update_info.copy()
 
@@ -281,7 +305,7 @@ def _get_update_info_for_periods(model):
     period_values = update_info.index.get_level_values("aug_period").map(
         model.labels.aug_periods_to_periods
     )
-    update_info.index = update_info.index.set_codes(period_values, level="aug_period")
+    update_info.index = update_info.index.set_codes(period_values, level="aug_period")  # ty: ignore[unresolved-attribute]
     update_info.index = update_info.index.set_names(["period", "variable"])
 
     # Group by period and variable, apply OR logic for boolean columns
@@ -293,8 +317,12 @@ def _get_update_info_for_periods(model):
 
 
 def _get_measurement_data(
-    data, update_info_by_period, periods, latent_factors, observed_factors
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    periods: list[int],
+    latent_factors: list[str],
+    observed_factors: list[str],
+) -> pd.DataFrame:
     """Get data frame with factor measurements in each period, in wide format.
 
     For each factor, retrieve the data on measurements in each period and stack
@@ -336,12 +364,12 @@ def _get_measurement_data(
 
 
 def _get_measurement_data_for_single_period(
-    data,
-    update_info_by_period,
-    period,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    period: int,
+    latent_factors: list[str],
+    observed_factors: list[str],
+) -> pd.DataFrame:
     """Extract measurements of factors for the given period.
 
     Args:
@@ -372,12 +400,12 @@ def _get_measurement_data_for_single_period(
 
 
 def _get_measurement_data_for_multiple_periods(
-    data,
-    update_info_by_period,
-    periods,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    periods: list[int],
+    latent_factors: list[str],
+    observed_factors: list[str],
+) -> pd.DataFrame:
     """Extract measurements for factors for given periods.
 
     Args:
@@ -413,12 +441,12 @@ def _get_measurement_data_for_multiple_periods(
 
 
 def _get_quasi_factor_scores_data(
-    data,
-    update_info_by_period,
-    periods,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    periods: list[int],
+    latent_factors: list[str],
+    observed_factors: list[str],
+) -> pd.DataFrame:
     """Get data frame with summary information on factor measurements in each period.
 
     In each period, standardize factor measurements to zero mean and unit standard
@@ -463,12 +491,12 @@ def _get_quasi_factor_scores_data(
 
 
 def _get_quasi_factor_scores_data_for_single_period(
-    data,
-    update_info_by_period,
-    period,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    period: int,
+    latent_factors: list[str],
+    observed_factors: list[str],
+) -> pd.DataFrame:
     """Get frame with summary scores on factor measurements in a given period.
 
     Args:
@@ -507,12 +535,12 @@ def _get_quasi_factor_scores_data_for_single_period(
 
 
 def _get_quasi_factor_scores_data_for_multiple_periods(
-    data,
-    update_info_by_period,
-    periods,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    periods: list[int],
+    latent_factors: list[str],
+    observed_factors: list[str],
+) -> pd.DataFrame:
     """Get frame with summary scores of factor measurements in a given period.
 
     Args:
@@ -548,13 +576,13 @@ def _get_quasi_factor_scores_data_for_multiple_periods(
 
 
 def _get_factor_scores_data(
-    data,
-    params,
-    model,
-    periods,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    model: ProcessedModel,
+    periods: list[int],
+    latent_factors: list[str],
+    observed_factors: list[str],
+) -> pd.DataFrame:
     """Get data frame with factor scores in each period.
 
     In each period, standardize factor measurements to with estimated intercepts and
@@ -601,13 +629,13 @@ def _get_factor_scores_data(
 
 
 def _get_factor_scores_data_for_single_period(
-    data,
-    params,
-    model,
-    period,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    model: ProcessedModel,
+    period: int,
+    latent_factors: list[str],
+    observed_factors: list[str],
+) -> pd.DataFrame:
     """Get frame with factor scores in a given period.
 
     Careful: When we have endogenous factors, *period* refers to the raw period, but the
@@ -654,14 +682,14 @@ def _get_factor_scores_data_for_single_period(
 
 
 def _get_factor_scores_data_for_single_model_period(
-    data,
-    params,
-    update_info,
-    aug_period,
-    period,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    update_info: pd.DataFrame,
+    aug_period: int,
+    period: int,
+    latent_factors: list[str],
+    observed_factors: list[str],
+) -> pd.DataFrame:
     """Get frame with factor scores in a given model period.
 
     In this function, all calculations are at the augmented period level.
@@ -690,7 +718,7 @@ def _get_factor_scores_data_for_single_model_period(
         params.loc["controls"].query("name2 == 'constant'").droplevel("name2")["value"]
     )
     loadings_count = loadings.astype(bool).groupby("name1").sum()
-    leave_out_meas = loadings_count[loadings_count > 1].index.to_list()
+    leave_out_meas = loadings_count[loadings_count > 1].index.to_list()  # ty: ignore[unsupported-operator]
     to_concat = []
     for factor in latent_factors:
         period_factor_measurements = period_info.query(
@@ -712,13 +740,13 @@ def _get_factor_scores_data_for_single_model_period(
 
 
 def _get_factor_scores_data_for_multiple_periods(
-    data,
-    params,
-    model,
-    periods,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    model: ProcessedModel,
+    periods: list[int],
+    latent_factors: list[str],
+    observed_factors: list[str],
+) -> pd.DataFrame:
     """Get frame with factor scores in a given period.
 
     Args:
@@ -754,7 +782,10 @@ def _get_factor_scores_data_for_multiple_periods(
     return df
 
 
-def _process_factors(model, factors):
+def _process_factors(
+    model: ProcessedModel,
+    factors: list[str] | str | None,
+) -> tuple[list[str], list[str]]:
     """Process factors to get a tuple of lists."""
     if not factors:
         latent_factors = list(model.labels.latent_factors)
@@ -777,26 +808,29 @@ def _process_factors(model, factors):
     return latent_factors, observed_factors  # ty: ignore[possibly-unresolved-reference]
 
 
-def _process_periods(periods, model):
+def _process_periods(
+    periods: float | list[int] | None,
+    model: ProcessedModel,
+) -> list[int]:
     """Process periods to get a list."""
     if periods is None:
-        periods = list(range(model.dimensions.n_periods))
-    elif isinstance(periods, int | float):
-        periods = [periods]
+        return list(range(model.dimensions.n_periods))
+    if isinstance(periods, int | float):
+        return [int(periods)]
     return periods
 
 
 def _get_layout_kwargs(
-    corr,
-    layout_kwargs,
-    annotate,
-    annotation_fontsize,
-    annotation_text_color,
-    annotation_text_angle,
-    axes_tick_fontsize,
-    axes_tick_label_angle,
-    axes_tick_label_color,
-):
+    corr: pd.DataFrame,
+    layout_kwargs: dict[str, Any] | None,
+    annotate: bool,
+    annotation_fontsize: int,
+    annotation_text_color: str,
+    annotation_text_angle: float,
+    axes_tick_fontsize: tuple[int, int],
+    axes_tick_label_angle: tuple[float, float],
+    axes_tick_label_color: tuple[str, str],
+) -> dict[str, Any]:
     """Get kwargs to update figure layout.
 
     Args:
@@ -844,10 +878,10 @@ def _get_layout_kwargs(
 
 
 def _get_axes_ticks_kwargs(
-    axes_tick_fontsize,
-    axes_tick_label_angle,
-    axes_tick_label_color,
-):
+    axes_tick_fontsize: tuple[int, int] | dict[str, int],
+    axes_tick_label_angle: tuple[float, float] | dict[str, float],
+    axes_tick_label_color: tuple[str, str] | dict[str, str],
+) -> dict[str, Any]:
     """Get kwargs for axes ticks label formating."""
     axes_tick_fontsize = _process_axes_tick_args(axes_tick_fontsize)
     axes_tick_label_angle = _process_axes_tick_args(axes_tick_label_angle)
@@ -865,12 +899,12 @@ def _get_axes_ticks_kwargs(
 
 
 def _get_annotations(
-    df,
-    annotate,
-    annotation_fontsize,
-    annotation_text_color,
-    annotation_text_angle,
-):
+    df: pd.DataFrame,
+    annotate: bool,
+    annotation_fontsize: int,
+    annotation_text_color: str,
+    annotation_text_angle: float,
+) -> dict[str, Any]:
     """Get annotations and formatting kwargs."""
     annotation_kwargs = {}
     if annotate:
@@ -897,14 +931,14 @@ def _get_annotations(
 
 
 def _get_heatmap_kwargs(
-    corr,
-    heatmap_kwargs,
-    colorscale,
-    show_color_bar,
-    zmax,
-    zmin,
-    zmid,
-):
+    corr: pd.DataFrame,
+    heatmap_kwargs: dict[str, Any] | None,
+    colorscale: str,
+    show_color_bar: bool,
+    zmax: float | None,
+    zmin: float | None,
+    zmid: float | None,
+) -> dict[str, Any]:
     """Get kwargs to instantiate Heatmap object.
 
     Args:
@@ -921,7 +955,8 @@ def _get_heatmap_kwargs(
 
     """
     if zmax is None:
-        zmax = np.abs(corr.to_numpy())[np.tril_indices_from(corr, k=-1)].max()
+        corr_arr = corr.to_numpy()
+        zmax = np.abs(corr_arr)[np.tril_indices_from(corr_arr, k=-1)].max()
     if zmin is None:
         zmin = -zmax
     if zmid is None:
@@ -938,7 +973,9 @@ def _get_heatmap_kwargs(
     return default_heatmap_kwargs
 
 
-def _process_axes_tick_args(args):
+def _process_axes_tick_args(
+    args: tuple[Any, Any] | list[Any] | dict[str, Any],
+) -> dict[str, Any]:
     if isinstance(args, tuple | list):
         args = {"x": args[0], "y": args[1]}
     return args

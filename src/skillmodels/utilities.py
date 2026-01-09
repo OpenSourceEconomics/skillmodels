@@ -1,5 +1,6 @@
 import warnings
 from copy import deepcopy
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -12,7 +13,11 @@ from skillmodels.process_model import (
 )
 
 
-def extract_factors(factors, model_dict, params=None):
+def extract_factors(
+    factors: str | list[str],
+    model_dict: dict[str, Any],
+    params: pd.DataFrame | None = None,
+) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
     """Reduce a specification to a model with fewer latent factors.
 
     If provided, a params DataFrame is also reduced correspondingly.
@@ -30,12 +35,15 @@ def extract_factors(factors, model_dict, params=None):
     if isinstance(factors, str):
         factors = [factors]
 
-    to_remove = set(model_dict["factors"]).difference(factors)
+    to_remove = list(set(model_dict["factors"]).difference(factors))
     out = remove_factors(to_remove, model_dict, params)
     return out
 
 
-def update_parameter_values(params, others):
+def update_parameter_values(
+    params: pd.DataFrame,
+    others: pd.DataFrame | list[pd.DataFrame],
+) -> pd.DataFrame:
     """Update the "value" column of params with values from other.
 
     Args:
@@ -67,7 +75,11 @@ def update_parameter_values(params, others):
     return out
 
 
-def remove_factors(factors, model_dict, params=None):
+def remove_factors(
+    factors: str | list[str],
+    model_dict: dict[str, Any],
+    params: pd.DataFrame | None = None,
+) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
     """Remove factors from a model specification.
 
     If provided, a params DataFrame is also reduced correspondingly.
@@ -108,13 +120,17 @@ def remove_factors(factors, model_dict, params=None):
         out = reduce_n_periods(out, new_n_periods)
 
     if params is not None:
-        out_params = _reduce_params(params, out, has_endogenous_factors)
+        out_params = _reduce_params(params, out, has_endogenous_factors)  # ty: ignore[invalid-argument-type]
         out = (out, out_params)
 
-    return out
+    return out  # ty: ignore[invalid-return-type]
 
 
-def remove_measurements(measurements, model_dict, params=None):
+def remove_measurements(
+    measurements: str | list[str],
+    model_dict: dict[str, Any],
+    params: pd.DataFrame | None = None,
+) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
     """Remove measurements from a model specification.
 
     If provided, a params DataFrame is also reduced correspondingly.
@@ -161,7 +177,11 @@ def remove_measurements(measurements, model_dict, params=None):
     return out
 
 
-def remove_controls(controls, model_dict, params=None):
+def remove_controls(
+    controls: str | list[str],
+    model_dict: dict[str, Any],
+    params: pd.DataFrame | None = None,
+) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
     """Remove control variables from a model specification.
 
     If provided, a params DataFrame is also reduced correspondingly.
@@ -189,7 +209,10 @@ def remove_controls(controls, model_dict, params=None):
     return out
 
 
-def switch_translog_to_linear(model_dict, params=None):
+def switch_translog_to_linear(
+    model_dict: dict[str, Any],
+    params: pd.DataFrame | None = None,
+) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
     """Switch all translog production functions to linear.
 
     If provided, a params DataFrame is also reduced correspondingly.
@@ -216,7 +239,10 @@ def switch_translog_to_linear(model_dict, params=None):
     return out
 
 
-def switch_linear_to_translog(model_dict, params=None):
+def switch_linear_to_translog(
+    model_dict: dict[str, Any],
+    params: pd.DataFrame | None = None,
+) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
     """Switch all linear production functions to translog.
 
     If provided, a params DataFrame is also extended correspondingly. The fill value
@@ -244,7 +270,11 @@ def switch_linear_to_translog(model_dict, params=None):
     return out
 
 
-def reduce_n_periods(model_dict, new_n_periods, params=None):
+def reduce_n_periods(
+    model_dict: dict[str, Any],
+    new_n_periods: int,
+    params: pd.DataFrame | None = None,
+) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
     """Remove all periods after n_periods.
 
     Args:
@@ -285,20 +315,30 @@ def reduce_n_periods(model_dict, new_n_periods, params=None):
     return out
 
 
-def _remove_from_list(list_, to_remove):
+def _remove_from_list(
+    list_: list[Any],
+    to_remove: str | list[str],
+) -> list[Any]:
     if isinstance(to_remove, str):
         to_remove = [to_remove]
     return [element for element in list_ if element not in to_remove]
 
 
-def _remove_from_dict(dict_, to_remove):
+def _remove_from_dict(
+    dict_: dict[str, Any],
+    to_remove: str | list[str],
+) -> dict[str, Any]:
     if isinstance(to_remove, str):
         to_remove = [to_remove]
 
     return {key: val for key, val in dict_.items() if key not in to_remove}
 
 
-def _reduce_params(params, model_dict, has_endogenous_factors):
+def _reduce_params(
+    params: pd.DataFrame,
+    model_dict: dict[str, Any],
+    has_endogenous_factors: bool,
+) -> pd.DataFrame:
     """Reduce a parameter DataFrame from a larger model to a reduced model.
 
     The reduced model must be nested in the original model for which the params
@@ -328,7 +368,11 @@ def _reduce_params(params, model_dict, has_endogenous_factors):
     return params.loc[index]
 
 
-def _extend_params(params, model_dict, fill_value):
+def _extend_params(
+    params: pd.DataFrame,
+    model_dict: dict[str, Any],
+    fill_value: float,
+) -> pd.DataFrame:
     index = _get_params_index_from_model_dict(model_dict)
     out = params.reindex(index)
     out["value"] = out["value"].fillna(fill_value)
@@ -341,7 +385,9 @@ def _extend_params(params, model_dict, fill_value):
     return out
 
 
-def _get_params_index_from_model_dict(model_dict):
+def _get_params_index_from_model_dict(
+    model_dict: dict[str, Any],
+) -> pd.MultiIndex:
     mod = process_model(model_dict)
     index = get_params_index(
         update_info=mod.update_info,
@@ -353,7 +399,10 @@ def _get_params_index_from_model_dict(model_dict):
     return index
 
 
-def _remove_measurements_from_normalizations(measurements, normalizations):
+def _remove_measurements_from_normalizations(
+    measurements: str | list[str],
+    normalizations: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     reduced = [_remove_from_dict(norm, measurements) for norm in normalizations]
     if reduced != normalizations:
         warnings.warn(
@@ -363,7 +412,10 @@ def _remove_measurements_from_normalizations(measurements, normalizations):
     return reduced
 
 
-def _shorten_if_necessary(list_, length):
+def _shorten_if_necessary(
+    list_: list[Any],
+    length: int,
+) -> list[Any]:
     if len(list_) > length:
         list_ = list_[:length]
     return list_

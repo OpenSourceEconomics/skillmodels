@@ -1,13 +1,21 @@
 import warnings
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+from jax import Array
+
+from skillmodels.types import Anchoring, Dimensions, Labels
 
 
 def create_parsing_info(
-    params_index, update_info, labels, anchoring, has_endogenous_factors
-):
+    params_index: pd.MultiIndex,
+    update_info: pd.DataFrame,
+    labels: Labels,
+    anchoring: Anchoring,
+    has_endogenous_factors: bool,
+) -> dict[str, Any]:
     """Create a dictionary with information how the parameter vector has to be parsed.
 
     Args:
@@ -83,7 +91,10 @@ def create_parsing_info(
     return parsing_info
 
 
-def _get_positional_selector_from_loc(range_sr, loc):
+def _get_positional_selector_from_loc(
+    range_sr: pd.Series,
+    loc: str | pd.MultiIndex | pd.Index,
+) -> Array | slice:
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
@@ -98,7 +109,13 @@ def _get_positional_selector_from_loc(range_sr, loc):
     return ilocs
 
 
-def parse_params(params, parsing_info, dimensions, labels, n_obs):
+def parse_params(
+    params: Array,
+    parsing_info: dict[str, Any],
+    dimensions: Dimensions,
+    labels: Labels,
+    n_obs: int,
+) -> tuple[Array, Array, Array, dict[str, Any]]:
     """Parse params into the quantities that depend on it.
 
     Args:
@@ -139,13 +156,13 @@ def parse_params(params, parsing_info, dimensions, labels, n_obs):
     }
 
     pardict["anchoring_scaling_factors"] = _get_anchoring_scaling_factors(
-        pardict["loadings"],
+        pardict["loadings"],  # ty: ignore[invalid-argument-type]
         parsing_info,
         dimensions,
     )
 
     pardict["anchoring_constants"] = _get_anchoring_constants(
-        pardict["controls"],
+        pardict["controls"],  # ty: ignore[invalid-argument-type]
         parsing_info,
         dimensions,
     )
@@ -153,7 +170,12 @@ def parse_params(params, parsing_info, dimensions, labels, n_obs):
     return states, upper_chols, log_weights, pardict
 
 
-def _get_initial_states(params, info, dimensions, n_obs):
+def _get_initial_states(
+    params: Array,
+    info: dict[str, Any],
+    dimensions: Dimensions,
+    n_obs: int,
+) -> Array:
     """Create the array of initial states."""
     state = params[info["initial_states"]].reshape(
         1,
@@ -163,7 +185,12 @@ def _get_initial_states(params, info, dimensions, n_obs):
     return jnp.repeat(state, n_obs, axis=0)
 
 
-def _get_initial_upper_chols(params, info, dimensions, n_obs):
+def _get_initial_upper_chols(
+    params: Array,
+    info: dict[str, Any],
+    dimensions: Dimensions,
+    n_obs: int,
+) -> Array:
     """Create the array with cholesky factors of the initial states covariance matrix.
 
     Note: The matrices contain the transpose of the lower triangular cholesky factors.
@@ -179,18 +206,29 @@ def _get_initial_upper_chols(params, info, dimensions, n_obs):
     return upper_chols
 
 
-def _get_initial_log_mixture_weights(params, info, n_obs):
+def _get_initial_log_mixture_weights(
+    params: Array,
+    info: dict[str, Any],
+    n_obs: int,
+) -> Array:
     """Create the array with the log of initial mixture weights."""
     log_weights = jnp.log(params[info["mixture_weights"]]).reshape(1, -1)
     return jnp.repeat(log_weights, n_obs, axis=0)
 
 
-def _get_control_params(params, info, dimensions):
+def _get_control_params(
+    params: Array,
+    info: dict[str, Any],
+    dimensions: Dimensions,
+) -> Array:
     """Create the parameters for control variables in measurement equations."""
     return params[info["controls"]].reshape(-1, dimensions.n_controls)
 
 
-def _get_loadings(params, info):
+def _get_loadings(
+    params: Array,
+    info: dict[str, Any],
+) -> Array:
     """Create the array of factor loadings."""
     info = info["loadings"]
     free = params[info["slice"]]
@@ -199,17 +237,28 @@ def _get_loadings(params, info):
     return out
 
 
-def _get_meas_sds(params, info):
+def _get_meas_sds(
+    params: Array,
+    info: dict[str, Any],
+) -> Array:
     """Create the array of standard deviations of the measurement errors."""
     return params[info["meas_sds"]]
 
 
-def _get_shock_sds(params, info, dimensions):
+def _get_shock_sds(
+    params: Array,
+    info: dict[str, Any],
+    dimensions: Dimensions,
+) -> Array:
     """Create the array of standard deviations of the shocks in transition functions."""
     return params[info["shock_sds"]].reshape(-1, dimensions.n_latent_factors)
 
 
-def _get_transition_params(params, info, labels):
+def _get_transition_params(
+    params: Array,
+    info: dict[str, Any],
+    labels: Labels,
+) -> dict[str, Array]:
     """Create a list of arrays with transition equation parameters."""
     trans_params = {}
     t_info = info["transition"]
@@ -224,7 +273,11 @@ def _get_transition_params(params, info, labels):
     return trans_params
 
 
-def _get_anchoring_scaling_factors(loadings, info, dimensions):
+def _get_anchoring_scaling_factors(
+    loadings: Array,
+    info: dict[str, Any],
+    dimensions: Dimensions,
+) -> Array:
     """Create an array of anchoring scaling factors.
 
     Note: Parameters are not taken from the parameter vector but from the loadings.
@@ -250,7 +303,11 @@ def _get_anchoring_scaling_factors(loadings, info, dimensions):
     return scaling_factors
 
 
-def _get_anchoring_constants(controls, info, dimensions):
+def _get_anchoring_constants(
+    controls: Array,
+    info: dict[str, Any],
+    dimensions: Dimensions,
+) -> Array:
     """Create an array of anchoring constants.
 
     Note: Parameters are not taken from the parameter vector but from the controls.

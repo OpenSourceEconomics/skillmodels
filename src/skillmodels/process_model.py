@@ -1,3 +1,4 @@
+from collections.abc import KeysView, Mapping
 from copy import deepcopy
 from functools import partial
 from typing import Any, Literal
@@ -7,7 +8,7 @@ import pandas as pd
 from dags import concatenate_functions
 from dags.signature import rename_arguments
 from frozendict import frozendict
-from jax import vmap
+from jax import Array, vmap
 from pandas import DataFrame
 
 import skillmodels.transition_functions as t_f_module
@@ -27,7 +28,7 @@ from skillmodels.types import (
 pd.set_option("future.no_silent_downcasting", True)  # noqa:  FBT003
 
 
-def process_model(model_dict):
+def process_model(model_dict: dict) -> ProcessedModel:
     """Check, clean, extend and transform the model specs.
 
     Check the completeness, consistency and validity of the model specifications.
@@ -334,7 +335,12 @@ def _process_anchoring(model_dict: dict) -> Anchoring:
     )
 
 
-def _insert_empty_elements_into_list(old, insert_at_modulo, to_insert, aug_p_to_p):
+def _insert_empty_elements_into_list(
+    old: list,
+    insert_at_modulo: int,
+    to_insert: Any,
+    aug_p_to_p: Mapping[int, int],
+) -> list:
     return [
         to_insert if aug_p % 2 == insert_at_modulo else old[p]
         for aug_p, p in aug_p_to_p.items()
@@ -428,7 +434,7 @@ def _get_transition_info(model_dict: dict, labels: Labels) -> TransitionInfo:
 
     # add functions to produce the individual factors out of the 1d states vector.
     # The dag will automatically sort out what we don't need.
-    def _extract_factor(states, pos):
+    def _extract_factor(states: Array, pos: int) -> Array:
         return states[pos]
 
     for i, factor in enumerate(labels.all_factors):
@@ -492,7 +498,8 @@ def _get_endogenous_factors_info(
 
 
 def _get_aug_periods_to_aug_period_meas_types(
-    aug_periods, has_endogenous_factors: bool
+    aug_periods: tuple[int, ...] | KeysView[int],
+    has_endogenous_factors: bool,
 ) -> dict[int, Literal["states", "endogenous_factors"]]:
     if has_endogenous_factors:
         return {

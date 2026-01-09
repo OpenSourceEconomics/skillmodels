@@ -1,9 +1,13 @@
 import functools
+from collections.abc import Callable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+from jax import Array
+from numpy.typing import NDArray
 
 import skillmodels.likelihood_function as lf
 import skillmodels.likelihood_function_debug as lfd
@@ -19,11 +23,16 @@ from skillmodels.parse_params import create_parsing_info
 from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
+from skillmodels.types import ProcessedModel
 
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
 
-def get_maximization_inputs(model_dict, data, split_dataset=1):
+def get_maximization_inputs(
+    model_dict: dict,
+    data: pd.DataFrame,
+    split_dataset: int = 1,
+) -> dict[str, Any]:
     """Create inputs for optimagic's maximize function.
 
     Args:
@@ -112,15 +121,17 @@ def get_maximization_inputs(model_dict, data, split_dataset=1):
     _jitted_loglikeobs = jax.jit(partialed_loglikes["llo"])
     _gradient = jax.jit(jax.grad(partialed_loglikes["ll"]))
 
-    def loglike(params):
+    def loglike(params: pd.DataFrame) -> float:
         params_vec = partialed_get_jnp_params_vec(params)
         return float(_jitted_loglike(params_vec))
 
-    def loglikeobs(params):
+    def loglikeobs(params: pd.DataFrame) -> NDArray[np.floating]:
         params_vec = partialed_get_jnp_params_vec(params)
         return _to_numpy(_jitted_loglikeobs(params_vec))
 
-    def loglike_and_gradient(params):
+    def loglike_and_gradient(
+        params: pd.DataFrame,
+    ) -> tuple[float, NDArray[np.floating]]:
         params_vec = partialed_get_jnp_params_vec(params)
         crit = float(_jitted_loglike(params_vec))
         n_obs = processed_data["measurements"].shape[1]
@@ -146,7 +157,7 @@ def get_maximization_inputs(model_dict, data, split_dataset=1):
         grad = _to_numpy(_grad)
         return crit, grad
 
-    def debug_loglike(params):
+    def debug_loglike(params: pd.DataFrame) -> dict[str, Any]:
         params_vec = partialed_get_jnp_params_vec(params)
         jax_output = partialed_loglikes["debug_ll"](params_vec)
         tmp = _to_numpy(jax_output)
@@ -189,15 +200,15 @@ def get_maximization_inputs(model_dict, data, split_dataset=1):
 
 
 def _partial_some_log_likelihood(
-    fun,
-    parsing_info,
-    measurements,
-    controls,
-    observed_factors,
-    model,
-    sigma_weights,
-    sigma_scaling_factor,
-):
+    fun: Callable,
+    parsing_info: dict[str, Any],
+    measurements: Array,
+    controls: Array,
+    observed_factors: Array,
+    model: ProcessedModel,
+    sigma_weights: Array,
+    sigma_scaling_factor: Array,
+) -> Callable:
     update_info = model.update_info
     is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
     _aug_periods = pd.Series(
@@ -236,7 +247,7 @@ def _partial_some_log_likelihood(
     )
 
 
-def _to_numpy(obj):
+def _to_numpy(obj: Any) -> Any:
     if isinstance(obj, dict):
         res = {}
         for key, value in obj.items():
@@ -253,7 +264,7 @@ def _to_numpy(obj):
     return res
 
 
-def _get_jnp_params_vec(params, target_index):
+def _get_jnp_params_vec(params: pd.DataFrame, target_index: pd.MultiIndex) -> Array:
     if set(params.index) != set(target_index):
         additional_entries = params.index.difference(target_index).tolist()
         missing_entries = target_index.difference(params.index).tolist()

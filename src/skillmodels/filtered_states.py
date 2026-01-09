@@ -1,5 +1,8 @@
+from typing import Any
+
 import jax.numpy as jnp
 import numpy as np
+import pandas as pd
 
 from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.params_index import get_params_index
@@ -8,7 +11,11 @@ from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
 
 
-def get_filtered_states(model_dict, data, params):
+def get_filtered_states(
+    model_dict: dict,
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+) -> dict[str, dict[str, Any]]:
     max_inputs = get_maximization_inputs(model_dict=model_dict, data=data)
     params = params.loc[max_inputs["params_template"].index]
     debug_loglike = max_inputs["debug_loglike"]
@@ -43,7 +50,12 @@ def get_filtered_states(model_dict, data, params):
     return out
 
 
-def anchor_states_df(states_df, model_dict, params, use_aug_period):
+def anchor_states_df(
+    states_df: pd.DataFrame,
+    model_dict: dict,
+    params: pd.DataFrame,
+    use_aug_period: bool,
+) -> pd.DataFrame:
     """Anchor states in a DataFrame.
 
     The DataFrame is expected to have a column called "period" as well as one column

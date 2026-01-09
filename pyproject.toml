@@ -174,20 +174,8 @@ line-length = 88
 [tool.ruff.lint]
 select = ["ALL"]
 extend-ignore = [
-    # missing type annotation
-    "ANN001",
-
-    # missing type annotation for `*args`
-    "ANN002",
-
-    # missing type annotation for `**kwargs`
-    "ANN003",
-
-    # missing return type annotation for public function
-    "ANN201",
-
-    # missing return type annotation for private function
-    "ANN202",
+    # Dynamically typed expressions (typing.Any) are disallowed - too strict
+    "ANN401",
 
     # No explicit `stacklevel` keyword argument found
     "B028",
@@ -271,6 +259,7 @@ extend-ignore = [
 "**/*.ipynb" = ["B018", "T201", "E402", "PLR2004", "INP001", "PTH100"]
 "docs/**/*" = ["A001", "ERA001", "INP001", "PTH100", "PTH123", "S506"]
 "tests/*" = [
+    "ANN",  # Tests don't need type annotations
     "ARG001",
     "E712",
     "FBT003",

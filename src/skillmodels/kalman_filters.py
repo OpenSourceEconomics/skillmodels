@@ -1,5 +1,8 @@
+from collections.abc import Callable
+
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 from skillmodels.qr import qr_gpu
 
@@ -15,15 +18,15 @@ array_qr_jax = (
 
 
 def kalman_update(
-    states,
-    upper_chols,
-    loadings,
-    control_params,
-    meas_sd,
-    measurements,
-    controls,
-    log_mixture_weights,
-):
+    states: Array,
+    upper_chols: Array,
+    loadings: Array,
+    control_params: Array,
+    meas_sd: Array,
+    measurements: Array,
+    controls: Array,
+    log_mixture_weights: Array,
+) -> tuple[Array, Array, Array, Array]:
     """Perform a Kalman update with likelihood evaluation.
 
     Args:
@@ -135,7 +138,10 @@ def kalman_update(
 # ======================================================================================
 
 
-def calculate_sigma_scaling_factor_and_weights(n_states, kappa=2):
+def calculate_sigma_scaling_factor_and_weights(
+    n_states: int,
+    kappa: float = 2,
+) -> tuple[Array, Array]:
     """Calculate the scaling factor and weights for sigma points according to Julier.
 
     There are other sigma point algorithms, but many of them possibly have negative
@@ -158,17 +164,17 @@ def calculate_sigma_scaling_factor_and_weights(n_states, kappa=2):
 
 
 def kalman_predict(
-    transition_func,
-    states,
-    upper_chols,
-    sigma_scaling_factor,
-    sigma_weights,
-    trans_coeffs,
-    shock_sds,
-    anchoring_scaling_factors,
-    anchoring_constants,
-    observed_factors,
-):
+    transition_func: Callable,
+    states: Array,
+    upper_chols: Array,
+    sigma_scaling_factor: float,
+    sigma_weights: Array,
+    trans_coeffs: dict[str, Array],
+    shock_sds: Array,
+    anchoring_scaling_factors: Array,
+    anchoring_constants: Array,
+    observed_factors: Array,
+) -> tuple[Array, Array]:
     """Make a unscented Kalman predict.
 
     Args:
@@ -228,7 +234,12 @@ def kalman_predict(
     return predicted_states, predicted_covs
 
 
-def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factors):
+def _calculate_sigma_points(
+    states: Array,
+    upper_chols: Array,
+    scaling_factor: float,
+    observed_factors: Array,
+) -> Array:
     """Calculate the array of sigma_points for the unscented transform.
 
     Args:
@@ -274,12 +285,12 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factor
 
 
 def transform_sigma_points(
-    sigma_points,
-    transition_func,
-    trans_coeffs,
-    anchoring_scaling_factors,
-    anchoring_constants,
-):
+    sigma_points: Array,
+    transition_func: Callable,
+    trans_coeffs: dict[str, Array],
+    anchoring_scaling_factors: Array,
+    anchoring_constants: Array,
+) -> Array:
     """Anchor sigma points, transform them and unanchor the transformed sigma points.
 
     Args:

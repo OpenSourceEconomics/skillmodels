@@ -3,7 +3,7 @@
 import functools
 import warnings
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import optimagic as om
@@ -11,14 +11,17 @@ import pandas as pd
 
 import skillmodels.transition_functions as t_f_module
 
+if TYPE_CHECKING:
+    from skillmodels.types import Anchoring, Dimensions, EndogenousFactorsInfo, Labels
+
 
 def get_constraints_dicts(
-    dimensions,
-    labels,
-    anchoring_info,
-    update_info,
-    normalizations,
-    endogenous_factors_info,
+    dimensions: "Dimensions",
+    labels: "Labels",
+    anchoring_info: "Anchoring",
+    update_info: pd.DataFrame,
+    normalizations: dict[str, dict[str, list]],
+    endogenous_factors_info: "EndogenousFactorsInfo",
 ) -> list[dict]:
     """Generate constraints implied by the model specification.
 
@@ -116,7 +119,7 @@ def add_bounds(params: pd.DataFrame, bounds_distance: float) -> pd.DataFrame:
     return df
 
 
-def _is_diagonal_entry(ind_tup):
+def _is_diagonal_entry(ind_tup: tuple[str, ...]) -> bool:
     name2 = ind_tup[-1]
     middle_pos = int(len(name2) // 2)
     if (
@@ -130,7 +133,10 @@ def _is_diagonal_entry(ind_tup):
     return is_diag
 
 
-def _get_normalization_constraints(normalizations, factors) -> list[dict]:
+def _get_normalization_constraints(
+    normalizations: dict[str, dict[str, list]],
+    factors: tuple[str, ...],
+) -> list[dict]:
     """List of constraints to enforce normalizations.
 
     Args:
@@ -171,7 +177,7 @@ def _get_normalization_constraints(normalizations, factors) -> list[dict]:
     return constraints_dicts
 
 
-def _get_mixture_weights_constraints(n_mixtures) -> list[dict]:
+def _get_mixture_weights_constraints(n_mixtures: int) -> list[dict]:
     """Constrain mixture weights to be between 0 and 1 and sum to 1."""
     if n_mixtures == 1:
         msg = "Set the mixture weight to 1 if there is only one mixture element."
@@ -191,7 +197,10 @@ def _get_mixture_weights_constraints(n_mixtures) -> list[dict]:
     return constraints_dicts
 
 
-def _get_stage_constraints(stagemap, stages) -> list[dict]:
+def _get_stage_constraints(
+    stagemap: tuple[int, ...],
+    stages: tuple[int, ...],
+) -> list[dict]:
     """Equality constraints for transition and shock parameters within stages.
 
     Args:
@@ -232,7 +241,7 @@ def _get_stage_constraints(stagemap, stages) -> list[dict]:
     return constraints_dicts
 
 
-def _get_constant_factors_constraints(labels) -> list[dict]:
+def _get_constant_factors_constraints(labels: "Labels") -> list[dict]:
     """Fix shock variances of constant factors to `bounds_distance`.
 
     Args:
@@ -259,7 +268,10 @@ def _get_constant_factors_constraints(labels) -> list[dict]:
     return constraints_dicts
 
 
-def _get_initial_states_constraints(n_mixtures, factors) -> list[dict]:
+def _get_initial_states_constraints(
+    n_mixtures: int,
+    factors: tuple[str, ...],
+) -> list[dict]:
     """Enforce that the x values of the first factor are increasing.
 
     Otherwise the model would only be identified up to the order of the start factors.
@@ -290,7 +302,7 @@ def _get_initial_states_constraints(n_mixtures, factors) -> list[dict]:
     return constraints_dicts
 
 
-def _get_transition_constraints(labels) -> list[dict]:
+def _get_transition_constraints(labels: "Labels") -> list[dict]:
     """Collect possible constraints on transition parameters.
 
     Args:
@@ -318,7 +330,10 @@ def _get_transition_constraints(labels) -> list[dict]:
 
 
 def _get_anchoring_constraints(
-    update_info, controls, anchoring_info, periods
+    update_info: pd.DataFrame,
+    controls: tuple[str, ...],
+    anchoring_info: "Anchoring",
+    periods: tuple[int, ...],
 ) -> list[dict]:
     """Constraints on anchoring parameters.
 
@@ -369,7 +384,7 @@ def _get_anchoring_constraints(
         ind_tups = []
         for period in periods:
             for factor in anchoring_info.factors:
-                outcome = anchoring_info.outcomes[factor]
+                outcome = anchoring_info.outcomes[factor]  # ty: ignore[invalid-argument-type]
                 meas = f"{outcome}_{factor}"
                 ind_tups.append(("loadings", period, meas, factor))
 
@@ -383,7 +398,8 @@ def _get_anchoring_constraints(
 
 
 def _get_constraints_for_augmented_periods(
-    labels, endogenous_factors_info
+    labels: "Labels",
+    endogenous_factors_info: "EndogenousFactorsInfo",
 ) -> list[dict]:
     """Constraints for augmented periods.
 
@@ -410,7 +426,7 @@ def _get_constraints_for_augmented_periods(
         # look counterintuitive...
         aug_period_meas_type_to_constrain = (
             "states"
-            if endogenous_factors_info.factor_info[factor].is_state
+            if endogenous_factors_info.factor_info[factor].is_state  # ty: ignore[invalid-argument-type]
             else "endogenous_factors"
         )
         aug_period_meas_types = (
@@ -441,7 +457,7 @@ def _get_constraints_for_augmented_periods(
     return constraints_dicts
 
 
-def _sel(params, loc):
+def _sel(params: pd.DataFrame, loc: Any) -> pd.DataFrame:
     return params.loc[loc]
 
 

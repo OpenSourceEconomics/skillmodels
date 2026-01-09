@@ -93,7 +93,7 @@ class TransitionInfo:
 
 @dataclass(frozen=True)
 class FactorInfo:
-    """Endogeneity information for a single factor."""
+    """Information for a single factor."""
 
     is_state: bool
     is_endogenous: bool

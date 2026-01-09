@@ -1,11 +1,14 @@
 import warnings
+from collections.abc import Mapping
 from copy import deepcopy
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.figure_factory as ff
 import plotly.graph_objects as go
+from numpy.typing import NDArray
 from plotly.subplots import make_subplots
 from scipy.stats import gaussian_kde
 
@@ -13,25 +16,28 @@ from skillmodels.filtered_states import get_filtered_states
 from skillmodels.process_model import process_model
 from skillmodels.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
 
+if TYPE_CHECKING:
+    from skillmodels.types import ProcessedModel
+
 
 def combine_distribution_plots(
-    kde_plots,
-    contour_plots,
-    surface_plots=None,
-    factor_order=None,
-    factor_mapping=None,
-    make_subplot_kwargs=None,
-    sharex=False,
-    sharey=False,
-    line_width=1.5,
-    showlegend=False,
-    layout_kwargs=None,
-    legend_kwargs=None,
-    title_kwargs=None,
-    eye_x=2.2,
-    eye_y=2.2,
-    eye_z=1,
-):
+    kde_plots: dict[str, go.Figure],
+    contour_plots: dict[tuple[str, str], go.Figure],
+    surface_plots: dict[tuple[str, str], go.Figure] | None = None,
+    factor_order: list[str] | None = None,
+    factor_mapping: dict[str, str] | None = None,
+    make_subplot_kwargs: dict[str, Any] | None = None,
+    sharex: bool = False,
+    sharey: bool = False,
+    line_width: float = 1.5,
+    showlegend: bool = False,
+    layout_kwargs: dict[str, Any] | None = None,
+    legend_kwargs: dict[str, Any] | None = None,
+    title_kwargs: dict[str, Any] | None = None,
+    eye_x: float = 2.2,
+    eye_y: float = 2.2,
+    eye_z: float = 1,
+) -> go.Figure:
     """Combine individual plots into figure with subplots.
 
     Uses dictionary with plotly images as values to build plotly Figure with subplots.
@@ -149,22 +155,22 @@ def combine_distribution_plots(
 
 
 def univariate_densities(
-    data,
-    model_dict,
-    params,
-    period,
-    factors=None,
-    observed_factors=False,
-    states=None,
-    show_curve=True,
-    show_hist=False,
-    show_rug=False,
-    curve_type="kde",
-    colorscale="D3",
-    bin_size=1,
-    distplot_kwargs=None,
-    layout_kwargs=None,
-):
+    data: pd.DataFrame,
+    model_dict: dict[str, Any],
+    params: pd.DataFrame,
+    period: int,
+    factors: list[str] | None = None,
+    observed_factors: bool = False,
+    states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame] | None = None,
+    show_curve: bool = True,
+    show_hist: bool = False,
+    show_rug: bool = False,
+    curve_type: str = "kde",
+    colorscale: str = "D3",
+    bin_size: float = 1,
+    distplot_kwargs: dict[str, Any] | None = None,
+    layout_kwargs: dict[str, Any] | None = None,
+) -> dict[str, go.Figure]:
     """Get dictionary with kernel density estimate plots for each factor.
 
     Plots kernel densities for latent factors and collects them in a dictionary
@@ -257,22 +263,22 @@ def univariate_densities(
 
 
 def bivariate_density_contours(
-    data,
-    model_dict,
-    params,
-    period,
-    factors=None,
-    observed_factors=False,
-    states=None,
-    n_points=50,
-    contour_kwargs=None,
-    layout_kwargs=None,
-    contours_showlabels=False,
-    contours_coloring="none",
-    contours_colorscale="RdBu_r",
-    lines_colorscale="D3",
-    showcolorbar=False,
-):
+    data: pd.DataFrame,
+    model_dict: dict[str, Any],
+    params: pd.DataFrame,
+    period: int,
+    factors: list[str] | None = None,
+    observed_factors: bool = False,
+    states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame] | None = None,
+    n_points: int = 50,
+    contour_kwargs: dict[str, Any] | None = None,
+    layout_kwargs: dict[str, Any] | None = None,
+    contours_showlabels: bool = False,
+    contours_coloring: str = "none",
+    contours_colorscale: str = "RdBu_r",
+    lines_colorscale: str = "D3",
+    showcolorbar: bool = False,
+) -> dict[tuple[str, str], go.Figure]:
     """Get dictionary with pariwise density contour plots.
 
     Plots pairwise bivariate density contours for latent factors
@@ -383,22 +389,22 @@ def bivariate_density_contours(
 
 
 def bivariate_density_surfaces(
-    data,
-    model_dict,
-    params,
-    period,
-    factors=None,
-    observed_factors=False,
-    states=None,
-    n_points=50,
-    layout_kwargs=None,
-    colorscale="RdBu_r",
-    opacity=0.9,
-    showcolorbar=False,
-    showgrids=True,
-    showaxlines=True,
-    showlabels=True,
-):
+    data: pd.DataFrame,
+    model_dict: dict[str, Any],
+    params: pd.DataFrame,
+    period: int,
+    factors: list[str] | None = None,
+    observed_factors: bool = False,
+    states: pd.DataFrame | None = None,
+    n_points: int = 50,
+    layout_kwargs: dict[str, Any] | None = None,
+    colorscale: str = "RdBu_r",
+    opacity: float = 0.9,
+    showcolorbar: bool = False,
+    showgrids: bool = True,
+    showaxlines: bool = True,
+    showlabels: bool = True,
+) -> dict[tuple[str, str], go.Figure]:
     """Get dictionary with pariwise 3d density surface plots.
 
     Plots pairwise 3d density surfaces for latent factors
@@ -505,8 +511,12 @@ def bivariate_density_surfaces(
 
 
 def _process_data(
-    states, period, factors, aug_periods_to_periods, observed_states=None
-):
+    states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame],
+    period: int,
+    factors: list[str],
+    aug_periods_to_periods: Mapping[int, int],
+    observed_states: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     ap_to_p = pd.Series(aug_periods_to_periods, name="period")
     ap_to_p.index.name = "aug_period"
     if isinstance(states, pd.DataFrame):
@@ -548,15 +558,15 @@ def _process_data(
 
 
 def _process_distplot_kwargs(
-    show_curve,
-    show_hist,
-    show_rug,
-    curve_type,
-    bin_size,
-    scenarios,
-    colorscale,
-    distplot_kwargs,
-):
+    show_curve: bool,
+    show_hist: bool,
+    show_rug: bool,
+    curve_type: str,
+    bin_size: float,
+    scenarios: NDArray[Any],
+    colorscale: str,
+    distplot_kwargs: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Define and update default distplot kwargs."""
     default_kwargs = {
         "show_hist": show_hist,
@@ -572,7 +582,13 @@ def _process_distplot_kwargs(
     return default_kwargs
 
 
-def _calculate_kde_for_3d(data, factors, n_points):
+def _calculate_kde_for_3d(
+    data: pd.DataFrame,
+    factors: tuple[str, str],
+    n_points: int,
+) -> tuple[
+    NDArray[np.floating[Any]], NDArray[np.floating[Any]], NDArray[np.floating[Any]]
+]:
     """Create grid mesh and calculate Gaussian kernel over the grid."""
     x = data[factors[0]]
     y = data[factors[1]]
@@ -588,12 +604,12 @@ def _calculate_kde_for_3d(data, factors, n_points):
 
 
 def _process_contour_kwargs(
-    contour_kwargs,
-    contours_showlabels,
-    contours_coloring,
-    contours_colorscale,
-    contours_showscale,
-):
+    contour_kwargs: dict[str, Any] | None,
+    contours_showlabels: bool,
+    contours_coloring: str | None,
+    contours_colorscale: str,
+    contours_showscale: bool,
+) -> dict[str, Any]:
     """Define and update default density contour kwargs."""
     if contours_coloring is None:
         contours_coloring = "none"
@@ -609,9 +625,11 @@ def _process_contour_kwargs(
     return default_kwargs
 
 
-def _process_layout_kwargs(layout_kwargs):
+def _process_layout_kwargs(
+    layout_kwargs: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Define and update default figure layout kwargs."""
-    default_kwargs = {
+    default_kwargs: dict[str, Any] = {
         "template": "simple_white",
         "xaxis_showgrid": False,
         "yaxis_showgrid": False,
@@ -621,12 +639,17 @@ def _process_layout_kwargs(layout_kwargs):
     return default_kwargs
 
 
-def _process_layout_kwargs_3d(layout_kwargs, showgrids, showaxlines, showlabels):
+def _process_layout_kwargs_3d(
+    layout_kwargs: dict[str, Any] | None,
+    showgrids: bool,
+    showaxlines: bool,
+    showlabels: bool,
+) -> dict[str, Any]:
     """Define and update default figure layout kwargs for 3d plots."""
-    default_kwargs = {
+    default_kwargs: dict[str, Any] = {
         "template": "none",
     }
-    scene = {}
+    scene: dict[str, Any] = {}
     for ax in list("xyz"):
         scene[f"{ax}axis"] = {
             "showgrid": showgrids,
@@ -640,7 +663,10 @@ def _process_layout_kwargs_3d(layout_kwargs, showgrids, showaxlines, showlabels)
     return default_kwargs
 
 
-def _process_factor_mapping_dist(mapper, factors):
+def _process_factor_mapping_dist(
+    mapper: dict[str, str] | None,
+    factors: list[str],
+) -> dict[str, str]:
     """Process mapper to return dictionary with old and new factor names."""
     if mapper is None:
         mapper = {fac: fac for fac in factors}
@@ -651,7 +677,10 @@ def _process_factor_mapping_dist(mapper, factors):
     return mapper
 
 
-def _get_ordered_factors(factor_order, factors):
+def _get_ordered_factors(
+    factor_order: list[str] | str | None,
+    factors: list[str],
+) -> list[str]:
     """Process factor orders to return list of strings."""
     if factor_order is None:
         ordered_factors = factors
@@ -662,17 +691,24 @@ def _get_ordered_factors(factor_order, factors):
     return ordered_factors
 
 
-def _get_factors(factors, observed_factors, model):
+def _get_factors(
+    factors: list[str] | None,
+    observed_factors: bool,
+    model: "ProcessedModel",
+) -> list[str]:
     """Proccess factor names to return list of strings."""
     if factors is None:
         if observed_factors:
-            factors = model.labels.all_factors
+            factors = list(model.labels.all_factors)
         else:
-            factors = model.labels.latent_factors
+            factors = list(model.labels.latent_factors)
     return factors
 
 
-def _get_data_observed_factors(data, factors):
+def _get_data_observed_factors(
+    data: pd.DataFrame,
+    factors: list[str],
+) -> pd.DataFrame | None:
     """Get data with observed factors if any."""
     to_concat = []
     for fac in factors:

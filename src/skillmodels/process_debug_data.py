@@ -1,8 +1,18 @@
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
 import pandas as pd
+from jax import Array
+from numpy.typing import NDArray
+
+if TYPE_CHECKING:
+    from skillmodels.types import ProcessedModel
 
 
-def process_debug_data(debug_data, model):
+def process_debug_data(
+    debug_data: dict[str, Any],
+    model: "ProcessedModel",
+) -> dict[str, Any]:
     """Process the raw debug data into pandas objects that make visualization easy.
 
     Args:
@@ -93,7 +103,11 @@ def process_debug_data(debug_data, model):
     return res
 
 
-def _create_post_update_states(filtered_states, factors, update_info):
+def _create_post_update_states(
+    filtered_states: Array,
+    factors: tuple[str, ...],
+    update_info: pd.DataFrame,
+) -> pd.DataFrame:
     to_concat = []
     for (aug_period, meas), data in zip(
         update_info.index, filtered_states, strict=False
@@ -109,7 +123,10 @@ def _create_post_update_states(filtered_states, factors, update_info):
     return post_states
 
 
-def _convert_state_array_to_df(arr, factor_names):
+def _convert_state_array_to_df(
+    arr: NDArray[np.floating[Any]],
+    factor_names: tuple[str, ...],
+) -> pd.DataFrame:
     """Convert a 3d state array into a 2d DataFrame.
 
     Args:
@@ -117,17 +134,22 @@ def _convert_state_array_to_df(arr, factor_names):
         factor_names (list): Names of the latent factors.
     """
     n_obs, n_mixtures, n_states = arr.shape
-    df = pd.DataFrame(data=arr.reshape(-1, n_states), columns=factor_names)
+    df = pd.DataFrame(data=arr.reshape(-1, n_states), columns=list(factor_names))
     df["mixture"] = np.full((n_obs, n_mixtures), np.arange(n_mixtures)).flatten()
     return df
 
 
-def _create_filtered_states(filtered_states, log_mixture_weights, update_info, factors):
-    filtered_states = np.array(filtered_states)
-    log_mixture_weights = np.array(log_mixture_weights)
-    weights = np.exp(log_mixture_weights)
+def _create_filtered_states(
+    filtered_states: Array,
+    log_mixture_weights: Array,
+    update_info: pd.DataFrame,
+    factors: tuple[str, ...],
+) -> pd.DataFrame:
+    filtered_states_np = np.array(filtered_states)
+    log_mixture_weights_np = np.array(log_mixture_weights)
+    weights = np.exp(log_mixture_weights_np)
 
-    agg_states = (filtered_states * weights.reshape(*weights.shape, 1)).sum(axis=-2)
+    agg_states = (filtered_states_np * weights.reshape(*weights.shape, 1)).sum(axis=-2)
 
     keep = []
     for i, (aug_period, measurement) in enumerate(update_info.index):
@@ -150,20 +172,26 @@ def _create_filtered_states(filtered_states, log_mixture_weights, update_info, f
     return filtered_states
 
 
-def create_state_ranges(filtered_states, factors):
-    ranges = {}
+def create_state_ranges(
+    filtered_states: pd.DataFrame,
+    factors: tuple[str, ...] | list[str],
+) -> dict[str, pd.DataFrame]:
+    ranges: dict[str, pd.DataFrame] = {}
     # Group by whichever period column is present
     period_col = "aug_period" if "aug_period" in filtered_states.columns else "period"
     minima = filtered_states.groupby(period_col).min()
     maxima = filtered_states.groupby(period_col).max()
     for factor in factors:
         df = pd.concat([minima[factor], maxima[factor]], axis=1)
-        df.columns = ["minimum", "maximum"]
+        df.columns = pd.Index(["minimum", "maximum"])
         ranges[factor] = df
     return ranges
 
 
-def _process_residuals(residuals, update_info):
+def _process_residuals(
+    residuals: Array,
+    update_info: pd.DataFrame,
+) -> pd.DataFrame:
     to_concat = []
     n_obs, n_mixtures = residuals[0].shape
     for (aug_period, meas), data in zip(update_info.index, residuals, strict=False):
@@ -176,11 +204,17 @@ def _process_residuals(residuals, update_info):
     return pd.concat(to_concat)
 
 
-def _process_residual_sds(residual_sds, update_info):
+def _process_residual_sds(
+    residual_sds: Array,
+    update_info: pd.DataFrame,
+) -> pd.DataFrame:
     return _process_residuals(residual_sds, update_info)
 
 
-def _process_all_contributions(all_contributions, update_info):
+def _process_all_contributions(
+    all_contributions: Array,
+    update_info: pd.DataFrame,
+) -> pd.DataFrame:
     to_concat = []
     for (period, meas), contribs in zip(
         update_info.index, all_contributions, strict=False

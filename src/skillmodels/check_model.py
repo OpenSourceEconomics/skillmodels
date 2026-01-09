@@ -52,8 +52,13 @@ def check_model(
         raise ValueError(f"Invalid model specification: {report}")
 
 
-def check_stagemap(stagemap, stages, n_periods, is_augmented):
-    report = []
+def check_stagemap(
+    stagemap: tuple[int, ...],
+    stages: tuple[int, ...] | list[int],
+    n_periods: int,
+    is_augmented: bool,
+) -> list[str]:
+    report: list[str] = []
     step_size = 2 if is_augmented else 1
     if len(stagemap) != n_periods - step_size:
         report.append(
@@ -95,8 +100,11 @@ def _check_anchoring(anchoring: Anchoring) -> list[str]:
     return report
 
 
-def _check_measurements(model_dict, factors):
-    report = []
+def _check_measurements(
+    model_dict: dict,
+    factors: tuple[str, ...],
+) -> list[str]:
+    report: list[str] = []
     for factor in factors:
         candidate = model_dict["factors"][factor]["measurements"]
         if not _is_list_of(candidate, list):
@@ -134,8 +142,11 @@ def _check_no_overlap_in_measurements_of_states_and_inv(
     return report
 
 
-def _check_normalizations(model_dict, factors):
-    report = []
+def _check_normalizations(
+    model_dict: dict,
+    factors: tuple[str, ...],
+) -> list[str]:
+    report: list[str] = []
     for factor in factors:
         norminfo = model_dict["factors"][factor].get("normalizations", {})
         for norm_type in ["loadings", "intercepts"]:
@@ -160,8 +171,12 @@ def _check_normalizations(model_dict, factors):
     return report
 
 
-def _check_normalized_variables_are_present(list_of_normdicts, model_dict, factor):
-    report = []
+def _check_normalized_variables_are_present(
+    list_of_normdicts: list[dict],
+    model_dict: dict,
+    factor: str,
+) -> list[str]:
+    report: list[str] = []
     for period, norm_dict in enumerate(list_of_normdicts):
         for var in norm_dict:
             if var not in model_dict["factors"][factor]["measurements"][period]:
@@ -174,8 +189,11 @@ def _check_normalized_variables_are_present(list_of_normdicts, model_dict, facto
     return report
 
 
-def _check_loadings_are_not_normalized_to_zero(list_of_normdicts, factor):
-    report = []
+def _check_loadings_are_not_normalized_to_zero(
+    list_of_normdicts: list[dict],
+    factor: str,
+) -> list[str]:
+    report: list[str] = []
     for period, norm_dict in enumerate(list_of_normdicts):
         for var, val in norm_dict.items():
             if val == 0:
@@ -186,7 +204,7 @@ def _check_loadings_are_not_normalized_to_zero(list_of_normdicts, factor):
     return report
 
 
-def _is_list_of(candidate, type_):
+def _is_list_of(candidate: object, type_: type) -> bool:
     """Check if candidate is a list that only contains elements of type.
 
     Note that this is always falls if candidate is not a list and always true if

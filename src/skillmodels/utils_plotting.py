@@ -1,14 +1,16 @@
+from typing import Any
+
 import numpy as np
 
 
 def get_layout_kwargs(
-    layout_kwargs=None,
-    legend_kwargs=None,
-    title_kwargs=None,
-    showlegend=False,
-    columns=None,
-    rows=None,
-):
+    layout_kwargs: dict[str, Any] | None = None,
+    legend_kwargs: dict[str, Any] | None = None,
+    title_kwargs: dict[str, Any] | None = None,
+    showlegend: bool = False,
+    columns: list[str] | None = None,
+    rows: list[str] | None = None,
+) -> dict[str, Any]:
     """Define and update default kwargs for update_layout.
 
     Defines some default keyword arguments to update figure layout, such as
@@ -37,13 +39,13 @@ def get_layout_kwargs(
 
 
 def get_make_subplot_kwargs(
-    sharex,
-    sharey,
-    column_order,
-    row_order,
-    make_subplot_kwargs,
-    add_scenes=False,
-):
+    sharex: bool,
+    sharey: bool,
+    column_order: list[str],
+    row_order: list[str],
+    make_subplot_kwargs: dict[str, Any] | None,
+    add_scenes: bool = False,
+) -> dict[str, Any]:
     """Define and update keywargs for instantiating figure with subplots."""
     nrows = len(row_order)
     ncols = len(column_order)

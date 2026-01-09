@@ -1,9 +1,17 @@
 import functools
+from collections.abc import Callable
+from typing import Any
 
 import jax.numpy as jnp
+from jax import Array
 
 
-def extract_params(func=None, *, key=None, names=None):
+def extract_params(
+    func: Callable | None = None,
+    *,
+    key: str | None = None,
+    names: list[str] | None = None,
+) -> Callable:
     """Process params before passing them to func.
 
     Note: The resulting function is keyword only!
@@ -17,11 +25,11 @@ def extract_params(func=None, *, key=None, names=None):
 
     """
 
-    def decorator_extract_params(func):
+    def decorator_extract_params(func: Callable) -> Callable:
         if key is not None and names is None:
 
             @functools.wraps(func)
-            def wrapper_extract_params(**kwargs):
+            def wrapper_extract_params(**kwargs: Any) -> Any:
                 internal_kwargs = kwargs.copy()
                 internal_kwargs["params"] = kwargs["params"][key]
                 return func(**internal_kwargs)
@@ -29,7 +37,7 @@ def extract_params(func=None, *, key=None, names=None):
         elif key is None and names is not None:
 
             @functools.wraps(func)
-            def wrapper_extract_params(**kwargs):
+            def wrapper_extract_params(**kwargs: Any) -> Any:
                 internal_kwargs = kwargs.copy()
                 internal_kwargs["params"] = dict(
                     zip(names, kwargs["params"], strict=False)
@@ -39,7 +47,7 @@ def extract_params(func=None, *, key=None, names=None):
         elif key is not None and names is not None:
 
             @functools.wraps(func)
-            def wrapper_extract_params(**kwargs):
+            def wrapper_extract_params(**kwargs: Any) -> Any:
                 internal_kwargs = kwargs.copy()
                 internal_kwargs["params"] = dict(
                     zip(names, kwargs["params"][key], strict=False)
@@ -56,11 +64,11 @@ def extract_params(func=None, *, key=None, names=None):
     return decorator_extract_params
 
 
-def jax_array_output(func):
+def jax_array_output(func: Callable) -> Callable:
     """Convert tuple output to list output."""
 
     @functools.wraps(func)
-    def wrapper_jax_array_output(*args, **kwargs):
+    def wrapper_jax_array_output(*args: Any, **kwargs: Any) -> Array:
         raw = func(*args, **kwargs)
         out = jnp.array(raw)
         return out
@@ -68,9 +76,13 @@ def jax_array_output(func):
     return wrapper_jax_array_output
 
 
-def register_params(func=None, *, params=None):
-    def decorator_register_params(func):
-        func.__registered_params__ = params
+def register_params(
+    func: Callable | None = None,
+    *,
+    params: list[str] | None = None,
+) -> Callable:
+    def decorator_register_params(func: Callable) -> Callable:
+        func.__registered_params__ = params  # ty: ignore[unresolved-attribute]
         return func
 
     if callable(func):

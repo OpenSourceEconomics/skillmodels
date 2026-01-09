@@ -1,30 +1,36 @@
 import functools
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 from skillmodels.clipping import soft_clipping
 from skillmodels.kalman_filters import kalman_predict
 from skillmodels.kalman_filters_debug import kalman_update
 from skillmodels.parse_params import parse_params
 
+if TYPE_CHECKING:
+    from skillmodels.types import Dimensions, EstimationOptions, Labels
+
 
 def log_likelihood(
-    params,
-    parsing_info,
-    measurements,
-    controls,
-    transition_func,
-    sigma_scaling_factor,
-    sigma_weights,
-    dimensions,
-    labels,
-    estimation_options,
-    is_measurement_iteration,
-    is_predict_iteration,
-    iteration_to_period,
-    observed_factors,
-):
+    params: Array,
+    parsing_info: dict[str, Any],
+    measurements: Array,
+    controls: Array,
+    transition_func: Callable[..., Array],
+    sigma_scaling_factor: float,
+    sigma_weights: Array,
+    dimensions: "Dimensions",
+    labels: "Labels",
+    estimation_options: "EstimationOptions",
+    is_measurement_iteration: Array,
+    is_predict_iteration: Array,
+    iteration_to_period: Array,
+    observed_factors: Array,
+) -> dict[str, Any]:
     """Log likelihood of a skill formation model, returning debug data on top.
 
     This function is jax-differentiable and jax-jittable as long as all but the first
@@ -142,15 +148,15 @@ def log_likelihood(
 
 
 def _scan_body(
-    carry,
-    loop_args,
-    controls,
-    pardict,
-    sigma_scaling_factor,
-    sigma_weights,
-    transition_func,
-    observed_factors,
-):
+    carry: dict[str, Array],
+    loop_args: dict[str, Array],
+    controls: Array,
+    pardict: dict[str, Any],
+    sigma_scaling_factor: float,
+    sigma_weights: Array,
+    transition_func: Callable[..., Array],
+    observed_factors: Array,
+) -> tuple[dict[str, Array], dict[str, Any]]:
     # ==================================================================================
     # create arguments needed for update
     # ==================================================================================
@@ -219,12 +225,16 @@ def _scan_body(
     return new_state, static_out
 
 
-def _one_arg_measurement_update(kwargs):
+def _one_arg_measurement_update(
+    kwargs: dict[str, Any],
+) -> tuple[Array, Array, Array, Array, dict[str, Any]]:
     out = kalman_update(**kwargs)
     return out
 
 
-def _one_arg_anchoring_update(kwargs):
+def _one_arg_anchoring_update(
+    kwargs: dict[str, Any],
+) -> tuple[Array, Array, Array, Array, dict[str, Any]]:
     _, _, new_log_mixture_weights, new_loglikes, debug_info = kalman_update(**kwargs)
     out = (
         kwargs["states"],
@@ -236,12 +246,18 @@ def _one_arg_anchoring_update(kwargs):
     return out
 
 
-def _one_arg_no_predict(kwargs, transition_func):  # noqa: ARG001
+def _one_arg_no_predict(
+    kwargs: dict[str, Any],
+    transition_func: Callable[..., Array],  # noqa: ARG001
+) -> tuple[Array, Array, Array]:
     """Just return the states cond chols without any changes."""
     return kwargs["states"], kwargs["upper_chols"], kwargs["states"]
 
 
-def _one_arg_predict(kwargs, transition_func):
+def _one_arg_predict(
+    kwargs: dict[str, Any],
+    transition_func: Callable[..., Array],
+) -> tuple[Array, Array, Array]:
     """Do a predict step but also return the input states as filtered states."""
     new_states, new_upper_chols = kalman_predict(
         transition_func,

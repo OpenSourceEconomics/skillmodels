@@ -1,5 +1,8 @@
+from typing import Any
+
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
 
@@ -10,15 +13,15 @@ array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
 
 
 def kalman_update(
-    states,
-    upper_chols,
-    loadings,
-    control_params,
-    meas_sd,
-    measurements,
-    controls,
-    log_mixture_weights,
-):
+    states: Array,
+    upper_chols: Array,
+    loadings: Array,
+    control_params: Array,
+    meas_sd: float,
+    measurements: Array,
+    controls: Array,
+    log_mixture_weights: Array,
+) -> tuple[Array, Array, Array, Array, dict[str, Any]]:
     """Perform a Kalman update with likelihood evaluation, returning debug info on top.
 
     Args:

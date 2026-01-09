@@ -1,22 +1,23 @@
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+from jax import Array
 
 if TYPE_CHECKING:
-    from skillmodels.types import Labels
+    from skillmodels.types import Anchoring, Labels
 
 
 def process_data(
-    df,
-    has_endogenous_factors,
-    labels,
-    update_info,
-    anchoring_info,
-    purpose="estimation",
-):
+    df: pd.DataFrame,
+    has_endogenous_factors: bool,
+    labels: "Labels",
+    update_info: pd.DataFrame,
+    anchoring_info: "Anchoring",
+    purpose: Literal["estimation", "anything", "simulation"] = "estimation",
+) -> dict[str, Any]:
     """Process the data for estimation.
 
     Args:
@@ -63,7 +64,10 @@ def process_data(
     return out
 
 
-def pre_process_data(df, periods):
+def pre_process_data(
+    df: pd.DataFrame,
+    periods: tuple[int, ...] | list[int],
+) -> pd.DataFrame:
     """Balance panel data in long format, drop unnecessary periods and set index.
 
     Args:
@@ -83,7 +87,8 @@ def pre_process_data(df, periods):
     # replace existing codes for periods and
     df.index.names = ["id", "period"]
     for level in [0, 1]:
-        df.index = df.index.set_levels(range(len(df.index.levels[level])), level=level)
+        # df.index is a MultiIndex but typed as Index
+        df.index = df.index.set_levels(range(len(df.index.levels[level])), level=level)  # ty: ignore[unresolved-attribute]
 
     # create new index
     ids = sorted(df.index.get_level_values("id").unique())
@@ -125,7 +130,7 @@ def _augment_data_for_endogenous_factors(
     df: pd.DataFrame,
     labels: "Labels",
     update_info: pd.DataFrame,
-):
+) -> pd.DataFrame:
     """Make room for endogenous factors by doubling up the periods.
 
     Endogeneity means that current states influence the factor. Typically, this comes
@@ -155,15 +160,23 @@ def _augment_data_for_endogenous_factors(
     return out.set_index(["id", "aug_period"]).sort_index()
 
 
-def _add_copies_of_anchoring_outcome(df, anchoring_info):
+def _add_copies_of_anchoring_outcome(
+    df: pd.DataFrame,
+    anchoring_info: "Anchoring",
+) -> pd.DataFrame:
     df = df.copy()
     for factor in anchoring_info.factors:
-        outcome = anchoring_info.outcomes[factor]
+        outcome = anchoring_info.outcomes[factor]  # ty: ignore[invalid-argument-type]
         df[f"{outcome}_{factor}"] = df[outcome]
     return df
 
 
-def _check_data(df, update_info, labels, purpose):  # noqa: C901
+def _check_data(  # noqa: C901
+    df: pd.DataFrame,
+    update_info: pd.DataFrame,
+    labels: "Labels",
+    purpose: Literal["estimation", "anything", "simulation"],
+) -> None:
     var_report = pd.DataFrame(index=update_info.index[:0], columns=["problem"])
     for aug_period in labels.aug_periods:
         period_data = df.query(f"aug_period == {aug_period}")
@@ -196,7 +209,11 @@ def _check_data(df, update_info, labels, purpose):  # noqa: C901
         raise ValueError(var_report)
 
 
-def _handle_controls_with_missings(df, controls, update_info):
+def _handle_controls_with_missings(
+    df: pd.DataFrame,
+    controls: tuple[str, ...],
+    update_info: pd.DataFrame,
+) -> pd.DataFrame:
     aug_periods = update_info.index.get_level_values(0).unique().tolist()
     problematic_index = df.index[:0]
     for aug_period in aug_periods:
@@ -215,7 +232,10 @@ def _handle_controls_with_missings(df, controls, update_info):
     return df
 
 
-def _get_period_measurements(update_info, aug_period):
+def _get_period_measurements(
+    update_info: pd.DataFrame,
+    aug_period: int,
+) -> list[str]:
     if aug_period in update_info.index:
         measurements = list(update_info.loc[aug_period].index)
     else:
@@ -223,14 +243,22 @@ def _get_period_measurements(update_info, aug_period):
     return measurements
 
 
-def _generate_measurements_array(df, update_info, n_obs):
+def _generate_measurements_array(
+    df: pd.DataFrame,
+    update_info: pd.DataFrame,
+    n_obs: int,
+) -> Array:
     arr = np.zeros((len(update_info), n_obs))
     for k, (aug_period, var) in enumerate(update_info.index):
         arr[k] = df.query(f"aug_period == {aug_period}")[var].to_numpy()
     return jnp.array(arr, dtype="float32")
 
 
-def _generate_controls_array(df, labels, n_obs):
+def _generate_controls_array(
+    df: pd.DataFrame,
+    labels: "Labels",
+    n_obs: int,
+) -> Array:
     arr = np.zeros((len(labels.aug_periods), n_obs, len(labels.controls)))
     for aug_period in labels.aug_periods:
         arr[aug_period] = df.query(f"aug_period == {aug_period}")[
@@ -239,7 +267,11 @@ def _generate_controls_array(df, labels, n_obs):
     return jnp.array(arr, dtype="float32")
 
 
-def _generate_observed_factor_array(df, labels, n_obs):
+def _generate_observed_factor_array(
+    df: pd.DataFrame,
+    labels: "Labels",
+    n_obs: int,
+) -> Array:
     arr = np.zeros((len(labels.aug_periods), n_obs, len(labels.observed_factors)))
     for aug_period in labels.aug_periods:
         arr[aug_period] = df.query(f"aug_period == {aug_period}")[

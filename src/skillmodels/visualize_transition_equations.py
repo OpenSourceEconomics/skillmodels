@@ -1,9 +1,12 @@
 import itertools
+from collections.abc import Callable
 from copy import deepcopy
+from typing import TYPE_CHECKING, Any
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+from jax import Array
 from plotly import express as px
 from plotly import graph_objects as go
 from plotly.subplots import make_subplots
@@ -16,20 +19,23 @@ from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
 from skillmodels.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
 
+if TYPE_CHECKING:
+    from skillmodels.types import ProcessedModel
+
 
 def combine_transition_plots(
-    plots_dict,
-    column_order=None,
-    row_order=None,
-    factor_mapping=None,
-    make_subplot_kwargs=None,
-    sharex=False,
-    sharey=True,
-    showlegend=True,
-    layout_kwargs=None,
-    legend_kwargs=None,
-    title_kwargs=None,
-):
+    plots_dict: dict[tuple[str, str], go.Figure],
+    column_order: list[str] | str | None = None,
+    row_order: list[str] | str | None = None,
+    factor_mapping: dict[str, str] | None = None,
+    make_subplot_kwargs: dict[str, Any] | None = None,
+    sharex: bool = False,
+    sharey: bool = True,
+    showlegend: bool = True,
+    layout_kwargs: dict[str, Any] | None = None,
+    legend_kwargs: dict[str, Any] | None = None,
+    title_kwargs: dict[str, Any] | None = None,
+) -> go.Figure:
     """Combine individual plots into figure with subplots.
 
     Use dictionary with plotly images as values to build plotly figure with subplots.
@@ -131,18 +137,22 @@ def combine_transition_plots(
 
 
 def get_transition_plots(
-    model_dict,
-    params,
-    data,
-    period,
-    state_ranges=None,
-    quantiles_of_other_factors=(0.25, 0.5, 0.75),
-    n_points=50,
-    n_draws=50,
-    colorscale="Magenta_r",
-    layout_kwargs=None,
-    include_correction_factors=False,
-):
+    model_dict: dict[str, Any],
+    params: pd.DataFrame,
+    data: pd.DataFrame,
+    period: int,
+    state_ranges: dict[str, pd.DataFrame] | None = None,
+    quantiles_of_other_factors: tuple[float, ...] | list[float] | float | None = (
+        0.25,
+        0.5,
+        0.75,
+    ),
+    n_points: int = 50,
+    n_draws: int = 50,
+    colorscale: str = "Magenta_r",
+    layout_kwargs: dict[str, Any] | None = None,
+    include_correction_factors: bool = False,
+) -> dict[tuple[str, str], go.Figure]:
     """Get dictionary with individual plots of transition equations for each factor.
 
     Args:
@@ -192,7 +202,7 @@ def get_transition_plots(
         latent_factors = [
             lf
             for lf in model.labels.latent_factors
-            if not model.endogenous_factors_info.factor_info[lf].is_correction
+            if not model.endogenous_factors_info.factor_info[lf].is_correction  # ty: ignore[invalid-argument-type]
         ]
     all_factors = model.labels.all_factors
     states = get_filtered_states(model_dict=model_dict, data=data, params=params)[
@@ -204,7 +214,7 @@ def get_transition_plots(
         params=params,
         states=states,
         state_ranges=state_ranges,
-        latent_factors=latent_factors,
+        latent_factors=latent_factors,  # ty: ignore[invalid-argument-type]
         all_factors=all_factors,
         quantiles_of_other_factors=quantiles_of_other_factors,
         period=period,
@@ -217,21 +227,21 @@ def get_transition_plots(
 
 
 def _get_dictionary_with_plots(
-    model,
-    data,
-    params,
-    states,
-    state_ranges,
-    latent_factors,
-    all_factors,
-    quantiles_of_other_factors,
-    period,
-    n_points,
-    n_draws,
-    colorscale,
-    layout_kwargs,
-    showlegend=True,
-):
+    model: "ProcessedModel",
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    states: pd.DataFrame,
+    state_ranges: dict[str, pd.DataFrame] | None,
+    latent_factors: list[str],
+    all_factors: tuple[str, ...],
+    quantiles_of_other_factors: list[float] | None,
+    period: int,
+    n_points: int,
+    n_draws: int,
+    colorscale: str,
+    layout_kwargs: dict[str, Any] | None,
+    showlegend: bool = True,
+) -> dict[tuple[str, str], go.Figure]:
     """Get plots of transition functions for each input and output combination.
 
     Return a dictionary with individual plots of transition functions for each input
@@ -288,10 +298,10 @@ def _get_dictionary_with_plots(
         _aug_periods = [period]
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
-        transition_function = model.transition_info.individual_functions[output_factor]
+        transition_function = model.transition_info.individual_functions[output_factor]  # ty: ignore[invalid-argument-type]
         if (
             has_endogenous_factors
-            and model.endogenous_factors_info.factor_info[output_factor].is_endogenous
+            and model.endogenous_factors_info.factor_info[output_factor].is_endogenous  # ty: ignore[invalid-argument-type]
         ):
             aug_period = min(_aug_periods)
         else:
@@ -350,17 +360,24 @@ def _get_dictionary_with_plots(
     return plots_dict
 
 
-def _get_state_ranges(state_ranges, states_data, all_factors):
+def _get_state_ranges(
+    state_ranges: dict[str, pd.DataFrame] | None,
+    states_data: pd.DataFrame,
+    all_factors: tuple[str, ...],
+) -> dict[str, pd.DataFrame]:
     """Create state ranges if none is given."""
     if state_ranges is None:
-        state_ranges = create_state_ranges(states_data, all_factors)
+        state_ranges = create_state_ranges(states_data, list(all_factors))
     return state_ranges
 
 
-def _get_pardict(model, params):
+def _get_pardict(
+    model: "ProcessedModel",
+    params: pd.DataFrame,
+) -> dict[str, Any]:
     """Get parsed params dictionary."""
     parsing_info = create_parsing_info(
-        params_index=params.index,
+        params_index=params.index,  # ty: ignore[invalid-argument-type]
         update_info=model.update_info,
         labels=model.labels,
         anchoring=model.anchoring,
@@ -377,7 +394,10 @@ def _get_pardict(model, params):
     return pardict
 
 
-def _set_index_params(model, params):
+def _set_index_params(
+    model: "ProcessedModel",
+    params: pd.DataFrame,
+) -> pd.DataFrame:
     """Reset index of params data frame to model implied values."""
     params_index = get_params_index(
         update_info=model.update_info,
@@ -391,7 +411,13 @@ def _set_index_params(model, params):
     return params
 
 
-def _get_states_data(model, period, data, states, observed_factors):
+def _get_states_data(
+    model: "ProcessedModel",
+    period: int,
+    data: pd.DataFrame,
+    states: pd.DataFrame,
+    observed_factors: tuple[str, ...],
+) -> pd.DataFrame:
     if observed_factors and data is None:
         raise ValueError(
             "The model has observed factors. You must pass the empirical data to "
@@ -445,17 +471,17 @@ def _get_states_data(model, period, data, states, observed_factors):
 
 
 def _prepare_data_for_one_plot_fixed_quantile_2d(
-    states_data,
-    state_ranges,
-    aug_period,
-    input_factor,
-    output_factor,
-    n_points,
-    quantiles_of_other_factors,
-    transition_function,
-    transition_params,
-    all_factors,
-):
+    states_data: pd.DataFrame,
+    state_ranges: dict[str, pd.DataFrame],
+    aug_period: int,
+    input_factor: str,
+    output_factor: str,
+    n_points: int,
+    quantiles_of_other_factors: list[float],
+    transition_function: Callable[..., Array],
+    transition_params: dict[str, Any],
+    all_factors: tuple[str, ...],
+) -> pd.DataFrame:
     period_data = states_data.query(f"aug_period == {aug_period}")[list(all_factors)]
     input_min = state_ranges[input_factor].loc[aug_period]["minimum"]
     input_max = state_ranges[input_factor].loc[aug_period]["maximum"]
@@ -479,7 +505,9 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
     return out
 
 
-def _process_quantiles_of_other_factors(quantiles_of_other_factors):
+def _process_quantiles_of_other_factors(
+    quantiles_of_other_factors: tuple[float, ...] | list[float] | float | None,
+) -> list[float] | None:
     """Process quantiles of other factors to always have list as type."""
     if isinstance(quantiles_of_other_factors, float | int):
         quantiles_of_other_factors = [quantiles_of_other_factors]
@@ -489,17 +517,17 @@ def _process_quantiles_of_other_factors(quantiles_of_other_factors):
 
 
 def _prepare_data_for_one_plot_average_2d(
-    states_data,
-    state_ranges,
-    aug_period,
-    input_factor,
-    output_factor,
-    n_points,
-    n_draws,
-    transition_function,
-    transition_params,
-    all_factors,
-):
+    states_data: pd.DataFrame,
+    state_ranges: dict[str, pd.DataFrame],
+    aug_period: int,
+    input_factor: str,
+    output_factor: str,
+    n_points: int,
+    n_draws: int,
+    transition_function: Callable[..., Array],
+    transition_params: dict[str, Any],
+    all_factors: tuple[str, ...],
+) -> pd.DataFrame:
     period_data = states_data.query(f"aug_period == {aug_period}")
 
     sampled_factors = [factor for factor in all_factors if factor != input_factor]
@@ -525,7 +553,11 @@ def _prepare_data_for_one_plot_average_2d(
     return out
 
 
-def _process_factor_mapping_trans(factor_mapper, output_factors, input_factors):
+def _process_factor_mapping_trans(
+    factor_mapper: dict[str, str] | None,
+    output_factors: list[str],
+    input_factors: list[str],
+) -> dict[str, str]:
     """Process mapper to return dictionary with old and new factor names."""
     all_factors = input_factors + output_factors
     if factor_mapper is None:
@@ -537,20 +569,30 @@ def _process_factor_mapping_trans(factor_mapper, output_factors, input_factors):
     return factor_mapper
 
 
-def _process_orders(columns, rows, plots_dict):
+def _process_orders(
+    columns: list[str] | str | None,
+    rows: list[str] | str | None,
+    plots_dict: dict[tuple[str, str], go.Figure],
+) -> tuple[list[str], list[str]]:
     """Process axes orders to return list of strings."""
+    out_columns: list[str]
+    out_rows: list[str]
     if columns is None:
-        columns = []
+        out_columns = []
         for f in plots_dict:
-            if f[0] not in columns:
-                columns.append(f[0])
+            if f[0] not in out_columns:
+                out_columns.append(f[0])
     elif isinstance(columns, str):
-        columns = [columns]
+        out_columns = [columns]
+    else:
+        out_columns = columns
     if rows is None:
-        rows = []
+        out_rows = []
         for f in plots_dict:
-            if f[1] not in rows:
-                rows.append(f[1])
+            if f[1] not in out_rows:
+                out_rows.append(f[1])
     elif isinstance(rows, str):
-        rows = [rows]
-    return columns, rows
+        out_rows = [rows]
+    else:
+        out_rows = rows
+    return out_columns, out_rows

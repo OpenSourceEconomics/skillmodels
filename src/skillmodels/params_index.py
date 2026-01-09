@@ -9,12 +9,12 @@ from skillmodels.types import (
 
 
 def get_params_index(
-    update_info,
+    update_info: pd.DataFrame,
     labels: Labels,
     dimensions: Dimensions,
     transition_info: TransitionInfo,
     endogenous_factors_info: EndogenousFactorsInfo,
-):
+) -> pd.MultiIndex:
     """Generate index for the params_df for optimagic.
 
     The index has four levels. The first is the parameter category. The second is the
@@ -68,13 +68,15 @@ def get_params_index(
     return index
 
 
-def get_control_params_index_tuples(controls, update_info):
+def get_control_params_index_tuples(
+    controls: tuple[str, ...],
+    update_info: pd.DataFrame,
+) -> list[tuple[str, int, str, str]]:
     """Index tuples for control coeffs.
 
     Args:
-        controls (list): List of lists. There is one sublist per period which contains
-            the names of the control variables in that period. Constant not included.
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
+        controls: Names of the control variables. Constant not included.
+        update_info: DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
 
     """
@@ -85,16 +87,16 @@ def get_control_params_index_tuples(controls, update_info):
     return ind_tups
 
 
-def get_loadings_index_tuples(factors, update_info):
+def get_loadings_index_tuples(
+    factors: tuple[str, ...],
+    update_info: pd.DataFrame,
+) -> list[tuple[str, int, str, str]]:
     """Index tuples for loading.
 
     Args:
-        factors (list): The latent factors of the model
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
+        factors: The latent factors of the model.
+        update_info: DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
-
-    Returns:
-        ind_tups (list)
 
     """
     mask = update_info[list(factors)].to_numpy()
@@ -106,15 +108,14 @@ def get_loadings_index_tuples(factors, update_info):
     return ind_tups
 
 
-def get_meas_sds_index_tuples(update_info):
+def get_meas_sds_index_tuples(
+    update_info: pd.DataFrame,
+) -> list[tuple[str, int, str, str]]:
     """Index tuples for meas_sd.
 
     Args:
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
+        update_info: DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
-
-    Returns:
-        ind_tups (list)
 
     """
     ind_tups = []
@@ -123,15 +124,17 @@ def get_meas_sds_index_tuples(update_info):
     return ind_tups
 
 
-def get_shock_sds_index_tuples(aug_periods, factors, has_endogenous_factors):
+def get_shock_sds_index_tuples(
+    aug_periods: tuple[int, ...],
+    factors: tuple[str, ...],
+    has_endogenous_factors: bool,
+) -> list[tuple[str, int, str, str]]:
     """Index tuples for shock_sd.
 
     Args:
-        aug_periods (list): The augmented periods of the model.
-        factors (list): The latent factors of the model.
-
-    Returns:
-        ind_tups (list)
+        aug_periods: The augmented periods of the model.
+        factors: The latent factors of the model.
+        has_endogenous_factors: Whether the model has endogenous factors.
 
     """
     end = -2 if has_endogenous_factors else -1
@@ -142,15 +145,15 @@ def get_shock_sds_index_tuples(aug_periods, factors, has_endogenous_factors):
     return ind_tups
 
 
-def initial_mean_index_tuples(n_mixtures, factors):
+def initial_mean_index_tuples(
+    n_mixtures: int,
+    factors: tuple[str, ...],
+) -> list[tuple[str, int, str, str]]:
     """Index tuples for initial_mean.
 
     Args:
-        n_mixtures (int): Number of elements in the mixture distribution of the factors.
-        factors (list): The latent factors of the model
-
-    Returns:
-        ind_tups (list)
+        n_mixtures: Number of elements in the mixture distribution of the factors.
+        factors: The latent factors of the model.
 
     """
     ind_tups = []
@@ -160,14 +163,13 @@ def initial_mean_index_tuples(n_mixtures, factors):
     return ind_tups
 
 
-def get_mixture_weights_index_tuples(n_mixtures):
+def get_mixture_weights_index_tuples(
+    n_mixtures: int,
+) -> list[tuple[str, int, str, str]]:
     """Index tuples for mixture_weight.
 
     Args:
-        n_mixtures (int): Number of elements in the mixture distribution of the factors.
-
-    Returns:
-        ind_tups (list)
+        n_mixtures: Number of elements in the mixture distribution of the factors.
 
     """
     ind_tups = []
@@ -176,15 +178,15 @@ def get_mixture_weights_index_tuples(n_mixtures):
     return ind_tups
 
 
-def get_initial_cholcovs_index_tuples(n_mixtures, factors):
+def get_initial_cholcovs_index_tuples(
+    n_mixtures: int,
+    factors: tuple[str, ...],
+) -> list[tuple[str, int, str, str]]:
     """Index tuples for initial_cov.
 
     Args:
-        n_mixtures (int): Number of elements in the mixture distribution of the factors.
-        factors (list): The latent factors of the model
-
-    Returns:
-        ind_tups (list)
+        n_mixtures: Number of elements in the mixture distribution of the factors.
+        factors: The latent factors of the model.
 
     """
     ind_tups = []
@@ -204,17 +206,16 @@ def get_initial_cholcovs_index_tuples(n_mixtures, factors):
 
 
 def get_transition_index_tuples(
-    transition_info: TransitionInfo, aug_periods, has_endogenous_factors: bool
-):
+    transition_info: TransitionInfo,
+    aug_periods: tuple[int, ...],
+    has_endogenous_factors: bool,
+) -> list[tuple[str, int, str, str]]:
     """Index tuples for transition equation coefficients.
 
     Args:
         transition_info: Information about transition equations.
         aug_periods: The augmented periods of the model.
         has_endogenous_factors: Whether the model has endogenous factors.
-
-    Returns:
-        ind_tups (list)
 
     """
     end = -2 if has_endogenous_factors else -1

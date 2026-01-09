@@ -1,8 +1,15 @@
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 
-def soft_clipping(arr, lower=None, upper=None, lower_hardness=1, upper_hardness=1):
+def soft_clipping(
+    arr: Array,
+    lower: float | None = None,
+    upper: float | None = None,
+    lower_hardness: float = 1,
+    upper_hardness: float = 1,
+) -> Array:
     """Clip values in an array elementwise using a soft maximum to avoid kinks.
 
     Clipping from below is taking a maximum between two values. Clipping
