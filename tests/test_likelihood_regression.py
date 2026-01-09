@@ -9,6 +9,7 @@ import pytest
 import yaml
 from numpy.testing import assert_array_almost_equal as aaae
 
+from skillmodels.config import TEST_DATA_DIR
 from skillmodels.decorators import register_params
 from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.utilities import reduce_n_periods
@@ -23,20 +24,19 @@ MODEL_NAMES = [
     "one_stage_anchoring_custom_functions",
 ]
 
-# importing the TEST_DIR from config does not work for test run in conda build
-TEST_DIR = Path(__file__).parent.resolve()
+REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 
 @pytest.fixture
 def model2():
-    with open(TEST_DIR / "model2.yaml") as y:
+    with open(TEST_DATA_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     return model_dict
 
 
 @pytest.fixture
 def model2_data():
-    data = pd.read_stata(TEST_DIR / "model2_simulated_data.dta")
+    data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])
     return data
 
@@ -74,7 +74,7 @@ def _convert_model(base_model, model_name):
     ("model_name", "fun_key"), product(MODEL_NAMES, ["loglike", "debug_loglike"])
 )
 def test_likelihood_values_have_not_changed(model2, model2_data, model_name, fun_key):
-    regvault = TEST_DIR / "regression_vault"
+    regvault = REGRESSION_VAULT
     model = _convert_model(model2, model_name)
     params = pd.read_csv(regvault / f"{model_name}.csv").set_index(
         ["category", "period", "name1", "name2"],
@@ -111,7 +111,7 @@ def test_splitting_does_not_change_gradient(model2, model2_data):
 def test_likelihood_contributions_have_not_changed(
     model2, model2_data, model_name, fun_key
 ):
-    regvault = TEST_DIR / "regression_vault"
+    regvault = REGRESSION_VAULT
     model = _convert_model(model2, model_name)
     params = pd.read_csv(regvault / f"{model_name}.csv").set_index(
         ["category", "period", "name1", "name2"],
@@ -134,7 +134,7 @@ def test_likelihood_contributions_have_not_changed(
     product(["no_stages_anchoring", "with_missings"], ["loglike_and_gradient"]),
 )
 def test_likelihood_contributions_large_nobs(model2, model2_data, model_type, fun_key):
-    regvault = TEST_DIR / "regression_vault"
+    regvault = REGRESSION_VAULT
     model = _convert_model(model2, "no_stages_anchoring")
     params = pd.read_csv(regvault / "no_stages_anchoring.csv").set_index(
         ["category", "period", "name1", "name2"],
@@ -208,7 +208,7 @@ def test_likelihood_runs_with_empty_periods(model2, model2_data):
 
 def test_likelihood_runs_with_too_long_data(model2, model2_data):
     model = reduce_n_periods(model2, 2)
-    func_dict = get_maximization_inputs(model, model2_data)
+    func_dict = get_maximization_inputs(model, model2_data)  # ty: ignore[invalid-argument-type]
 
     params = func_dict["params_template"]
     params["value"] = 0.1

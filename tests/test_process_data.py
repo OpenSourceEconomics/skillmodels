@@ -1,6 +1,5 @@
 import io
 import textwrap
-from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
@@ -10,6 +9,7 @@ import yaml
 from frozendict import frozendict
 from numpy.testing import assert_array_equal as aae
 
+from skillmodels.config import TEST_DATA_DIR
 from skillmodels.process_data import (
     _augment_data_for_endogenous_factors,
     _generate_controls_array,
@@ -20,9 +20,6 @@ from skillmodels.process_data import (
 )
 from skillmodels.process_model import process_model
 from skillmodels.types import Labels
-
-# importing the TEST_DIR from config does not work for test run in conda build
-TEST_DIR = Path(__file__).parent.resolve()
 
 
 def test_pre_process_data():
@@ -50,14 +47,14 @@ def test_pre_process_data():
 @pytest.fixture
 def simplest_augmented():
     out = {}
-    with open(TEST_DIR / "simplest_augmented_model.yaml") as y:
+    with open(TEST_DATA_DIR / "simplest_augmented_model.yaml") as y:
         out["model_dict"] = yaml.load(y, Loader=yaml.FullLoader)
     _df = pd.DataFrame(data=np.arange(15).reshape(3, 5).T, columns=["var", "inv", "of"])
     _df["period"] = [1, 1, 2, 1, 2]
     _df["id"] = [1, 3, 3, 5, 5]
     out["data_input"] = _df.set_index(["id", "period"])
     out["data_exp"] = pd.read_csv(
-        TEST_DIR / "simplest_augmented_data_expected.csv",
+        TEST_DATA_DIR / "simplest_augmented_data_expected.csv",
         index_col=["id", "aug_period"],
     )
     return out
@@ -79,7 +76,7 @@ def test_augment_data_for_endogenous_factors(simplest_augmented):
 
 
 def test_handle_controls_with_missings():
-    controls = ["c1"]
+    controls = ("c1",)
     uinfo_ind_tups = [(0, "m1"), (0, "m2")]
     update_info = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_ind_tups))
     data = [[1, 1, 1], [np.nan, 1, 1], [np.nan, 1, np.nan], [np.nan, np.nan, np.nan]]
@@ -92,7 +89,7 @@ def test_handle_controls_with_missings():
 
     with pytest.warns(UserWarning):  # noqa: PT030
         calculated = _handle_controls_with_missings(df, controls, update_info)
-    assert calculated.loc[(2, 0)].isna().all()
+    assert calculated.loc[(2, 0)].isna().all()  # ty: ignore[unresolved-attribute]
 
 
 def test_generate_measurements_array():

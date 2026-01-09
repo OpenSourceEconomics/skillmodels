@@ -83,5 +83,5 @@ def test_register_params_direct_call():
         return "bla"
 
     g = register_params(f, params=["a", "b", "c"])
-    assert g.__registered_params__ == ["a", "b", "c"]
+    assert g.__registered_params__ == ["a", "b", "c"]  # ty: ignore[unresolved-attribute]
     assert g() == "bla"

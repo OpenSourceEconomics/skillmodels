@@ -1,6 +1,5 @@
 import jax
 import jax.numpy as jnp
-import numpy as np
 from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.transition_functions import (
@@ -17,14 +16,14 @@ jax.config.update("jax_enable_x64", True)
 
 
 def test_linear():
-    states = np.arange(3)
-    params = np.array([0.1, 0.2, 0.3, 0.4])
+    states = jnp.arange(3)
+    params = jnp.array([0.1, 0.2, 0.3, 0.4])
     expected = 1.2
     aaae(linear(states, params), expected)
 
 
 def test_translog():
-    all_states = np.array(
+    all_states = jnp.array(
         [
             [2, 0, 0],
             [0, 3, 0],
@@ -38,7 +37,7 @@ def test_translog():
         ],
     )
 
-    params = np.array(
+    params = jnp.array(
         [
             # linear terms
             0.2,
@@ -60,12 +59,12 @@ def test_translog():
     expected_translog = [0.76, 0.7, 1.32, 0.04, 0.77, 0.1, -0.07, 0.573, 76.72]
 
     for states, expected in zip(all_states, expected_translog, strict=False):
-        calculated = translog(states, params)
+        calculated = translog(jnp.asarray(states), params)
         aaae(calculated, expected)
 
 
 def test_log_ces():
-    states = np.array([3, 7.5])
+    states = jnp.array([3, 7.5])
     params = jnp.array([0.4, 0.6, 2])
     expected = 7.244628323025
     calculated = log_ces(states, params)
@@ -82,11 +81,11 @@ def test_where_all_but_one_gammas_are_zero():
 
 
 def test_constant():
-    assert constant("bla", "blubb") == "bla"
+    assert constant("bla", "blubb") == "bla"  # ty: ignore[invalid-argument-type]
 
 
 def test_robust_translog():
-    all_states = np.array(
+    all_states = jnp.array(
         [
             [2, 0, 0],
             [0, 3, 0],
@@ -100,7 +99,7 @@ def test_robust_translog():
         ],
     )
 
-    params = np.array(
+    params = jnp.array(
         [
             # linear terms
             0.2,
@@ -122,12 +121,12 @@ def test_robust_translog():
     expected_translog = [0.76, 0.7, 1.32, 0.04, 0.77, 0.1, -0.07, 0.573, 76.72]
 
     for states, expected in zip(all_states, expected_translog, strict=False):
-        calculated = robust_translog(states, params)
+        calculated = robust_translog(jnp.asarray(states), params)
         aaae(calculated, expected)
 
 
 def test_log_ces_general():
-    states = np.array([3, 7.5])
+    states = jnp.array([3, 7.5])
     params = jnp.array([0.4, 0.6, 2, 2, 0.5])
     expected = 7.244628323025
     calculated = log_ces_general(states, params)
@@ -144,7 +143,7 @@ def test_log_ces_general_where_all_but_one_gammas_are_zero():
 
 
 def test_param_names_log_ces_general():
-    factors = ["a", "b"]
+    factors = ("a", "b")
     expected = ["a", "b", "sigma_a", "sigma_b", "tfp"]
     calculated = params_log_ces_general(factors)
     assert calculated == expected

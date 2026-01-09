@@ -8,29 +8,29 @@ import pytest
 import yaml
 from numpy.testing import assert_array_almost_equal as aaae
 
+from skillmodels.config import TEST_DATA_DIR
 from skillmodels.simulate_data import measurements_from_states, simulate_dataset
 
-# importing the TEST_DIR from config does not work for test run in conda build
-TEST_DIR = Path(__file__).parent.resolve()
+REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 
 @pytest.fixture
 def model2():
-    with open(TEST_DIR / "model2.yaml") as y:
+    with open(TEST_DATA_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     return model_dict
 
 
 @pytest.fixture
 def model2_data():
-    data = pd.read_stata(TEST_DIR / "model2_simulated_data.dta")
+    data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])
     return data
 
 
 def test_simulate_dataset(model2, model2_data):
     model_dict = model2
-    params = pd.read_csv(TEST_DIR / "regression_vault" / "one_stage_anchoring.csv")
+    params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
 
     calculated = simulate_dataset(

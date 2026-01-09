@@ -1,11 +1,11 @@
 import inspect
-from pathlib import Path
 
 import pandas as pd
 import pytest
 import yaml
 from pandas.testing import assert_frame_equal
 
+from skillmodels.config import TEST_DATA_DIR
 from skillmodels.process_model import get_has_endogenous_factors, process_model
 from skillmodels.types import TransitionInfo
 
@@ -13,13 +13,10 @@ from skillmodels.types import TransitionInfo
 # Integration test with model2 from the replication files of CHS2010
 # ======================================================================================
 
-# importing the TEST_DIR from config does not work for test run in conda build
-TEST_DIR = Path(__file__).parent.resolve()
-
 
 @pytest.fixture
 def model2():
-    with open(TEST_DIR / "model2.yaml") as y:
+    with open(TEST_DATA_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     return model_dict
 
@@ -76,9 +73,8 @@ def test_transition_info(model2):
 
 def test_update_info(model2):
     res = process_model(model2).update_info
-    test_dir = Path(__file__).parent.resolve()
     expected = pd.read_csv(
-        test_dir / "model2_correct_update_info.csv",
+        TEST_DATA_DIR / "model2_correct_update_info.csv",
         index_col=["aug_period", "variable"],
     )
     assert_frame_equal(res, expected)
@@ -128,7 +124,7 @@ def test_normalizations(model2):
 
 
 def test_anchoring_and_endogenous_factors_work_together():
-    with open(TEST_DIR / "model2.yaml") as y:
+    with open(TEST_DATA_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     # Set fac3 to be endogenous
     model_dict["factors"]["fac3"]["is_endogenous"] = True
@@ -151,7 +147,7 @@ def test_anchoring_and_endogenous_factors_work_together():
 
 
 def test_stagemap_with_endogenous_factors_wrong_labels():
-    with open(TEST_DIR / "model2.yaml") as y:
+    with open(TEST_DATA_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     # Set fac3 to be endogenous
     model_dict["factors"]["fac3"]["is_endogenous"] = True
@@ -162,7 +158,7 @@ def test_stagemap_with_endogenous_factors_wrong_labels():
 
 
 def test_stagemap_with_endogenous_factors():
-    with open(TEST_DIR / "model2.yaml") as y:
+    with open(TEST_DATA_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     # Set fac3 to be endogenous
     model_dict["factors"]["fac3"]["is_endogenous"] = True
@@ -176,7 +172,7 @@ def test_stagemap_with_endogenous_factors():
 
 @pytest.fixture
 def model2_inv():
-    with open(TEST_DIR / "model2.yaml") as y:
+    with open(TEST_DATA_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     # Set fac3 to be endogenous
     model_dict["factors"]["fac3"]["is_endogenous"] = True
@@ -242,9 +238,8 @@ def test_with_endog_transition_info(model2_inv):
 
 def test_with_endog_update_info(model2_inv):
     res = process_model(model2_inv).update_info
-    test_dir = Path(__file__).parent.resolve()
     expected = pd.read_csv(
-        test_dir / "model2_with_endog_correct_update_info.csv",
+        TEST_DATA_DIR / "model2_with_endog_correct_update_info.csv",
         index_col=["aug_period", "variable"],
     )
     assert_frame_equal(res, expected)

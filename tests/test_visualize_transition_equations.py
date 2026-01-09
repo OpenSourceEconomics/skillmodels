@@ -3,25 +3,26 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from skillmodels.config import TEST_DATA_DIR
 from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.visualize_transition_equations import (
     combine_transition_plots,
     get_transition_plots,
 )
 
-TEST_DIR = Path(__file__).parent.resolve()
+REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 
 def test_visualize_transition_equations_runs():
-    with open(TEST_DIR / "model2.yaml") as y:
+    with open(TEST_DATA_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
 
     model_dict["observed_factors"] = ["ob1"]
 
-    params = pd.read_csv(TEST_DIR / "regression_vault" / "one_stage_anchoring.csv")
+    params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
 
-    data = pd.read_stata(TEST_DIR / "model2_simulated_data.dta")
+    data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
     data.set_index(["caseid", "period"], inplace=True)
     data["ob1"] = 0
 

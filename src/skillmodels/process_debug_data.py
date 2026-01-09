@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 def process_debug_data(
     debug_data: dict[str, Any],
-    model: "ProcessedModel",
+    model: ProcessedModel,
 ) -> dict[str, Any]:
     """Process the raw debug data into pandas objects that make visualization easy.
 

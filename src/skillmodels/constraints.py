@@ -16,12 +16,12 @@ if TYPE_CHECKING:
 
 
 def get_constraints_dicts(
-    dimensions: "Dimensions",
-    labels: "Labels",
-    anchoring_info: "Anchoring",
+    dimensions: Dimensions,
+    labels: Labels,
+    anchoring_info: Anchoring,
     update_info: pd.DataFrame,
     normalizations: dict[str, dict[str, list]],
-    endogenous_factors_info: "EndogenousFactorsInfo",
+    endogenous_factors_info: EndogenousFactorsInfo,
 ) -> list[dict]:
     """Generate constraints implied by the model specification.
 
@@ -241,7 +241,7 @@ def _get_stage_constraints(
     return constraints_dicts
 
 
-def _get_constant_factors_constraints(labels: "Labels") -> list[dict]:
+def _get_constant_factors_constraints(labels: Labels) -> list[dict]:
     """Fix shock variances of constant factors to `bounds_distance`.
 
     Args:
@@ -302,7 +302,7 @@ def _get_initial_states_constraints(
     return constraints_dicts
 
 
-def _get_transition_constraints(labels: "Labels") -> list[dict]:
+def _get_transition_constraints(labels: Labels) -> list[dict]:
     """Collect possible constraints on transition parameters.
 
     Args:
@@ -332,7 +332,7 @@ def _get_transition_constraints(labels: "Labels") -> list[dict]:
 def _get_anchoring_constraints(
     update_info: pd.DataFrame,
     controls: tuple[str, ...],
-    anchoring_info: "Anchoring",
+    anchoring_info: Anchoring,
     periods: tuple[int, ...],
 ) -> list[dict]:
     """Constraints on anchoring parameters.
@@ -398,8 +398,8 @@ def _get_anchoring_constraints(
 
 
 def _get_constraints_for_augmented_periods(
-    labels: "Labels",
-    endogenous_factors_info: "EndogenousFactorsInfo",
+    labels: Labels,
+    endogenous_factors_info: EndogenousFactorsInfo,
 ) -> list[dict]:
     """Constraints for augmented periods.
 

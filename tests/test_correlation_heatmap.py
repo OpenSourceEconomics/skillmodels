@@ -265,16 +265,16 @@ def test_process_factors():
     observed_factor = "g"
     factors = ["b", "d", "g"]
     all_factors = None
-    assert list("abcd") == _process_factors(model, all_factors)[0]
-    assert list("efg") == _process_factors(model, all_factors)[1]
-    assert [latent_factor] == _process_factors(model, latent_factor)[0]
-    assert [observed_factor] == _process_factors(model, observed_factor)[1]
-    assert factors[:-1] == _process_factors(model, factors)[0]
-    assert [factors[-1] == _process_factors(model, factors)[1]]
+    assert list("abcd") == _process_factors(model, all_factors)[0]  # ty: ignore[invalid-argument-type]
+    assert list("efg") == _process_factors(model, all_factors)[1]  # ty: ignore[invalid-argument-type]
+    assert [latent_factor] == _process_factors(model, latent_factor)[0]  # ty: ignore[invalid-argument-type]
+    assert [observed_factor] == _process_factors(model, observed_factor)[1]  # ty: ignore[invalid-argument-type]
+    assert factors[:-1] == _process_factors(model, factors)[0]  # ty: ignore[invalid-argument-type]
+    assert [factors[-1] == _process_factors(model, factors)[1]]  # ty: ignore[invalid-argument-type]
 
 
 def test_get_mask_lower_triangle_only():
-    corr = np.ones((4, 4))
+    corr = pd.DataFrame(np.ones((4, 4)))
     show_upper = False
     show_diag = False
     expected = np.array(
@@ -290,7 +290,7 @@ def test_get_mask_lower_triangle_only():
 
 
 def test_get_mask_lower_triangle_and_diag():
-    corr = np.ones((4, 4))
+    corr = pd.DataFrame(np.ones((4, 4)))
     show_upper = False
     show_diag = True
     expected = np.array(
@@ -306,7 +306,7 @@ def test_get_mask_lower_triangle_and_diag():
 
 
 def test_get_mask_lower_and_upper_triangle_no_diag():
-    corr = np.ones((4, 4))
+    corr = pd.DataFrame(np.ones((4, 4)))
     show_upper = True
     show_diag = False
     expected = np.array(
@@ -322,9 +322,9 @@ def test_get_mask_lower_and_upper_triangle_no_diag():
 
 
 def test_get_mask_full_square_matrix():
-    corr = np.ones((4, 4))
+    corr = pd.DataFrame(np.ones((4, 4)))
     show_upper = True
     show_diag = True
-    expected = corr.astype(bool)
+    expected = corr.to_numpy().astype(bool)
     result = _get_mask(corr, show_upper, show_diag)
     np.testing.assert_array_equal(result, expected)

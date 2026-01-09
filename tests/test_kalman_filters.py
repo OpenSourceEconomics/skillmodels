@@ -133,10 +133,10 @@ def test_kalman_update_with_missing(update_func):
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-def test_sigma_points(seed):
+def test_sigma_points(seed: int):
     np.random.seed(seed)
     state, cov = _random_state_and_covariance()
-    observed_factors = np.arange(2).reshape(1, 2)
+    observed_factors = jnp.arange(2).reshape(1, 2)
     expected = JulierSigmaPoints(n=len(state), kappa=2).sigma_points(state, cov)
     observed_part = np.tile(observed_factors, len(expected)).reshape(-1, 2)
     expected = np.hstack([expected, observed_part])
@@ -189,7 +189,7 @@ def test_transformation_of_sigma_points():
 
     anch_scaling = jnp.array([[1, 1], [2, 1]])
 
-    anch_constants = np.array([[0, 0], [0, 0]])
+    anch_constants = jnp.array([[0, 0], [0, 0]])
 
     expected = jnp.array([[[[3, 2], [7, 4], [11, 6], [15, 8], [19, 10]]]])
 
@@ -249,13 +249,13 @@ def test_predict_against_linear_filterpy(seed):
         transition_function,
         sm_state,
         sm_chol,
-        scaling_factor,
+        float(scaling_factor),
         weights,
         trans_coeffs,
         jnp.array(shock_sds),
         anch_scaling,
         anch_constants,
-        observed_factors,
+        jnp.asarray(observed_factors),
     )
 
     aaae(calc_states.flatten(), expected_state.flatten())

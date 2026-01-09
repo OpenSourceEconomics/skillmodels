@@ -1,10 +1,9 @@
-from pathlib import Path
-
 import pandas as pd
 import pytest
 import yaml
 from frozendict import frozendict
 
+from skillmodels.config import TEST_DATA_DIR
 from skillmodels.params_index import (
     get_control_params_index_tuples,
     get_initial_cholcovs_index_tuples,
@@ -22,8 +21,7 @@ from skillmodels.types import TransitionInfo
 
 @pytest.fixture
 def model2_inputs():
-    test_dir = Path(__file__).parent.resolve()
-    with open(test_dir / "model2.yaml") as y:
+    with open(TEST_DATA_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     processed = process_model(model_dict)
 
@@ -38,10 +36,9 @@ def model2_inputs():
 
 
 def test_params_index_with_model2(model2_inputs):
-    test_dir = Path(__file__).parent.resolve()
     calculated = get_params_index(**model2_inputs)
     expected = pd.read_csv(
-        test_dir / "model2_correct_params_index.csv",
+        TEST_DATA_DIR / "model2_correct_params_index.csv",
         index_col=["category", "period", "name1", "name2"],
     ).index
 
@@ -51,7 +48,7 @@ def test_params_index_with_model2(model2_inputs):
 def test_control_coeffs_index_tuples():
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
     uinfo = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_tups))
-    controls = ["constant", "c1"]
+    controls = ("constant", "c1")
 
     expected = [
         ("controls", 0, "m1", "constant"),
@@ -77,7 +74,7 @@ def test_loading_index_tuples():
         index=pd.MultiIndex.from_tuples(uinfo_tups),
         columns=["fac1", "fac2"],
     )
-    factors = ["fac1", "fac2"]
+    factors = ("fac1", "fac2")
     expected = [
         ("loadings", 0, "m1", "fac1"),
         ("loadings", 0, "m1", "fac2"),
@@ -112,8 +109,8 @@ def test_meas_sd_index_tuples():
 
 
 def test_shock_sd_index_tuples():
-    periods = [0, 1, 2]
-    factors = ["fac1", "fac2"]
+    periods = (0, 1, 2)
+    factors = ("fac1", "fac2")
 
     expected = [
         ("shock_sds", 0, "fac1", "-"),
@@ -128,7 +125,7 @@ def test_shock_sd_index_tuples():
 
 def test_initial_mean_index_tuples():
     nmixtures = 3
-    factors = ["fac1", "fac2"]
+    factors = ("fac1", "fac2")
 
     expected = [
         ("initial_states", 0, "mixture_0", "fac1"),
@@ -156,7 +153,7 @@ def test_mixture_weight_index_tuples():
 
 def test_initial_cov_index_tuples():
     nmixtures = 2
-    factors = ["fac1", "fac2", "fac3"]
+    factors = ("fac1", "fac2", "fac3")
     expected = [
         ("initial_cholcovs", 0, "mixture_0", "fac1-fac1"),
         ("initial_cholcovs", 0, "mixture_0", "fac2-fac1"),
@@ -177,7 +174,7 @@ def test_initial_cov_index_tuples():
 
 
 def test_trans_coeffs_index_tuples_no_endogenous_factors():
-    periods = [0, 1, 2]
+    periods = (0, 1, 2)
 
     param_names = {
         "fac1": ["fac1", "fac2", "fac3", "constant"],
@@ -220,7 +217,7 @@ def test_trans_coeffs_index_tuples_no_endogenous_factors():
 
 
 def test_trans_coeffs_index_tuples_has_endogenous_factors():
-    periods = [0, 1, 2, 3, 4, 5]
+    periods = (0, 1, 2, 3, 4, 5)
 
     param_names = {
         "fac1": ["fac1", "fac2", "fac3", "constant"],

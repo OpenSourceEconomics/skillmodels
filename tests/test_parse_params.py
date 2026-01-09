@@ -5,8 +5,6 @@ implementation details.
 
 """
 
-from pathlib import Path
-
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
@@ -15,6 +13,7 @@ import yaml
 from frozendict import frozendict
 from numpy.testing import assert_array_equal as aae
 
+from skillmodels.config import TEST_DATA_DIR
 from skillmodels.parse_params import create_parsing_info, parse_params
 from skillmodels.process_model import process_model
 from skillmodels.types import Anchoring
@@ -22,13 +21,12 @@ from skillmodels.types import Anchoring
 
 @pytest.fixture
 def parsed_parameters():
-    test_dir = Path(__file__).parent.resolve()
     p_index = pd.read_csv(
-        test_dir / "model2_correct_params_index.csv",
+        TEST_DATA_DIR / "model2_correct_params_index.csv",
         index_col=["category", "period", "name1", "name2"],
     ).index
 
-    with open(test_dir / "model2.yaml") as y:
+    with open(TEST_DATA_DIR / "model2.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
 
     processed = process_model(model_dict)
@@ -49,7 +47,7 @@ def parsed_parameters():
     )
 
     parsing_info = create_parsing_info(
-        params_index=p_index,
+        params_index=p_index,  # ty: ignore[invalid-argument-type]
         update_info=update_info,
         labels=labels,
         anchoring=anchoring,

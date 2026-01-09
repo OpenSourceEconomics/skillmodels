@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,6 +5,7 @@ import yaml
 from frozendict import frozendict
 from pandas.testing import assert_frame_equal
 
+from skillmodels.config import TEST_DATA_DIR
 from skillmodels.constraints import (
     _get_anchoring_constraints,
     _get_constant_factors_constraints,
@@ -20,9 +19,6 @@ from skillmodels.constraints import (
 )
 from skillmodels.process_model import process_model
 from skillmodels.types import Anchoring, Labels
-
-# importing the TEST_DIR from config does not work for test run in conda build
-TEST_DIR = Path(__file__).parent.resolve()
 
 
 def test_add_bounds():
@@ -86,7 +82,7 @@ def test_normalization_constraints():
         },
     ]
 
-    calculated = _get_normalization_constraints(norm, factors=["fac1", "fac2"])
+    calculated = _get_normalization_constraints(norm, factors=("fac1", "fac2"))
     for c in calculated:
         del c["description"]
 
@@ -120,8 +116,8 @@ def test_mixture_weight_constraints_normal():
 
 
 def test_stage_constraints():
-    stages = [0]
-    stagemap = [0] * 3
+    stages = (0,)
+    stagemap = (0, 0, 0)
 
     expected = [
         {
@@ -141,8 +137,8 @@ def test_stage_constraints():
 
 
 def test_stage_constraints_with_endogenous_factors():
-    stages = [0, 1, 2, 3]
-    stagemap = [0, 1, 0, 1, 2, 3]
+    stages = (0, 1, 2, 3)
+    stagemap = (0, 1, 0, 1, 2, 3)
     expected = [
         {
             "loc": [("transition", 0), ("transition", 2)],
@@ -207,7 +203,7 @@ def test_constant_factor_constraints():
 
 def test_initial_mean_constraints():
     nmixtures = 3
-    factors = ["fac1", "fac2", "fac3"]
+    factors = ("fac1", "fac2", "fac3")
     ind_tups = [
         ("initial_states", 0, "mixture_0", "fac1"),
         ("initial_states", 0, "mixture_1", "fac1"),
@@ -302,7 +298,7 @@ def base_anchoring_info():
 
 
 def test_anchoring_constraints_no_constraint_needed(anch_uinfo, base_anchoring_info):
-    calculated = _get_anchoring_constraints(anch_uinfo, [], base_anchoring_info, (0, 1))
+    calculated = _get_anchoring_constraints(anch_uinfo, (), base_anchoring_info, (0, 1))
     assert calculated == []
 
 
@@ -316,7 +312,7 @@ def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
         free_loadings=True,
         ignore_constant_when_anchoring=False,
     )
-    calculated = _get_anchoring_constraints(anch_uinfo, [], anchoring_info, (0, 1))
+    calculated = _get_anchoring_constraints(anch_uinfo, (), anchoring_info, (0, 1))
 
     del calculated[0]["description"]
     expected = [
@@ -347,7 +343,7 @@ def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
     )
     calculated = _get_anchoring_constraints(
         anch_uinfo,
-        ["c1", "c2"],
+        ("c1", "c2"),
         anchoring_info,
         (0, 1),
     )
@@ -385,7 +381,7 @@ def test_anchoring_constraints_for_loadings(anch_uinfo, base_anchoring_info):
         free_loadings=False,
         ignore_constant_when_anchoring=False,
     )
-    calculated = _get_anchoring_constraints(anch_uinfo, [], anchoring_info, (0, 1))
+    calculated = _get_anchoring_constraints(anch_uinfo, (), anchoring_info, (0, 1))
 
     expected = [
         {
@@ -415,7 +411,7 @@ def assert_list_equal_except_for_order(list1, list2):
 
 @pytest.fixture
 def simplest_augmented_model():
-    with open(TEST_DIR / "simplest_augmented_model.yaml") as y:
+    with open(TEST_DATA_DIR / "simplest_augmented_model.yaml") as y:
         model_dict = yaml.load(y, Loader=yaml.FullLoader)
     return process_model(model_dict)
 

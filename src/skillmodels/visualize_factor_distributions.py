@@ -694,7 +694,7 @@ def _get_ordered_factors(
 def _get_factors(
     factors: list[str] | None,
     observed_factors: bool,
-    model: "ProcessedModel",
+    model: ProcessedModel,
 ) -> list[str]:
     """Proccess factor names to return list of strings."""
     if factors is None:

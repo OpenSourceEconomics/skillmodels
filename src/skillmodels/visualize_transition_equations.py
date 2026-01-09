@@ -227,7 +227,7 @@ def get_transition_plots(
 
 
 def _get_dictionary_with_plots(
-    model: "ProcessedModel",
+    model: ProcessedModel,
     data: pd.DataFrame,
     params: pd.DataFrame,
     states: pd.DataFrame,
@@ -372,7 +372,7 @@ def _get_state_ranges(
 
 
 def _get_pardict(
-    model: "ProcessedModel",
+    model: ProcessedModel,
     params: pd.DataFrame,
 ) -> dict[str, Any]:
     """Get parsed params dictionary."""
@@ -395,7 +395,7 @@ def _get_pardict(
 
 
 def _set_index_params(
-    model: "ProcessedModel",
+    model: ProcessedModel,
     params: pd.DataFrame,
 ) -> pd.DataFrame:
     """Reset index of params data frame to model implied values."""
@@ -412,7 +412,7 @@ def _set_index_params(
 
 
 def _get_states_data(
-    model: "ProcessedModel",
+    model: ProcessedModel,
     period: int,
     data: pd.DataFrame,
     states: pd.DataFrame,

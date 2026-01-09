@@ -13,9 +13,9 @@ if TYPE_CHECKING:
 def process_data(
     df: pd.DataFrame,
     has_endogenous_factors: bool,
-    labels: "Labels",
+    labels: Labels,
     update_info: pd.DataFrame,
-    anchoring_info: "Anchoring",
+    anchoring_info: Anchoring,
     purpose: Literal["estimation", "anything", "simulation"] = "estimation",
 ) -> dict[str, Any]:
     """Process the data for estimation.
@@ -104,7 +104,7 @@ def _get_period_data_for_endogenous_factors(
     aug_period: int,
     period: int,
     df: pd.DataFrame,
-    labels: "Labels",
+    labels: Labels,
     update_info: pd.DataFrame,
 ) -> pd.DataFrame:
     meas = _get_period_measurements(update_info, aug_period)
@@ -128,7 +128,7 @@ def _get_period_data_for_endogenous_factors(
 
 def _augment_data_for_endogenous_factors(
     df: pd.DataFrame,
-    labels: "Labels",
+    labels: Labels,
     update_info: pd.DataFrame,
 ) -> pd.DataFrame:
     """Make room for endogenous factors by doubling up the periods.
@@ -162,7 +162,7 @@ def _augment_data_for_endogenous_factors(
 
 def _add_copies_of_anchoring_outcome(
     df: pd.DataFrame,
-    anchoring_info: "Anchoring",
+    anchoring_info: Anchoring,
 ) -> pd.DataFrame:
     df = df.copy()
     for factor in anchoring_info.factors:
@@ -174,7 +174,7 @@ def _add_copies_of_anchoring_outcome(
 def _check_data(  # noqa: C901
     df: pd.DataFrame,
     update_info: pd.DataFrame,
-    labels: "Labels",
+    labels: Labels,
     purpose: Literal["estimation", "anything", "simulation"],
 ) -> None:
     var_report = pd.DataFrame(index=update_info.index[:0], columns=["problem"])
@@ -256,7 +256,7 @@ def _generate_measurements_array(
 
 def _generate_controls_array(
     df: pd.DataFrame,
-    labels: "Labels",
+    labels: Labels,
     n_obs: int,
 ) -> Array:
     arr = np.zeros((len(labels.aug_periods), n_obs, len(labels.controls)))
@@ -269,7 +269,7 @@ def _generate_controls_array(
 
 def _generate_observed_factor_array(
     df: pd.DataFrame,
-    labels: "Labels",
+    labels: Labels,
     n_obs: int,
 ) -> Array:
     arr = np.zeros((len(labels.aug_periods), n_obs, len(labels.observed_factors)))
