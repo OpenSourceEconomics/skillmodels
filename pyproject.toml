@@ -175,46 +175,42 @@ line-length = 88
 select = ["ALL"]
 extend-ignore = [
     "ANN401", # Dynamically typed expressions (typing.Any) are disallowed - too strict
-    "B028", # No explicit `stacklevel` keyword argument found
     "COM812", # In conflict with formatter
-    "D100", # Missing docstring in public module
-    "D103", # missing docstring in public function
-    "D104", # missing docstring in public package
     "EM101", # exception must not use a string literal
     "EM102", # exception must not use an f-string literal
-    "FBT001", # Boolean-typed positional arguments.
     "FBT002", # Boolean default positional argument in function definition
-    "FIX002", # line contains a todo
     "ISC001", # In conflict with formatter
     "NPY002", # Leave Numpy's legacy RNG
-    "PD008", # array.at is perfectly valid Jax, but linter thinks it's Pandas...
     "PD015", # pd.merge is fine
     "PERF401", # Many suggestions to use list comprehension are not helpful
-    "PLR2004", # Magic values are fine
     "PLR0913", # Too many arguments to function call
-    "RET504", # Assignment before return statement is fine.
-    "S101", # use of `assert` detected
+    "PLR2004", # Magic values are fine
     "S301", # `pickle` module is unsafe
-    "SLF001", # Private member accessed: `_stochastic_info`
     "TRY003", # long messages outside the exception class
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "src/skillmodels/types.py" = ["TC"]  # Dataclasses need types at runtime
 "src/skillmodels/visualize_*.py" = ["BLE001"]
-"**/*.ipynb" = ["B018", "T201", "E402", "PLR2004", "INP001", "PTH100"]
-"docs/**/*" = ["A001", "ERA001", "INP001", "PTH100", "PTH123", "S506"]
+"**/*.ipynb" = [
+    "B018", # Seemingly useless expression for printing.
+    "T201", # Printing is fine here.
+    "INP001", # No need for a namespace.
+]
+"docs/source/conf.py" = [
+    "ERA001", # Lots of erased code
+    "INP001", # No need for a namespace.
+]
 "tests/*" = [
-    "ANN",  # Tests don't need type annotations
-    "ARG001",
-    "E712",
-    "FBT003",
-    "INP001",
-    "PD002",
-    "PT011",
-    "NPY002",
-    "PTH123",
-    "S506"
+    "ANN",  # No type annotations needed for tests
+    "ARG001", # Unused arguments are common in fixture-heavy tests
+    "D100", # No module docstrings needed for tests
+    "D103", # No function docstrings needed for tests
+    "E712", # Comparison to True/False using == might be necessary for arrays.
+    "FBT003", # Boolean positional values are common in test setup
+    "INP001",  # No need for a namespace.
+    "PT011", # Broad pytest.raises() blocks are okay
+    "S101", # use of `assert` detected
 ]
 
 [tool.ruff.lint.pydocstyle]

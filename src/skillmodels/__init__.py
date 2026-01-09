@@ -1,3 +1,5 @@
+"""Skillmodels: A Python package for estimating latent factor models."""
+
 import contextlib
 
 try:

@@ -21,21 +21,20 @@ from skillmodels.types import TransitionInfo
 
 @pytest.fixture
 def model2_inputs():
-    with open(TEST_DATA_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+    with (TEST_DATA_DIR / "model2.yaml").open() as y:
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
     processed = process_model(model_dict)
 
-    out = {
+    return {
         "update_info": processed.update_info,
         "labels": processed.labels,
         "dimensions": processed.dimensions,
         "transition_info": processed.transition_info,
         "endogenous_factors_info": processed.endogenous_factors_info,
     }
-    return out
 
 
-def test_params_index_with_model2(model2_inputs):
+def test_params_index_with_model2(model2_inputs) -> None:
     calculated = get_params_index(**model2_inputs)
     expected = pd.read_csv(
         TEST_DATA_DIR / "model2_correct_params_index.csv",
@@ -45,7 +44,7 @@ def test_params_index_with_model2(model2_inputs):
     assert calculated.equals(expected)
 
 
-def test_control_coeffs_index_tuples():
+def test_control_coeffs_index_tuples() -> None:
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
     uinfo = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_tups))
     controls = ("constant", "c1")
@@ -67,7 +66,7 @@ def test_control_coeffs_index_tuples():
     assert calculated == expected
 
 
-def test_loading_index_tuples():
+def test_loading_index_tuples() -> None:
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
     uinfo = pd.DataFrame(
         True,
@@ -92,7 +91,7 @@ def test_loading_index_tuples():
     assert calculated == expected
 
 
-def test_meas_sd_index_tuples():
+def test_meas_sd_index_tuples() -> None:
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
     uinfo = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_tups))
 
@@ -108,7 +107,7 @@ def test_meas_sd_index_tuples():
     assert calculated == expected
 
 
-def test_shock_sd_index_tuples():
+def test_shock_sd_index_tuples() -> None:
     periods = (0, 1, 2)
     factors = ("fac1", "fac2")
 
@@ -119,11 +118,13 @@ def test_shock_sd_index_tuples():
         ("shock_sds", 1, "fac2", "-"),
     ]
 
-    calculated = get_shock_sds_index_tuples(periods, factors, False)
+    calculated = get_shock_sds_index_tuples(
+        periods, factors, has_endogenous_factors=False
+    )
     assert calculated == expected
 
 
-def test_initial_mean_index_tuples():
+def test_initial_mean_index_tuples() -> None:
     nmixtures = 3
     factors = ("fac1", "fac2")
 
@@ -140,7 +141,7 @@ def test_initial_mean_index_tuples():
     assert calculated == expected
 
 
-def test_mixture_weight_index_tuples():
+def test_mixture_weight_index_tuples() -> None:
     nmixtures = 3
     expected = [
         ("mixture_weights", 0, "mixture_0", "-"),
@@ -151,7 +152,7 @@ def test_mixture_weight_index_tuples():
     assert calculated == expected
 
 
-def test_initial_cov_index_tuples():
+def test_initial_cov_index_tuples() -> None:
     nmixtures = 2
     factors = ("fac1", "fac2", "fac3")
     expected = [
@@ -173,7 +174,7 @@ def test_initial_cov_index_tuples():
     assert calculated == expected
 
 
-def test_trans_coeffs_index_tuples_no_endogenous_factors():
+def test_trans_coeffs_index_tuples_no_endogenous_factors() -> None:
     periods = (0, 1, 2)
 
     param_names = {
@@ -216,7 +217,7 @@ def test_trans_coeffs_index_tuples_no_endogenous_factors():
     assert calculated == expected
 
 
-def test_trans_coeffs_index_tuples_has_endogenous_factors():
+def test_trans_coeffs_index_tuples_has_endogenous_factors() -> None:
     periods = (0, 1, 2, 3, 4, 5)
 
     param_names = {

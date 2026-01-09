@@ -1,3 +1,5 @@
+"""Functions to create inputs for optimization of the log-likelihood."""
+
 import functools
 from collections.abc import Callable  # noqa: TC003
 from typing import TYPE_CHECKING, Any
@@ -185,10 +187,9 @@ def get_maximization_inputs(
         params_template=params_template,
         constraints_dicts=_constraints_dicts,
     )
-    assert params_template.index.equals(p_index), (
-        "params_template index is not equal to p_index"
-    )
-    out = {
+    if not params_template.index.equals(p_index):
+        raise ValueError("params_template index is not equal to p_index")
+    return {
         "loglike": loglike,
         "loglikeobs": loglikeobs,
         "debug_loglike": debug_loglike,
@@ -196,8 +197,6 @@ def get_maximization_inputs(
         "constraints": constraints,
         "params_template": params_template,
     }
-
-    return out
 
 
 def _partial_some_log_likelihood(
@@ -228,7 +227,8 @@ def _partial_some_log_likelihood(
         else model.labels.aug_periods[-1]
     )
     iteration_to_period = _aug_periods.replace(last_aug_period, -1).to_numpy()
-    assert max(iteration_to_period) == last_aug_period - 1
+    if max(iteration_to_period) != last_aug_period - 1:
+        raise ValueError("Unexpected iteration_to_period configuration")
 
     return functools.partial(
         fun,
@@ -276,5 +276,4 @@ def _get_jnp_params_vec(params: pd.DataFrame, target_index: pd.MultiIndex) -> Ar
             msg += f"Your params have missing entries: {missing_entries}. "
         raise ValueError(msg)
 
-    vec = jnp.array(params.reindex(target_index)["value"].to_numpy())
-    return vec
+    return jnp.array(params.reindex(target_index)["value"].to_numpy())

@@ -394,9 +394,7 @@ def _get_anchoring_constraints(
             {"loc": ind_tups, "type": "fixed", "value": 1, "description": msg},
         )
 
-    constraints_dicts = [c for c in constraints_dicts if c["loc"] != []]
-
-    return constraints_dicts
+    return [c for c in constraints_dicts if c["loc"] != []]
 
 
 def _get_constraints_for_augmented_periods(

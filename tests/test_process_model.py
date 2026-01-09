@@ -16,16 +16,15 @@ from skillmodels.types import TransitionInfo
 
 @pytest.fixture
 def model2():
-    with open(TEST_DATA_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
-    return model_dict
+    with (TEST_DATA_DIR / "model2.yaml").open() as y:
+        return yaml.load(y, Loader=yaml.SafeLoader)
 
 
-def test_has_endogenous_factors(model2):
+def test_has_endogenous_factors(model2) -> None:
     assert process_model(model2).endogenous_factors_info.has_endogenous_factors == False
 
 
-def test_dimensions(model2):
+def test_dimensions(model2) -> None:
     res = process_model(model2).dimensions
     assert res.n_latent_factors == 3
     assert res.n_observed_factors == 0
@@ -35,7 +34,7 @@ def test_dimensions(model2):
     assert res.n_mixtures == 1
 
 
-def test_labels(model2):
+def test_labels(model2) -> None:
     res = process_model(model2).labels
     assert res.latent_factors == ("fac1", "fac2", "fac3")
     assert res.observed_factors == ()
@@ -46,14 +45,14 @@ def test_labels(model2):
     assert res.stages == (0,)
 
 
-def test_estimation_options(model2):
+def test_estimation_options(model2) -> None:
     res = process_model(model2).estimation_options
     assert res.sigma_points_scale == 2
     assert res.robust_bounds
     assert res.bounds_distance == 0.001
 
 
-def test_anchoring(model2):
+def test_anchoring(model2) -> None:
     res = process_model(model2).anchoring
     assert res.outcomes == {"fac1": "Q1"}
     assert res.factors == ("fac1",)
@@ -62,7 +61,7 @@ def test_anchoring(model2):
     assert res.free_loadings
 
 
-def test_transition_info(model2):
+def test_transition_info(model2) -> None:
     res = process_model(model2).transition_info
 
     assert isinstance(res, TransitionInfo)
@@ -71,7 +70,7 @@ def test_transition_info(model2):
     assert list(inspect.signature(res.func).parameters) == ["params", "states"]
 
 
-def test_update_info(model2):
+def test_update_info(model2) -> None:
     res = process_model(model2).update_info
     expected = pd.read_csv(
         TEST_DATA_DIR / "model2_correct_update_info.csv",
@@ -80,7 +79,7 @@ def test_update_info(model2):
     assert_frame_equal(res, expected)
 
 
-def test_normalizations(model2):
+def test_normalizations(model2) -> None:
     expected = {
         "fac1": {
             "loadings": [
@@ -123,9 +122,9 @@ def test_normalizations(model2):
 # ======================================================================================
 
 
-def test_anchoring_and_endogenous_factors_work_together():
-    with open(TEST_DATA_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+def test_anchoring_and_endogenous_factors_work_together() -> None:
+    with (TEST_DATA_DIR / "model2.yaml").open() as y:
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
     model_dict["factors"]["fac3"]["is_endogenous"] = True
     del model_dict["stagemap"]
@@ -146,9 +145,9 @@ def test_anchoring_and_endogenous_factors_work_together():
     )  # One per aug_period for the one anchored factor
 
 
-def test_stagemap_with_endogenous_factors_wrong_labels():
-    with open(TEST_DATA_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+def test_stagemap_with_endogenous_factors_wrong_labels() -> None:
+    with (TEST_DATA_DIR / "model2.yaml").open() as y:
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
     model_dict["factors"]["fac3"]["is_endogenous"] = True
     model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 4]
@@ -157,9 +156,9 @@ def test_stagemap_with_endogenous_factors_wrong_labels():
         process_model(model_dict)
 
 
-def test_stagemap_with_endogenous_factors():
-    with open(TEST_DATA_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+def test_stagemap_with_endogenous_factors() -> None:
+    with (TEST_DATA_DIR / "model2.yaml").open() as y:
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
     model_dict["factors"]["fac3"]["is_endogenous"] = True
     model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 3]
@@ -172,8 +171,8 @@ def test_stagemap_with_endogenous_factors():
 
 @pytest.fixture
 def model2_inv():
-    with open(TEST_DATA_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+    with (TEST_DATA_DIR / "model2.yaml").open() as y:
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
     model_dict["factors"]["fac3"]["is_endogenous"] = True
     del model_dict["stagemap"]
@@ -181,13 +180,13 @@ def model2_inv():
     return model_dict
 
 
-def test_with_endog_has_endogenous_factors(model2_inv):
+def test_with_endog_has_endogenous_factors(model2_inv) -> None:
     assert (
         process_model(model2_inv).endogenous_factors_info.has_endogenous_factors == True
     )
 
 
-def test_with_endog_dimensions(model2_inv):
+def test_with_endog_dimensions(model2_inv) -> None:
     res = process_model(model2_inv).dimensions
     assert res.n_latent_factors == 3
     assert res.n_observed_factors == 0
@@ -198,7 +197,7 @@ def test_with_endog_dimensions(model2_inv):
     assert res.n_mixtures == 1
 
 
-def test_with_endog_labels(model2_inv):
+def test_with_endog_labels(model2_inv) -> None:
     res = process_model(model2_inv).labels
     n_aug_periods = 16
     assert res.latent_factors == ("fac1", "fac2", "fac3")
@@ -211,14 +210,14 @@ def test_with_endog_labels(model2_inv):
     assert res.aug_stages == tuple(range(n_aug_periods - 2))
 
 
-def test_with_endog_estimation_options(model2_inv):
+def test_with_endog_estimation_options(model2_inv) -> None:
     res = process_model(model2_inv).estimation_options
     assert res.sigma_points_scale == 2
     assert res.robust_bounds
     assert res.bounds_distance == 0.001
 
 
-def test_with_endog_anchoring_is_empty(model2_inv):
+def test_with_endog_anchoring_is_empty(model2_inv) -> None:
     res = process_model(model2_inv).anchoring
     assert res.outcomes == {}
     assert res.factors == ()
@@ -227,7 +226,7 @@ def test_with_endog_anchoring_is_empty(model2_inv):
     assert res.free_loadings is False
 
 
-def test_with_endog_transition_info(model2_inv):
+def test_with_endog_transition_info(model2_inv) -> None:
     res = process_model(model2_inv).transition_info
 
     assert isinstance(res, TransitionInfo)
@@ -236,7 +235,7 @@ def test_with_endog_transition_info(model2_inv):
     assert list(inspect.signature(res.func).parameters) == ["params", "states"]
 
 
-def test_with_endog_update_info(model2_inv):
+def test_with_endog_update_info(model2_inv) -> None:
     res = process_model(model2_inv).update_info
     expected = pd.read_csv(
         TEST_DATA_DIR / "model2_with_endog_correct_update_info.csv",
@@ -245,7 +244,7 @@ def test_with_endog_update_info(model2_inv):
     assert_frame_equal(res, expected)
 
 
-def test_with_endog_normalizations(model2_inv):
+def test_with_endog_normalizations(model2_inv) -> None:
     expected = {
         "fac1": {
             "loadings": [
@@ -372,24 +371,24 @@ def test_with_endog_normalizations(model2_inv):
 # ======================================================================================
 
 
-def test_model_has_endogenous_factors_not_specified():
+def test_model_has_endogenous_factors_not_specified() -> None:
     factors = {"a": {}}
     assert get_has_endogenous_factors(factors) == False
 
 
-def test_get_has_endogenous_factors_wrong_type():
+def test_get_has_endogenous_factors_wrong_type() -> None:
     factors = {"a": {"is_endogenous": 3}}
     with pytest.raises(ValueError):
         get_has_endogenous_factors(factors)
 
 
-def test_get_has_endogenous_factors_wrong_constellation():
+def test_get_has_endogenous_factors_wrong_constellation() -> None:
     factors = {"a": {"is_endogenous": False, "is_correction": True}}
     with pytest.raises(ValueError):
         get_has_endogenous_factors(factors)
 
 
-def test_get_has_endogenous_factors_indeed():
+def test_get_has_endogenous_factors_indeed() -> None:
     factors = {
         "a": {"is_endogenous": True, "is_correction": False},
         "b": {"is_endogenous": False, "is_correction": False},
@@ -397,7 +396,7 @@ def test_get_has_endogenous_factors_indeed():
     assert get_has_endogenous_factors(factors) == True
 
 
-def test_get_has_endogenous_factors_and_correction():
+def test_get_has_endogenous_factors_and_correction() -> None:
     factors = {
         "a": {"is_endogenous": True, "is_correction": False},
         "b": {"is_endogenous": False, "is_correction": False},

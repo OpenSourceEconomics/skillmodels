@@ -1,3 +1,5 @@
+"""Functions to process and prepare data for model estimation."""
+
 import warnings
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -12,6 +14,7 @@ if TYPE_CHECKING:
 
 def process_data(
     df: pd.DataFrame,
+    *,
     has_endogenous_factors: bool,
     labels: Labels,
     update_info: pd.DataFrame,
@@ -96,9 +99,7 @@ def pre_process_data(
     new_index = pd.MultiIndex.from_product([ids, periods], names=["id", "period"])
 
     # set new index
-    df = df.reindex(new_index)
-
-    return df
+    return df.reindex(new_index)
 
 
 def _get_period_data_for_endogenous_factors(
@@ -143,8 +144,10 @@ def _augment_data_for_endogenous_factors(
     # Make sure datset is balanced
     n_ids = df["id"].nunique()
     n_periods = df["period"].nunique()
-    assert n_ids * n_periods == df.shape[0]
-    assert set(df["period"]) == set(labels.aug_periods_to_periods.values())
+    if n_ids * n_periods != df.shape[0]:
+        raise ValueError("Dataset is not balanced: n_ids * n_periods != n_rows")
+    if set(df["period"]) != set(labels.aug_periods_to_periods.values()):
+        raise ValueError("Periods in data don't match expected periods")
 
     out = pd.concat(
         [
@@ -228,7 +231,7 @@ def _handle_controls_with_missings(
         old_names = df.loc[problematic_index][["__old_id__", "__old_period__"]]
         msg = "Set measurements to NaN because there are NaNs in the controls for:\n{}"
         msg = msg.format(list(map(tuple, old_names.to_numpy().tolist())))
-        warnings.warn(msg)
+        warnings.warn(msg, stacklevel=2)
         df.loc[problematic_index] = np.nan
     return df
 

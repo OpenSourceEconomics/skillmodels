@@ -1,3 +1,5 @@
+"""Functions to parse parameter vectors into structured dictionaries."""
+
 import warnings
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +17,7 @@ def create_parsing_info(
     update_info: pd.DataFrame,
     labels: Labels,
     anchoring: Anchoring,
+    *,
     has_endogenous_factors: bool,
 ) -> dict[str, Any]:
     """Create a dictionary with information how the parameter vector has to be parsed.
@@ -204,8 +207,8 @@ def _get_initial_upper_chols(
     upper_chols = jnp.zeros((n_obs, n_mixtures, n_states, n_states))
     for i in range(n_mixtures):
         filler = jnp.zeros((n_states, n_states))
-        filler = filler.at[jnp.tril_indices(n_states)].set(chol_params[i])
-        upper_chols = upper_chols.at[:, i].set(filler.T)
+        filler = filler.at[jnp.tril_indices(n_states)].set(chol_params[i])  # noqa: PD008
+        upper_chols = upper_chols.at[:, i].set(filler.T)  # noqa: PD008
     return upper_chols
 
 
@@ -235,9 +238,8 @@ def _get_loadings(
     """Create the array of factor loadings."""
     info = info["loadings"]
     free = params[info["slice"]]
-    extended = jnp.zeros(info["size"]).at[info["flat_indices"]].set(free)
-    out = extended.reshape(info["shape"])
-    return out
+    extended = jnp.zeros(info["size"]).at[info["flat_indices"]].set(free)  # noqa: PD008
+    return extended.reshape(info["shape"])
 
 
 def _get_meas_sds(
@@ -293,7 +295,7 @@ def _get_anchoring_scaling_factors(
         dimensions.n_aug_periods,
         -1,
     )
-    scaling_factors = scaling_factors.at[:, info["is_anchored_factor"]].set(
+    scaling_factors = scaling_factors.at[:, info["is_anchored_factor"]].set(  # noqa: PD008
         free_anchoring_loadings,
     )
 
@@ -301,9 +303,7 @@ def _get_anchoring_scaling_factors(
         (dimensions.n_aug_periods, dimensions.n_observed_factors),
     )
 
-    scaling_factors = jnp.hstack([scaling_factors, scaling_for_observed])
-
-    return scaling_factors
+    return jnp.hstack([scaling_factors, scaling_for_observed])
 
 
 def _get_anchoring_constants(
@@ -322,12 +322,10 @@ def _get_anchoring_constants(
             dimensions.n_aug_periods,
             -1,
         )
-        constants = constants.at[:, info["is_anchored_factor"]].set(values)
+        constants = constants.at[:, info["is_anchored_factor"]].set(values)  # noqa: PD008
 
     constants_for_observed = jnp.zeros(
         (dimensions.n_aug_periods, dimensions.n_observed_factors),
     )
 
-    constants = jnp.hstack([constants, constants_for_observed])
-
-    return constants
+    return jnp.hstack([constants, constants_for_observed])

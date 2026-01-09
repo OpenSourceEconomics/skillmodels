@@ -1,3 +1,5 @@
+"""Functions to validate model specifications."""
+
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -11,6 +13,7 @@ def check_model(
     labels: Labels,
     dimensions: Dimensions,
     anchoring: Anchoring,
+    *,
     has_endogenous_factors: bool,
 ) -> None:
     """Check consistency and validity of the model specification.
@@ -59,8 +62,10 @@ def check_stagemap(
     stagemap: tuple[int, ...],
     stages: tuple[int, ...] | list[int],
     n_periods: int,
+    *,
     is_augmented: bool,
 ) -> list[str]:
+    """Validate the stagemap configuration against model dimensions."""
     report: list[str] = []
     step_size = 2 if is_augmented else 1
     if len(stagemap) != n_periods - step_size:

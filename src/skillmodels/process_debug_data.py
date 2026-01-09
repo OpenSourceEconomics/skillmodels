@@ -1,3 +1,5 @@
+"""Functions to process debug output from likelihood function into DataFrames."""
+
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -119,9 +121,7 @@ def _create_post_update_states(
         df["measurement"] = meas
         to_concat.append(df)
 
-    post_states = pd.concat(to_concat)
-
-    return post_states
+    return pd.concat(to_concat)
 
 
 def _convert_state_array_to_df(
@@ -168,15 +168,14 @@ def _create_filtered_states(
         df["id"] = np.arange(len(df))
         to_concat.append(df)
 
-    filtered_states = pd.concat(to_concat)
-
-    return filtered_states
+    return pd.concat(to_concat)
 
 
 def create_state_ranges(
     filtered_states: pd.DataFrame,
     factors: tuple[str, ...] | list[str],
 ) -> dict[str, pd.DataFrame]:
+    """Compute minimum and maximum state values for each factor by period."""
     ranges: dict[str, pd.DataFrame] = {}
     # Group by whichever period column is present
     period_col = "aug_period" if "aug_period" in filtered_states.columns else "period"

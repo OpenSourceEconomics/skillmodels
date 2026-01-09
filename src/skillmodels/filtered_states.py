@@ -1,3 +1,5 @@
+"""Functions to compute and process filtered latent states."""
+
 from typing import TYPE_CHECKING, Any
 
 import jax.numpy as jnp
@@ -18,6 +20,7 @@ def get_filtered_states(
     data: pd.DataFrame,
     params: pd.DataFrame,
 ) -> dict[str, dict[str, Any]]:
+    """Compute filtered latent states given data and estimated parameters."""
     max_inputs = get_maximization_inputs(model_dict=model_dict, data=data)
     params = params.loc[max_inputs["params_template"].index]
     debug_loglike = max_inputs["debug_loglike"]
@@ -38,7 +41,7 @@ def get_filtered_states(
         factors=model.labels.latent_factors,
     )
 
-    out = {
+    return {
         "anchored_states": {
             "states": anchored_states_df,
             "state_ranges": anchored_ranges,
@@ -49,13 +52,12 @@ def get_filtered_states(
         },
     }
 
-    return out
-
 
 def anchor_states_df(
     states_df: pd.DataFrame,
     model_dict: dict,
     params: pd.DataFrame,
+    *,
     use_aug_period: bool,
 ) -> pd.DataFrame:
     """Anchor states in a DataFrame.
@@ -121,6 +123,4 @@ def anchor_states_df(
     for pos, factor in enumerate(model.labels.latent_factors):
         out[factor] = constants_arr[:, pos] + states_df[factor] * scaling_arr[:, pos]
 
-    out = out[states_df.columns]
-
-    return out
+    return out[states_df.columns]

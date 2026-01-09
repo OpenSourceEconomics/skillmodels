@@ -16,19 +16,17 @@ REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 @pytest.fixture
 def model2():
-    with open(TEST_DATA_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
-    return model_dict
+    with (TEST_DATA_DIR / "model2.yaml").open() as y:
+        return yaml.load(y, Loader=yaml.SafeLoader)
 
 
 @pytest.fixture
 def model2_data():
     data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
-    data = data.set_index(["caseid", "period"])
-    return data
+    return data.set_index(["caseid", "period"])
 
 
-def test_simulate_dataset(model2, model2_data):
+def test_simulate_dataset(model2, model2_data) -> None:
     model_dict = model2
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
@@ -48,7 +46,7 @@ def test_simulate_dataset(model2, model2_data):
         assert np.allclose(ratio, expected_ratio)
 
 
-def test_measurements_from_factors():
+def test_measurements_from_factors() -> None:
     inputs = {
         "states": np.array([[0, 0, 0], [1, 1, 1]]),
         "controls": np.array([[1, 1], [1, 1]]),

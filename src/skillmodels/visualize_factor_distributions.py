@@ -1,3 +1,5 @@
+"""Functions to visualize distributions of latent factors."""
+
 import warnings
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
@@ -29,6 +31,7 @@ def combine_distribution_plots(
     factor_order: list[str] | None = None,
     factor_mapping: dict[str, str] | None = None,
     make_subplot_kwargs: dict[str, Any] | None = None,
+    *,
     sharex: bool = False,
     sharey: bool = False,
     line_width: float = 1.5,
@@ -165,6 +168,7 @@ def univariate_densities(
     params: pd.DataFrame,
     period: int,
     factors: list[str] | None = None,
+    *,
     observed_factors: bool = False,
     states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame] | None = None,
     show_curve: bool = True,
@@ -238,14 +242,14 @@ def univariate_densities(
     scenarios = df["scenario"].unique()
     plots_dict = {}
     distplot_kwargs = _process_distplot_kwargs(
-        show_curve,
-        show_hist,
-        show_rug,
-        curve_type,
-        bin_size,
-        scenarios,
-        colorscale,
-        distplot_kwargs,
+        show_curve=show_curve,
+        show_hist=show_hist,
+        show_rug=show_rug,
+        curve_type=curve_type,
+        bin_size=bin_size,
+        scenarios=scenarios,
+        colorscale=colorscale,
+        distplot_kwargs=distplot_kwargs,
     )
     plots_dict = {}
     layout_kwargs = get_layout_kwargs(layout_kwargs)
@@ -257,6 +261,7 @@ def univariate_densities(
             warnings.warn(
                 f"""Plotting univariate density failed for {fac} in
                 period {period} with error:\n\n{e}""",
+                stacklevel=2,
             )
             fig = go.Figure()
         fig.update_layout(showlegend=False)
@@ -273,6 +278,7 @@ def bivariate_density_contours(
     params: pd.DataFrame,
     period: int,
     factors: list[str] | None = None,
+    *,
     observed_factors: bool = False,
     states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame] | None = None,
     n_points: int = 50,
@@ -352,10 +358,10 @@ def bivariate_density_contours(
     plots_dict = {}
     contour_kwargs = _process_contour_kwargs(
         contour_kwargs,
-        contours_showlabels,
-        contours_coloring,
-        contours_colorscale,
-        showcolorbar,
+        contours_showlabels=contours_showlabels,
+        contours_coloring=contours_coloring,
+        contours_colorscale=contours_colorscale,
+        contours_showscale=showcolorbar,
     )
     layout_kwargs = _process_layout_kwargs(layout_kwargs)
     pairs = []
@@ -387,6 +393,7 @@ def bivariate_density_contours(
                     Contour plot failed for {pair} in period {period}
                     with error:\n\n{e}
                     """,
+                    stacklevel=2,
                 )
         fig.update_xaxes(title={"text": pair[0]})
         fig.update_yaxes(title={"text": pair[1]})
@@ -402,6 +409,7 @@ def bivariate_density_surfaces(
     params: pd.DataFrame,
     period: int,
     factors: list[str] | None = None,
+    *,
     observed_factors: bool = False,
     states: pd.DataFrame | None = None,
     n_points: int = 50,
@@ -479,9 +487,9 @@ def bivariate_density_surfaces(
     plots_dict = {}
     layout_kwargs = _process_layout_kwargs_3d(
         layout_kwargs,
-        showgrids,
-        showaxlines,
-        showlabels,
+        showgrids=showgrids,
+        showaxlines=showaxlines,
+        showlabels=showlabels,
     )
     pairs = []
     for fac1 in factors:
@@ -506,6 +514,7 @@ def bivariate_density_surfaces(
             warnings.warn(
                 f"""Plotting bivariate density surfaces for {pair} in
                 period {period} with error:\n\n{e}""",
+                stacklevel=2,
             )
             fig = go.Figure()
         fig.update_layout(
@@ -568,6 +577,7 @@ def _process_data(
 
 
 def _process_distplot_kwargs(
+    *,
     show_curve: bool,
     show_hist: bool,
     show_rug: bool,
@@ -615,6 +625,7 @@ def _calculate_kde_for_3d(
 
 def _process_contour_kwargs(
     contour_kwargs: dict[str, Any] | None,
+    *,
     contours_showlabels: bool,
     contours_coloring: str | None,
     contours_colorscale: str,
@@ -651,6 +662,7 @@ def _process_layout_kwargs(
 
 def _process_layout_kwargs_3d(
     layout_kwargs: dict[str, Any] | None,
+    *,
     showgrids: bool,
     showaxlines: bool,
     showlabels: bool,
@@ -703,6 +715,7 @@ def _get_ordered_factors(
 
 def _get_factors(
     factors: list[str] | None,
+    *,
     observed_factors: bool,
     model: ProcessedModel,
 ) -> list[str]:

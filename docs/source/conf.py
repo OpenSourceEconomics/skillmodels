@@ -1,3 +1,5 @@
+"""Sphinx configuration file for skillmodels documentation."""
+
 #
 # Documentation build configuration file, created by sphinx-quickstart
 #
@@ -8,13 +10,13 @@
 #
 # All configuration values have a default; values that are commented out
 # serve to show the default.
-import os
 import sys
+from pathlib import Path
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-sys.path.insert(0, os.path.abspath("../.."))
+# documentation root, use Path.resolve() to make it absolute, like shown here.
+sys.path.insert(0, str(Path("../..").resolve()))
 
 
 # -- General configuration ----------------------------------------------------
@@ -61,7 +63,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "skillmodels"
-copyright = "2016-2021, Janos Gabler"
+copyright = "2016-, Janos Gabler"  # noqa: A001
 
 # The version info for the project you"re documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

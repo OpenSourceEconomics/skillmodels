@@ -1,3 +1,5 @@
+"""Kalman filter operations for state estimation using the square-root form."""
+
 from collections.abc import Callable  # noqa: TC003
 
 import jax
@@ -279,8 +281,7 @@ def _calculate_sigma_points(
         n_observed,
     )
 
-    sigma_points = jnp.concatenate([sigma_points, observed_part], axis=-1)
-    return sigma_points
+    return jnp.concatenate([sigma_points, observed_part], axis=-1)
 
 
 def transform_sigma_points(
@@ -323,6 +324,4 @@ def transform_sigma_points(
     ) / anchoring_scaling_factors[1][:n_observed]
 
     out_shape = (n_obs, n_mixtures, n_sigma, -1)
-    out = transformed_unanchored.reshape(out_shape)
-
-    return out
+    return transformed_unanchored.reshape(out_shape)

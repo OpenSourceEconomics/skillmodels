@@ -90,13 +90,12 @@ def translog(states: Array, params: Array) -> Array:
 
 def params_translog(factors: tuple[str, ...]) -> list[str]:
     """Index tuples for the translog production function."""
-    names = (
+    return (
         list(factors)
         + [f"{factor} ** 2" for factor in factors]
         + [f"{a} * {b}" for a, b in combinations(factors, 2)]
         + ["constant"]
     )
-    return names
 
 
 def identity_constraints_translog(
@@ -131,8 +130,7 @@ def log_ces(states: Array, params: Array) -> Array:
     # the log step for gammas underflows for gamma = 0, but this is handled correctly
     # by logsumexp and does not raise a warning.
     unscaled = jax.scipy.special.logsumexp(jnp.log(gammas) + states * phi)
-    result = unscaled * scaling_factor
-    return result
+    return unscaled * scaling_factor
 
 
 def params_log_ces(factors: tuple[str, ...]) -> list[str]:
@@ -187,6 +185,7 @@ def robust_translog(states: Array, params: Array) -> Array:
 
 
 def params_robust_translog(factors: tuple[str, ...]) -> list[str]:
+    """Return parameter names for robust translog transition function."""
     return params_translog(factors)
 
 
@@ -214,8 +213,7 @@ def linear_and_squares(states: Array, params: Array) -> Array:
 
 def params_linear_and_squares(factors: tuple[str, ...]) -> list[str]:
     """Index tuples for the linear_and_squares production function."""
-    names = list(factors) + [f"{factor} ** 2" for factor in factors] + ["constant"]
-    return names
+    return list(factors) + [f"{factor} ** 2" for factor in factors] + ["constant"]
 
 
 def identity_constraints_linear_and_squares(
@@ -251,8 +249,7 @@ def log_ces_general(states: Array, params: Array) -> Array:
     # the log step for gammas underflows for gamma = 0, but this is handled correctly
     # by logsumexp and does not raise a warning.
     unscaled = jax.scipy.special.logsumexp(jnp.log(gammas) + states * sigmas)
-    result = unscaled * tfp
-    return result
+    return unscaled * tfp
 
 
 def params_log_ces_general(factors: tuple[str, ...]) -> list[str]:

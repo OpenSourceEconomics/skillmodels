@@ -1,3 +1,5 @@
+"""Log-likelihood function for latent factor models."""
+
 import functools
 from collections.abc import Callable  # noqa: TC003
 from typing import Any
@@ -267,21 +269,19 @@ def _scan_body(
 def _one_arg_measurement_update(
     kwargs: dict[str, Array],
 ) -> tuple[Array, Array, Array, Array]:
-    out = kalman_update(**kwargs)
-    return out
+    return kalman_update(**kwargs)
 
 
 def _one_arg_anchoring_update(
     kwargs: dict[str, Array],
 ) -> tuple[Array, Array, Array, Array]:
     _, _, new_log_mixture_weights, new_loglikes = kalman_update(**kwargs)
-    out = (
+    return (
         kwargs["states"],
         kwargs["upper_chols"],
         new_log_mixture_weights,
         new_loglikes,
     )
-    return out
 
 
 def _one_arg_no_predict(

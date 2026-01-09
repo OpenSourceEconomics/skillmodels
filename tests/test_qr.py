@@ -1,3 +1,7 @@
+"""Tests for custom QR decomposition."""
+
+from typing import TYPE_CHECKING
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -6,30 +10,37 @@ from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.qr import qr_gpu
 
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
 SEED = 20
 
 
 @pytest.fixture
-def cov_matrix():
+def cov_matrix() -> NDArray[np.floating]:
+    """Create a covariance matrix for testing."""
     fixedrng = np.random.default_rng(SEED)
     factorized = fixedrng.uniform(low=-1, high=3, size=(7, 7))
-    cov = factorized @ factorized.T * 0.5 + np.eye(7)
-    return cov
+    return factorized @ factorized.T * 0.5 + np.eye(7)
 
 
-def test_q(cov_matrix):
+def test_q(cov_matrix: NDArray[np.floating]) -> None:
+    """Test Q matrix from QR decomposition matches JAX implementation."""
     q_gpu, _ = qr_gpu(cov_matrix)
     q_jax, _ = jnp.linalg.qr(cov_matrix)
     aaae(q_gpu, q_jax)
 
 
-def test_r(cov_matrix):
+def test_r(cov_matrix: NDArray[np.floating]) -> None:
+    """Test R matrix from QR decomposition matches JAX implementation."""
     _, r_gpu = qr_gpu(cov_matrix)
     _, r_jax = jnp.linalg.qr(cov_matrix)
     aaae(r_gpu, r_jax)
 
 
-def test_grad_qr(cov_matrix):
+def test_grad_qr(cov_matrix: NDArray[np.floating]) -> None:
+    """Test gradient of QR decomposition matches JAX implementation."""
+
     def f_jax(a):
         q, r = jnp.linalg.qr(a)
         return jnp.sum(r) + jnp.sum(q)

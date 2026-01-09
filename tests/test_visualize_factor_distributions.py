@@ -16,15 +16,15 @@ from skillmodels.visualize_factor_distributions import (
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 
-def test_visualize_factor_distributions_runs_with_filtered_states():
-    with open(TEST_DATA_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+def test_visualize_factor_distributions_runs_with_filtered_states() -> None:
+    with (TEST_DATA_DIR / "model2.yaml").open() as y:
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
 
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
 
     data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
-    data.set_index(["caseid", "period"], inplace=True)
+    data = data.set_index(["caseid", "period"])
 
     max_inputs = get_maximization_inputs(model_dict, data)
     params = params.loc[max_inputs["params_template"].index]
@@ -53,12 +53,12 @@ def test_visualize_factor_distributions_runs_with_filtered_states():
     )
 
 
-def test_visualize_factor_distributions_runs_with_simulated_states():
-    with open(TEST_DATA_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+def test_visualize_factor_distributions_runs_with_simulated_states() -> None:
+    with (TEST_DATA_DIR / "model2.yaml").open() as y:
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
 
     data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
-    data.set_index(["caseid", "period"], inplace=True)
+    data = data.set_index(["caseid", "period"])
 
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])

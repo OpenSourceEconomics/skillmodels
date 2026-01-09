@@ -1,3 +1,5 @@
+"""Functions for creating correlation heatmap visualizations."""
+
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -22,6 +24,7 @@ def plot_correlation_heatmap(
     zmin: float | None = None,
     zmid: float | None = None,
     colorscale: str = "RdBu_r",
+    *,
     show_color_bar: bool = True,
     show_diagonal: bool = True,
     show_upper_triangle: bool = True,
@@ -96,18 +99,18 @@ def plot_correlation_heatmap(
     corr = _process_corr_data_for_plotting(
         corr,
         rounding,
-        show_upper_triangle,
-        show_diagonal,
-        trim_heatmap,
+        show_upper_triangle=show_upper_triangle,
+        show_diagonal=show_diagonal,
+        trim_heatmap=trim_heatmap,
     )
     heatmap_kwargs = _get_heatmap_kwargs(
         corr,
         heatmap_kwargs,
         colorscale,
-        show_color_bar,
-        zmax,
-        zmin,
-        zmid,
+        show_color_bar=show_color_bar,
+        zmax=zmax,
+        zmin=zmin,
+        zmid=zmid,
     )
     layout_kwargs = _get_layout_kwargs(
         corr=corr,
@@ -170,8 +173,7 @@ def get_measurements_corr(
         latent_factors=latent_factors,
         observed_factors=observed_factors,
     )
-    corr = df.corr()
-    return corr
+    return df.corr()
 
 
 def get_quasi_scores_corr(
@@ -216,8 +218,7 @@ def get_quasi_scores_corr(
         latent_factors=latent_factors,
         observed_factors=observed_factors,
     )
-    corr = df.corr()
-    return corr
+    return df.corr()
 
 
 def get_scores_corr(
@@ -263,19 +264,21 @@ def get_scores_corr(
         latent_factors=latent_factors,
         observed_factors=observed_factors,
     )
-    corr = df.corr()
-    return corr
+    return df.corr()
 
 
 def _process_corr_data_for_plotting(
     corr: pd.DataFrame,
     rounding: int,
+    *,
     show_upper_triangle: bool,
     show_diagonal: bool,
     trim_heatmap: bool,
 ) -> pd.DataFrame:
     """Apply mask and rounding to correlation DataFrame."""
-    mask = _get_mask(corr, show_upper_triangle, show_diagonal)
+    mask = _get_mask(
+        corr, show_upper_triangle=show_upper_triangle, show_diagonal=show_diagonal
+    )
     corr = corr.where(mask).round(rounding)
     if trim_heatmap:
         keeprows = mask.any(axis=1) & corr.notna().any(axis="columns").to_numpy()
@@ -289,6 +292,7 @@ def _process_corr_data_for_plotting(
 
 def _get_mask(
     corr: pd.DataFrame,
+    *,
     show_upper_triangle: bool,
     show_diagonal: bool,
 ) -> NDArray[np.bool_]:
@@ -400,8 +404,7 @@ def _get_measurement_data_for_single_period(
         )["variable"].to_list()
     for fac in observed_factors:
         measurements.append(fac)
-    df = data.query(f"{update_info_by_period.index.names[0]}=={period}")[measurements]
-    return df
+    return data.query(f"{update_info_by_period.index.names[0]}=={period}")[measurements]
 
 
 def _get_measurement_data_for_multiple_periods(
@@ -441,8 +444,7 @@ def _get_measurement_data_for_multiple_periods(
             .add_suffix(f", {period}")
             .reset_index(drop=True),
         )
-    df = pd.concat(to_concat, axis=1)
-    return df
+    return pd.concat(to_concat, axis=1)
 
 
 def _get_quasi_factor_scores_data(
@@ -534,8 +536,7 @@ def _get_quasi_factor_scores_data_for_single_period(
     for factor in observed_factors:
         df = data.query(f"{update_info_by_period.index.names[0]}=={period}")[factor]
         to_concat.append(df)
-    df = pd.concat(to_concat, axis=1)
-    return df
+    return pd.concat(to_concat, axis=1)
 
 
 def _get_quasi_factor_scores_data_for_multiple_periods(
@@ -575,8 +576,7 @@ def _get_quasi_factor_scores_data_for_multiple_periods(
             .add_suffix(f", {period}")
             .reset_index(drop=True),
         )
-    df = pd.concat(to_concat, axis=1)
-    return df
+    return pd.concat(to_concat, axis=1)
 
 
 def _get_factor_scores_data(
@@ -782,8 +782,7 @@ def _get_factor_scores_data_for_multiple_periods(
             .add_suffix(f", {period}")
             .reset_index(drop=True),
         )
-    df = pd.concat(to_concat, axis=1)
-    return df
+    return pd.concat(to_concat, axis=1)
 
 
 def _process_factors(
@@ -827,6 +826,7 @@ def _process_periods(
 def _get_layout_kwargs(
     corr: pd.DataFrame,
     layout_kwargs: dict[str, Any] | None,
+    *,
     annotate: bool,
     annotation_fontsize: int,
     annotation_text_color: str,
@@ -863,10 +863,10 @@ def _get_layout_kwargs(
     default_layout_kwargs.update(
         _get_annotations(
             corr,
-            annotate,
-            annotation_fontsize,
-            annotation_text_color,
-            annotation_text_angle,
+            annotate=annotate,
+            annotation_fontsize=annotation_fontsize,
+            annotation_text_color=annotation_text_color,
+            annotation_text_angle=annotation_text_angle,
         ),
     )
     default_layout_kwargs.update(
@@ -904,6 +904,7 @@ def _get_axes_ticks_kwargs(
 
 def _get_annotations(
     df: pd.DataFrame,
+    *,
     annotate: bool,
     annotation_fontsize: int,
     annotation_text_color: str,
@@ -938,6 +939,7 @@ def _get_heatmap_kwargs(
     corr: pd.DataFrame,
     heatmap_kwargs: dict[str, Any] | None,
     colorscale: str,
+    *,
     show_color_bar: bool,
     zmax: float | None,
     zmin: float | None,

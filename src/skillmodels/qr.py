@@ -1,3 +1,5 @@
+"""Custom QR decomposition implementation optimized for GPU."""
+
 import jax
 import jax.numpy as jnp
 from jax import Array

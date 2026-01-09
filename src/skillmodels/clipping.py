@@ -1,3 +1,5 @@
+"""Soft clipping utilities for constraining values to bounded ranges."""
+
 import jax
 import jax.numpy as jnp
 from jax import Array

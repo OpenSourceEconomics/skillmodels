@@ -1,3 +1,5 @@
+"""Decorators for parameter extraction and registration in transition functions."""
+
 import functools
 from collections.abc import Callable  # noqa: TC003
 from typing import Any
@@ -71,8 +73,7 @@ def jax_array_output(func: Callable) -> Callable:
     @functools.wraps(func)
     def wrapper_jax_array_output(*args: Any, **kwargs: Any) -> Array:
         raw = func(*args, **kwargs)
-        out = jnp.array(raw)
-        return out
+        return jnp.array(raw)
 
     return wrapper_jax_array_output
 
@@ -82,6 +83,8 @@ def register_params(
     *,
     params: list[str] | None = None,
 ) -> Callable:
+    """Register parameter names for a transition function."""
+
     def decorator_register_params(func: Callable) -> Callable:
         func.__registered_params__ = params  # ty: ignore[unresolved-attribute]
         return func

@@ -28,7 +28,7 @@ UPDATE_FUNCS = [kalman_update, kalman_update_debug]
 
 
 @pytest.mark.parametrize(("seed", "update_func"), product(SEEDS, UPDATE_FUNCS))
-def test_kalman_update(seed, update_func):
+def test_kalman_update(seed, update_func) -> None:
     np.random.seed(seed)
     dim = np.random.randint(low=1, high=10)
     n_obs = 5
@@ -86,7 +86,7 @@ def test_kalman_update(seed, update_func):
 
 
 @pytest.mark.parametrize("update_func", UPDATE_FUNCS)
-def test_kalman_update_with_missing(update_func):
+def test_kalman_update_with_missing(update_func) -> None:
     """State, cov and weights should not change, log likelihood should be zero."""
     n_mixtures = 2
     n_obs = 3
@@ -133,7 +133,7 @@ def test_kalman_update_with_missing(update_func):
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-def test_sigma_points(seed: int):
+def test_sigma_points(seed: int) -> None:
     np.random.seed(seed)
     state, cov = _random_state_and_covariance()
     observed_factors = jnp.arange(2).reshape(1, 2)
@@ -157,7 +157,7 @@ def test_sigma_points(seed: int):
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-def test_sigma_scaling_factor_and_weights(seed):
+def test_sigma_scaling_factor_and_weights(seed) -> None:
     np.random.seed(seed)
     dim = np.random.randint(low=1, high=15)
     kappa = np.random.uniform(low=0.5, high=5)
@@ -176,14 +176,13 @@ def test_sigma_scaling_factor_and_weights(seed):
 # ======================================================================================
 
 
-def test_transformation_of_sigma_points():
+def test_transformation_of_sigma_points() -> None:
     sp = jnp.arange(10).reshape(1, 1, 5, 2) + 1
 
     def f(params, states):
-        out = jnp.column_stack(
+        return jnp.column_stack(
             [(states * params["fac1"][0]).sum(axis=1), states[..., 1]],
         )
-        return out
 
     trans_coeffs = {"fac1": jnp.array([2]), "fac2": jnp.array([])}
 
@@ -213,7 +212,7 @@ def test_transformation_of_sigma_points():
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-def test_predict_against_linear_filterpy(seed):
+def test_predict_against_linear_filterpy(seed) -> None:
     np.random.seed(seed)
     state, cov = _random_state_and_covariance()
     dim = len(state)
@@ -235,8 +234,7 @@ def test_predict_against_linear_filterpy(seed):
         return jnp.dot(states, params)
 
     def transition_function(params, states):
-        out = jnp.column_stack([linear(params[f"fac{i}"], states) for i in range(dim)])
-        return out
+        return jnp.column_stack([linear(params[f"fac{i}"], states) for i in range(dim)])
 
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)

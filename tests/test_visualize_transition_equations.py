@@ -13,9 +13,9 @@ from skillmodels.visualize_transition_equations import (
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 
-def test_visualize_transition_equations_runs():
-    with open(TEST_DATA_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+def test_visualize_transition_equations_runs() -> None:
+    with (TEST_DATA_DIR / "model2.yaml").open() as y:
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
 
     model_dict["observed_factors"] = ["ob1"]
 
@@ -23,7 +23,7 @@ def test_visualize_transition_equations_runs():
     params = params.set_index(["category", "period", "name1", "name2"])
 
     data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
-    data.set_index(["caseid", "period"], inplace=True)
+    data = data.set_index(["caseid", "period"])
     data["ob1"] = 0
 
     max_inputs = get_maximization_inputs(model_dict, data)

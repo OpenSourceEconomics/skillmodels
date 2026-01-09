@@ -1,3 +1,5 @@
+"""Debug version of log-likelihood function that returns intermediate results."""
+
 import functools
 from collections.abc import Callable  # noqa: TC003
 from typing import Any
@@ -220,22 +222,20 @@ def _scan_body(
 def _one_arg_measurement_update(
     kwargs: dict[str, Any],
 ) -> tuple[Array, Array, Array, Array, dict[str, Any]]:
-    out = kalman_update(**kwargs)
-    return out
+    return kalman_update(**kwargs)
 
 
 def _one_arg_anchoring_update(
     kwargs: dict[str, Any],
 ) -> tuple[Array, Array, Array, Array, dict[str, Any]]:
     _, _, new_log_mixture_weights, new_loglikes, debug_info = kalman_update(**kwargs)
-    out = (
+    return (
         kwargs["states"],
         kwargs["upper_chols"],
         new_log_mixture_weights,
         new_loglikes,
         debug_info,
     )
-    return out
 
 
 def _one_arg_no_predict(

@@ -1,3 +1,5 @@
+"""Functions to construct the parameter index for model estimation."""
+
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -64,11 +66,10 @@ def get_params_index(
         has_endogenous_factors=endogenous_factors_info.has_endogenous_factors,
     )
 
-    index = pd.MultiIndex.from_tuples(
+    return pd.MultiIndex.from_tuples(
         ind_tups,
         names=["category", "aug_period", "name1", "name2"],
     )
-    return index
 
 
 def get_control_params_index_tuples(
@@ -130,6 +131,7 @@ def get_meas_sds_index_tuples(
 def get_shock_sds_index_tuples(
     aug_periods: tuple[int, ...],
     factors: tuple[str, ...],
+    *,
     has_endogenous_factors: bool,
 ) -> list[tuple[str, int, str, str]]:
     """Index tuples for shock_sd.
@@ -211,6 +213,7 @@ def get_initial_cholcovs_index_tuples(
 def get_transition_index_tuples(
     transition_info: TransitionInfo,
     aug_periods: tuple[int, ...],
+    *,
     has_endogenous_factors: bool,
 ) -> list[tuple[str, int, str, str]]:
     """Index tuples for transition equation coefficients.

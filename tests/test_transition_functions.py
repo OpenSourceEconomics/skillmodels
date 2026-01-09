@@ -15,14 +15,14 @@ from skillmodels.transition_functions import (
 jax.config.update("jax_enable_x64", True)
 
 
-def test_linear():
+def test_linear() -> None:
     states = jnp.arange(3)
     params = jnp.array([0.1, 0.2, 0.3, 0.4])
     expected = 1.2
     aaae(linear(states, params), expected)
 
 
-def test_translog():
+def test_translog() -> None:
     all_states = jnp.array(
         [
             [2, 0, 0],
@@ -63,7 +63,7 @@ def test_translog():
         aaae(calculated, expected)
 
 
-def test_log_ces():
+def test_log_ces() -> None:
     states = jnp.array([3, 7.5])
     params = jnp.array([0.4, 0.6, 2])
     expected = 7.244628323025
@@ -71,7 +71,7 @@ def test_log_ces():
     aaae(calculated, expected)
 
 
-def test_where_all_but_one_gammas_are_zero():
+def test_where_all_but_one_gammas_are_zero() -> None:
     """This has to be tested, becaus it leads to an underflow in the log step."""
     states = jnp.ones(3)
     params = jnp.array([0, 0, 1, -0.5])
@@ -80,11 +80,11 @@ def test_where_all_but_one_gammas_are_zero():
     aaae(calculated, expected)
 
 
-def test_constant():
+def test_constant() -> None:
     assert constant("bla", "blubb") == "bla"  # ty: ignore[invalid-argument-type]
 
 
-def test_robust_translog():
+def test_robust_translog() -> None:
     all_states = jnp.array(
         [
             [2, 0, 0],
@@ -125,7 +125,7 @@ def test_robust_translog():
         aaae(calculated, expected)
 
 
-def test_log_ces_general():
+def test_log_ces_general() -> None:
     states = jnp.array([3, 7.5])
     params = jnp.array([0.4, 0.6, 2, 2, 0.5])
     expected = 7.244628323025
@@ -133,7 +133,7 @@ def test_log_ces_general():
     aaae(calculated, expected)
 
 
-def test_log_ces_general_where_all_but_one_gammas_are_zero():
+def test_log_ces_general_where_all_but_one_gammas_are_zero() -> None:
     """This has to be tested, becaus it leads to an underflow in the log step."""
     states = jnp.ones(3)
     params = jnp.array([0, 0, 1, -0.5, -0.5, -0.5, -2])
@@ -142,7 +142,7 @@ def test_log_ces_general_where_all_but_one_gammas_are_zero():
     aaae(calculated, expected)
 
 
-def test_param_names_log_ces_general():
+def test_param_names_log_ces_general() -> None:
     factors = ("a", "b")
     expected = ["a", "b", "sigma_a", "sigma_b", "tfp"]
     calculated = params_log_ces_general(factors)

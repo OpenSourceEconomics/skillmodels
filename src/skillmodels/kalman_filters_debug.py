@@ -1,3 +1,5 @@
+"""Debug versions of Kalman filter operations that return intermediate results."""
+
 from typing import Any
 
 import jax

@@ -1,3 +1,5 @@
+"""Utility functions for configuring plot layouts and subplots."""
+
 from typing import Any
 
 import numpy as np
@@ -7,6 +9,7 @@ def get_layout_kwargs(
     layout_kwargs: dict[str, Any] | None = None,
     legend_kwargs: dict[str, Any] | None = None,
     title_kwargs: dict[str, Any] | None = None,
+    *,
     showlegend: bool = False,
     columns: list[str] | None = None,
     rows: list[str] | None = None,
@@ -39,6 +42,7 @@ def get_layout_kwargs(
 
 
 def get_make_subplot_kwargs(
+    *,
     sharex: bool,
     sharey: bool,
     column_order: list[str],

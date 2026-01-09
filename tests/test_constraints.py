@@ -21,7 +21,7 @@ from skillmodels.process_model import process_model
 from skillmodels.types import Anchoring, Labels
 
 
-def test_add_bounds():
+def test_add_bounds() -> None:
     ind_tups = [("shock_sds", i) for i in range(5)] + [
         ("meas_sds", 4),
         ("bla", "blubb"),
@@ -45,7 +45,7 @@ def test_add_bounds():
 # ======================================================================================
 
 
-def test_normalization_constraints():
+def test_normalization_constraints() -> None:
     norm = {
         "fac1": {
             "loadings": [{"m1": 2, "m2": 1.5}, {"m1": 3}],
@@ -94,7 +94,7 @@ def test_normalization_constraints():
 # ======================================================================================
 
 
-def test_mixture_weight_constraints_mixture():
+def test_mixture_weight_constraints_mixture() -> None:
     calculated = _get_mixture_weights_constraints(n_mixtures=2)
     for c in calculated:
         del c["description"]
@@ -102,7 +102,7 @@ def test_mixture_weight_constraints_mixture():
     assert_list_equal_except_for_order(calculated, expected)
 
 
-def test_mixture_weight_constraints_normal():
+def test_mixture_weight_constraints_normal() -> None:
     calculated = _get_mixture_weights_constraints(n_mixtures=1)
     for c in calculated:
         del c["description"]
@@ -115,7 +115,7 @@ def test_mixture_weight_constraints_normal():
 # ======================================================================================
 
 
-def test_stage_constraints():
+def test_stage_constraints() -> None:
     stages = (0,)
     stagemap = (0, 0, 0)
 
@@ -136,7 +136,7 @@ def test_stage_constraints():
     assert_list_equal_except_for_order(calculated, expected)
 
 
-def test_stage_constraints_with_endogenous_factors():
+def test_stage_constraints_with_endogenous_factors() -> None:
     stages = (0, 1, 2, 3)
     stagemap = (0, 1, 0, 1, 2, 3)
     expected = [
@@ -169,7 +169,7 @@ def test_stage_constraints_with_endogenous_factors():
 # ======================================================================================
 
 
-def test_constant_factor_constraints():
+def test_constant_factor_constraints() -> None:
     labels = Labels(
         latent_factors=("fac1", "fac2"),
         observed_factors=(),
@@ -201,7 +201,7 @@ def test_constant_factor_constraints():
 # ======================================================================================
 
 
-def test_initial_mean_constraints():
+def test_initial_mean_constraints() -> None:
     nmixtures = 3
     factors = ("fac1", "fac2", "fac3")
     ind_tups = [
@@ -223,7 +223,7 @@ def test_initial_mean_constraints():
 # ======================================================================================
 
 
-def test_trans_coeff_constraints():
+def test_trans_coeff_constraints() -> None:
     labels = Labels(
         latent_factors=("fac1", "fac2", "fac3"),
         observed_factors=(),
@@ -297,12 +297,14 @@ def base_anchoring_info():
     )
 
 
-def test_anchoring_constraints_no_constraint_needed(anch_uinfo, base_anchoring_info):
+def test_anchoring_constraints_no_constraint_needed(
+    anch_uinfo, base_anchoring_info
+) -> None:
     calculated = _get_anchoring_constraints(anch_uinfo, (), base_anchoring_info, (0, 1))
     assert calculated == []
 
 
-def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
+def test_anchoring_constraints_for_constants(anch_uinfo) -> None:
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
@@ -331,7 +333,7 @@ def test_anchoring_constraints_for_constants(anch_uinfo, base_anchoring_info):
     assert calculated == expected
 
 
-def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
+def test_anchoring_constraints_for_controls(anch_uinfo) -> None:
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
@@ -371,7 +373,7 @@ def test_anchoring_constraints_for_controls(anch_uinfo, base_anchoring_info):
     assert calculated == expected
 
 
-def test_anchoring_constraints_for_loadings(anch_uinfo, base_anchoring_info):
+def test_anchoring_constraints_for_loadings(anch_uinfo) -> None:
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
@@ -402,7 +404,7 @@ def test_anchoring_constraints_for_loadings(anch_uinfo, base_anchoring_info):
     assert calculated == expected
 
 
-def assert_list_equal_except_for_order(list1, list2):
+def assert_list_equal_except_for_order(list1, list2) -> None:
     for item in list1:
         assert item in list2, f"{item} is in list1 but not in list2"
     for item in list2:
@@ -411,12 +413,12 @@ def assert_list_equal_except_for_order(list1, list2):
 
 @pytest.fixture
 def simplest_augmented_model():
-    with open(TEST_DATA_DIR / "simplest_augmented_model.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
+    with (TEST_DATA_DIR / "simplest_augmented_model.yaml").open() as y:
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
     return process_model(model_dict)
 
 
-def test_get_constraints_for_augmented_periods(simplest_augmented_model):
+def test_get_constraints_for_augmented_periods(simplest_augmented_model) -> None:
     calculated = _get_constraints_for_augmented_periods(
         labels=simplest_augmented_model.labels,
         endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,

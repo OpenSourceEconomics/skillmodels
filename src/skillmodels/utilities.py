@@ -1,3 +1,5 @@
+"""Utility functions for manipulating model specifications and parameters."""
+
 import warnings
 from copy import deepcopy
 from typing import Any
@@ -36,8 +38,7 @@ def extract_factors(
         factors = [factors]
 
     to_remove = list(set(model_dict["factors"]).difference(factors))
-    out = remove_factors(to_remove, model_dict, params)
-    return out
+    return remove_factors(to_remove, model_dict, params)
 
 
 def update_parameter_values(
@@ -116,11 +117,17 @@ def remove_factors(
     # Remove periods if necessary, but only if no endogenous factors are present.
     # (else we would mess up the mapping between raw periods model periods)
     if not has_endogenous_factors:
-        new_n_periods = get_dimensions(out, has_endogenous_factors).n_periods
+        new_n_periods = get_dimensions(
+            out, has_endogenous_factors=has_endogenous_factors
+        ).n_periods
         out = reduce_n_periods(out, new_n_periods)
 
     if params is not None:
-        out_params = _reduce_params(params, out, has_endogenous_factors)  # ty: ignore[invalid-argument-type]
+        out_params = _reduce_params(
+            params,
+            out,  # ty: ignore[invalid-argument-type]
+            has_endogenous_factors=has_endogenous_factors,
+        )
         out = (out, out_params)
 
     return out  # ty: ignore[invalid-return-type]
@@ -337,6 +344,7 @@ def _remove_from_dict(
 def _reduce_params(
     params: pd.DataFrame,
     model_dict: dict[str, Any],
+    *,
     has_endogenous_factors: bool,
 ) -> pd.DataFrame:
     """Reduce a parameter DataFrame from a larger model to a reduced model.
@@ -389,14 +397,13 @@ def _get_params_index_from_model_dict(
     model_dict: dict[str, Any],
 ) -> pd.MultiIndex:
     mod = process_model(model_dict)
-    index = get_params_index(
+    return get_params_index(
         update_info=mod.update_info,
         labels=mod.labels,
         dimensions=mod.dimensions,
         transition_info=mod.transition_info,
         endogenous_factors_info=mod.endogenous_factors_info,
     )
-    return index
 
 
 def _remove_measurements_from_normalizations(
@@ -408,6 +415,7 @@ def _remove_measurements_from_normalizations(
         warnings.warn(
             "Your removed a normalized measurement from a model. Make sure there are "
             "enough normalizations left to ensure identification.",
+            stacklevel=2,
         )
     return reduced
 

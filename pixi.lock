@@ -8471,8 +8471,8 @@ packages:
   timestamp: 1753199211006
 - pypi: ./
   name: skillmodels
-  version: 0.0.24.dev245+g921c61276.d20260109
-  sha256: 5918dae4da35a25e3716f0ea2f2cce8f1e9841ad01284ccc92962243d4a6d19e
+  version: 0.0.24.dev246+gdce66ad7c.d20260109
+  sha256: c4aac3043ab0ace6fc5dfb9a40c211225a79046f52762a52dc441938d4487364
   requires_dist:
   - dags
   - frozendict

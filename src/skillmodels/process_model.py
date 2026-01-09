@@ -1,3 +1,5 @@
+"""Functions to process model specifications from user-friendly to internal form."""
+
 from copy import deepcopy
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
@@ -165,7 +167,7 @@ def get_has_endogenous_factors(factors: dict[str, Any]) -> bool:
     return endogenous_factors["is_endogenous"].any()  # ty: ignore[invalid-return-type]
 
 
-def get_dimensions(model_dict: dict, has_endogenous_factors: bool) -> Dimensions:
+def get_dimensions(model_dict: dict, *, has_endogenous_factors: bool) -> Dimensions:
     """Extract the dimensions of the model.
 
     Args:
@@ -191,7 +193,7 @@ def get_dimensions(model_dict: dict, has_endogenous_factors: bool) -> Dimensions
 
 
 def _get_aug_periods_to_periods(
-    n_aug_periods: int, has_endogenous_factors: bool
+    n_aug_periods: int, *, has_endogenous_factors: bool
 ) -> dict[int, int]:
     """Return mapper of (potentially) augmented periods to user-provided periods."""
     aug_periods = list(range(n_aug_periods))
@@ -210,7 +212,7 @@ def _aug_periods_from_period(
 
 
 def _get_labels(
-    model_dict: dict, has_endogenous_factors: bool, dimensions: Dimensions
+    model_dict: dict, *, has_endogenous_factors: bool, dimensions: Dimensions
 ) -> Labels:
     """Extract labels of the model quantities.
 
@@ -466,6 +468,7 @@ def _get_transition_info(model_dict: dict, labels: Labels) -> TransitionInfo:
 
 
 def _get_endogenous_factors_info(
+    *,
     has_endogenous_factors: bool,
     model_dict: dict[str, Any],
     labels: Labels,
@@ -501,6 +504,7 @@ def _get_endogenous_factors_info(
 
 def _get_aug_periods_to_aug_period_meas_types(
     aug_periods: tuple[int, ...] | KeysView[int],
+    *,
     has_endogenous_factors: bool,
 ) -> dict[int, Literal["states", "endogenous_factors"]]:
     if has_endogenous_factors:

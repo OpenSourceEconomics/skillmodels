@@ -3,6 +3,8 @@ yaml-files:
   - '*.yaml'
   - '*.yml'
   - .yamllint
+ignore:
+  - src/skillmodels/test_data/simplest_augmented_model.yaml
 rules:
   braces: enable
   brackets: enable
@@ -34,3 +36,4 @@ rules:
   trailing-spaces: enable
   truthy:
     level: warning
+    check-keys: false

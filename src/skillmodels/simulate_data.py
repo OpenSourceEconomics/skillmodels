@@ -86,6 +86,7 @@ def simulate_dataset(
             warnings.warn(
                 f"The number of observations inferred from data ({data_n_obs}) and "
                 f"n_obs ({n_obs}) are different. n_obs is ignored.",
+                stacklevel=2,
             )
         n_obs = data_n_obs
 
@@ -112,7 +113,8 @@ def simulate_dataset(
         has_endogenous_factors=model.endogenous_factors_info.has_endogenous_factors,
     )
 
-    assert n_obs is not None  # type narrowing: n_obs is set by either data or argument
+    if n_obs is None:
+        raise ValueError("n_obs must be set by either data or argument")
     states, covs, log_weights, pardict = parse_params(
         params=jnp.array(params["value"].to_numpy()),
         parsing_info=parsing_info,
@@ -153,7 +155,7 @@ def simulate_dataset(
         use_aug_period=False,
     )
 
-    out = {
+    return {
         "unanchored_states": {
             "states": latent_data,
             "state_ranges": create_state_ranges(
@@ -178,8 +180,6 @@ def simulate_dataset(
         "aug_measurements": aug_measurements,
     }
 
-    return out
-
 
 def _simulate_dataset(
     latent_states: Array,
@@ -189,6 +189,7 @@ def _simulate_dataset(
     labels: Labels,
     dimensions: Dimensions,
     n_obs: int,
+    *,
     has_endogenous_factors: bool,
     update_info: pd.DataFrame,
     control_data: Array,
@@ -473,5 +474,4 @@ def measurements_from_states(
     epsilon = multivariate_normal([0] * n_meas, np.diag(sds**2), n_obs)
     states_part = np.dot(states, loadings.T)
     control_part = np.dot(controls, control_params.T)
-    meas = states_part + control_part + epsilon
-    return meas
+    return states_part + control_part + epsilon

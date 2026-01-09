@@ -1,3 +1,5 @@
+"""Functions to visualize transition equations and production functions."""
+
 import itertools
 from collections.abc import Callable  # noqa: TC003
 from copy import deepcopy
@@ -29,6 +31,7 @@ def combine_transition_plots(
     row_order: list[str] | str | None = None,
     factor_mapping: dict[str, str] | None = None,
     make_subplot_kwargs: dict[str, Any] | None = None,
+    *,
     sharex: bool = False,
     sharey: bool = True,
     showlegend: bool = True,
@@ -80,11 +83,11 @@ def combine_transition_plots(
 
     column_order, row_order = _process_orders(column_order, row_order, plots_dict)
     make_subplot_kwargs = get_make_subplot_kwargs(
-        sharex,
-        sharey,
-        column_order,
-        row_order,
-        make_subplot_kwargs,
+        sharex=sharex,
+        sharey=sharey,
+        column_order=column_order,
+        row_order=row_order,
+        make_subplot_kwargs=make_subplot_kwargs,
     )
     factor_mapping = _process_factor_mapping_trans(
         factor_mapping,
@@ -125,12 +128,12 @@ def combine_transition_plots(
             )
 
     layout_kwargs = get_layout_kwargs(
-        layout_kwargs,
-        legend_kwargs,
-        title_kwargs,
-        showlegend,
-        column_order,
-        row_order,
+        layout_kwargs=layout_kwargs,
+        legend_kwargs=legend_kwargs,
+        title_kwargs=title_kwargs,
+        showlegend=showlegend,
+        columns=column_order,
+        rows=row_order,
     )
     fig.update_layout(**layout_kwargs)
     return fig
@@ -151,6 +154,7 @@ def get_transition_plots(
     n_draws: int = 50,
     colorscale: str = "Magenta_r",
     layout_kwargs: dict[str, Any] | None = None,
+    *,
     include_correction_factors: bool = False,
 ) -> dict[tuple[str, str], go.Figure]:
     """Get dictionary with individual plots of transition equations for each factor.
@@ -208,7 +212,7 @@ def get_transition_plots(
     states = get_filtered_states(model_dict=model_dict, data=data, params=params)[
         "anchored_states"
     ]["states"]
-    plots_dict = _get_dictionary_with_plots(
+    return _get_dictionary_with_plots(
         model=model,
         data=data,
         params=params,
@@ -223,7 +227,6 @@ def get_transition_plots(
         colorscale=colorscale,
         layout_kwargs=layout_kwargs,
     )
-    return plots_dict
 
 
 def _get_dictionary_with_plots(
@@ -240,6 +243,7 @@ def _get_dictionary_with_plots(
     n_draws: int,
     colorscale: str,
     layout_kwargs: dict[str, Any] | None,
+    *,
     showlegend: bool = True,
 ) -> dict[tuple[str, str], go.Figure]:
     """Get plots of transition functions for each input and output combination.
@@ -409,8 +413,7 @@ def _set_index_params(
         endogenous_factors_info=model.endogenous_factors_info,
     )
 
-    params = params.reindex(params_index)
-    return params
+    return params.reindex(params_index)
 
 
 def _get_states_data(
@@ -503,8 +506,7 @@ def _prepare_data_for_one_plot_fixed_quantile_2d(
         quantile_data["quantile"] = quantile
         to_concat.append(quantile_data)
 
-    out = pd.concat(to_concat).reset_index()
-    return out
+    return pd.concat(to_concat).reset_index()
 
 
 def _process_quantiles_of_other_factors(
@@ -551,8 +553,7 @@ def _prepare_data_for_one_plot_average_2d(
         draw_data[f"output_{output_factor}"] = np.array(output_arr)
         to_concat.append(draw_data)
 
-    out = pd.concat(to_concat).groupby(f"input_{input_factor}").mean().reset_index()
-    return out
+    return pd.concat(to_concat).groupby(f"input_{input_factor}").mean().reset_index()
 
 
 def _process_factor_mapping_trans(
