@@ -169,7 +169,7 @@ ty = {features = ["test", "ty"], solve-group = "default"}
 target-version = "py314"
 fix = true
 line-length = 88
-
+unsafe-fixes = false
 
 [tool.ruff.lint]
 select = ["ALL"]

@@ -54,7 +54,6 @@ repos:
           - jupyter
         args:
           - --fix
-          # - --unsafe-fixes
       - id: ruff-format
         types_or:
           - python
