@@ -2,11 +2,34 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from enum import Enum, auto
+from typing import NewType
 
 import pandas as pd
 from frozendict import frozendict
 from jax import Array
+
+# NewType definitions for domain safety
+# These prevent accidentally mixing up semantically different int values
+Period = NewType("Period", int)
+AugPeriod = NewType("AugPeriod", int)
+Stage = NewType("Stage", int)
+AugStage = NewType("AugStage", int)
+
+
+class FactorType(Enum):
+    """Type of a latent factor in the model."""
+
+    STATE = auto()  # Regular state factor
+    ENDOGENOUS = auto()  # Endogenous factor (not a correction)
+    CORRECTION = auto()  # Correction factor (is_endogenous=True, is_correction=True)
+
+
+class MeasurementType(Enum):
+    """Type of measurement in an augmented period."""
+
+    STATES = auto()
+    ENDOGENOUS_FACTORS = auto()
 
 
 @dataclass(frozen=True)
@@ -67,6 +90,52 @@ class Anchoring:
     free_loadings: bool
     ignore_constant_when_anchoring: bool
 
+    @classmethod
+    def disabled(cls) -> Anchoring:
+        """Create an Anchoring config with anchoring disabled."""
+        return cls(
+            anchoring=False,
+            outcomes=frozendict({}),
+            factors=(),
+            free_controls=False,
+            free_constant=False,
+            free_loadings=False,
+            ignore_constant_when_anchoring=False,
+        )
+
+    @classmethod
+    def from_config(
+        cls,
+        outcomes: dict[str, str],
+        *,
+        free_controls: bool = False,
+        free_constant: bool = False,
+        free_loadings: bool = False,
+        ignore_constant_when_anchoring: bool = False,
+    ) -> Anchoring:
+        """Create an Anchoring config from a configuration dictionary.
+
+        Args:
+            outcomes: Mapping from factor names to outcome variable names.
+            free_controls: Whether control parameters are free in anchoring equations.
+            free_constant: Whether constant is free in anchoring equations.
+            free_loadings: Whether loadings are free in anchoring equations.
+            ignore_constant_when_anchoring: Whether to ignore constant when anchoring.
+
+        Returns:
+            Configured Anchoring instance with anchoring enabled.
+
+        """
+        return cls(
+            anchoring=True,
+            outcomes=frozendict(outcomes),
+            factors=tuple(outcomes.keys()),
+            free_controls=free_controls,
+            free_constant=free_constant,
+            free_loadings=free_loadings,
+            ignore_constant_when_anchoring=ignore_constant_when_anchoring,
+        )
+
 
 @dataclass(frozen=True)
 class EstimationOptions:
@@ -95,9 +164,48 @@ class TransitionInfo:
 class FactorInfo:
     """Information for a single factor."""
 
-    is_state: bool
-    is_endogenous: bool
-    is_correction: bool
+    factor_type: FactorType
+
+    @property
+    def is_state(self) -> bool:
+        """Whether the factor is a regular state factor."""
+        return self.factor_type == FactorType.STATE
+
+    @property
+    def is_endogenous(self) -> bool:
+        """Whether the factor is endogenous (ENDOGENOUS or CORRECTION)."""
+        return self.factor_type in (FactorType.ENDOGENOUS, FactorType.CORRECTION)
+
+    @property
+    def is_correction(self) -> bool:
+        """Whether the factor is a correction factor."""
+        return self.factor_type == FactorType.CORRECTION
+
+    @classmethod
+    def from_flags(
+        cls, *, is_endogenous: bool = False, is_correction: bool = False
+    ) -> FactorInfo:
+        """Create FactorInfo from boolean flags.
+
+        Args:
+            is_endogenous: Whether the factor is endogenous.
+            is_correction: Whether the factor is a correction (must be endogenous).
+
+        Returns:
+            FactorInfo with the appropriate FactorType.
+
+        Raises:
+            ValueError: If is_correction is True but is_endogenous is False.
+
+        """
+        if is_correction and not is_endogenous:
+            msg = "A correction factor must also be endogenous"
+            raise ValueError(msg)
+        if is_correction:
+            return cls(factor_type=FactorType.CORRECTION)
+        if is_endogenous:
+            return cls(factor_type=FactorType.ENDOGENOUS)
+        return cls(factor_type=FactorType.STATE)
 
 
 @dataclass(frozen=True)
@@ -105,9 +213,7 @@ class EndogenousFactorsInfo:
     """Information about endogenous factors in the model."""
 
     has_endogenous_factors: bool
-    aug_periods_to_aug_period_meas_types: frozendict[
-        int, Literal["states", "endogenous_factors"]
-    ]
+    aug_periods_to_aug_period_meas_types: frozendict[int, MeasurementType]
     bounds_distance: float
     aug_periods_from_period: Callable[[int], list[int]]
     factor_info: frozendict[str, FactorInfo]

@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from jax import Array
+from numpy.typing import NDArray  # noqa: TC002
 
 import skillmodels.likelihood_function as lf
 import skillmodels.likelihood_function_debug as lfd
@@ -24,10 +25,9 @@ from skillmodels.parse_params import create_parsing_info
 from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
+from skillmodels.types import ParsingInfo  # noqa: TC001
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
     from skillmodels.types import ProcessedModel
 
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
@@ -201,7 +201,7 @@ def get_maximization_inputs(
 
 def _partial_some_log_likelihood(
     fun: Callable,
-    parsing_info: dict[str, Any],
+    parsing_info: ParsingInfo,
     measurements: Array,
     controls: Array,
     observed_factors: Array,
@@ -223,7 +223,7 @@ def _partial_some_log_likelihood(
     # be measurements for endogenous factors in the "second half" of the last period).
     last_aug_period = (
         model.labels.aug_periods[-2]
-        if parsing_info["has_endogenous_factors"]
+        if parsing_info.has_endogenous_factors
         else model.labels.aug_periods[-1]
     )
     iteration_to_period = _aug_periods.replace(last_aug_period, -1).to_numpy()

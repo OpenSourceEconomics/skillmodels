@@ -9,6 +9,7 @@ import numpy as np
 import optimagic as om
 
 import skillmodels.transition_functions as t_f_module
+from skillmodels.types import MeasurementType
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -427,9 +428,9 @@ def _get_constraints_for_augmented_periods(
         # We are restricting transitions and shocks, not measurements. So this might
         # look counterintuitive...
         aug_period_meas_type_to_constrain = (
-            "states"
+            MeasurementType.STATES
             if endogenous_factors_info.factor_info[factor].is_state  # ty: ignore[invalid-argument-type]
-            else "endogenous_factors"
+            else MeasurementType.ENDOGENOUS_FACTORS
         )
         aug_period_meas_types = (
             endogenous_factors_info.aug_periods_to_aug_period_meas_types

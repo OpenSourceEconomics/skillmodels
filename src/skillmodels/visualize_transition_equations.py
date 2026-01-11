@@ -19,6 +19,7 @@ from skillmodels.parse_params import create_parsing_info, parse_params
 from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
+from skillmodels.types import ParsedParams  # noqa: TC001
 from skillmodels.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
 
 if TYPE_CHECKING:
@@ -289,7 +290,7 @@ def _get_dictionary_with_plots(
     observed_factors = model.labels.observed_factors
     states_data = _get_states_data(model, period, data, states, observed_factors)
     params = _set_index_params(model, params)
-    pardict = _get_pardict(model, params)
+    parsed_params = _get_parsed_params(model, params)
     state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
     layout_kwargs = get_layout_kwargs(
         layout_kwargs=layout_kwargs,
@@ -313,7 +314,7 @@ def _get_dictionary_with_plots(
         else:
             aug_period = max(_aug_periods)
         transition_params = {
-            output_factor: pardict["transition"][output_factor][aug_period]
+            output_factor: parsed_params.transition[output_factor][aug_period]
         }
 
         if quantiles_of_other_factors is not None:
@@ -377,11 +378,11 @@ def _get_state_ranges(
     return state_ranges
 
 
-def _get_pardict(
+def _get_parsed_params(
     model: ProcessedModel,
     params: pd.DataFrame,
-) -> dict[str, Any]:
-    """Get parsed params dictionary."""
+) -> ParsedParams:
+    """Get parsed params dataclass."""
     parsing_info = create_parsing_info(
         params_index=params.index,  # ty: ignore[invalid-argument-type]
         update_info=model.update_info,
@@ -390,14 +391,14 @@ def _get_pardict(
         has_endogenous_factors=model.endogenous_factors_info.has_endogenous_factors,
     )
 
-    _, _, _, pardict = parse_params(
+    _, _, _, parsed_params = parse_params(
         params=jnp.array(params["value"].to_numpy()),
         parsing_info=parsing_info,
         dimensions=model.dimensions,
         labels=model.labels,
         n_obs=1,
     )
-    return pardict
+    return parsed_params
 
 
 def _set_index_params(

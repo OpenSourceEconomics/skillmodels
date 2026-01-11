@@ -12,12 +12,18 @@ from skillmodels.clipping import soft_clipping
 from skillmodels.kalman_filters import kalman_predict
 from skillmodels.kalman_filters_debug import kalman_update
 from skillmodels.parse_params import parse_params
-from skillmodels.types import Dimensions, EstimationOptions, Labels  # noqa: TC001
+from skillmodels.types import (  # noqa: TC001
+    Dimensions,
+    EstimationOptions,
+    Labels,
+    ParsedParams,
+    ParsingInfo,
+)
 
 
 def log_likelihood(
     params: Array,
-    parsing_info: dict[str, Any],
+    parsing_info: ParsingInfo,
     measurements: Array,
     controls: Array,
     transition_func: Callable[..., Array],
@@ -66,7 +72,7 @@ def log_likelihood(
 
     """
     n_obs = measurements.shape[1]
-    states, upper_chols, log_mixture_weights, pardict = parse_params(
+    states, upper_chols, log_mixture_weights, parsed_params = parse_params(
         params,
         parsing_info,
         dimensions,
@@ -82,9 +88,9 @@ def log_likelihood(
 
     loop_args = {
         "period": iteration_to_period,
-        "loadings": pardict["loadings"],
-        "control_params": pardict["controls"],
-        "meas_sds": pardict["meas_sds"],
+        "loadings": parsed_params.loadings,
+        "control_params": parsed_params.controls,
+        "meas_sds": parsed_params.meas_sds,
         "measurements": measurements,
         "is_measurement_iteration": is_measurement_iteration,
         "is_predict_iteration": is_predict_iteration,
@@ -93,7 +99,7 @@ def log_likelihood(
     _body = functools.partial(
         _scan_body,
         controls=controls,
-        pardict=pardict,
+        parsed_params=parsed_params,
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
         transition_func=transition_func,
@@ -145,7 +151,7 @@ def _scan_body(
     carry: dict[str, Array],
     loop_args: dict[str, Array],
     controls: Array,
-    pardict: dict[str, Any],
+    parsed_params: ParsedParams,
     sigma_scaling_factor: float,
     sigma_weights: Array,
     transition_func: Callable[..., Array],
@@ -188,12 +194,12 @@ def _scan_body(
         "upper_chols": upper_chols,
         "sigma_scaling_factor": sigma_scaling_factor,
         "sigma_weights": sigma_weights,
-        "trans_coeffs": {k: arr[t] for k, arr in pardict["transition"].items()},
-        "shock_sds": pardict["shock_sds"][t],
-        "anchoring_scaling_factors": pardict["anchoring_scaling_factors"][
+        "trans_coeffs": {k: arr[t] for k, arr in parsed_params.transition.items()},
+        "shock_sds": parsed_params.shock_sds[t],
+        "anchoring_scaling_factors": parsed_params.anchoring_scaling_factors[
             jnp.array([t, t + 1])
         ],
-        "anchoring_constants": pardict["anchoring_constants"][jnp.array([t, t + 1])],
+        "anchoring_constants": parsed_params.anchoring_constants[jnp.array([t, t + 1])],
         "observed_factors": observed_factors[t],
     }
 

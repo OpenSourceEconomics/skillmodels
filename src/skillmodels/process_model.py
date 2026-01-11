@@ -1,8 +1,9 @@
 """Functions to process model specifications from user-friendly to internal form."""
 
 from copy import deepcopy
+from dataclasses import replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -21,7 +22,9 @@ from skillmodels.types import (
     EndogenousFactorsInfo,
     EstimationOptions,
     FactorInfo,
+    FactorType,
     Labels,
+    MeasurementType,
     ProcessedModel,
     TransitionInfo,
 )
@@ -97,9 +100,7 @@ def process_model(model_dict: dict) -> ProcessedModel:
             ),
             factor_info=frozendict(
                 {
-                    fac: FactorInfo(
-                        is_state=True, is_endogenous=False, is_correction=False
-                    )
+                    fac: FactorInfo(factor_type=FactorType.STATE)
                     for fac in labels.latent_factors
                 }
             ),
@@ -112,20 +113,8 @@ def process_model(model_dict: dict) -> ProcessedModel:
         has_endogenous_factors=has_endogenous_factors,
     )
     transition_info = _get_transition_info(_model_dict_aug, labels)
-    # Create new Labels with transition_names (frozen dataclass requires replacement)
-    labels = Labels(
-        latent_factors=labels.latent_factors,
-        observed_factors=labels.observed_factors,
-        controls=labels.controls,
-        periods=labels.periods,
-        stagemap=labels.stagemap,
-        stages=labels.stages,
-        aug_periods=labels.aug_periods,
-        aug_periods_to_periods=labels.aug_periods_to_periods,
-        aug_stagemap=labels.aug_stagemap,
-        aug_stages=labels.aug_stages,
-        aug_stages_to_stages=labels.aug_stages_to_stages,
-        transition_names=tuple(transition_info.function_names.values()),
+    labels = replace(
+        labels, transition_names=tuple(transition_info.function_names.values())
     )
 
     return ProcessedModel(
@@ -316,10 +305,8 @@ def _process_anchoring(model_dict: dict) -> Anchoring:
     """
     if "anchoring" in model_dict:
         anch = model_dict["anchoring"]
-        return Anchoring(
-            anchoring=True,
-            outcomes=frozendict(anch.get("outcomes", {})),
-            factors=tuple(anch.get("outcomes", {}).keys()),
+        return Anchoring.from_config(
+            outcomes=anch.get("outcomes", {}),
             free_controls=anch.get("free_controls", False),
             free_constant=anch.get("free_constant", False),
             free_loadings=anch.get("free_loadings", False),
@@ -328,15 +315,7 @@ def _process_anchoring(model_dict: dict) -> Anchoring:
             ),
         )
 
-    return Anchoring(
-        anchoring=False,
-        outcomes=frozendict({}),
-        factors=(),
-        free_controls=False,
-        free_constant=False,
-        free_loadings=False,
-        ignore_constant_when_anchoring=False,
-    )
+    return Anchoring.disabled()
 
 
 def _insert_empty_elements_into_list(
@@ -477,10 +456,7 @@ def _get_endogenous_factors_info(
     """Collect information about endogenous factors."""
     factor_info = {}
     for fac, v in model_dict["factors"].items():
-        factor_info[fac] = FactorInfo(
-            is_state=(
-                not v.get("is_endogenous", False) and not v.get("is_correction", False)
-            ),
+        factor_info[fac] = FactorInfo.from_flags(
             is_endogenous=v.get("is_endogenous", False),
             is_correction=v.get("is_correction", False),
         )
@@ -506,13 +482,17 @@ def _get_aug_periods_to_aug_period_meas_types(
     aug_periods: tuple[int, ...] | KeysView[int],
     *,
     has_endogenous_factors: bool,
-) -> dict[int, Literal["states", "endogenous_factors"]]:
+) -> dict[int, MeasurementType]:
     if has_endogenous_factors:
         return {
-            aug_p: ("states" if aug_p % 2 == 0 else "endogenous_factors")
+            aug_p: (
+                MeasurementType.STATES
+                if aug_p % 2 == 0
+                else MeasurementType.ENDOGENOUS_FACTORS
+            )
             for aug_p in aug_periods
         }
-    return dict.fromkeys(aug_periods, "states")
+    return dict.fromkeys(aug_periods, MeasurementType.STATES)
 
 
 def _get_update_info(

@@ -91,7 +91,7 @@ def anchor_states_df(
         has_endogenous_factors=model.endogenous_factors_info.has_endogenous_factors,
     )
 
-    *_, pardict = parse_params(
+    *_, parsed_params = parse_params(
         params=jnp.array(params["value"].to_numpy()),
         parsing_info=parsing_info,
         dimensions=model.dimensions,
@@ -101,8 +101,8 @@ def anchor_states_df(
 
     n_latent = model.dimensions.n_latent_factors
 
-    _scaling_factors = np.array(pardict["anchoring_scaling_factors"][:, :n_latent])
-    _constants = np.array(pardict["anchoring_constants"][:, :n_latent])
+    _scaling_factors = np.array(parsed_params.anchoring_scaling_factors[:, :n_latent])
+    _constants = np.array(parsed_params.anchoring_constants[:, :n_latent])
     if use_aug_period:
         period_arr = states_df["aug_period"].to_numpy()
         ap_to_p = model.labels.aug_periods_to_periods

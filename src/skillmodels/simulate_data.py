@@ -28,6 +28,7 @@ from skillmodels.parse_params import create_parsing_info, parse_params
 from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
+from skillmodels.types import ParsedParams  # noqa: TC001
 
 
 def simulate_dataset(
@@ -115,7 +116,7 @@ def simulate_dataset(
 
     if n_obs is None:
         raise ValueError("n_obs must be set by either data or argument")
-    states, covs, log_weights, pardict = parse_params(
+    states, covs, log_weights, parsed_params = parse_params(
         params=jnp.array(params["value"].to_numpy()),
         parsing_info=parsing_info,
         dimensions=model.dimensions,
@@ -127,7 +128,7 @@ def simulate_dataset(
         latent_states=states,
         covs=covs,
         log_weights=log_weights,
-        pardict=pardict,
+        parsed_params=parsed_params,
         labels=model.labels,
         dimensions=model.dimensions,
         n_obs=n_obs,
@@ -185,7 +186,7 @@ def _simulate_dataset(
     latent_states: Array,
     covs: Array,
     log_weights: Array,
-    pardict: dict,
+    parsed_params: ParsedParams,
     labels: Labels,
     dimensions: Dimensions,
     n_obs: int,
@@ -205,7 +206,7 @@ def _simulate_dataset(
         covs: Array of shape (n_obs, n_mixtures, n_states, n_states) with initial
             covariance matrices.
         log_weights: Array of shape (n_obs, n_mixtures) with log mixture weights.
-        pardict: Dictionary with parsed parameters.
+        parsed_params: ParsedParams dataclass with parsed parameters.
         labels: Labels for the model quantities like factors, periods, controls.
         dimensions: Dimensional information like n_states, n_periods, n_controls.
         n_obs: Number of observations.
@@ -231,23 +232,23 @@ def _simulate_dataset(
 
     weights = np.exp(log_weights)[0]
     loadings_df = pd.DataFrame(
-        data=pardict["loadings"],
+        data=parsed_params.loadings,
         index=update_info.index,
         columns=labels.latent_factors,
     )
 
     control_params_df = pd.DataFrame(
-        data=pardict["controls"],
+        data=parsed_params.controls,
         index=update_info.index,
         columns=labels.controls,
     )
     meas_sds = pd.DataFrame(
-        data=pardict["meas_sds"].reshape(-1, 1),
+        data=parsed_params.meas_sds.reshape(-1, 1),
         index=update_info.index,
     )
 
-    transition_params = pardict["transition"]
-    shock_sds = pardict["shock_sds"]
+    transition_params = parsed_params.transition
+    shock_sds = parsed_params.shock_sds
 
     dist_args = []
     for mixture in range(dimensions.n_mixtures):
@@ -281,11 +282,11 @@ def _simulate_dataset(
         trans_coeffs = {k: arr[t] for k, arr in transition_params.items()}
 
         # get anchoring_scaling_factors for the period
-        anchoring_scaling_factors = pardict["anchoring_scaling_factors"][
+        anchoring_scaling_factors = parsed_params.anchoring_scaling_factors[
             jnp.array([t, t + 1])
         ]
         # get anchoring constants for the period
-        anchoring_constants = pardict["anchoring_constants"][jnp.array([t, t + 1])]
+        anchoring_constants = parsed_params.anchoring_constants[jnp.array([t, t + 1])]
 
         # call transform_sigma_points and convert result to numpy
         next_states = np.array(
