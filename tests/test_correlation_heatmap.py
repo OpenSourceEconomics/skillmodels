@@ -265,12 +265,12 @@ def test_process_factors() -> None:
     observed_factor = "g"
     factors = ["b", "d", "g"]
     all_factors = None
-    assert list("abcd") == _process_factors(model, all_factors)[0]  # ty: ignore[invalid-argument-type]
-    assert list("efg") == _process_factors(model, all_factors)[1]  # ty: ignore[invalid-argument-type]
-    assert [latent_factor] == _process_factors(model, latent_factor)[0]  # ty: ignore[invalid-argument-type]
-    assert [observed_factor] == _process_factors(model, observed_factor)[1]  # ty: ignore[invalid-argument-type]
-    assert factors[:-1] == _process_factors(model, factors)[0]  # ty: ignore[invalid-argument-type]
-    assert [factors[-1] == _process_factors(model, factors)[1]]  # ty: ignore[invalid-argument-type]
+    assert tuple("abcd") == _process_factors(model, all_factors)[0]  # ty: ignore[invalid-argument-type]
+    assert tuple("efg") == _process_factors(model, all_factors)[1]  # ty: ignore[invalid-argument-type]
+    assert (latent_factor,) == _process_factors(model, latent_factor)[0]  # ty: ignore[invalid-argument-type]
+    assert (observed_factor,) == _process_factors(model, observed_factor)[1]  # ty: ignore[invalid-argument-type]
+    assert tuple(factors[:-1]) == _process_factors(model, factors)[0]  # ty: ignore[invalid-argument-type]
+    assert (factors[-1],) == _process_factors(model, factors)[1]  # ty: ignore[invalid-argument-type]
 
 
 def test_get_mask_lower_triangle_only() -> None:

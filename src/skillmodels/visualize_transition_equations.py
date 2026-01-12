@@ -28,8 +28,8 @@ if TYPE_CHECKING:
 
 def combine_transition_plots(
     plots_dict: dict[tuple[str, str], go.Figure],
-    column_order: tuple[str, ...] | str | None = None,
-    row_order: tuple[str, ...] | str | None = None,
+    column_order: list[str] | tuple[str, ...] | str | None = None,
+    row_order: list[str] | tuple[str, ...] | str | None = None,
     factor_mapping: dict[str, str] | None = None,
     make_subplot_kwargs: dict[str, Any] | None = None,
     *,
@@ -574,8 +574,8 @@ def _process_factor_mapping_trans(
 
 
 def _process_orders(
-    columns: tuple[str, ...] | str | None,
-    rows: tuple[str, ...] | str | None,
+    columns: list[str] | tuple[str, ...] | str | None,
+    rows: list[str] | tuple[str, ...] | str | None,
     plots_dict: dict[tuple[str, str], go.Figure],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Process axes orders to return tuples of strings."""
@@ -590,7 +590,7 @@ def _process_orders(
     elif isinstance(columns, str):
         out_columns = (columns,)
     else:
-        out_columns = columns
+        out_columns = tuple(columns)
     if rows is None:
         seen = []
         for f in plots_dict:
@@ -600,5 +600,5 @@ def _process_orders(
     elif isinstance(rows, str):
         out_rows = (rows,)
     else:
-        out_rows = rows
+        out_rows = tuple(rows)
     return out_columns, out_rows

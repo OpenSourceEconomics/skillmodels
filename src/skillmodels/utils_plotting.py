@@ -11,8 +11,8 @@ def get_layout_kwargs(
     title_kwargs: dict[str, Any] | None = None,
     *,
     showlegend: bool = False,
-    columns: list[str] | None = None,
-    rows: list[str] | None = None,
+    columns: list[str] | tuple[str, ...] | None = None,
+    rows: list[str] | tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Define and update default kwargs for update_layout.
 
@@ -45,8 +45,8 @@ def get_make_subplot_kwargs(
     *,
     sharex: bool,
     sharey: bool,
-    column_order: list[str],
-    row_order: list[str],
+    column_order: list[str] | tuple[str, ...],
+    row_order: list[str] | tuple[str, ...],
     make_subplot_kwargs: dict[str, Any] | None,
     add_scenes: bool = False,
 ) -> dict[str, Any]:

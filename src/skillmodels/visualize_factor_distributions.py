@@ -28,7 +28,7 @@ def combine_distribution_plots(
     kde_plots: dict[str, go.Figure],
     contour_plots: dict[tuple[str, str], go.Figure],
     surface_plots: dict[tuple[str, str], go.Figure] | None = None,
-    factor_order: tuple[str, ...] | None = None,
+    factor_order: list[str] | tuple[str, ...] | None = None,
     factor_mapping: dict[str, str] | None = None,
     make_subplot_kwargs: dict[str, Any] | None = None,
     *,
@@ -167,7 +167,7 @@ def univariate_densities(
     model_dict: dict[str, Any],
     params: pd.DataFrame,
     period: int,
-    factors: tuple[str, ...] | None = None,
+    factors: list[str] | tuple[str, ...] | None = None,
     *,
     observed_factors: bool = False,
     states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame] | None = None,
@@ -277,7 +277,7 @@ def bivariate_density_contours(
     model_dict: dict[str, Any],
     params: pd.DataFrame,
     period: int,
-    factors: tuple[str, ...] | None = None,
+    factors: list[str] | tuple[str, ...] | None = None,
     *,
     observed_factors: bool = False,
     states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame] | None = None,
@@ -408,7 +408,7 @@ def bivariate_density_surfaces(
     model_dict: dict[str, Any],
     params: pd.DataFrame,
     period: int,
-    factors: tuple[str, ...] | None = None,
+    factors: list[str] | tuple[str, ...] | None = None,
     *,
     observed_factors: bool = False,
     states: pd.DataFrame | None = None,
@@ -687,7 +687,7 @@ def _process_layout_kwargs_3d(
 
 def _process_factor_mapping_dist(
     mapper: dict[str, str] | None,
-    factors: tuple[str, ...],
+    factors: list[str] | tuple[str, ...],
 ) -> dict[str, str]:
     """Process mapper to return dictionary with old and new factor names."""
     if mapper is None:
@@ -700,21 +700,21 @@ def _process_factor_mapping_dist(
 
 
 def _get_ordered_factors(
-    factor_order: tuple[str, ...] | str | None,
-    factors: tuple[str, ...],
+    factor_order: list[str] | tuple[str, ...] | str | None,
+    factors: list[str] | tuple[str, ...],
 ) -> tuple[str, ...]:
     """Process factor orders to return tuple of strings."""
     if factor_order is None:
-        ordered_factors = factors
+        ordered_factors = tuple(factors)
     elif isinstance(factor_order, str):
         ordered_factors = (factor_order,)
     else:
-        ordered_factors = factor_order
+        ordered_factors = tuple(factor_order)
     return ordered_factors
 
 
 def _get_factors(
-    factors: tuple[str, ...] | None,
+    factors: list[str] | tuple[str, ...] | None,
     *,
     observed_factors: bool,
     model: ProcessedModel,
@@ -722,10 +722,9 @@ def _get_factors(
     """Proccess factor names to return tuple of strings."""
     if factors is None:
         if observed_factors:
-            factors = model.labels.all_factors
-        else:
-            factors = model.labels.latent_factors
-    return factors
+            return model.labels.all_factors
+        return model.labels.latent_factors
+    return tuple(factors)
 
 
 def _get_data_observed_factors(
