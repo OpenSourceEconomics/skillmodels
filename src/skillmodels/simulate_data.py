@@ -375,12 +375,14 @@ def _collapse_aug_periods_to_periods(
     ]
     state_cols = [fac for fac in factors if fac not in endogenous_cols]
 
-    out = df.query('_aug_period_meas_type == "endogenous_factors"')[
+    out = df.query("_aug_period_meas_type == @MeasurementType.ENDOGENOUS_FACTORS")[
         ["id", "period", *endogenous_cols]
     ]
     return pd.merge(
         out,
-        df.query('_aug_period_meas_type == "states"')[["id", "period", *state_cols]],
+        df.query("_aug_period_meas_type == @MeasurementType.STATES")[
+            ["id", "period", *state_cols]
+        ],
         on=["id", "period"],
         how="outer",
     )
