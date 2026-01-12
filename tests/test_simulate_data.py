@@ -9,7 +9,12 @@ import yaml
 from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.config import TEST_DATA_DIR
-from skillmodels.simulate_data import measurements_from_states, simulate_dataset
+from skillmodels.process_model import process_model
+from skillmodels.simulate_data import (
+    _collapse_aug_periods_to_periods,
+    measurements_from_states,
+    simulate_dataset,
+)
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
@@ -56,3 +61,63 @@ def test_measurements_from_factors() -> None:
     }
     expected = np.array([[1, 1, 1], [1.9, 1.9, 1.9]])
     aaae(measurements_from_states(**inputs), expected)
+
+
+@pytest.fixture
+def model2_with_endogenous():
+    """Model2 with fac3 set as endogenous factor."""
+    with (TEST_DATA_DIR / "model2.yaml").open() as y:
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
+    model_dict["factors"]["fac3"]["is_endogenous"] = True
+    del model_dict["stagemap"]
+    del model_dict["anchoring"]
+    return model_dict
+
+
+def test_collapse_aug_periods_to_periods_with_endogenous_factors(
+    model2_with_endogenous,
+) -> None:
+    """Test that _collapse_aug_periods_to_periods works with endogenous factors.
+
+    This is a regression test for a bug where MeasurementType enum values were
+    compared against strings in pandas queries, causing empty results.
+    """
+    model = process_model(model2_with_endogenous)
+    factors = model.labels.latent_factors
+
+    # Create a mock aug_latent_data DataFrame with aug_period column
+    n_obs = 5
+    n_aug_periods = model.dimensions.n_aug_periods - 1  # Exclude last half-period
+    records = []
+    for aug_p in range(n_aug_periods):
+        for obs_id in range(n_obs):
+            record = {"id": obs_id, "aug_period": aug_p}
+            for fac in factors:
+                record[fac] = np.random.randn()
+            records.append(record)
+    aug_latent_data = pd.DataFrame(records)
+
+    result = _collapse_aug_periods_to_periods(
+        df=aug_latent_data,
+        factors=factors,
+        aug_periods_to_periods=model.labels.aug_periods_to_periods,
+        endogenous_factors_info=model.endogenous_factors_info,
+    )
+
+    # The result should not be empty
+    assert len(result) > 0, "Collapsed DataFrame should not be empty"
+
+    # Should have 'period' column, not 'aug_period'
+    assert "period" in result.columns
+    assert "aug_period" not in result.columns
+
+    # Should have all factor columns
+    for fac in factors:
+        assert fac in result.columns
+
+    # Should have correct number of unique periods (half of aug_periods)
+    expected_n_periods = model.dimensions.n_periods
+    assert result["period"].nunique() == expected_n_periods
+
+    # Should have all observations for each period
+    assert len(result) == n_obs * expected_n_periods

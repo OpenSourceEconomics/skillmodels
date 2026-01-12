@@ -28,7 +28,7 @@ from skillmodels.parse_params import create_parsing_info, parse_params
 from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
-from skillmodels.types import ParsedParams  # noqa: TC001
+from skillmodels.types import MeasurementType, ParsedParams
 
 
 def simulate_dataset(
@@ -375,14 +375,13 @@ def _collapse_aug_periods_to_periods(
     ]
     state_cols = [fac for fac in factors if fac not in endogenous_cols]
 
-    out = df.query("_aug_period_meas_type == @MeasurementType.ENDOGENOUS_FACTORS")[
-        ["id", "period", *endogenous_cols]
-    ]
+    is_endogenous = df["_aug_period_meas_type"] == MeasurementType.ENDOGENOUS_FACTORS
+    is_states = df["_aug_period_meas_type"] == MeasurementType.STATES
+
+    out = df.loc[is_endogenous, ["id", "period", *endogenous_cols]]
     return pd.merge(
         out,
-        df.query("_aug_period_meas_type == @MeasurementType.STATES")[
-            ["id", "period", *state_cols]
-        ],
+        df.loc[is_states, ["id", "period", *state_cols]],
         on=["id", "period"],
         how="outer",
     )
