@@ -137,7 +137,7 @@ def plot_correlation_heatmap(
 def get_measurements_corr(
     data: pd.DataFrame,
     model_dict: dict,
-    factors: list[str] | str | None,
+    factors: tuple[str, ...] | str | None,
     periods: float | list[int] | None,
 ) -> pd.DataFrame:
     """Get data frame with measurement correlations.
@@ -179,7 +179,7 @@ def get_measurements_corr(
 def get_quasi_scores_corr(
     data: pd.DataFrame,
     model_dict: dict,
-    factors: list[str] | str | None,
+    factors: tuple[str, ...] | str | None,
     periods: float | list[int] | None,
 ) -> pd.DataFrame:
     """Get data frame with correlations of factor scores.
@@ -225,7 +225,7 @@ def get_scores_corr(
     data: pd.DataFrame,
     params: pd.DataFrame,
     model_dict: dict,
-    factors: list[str] | str | None,
+    factors: tuple[str, ...] | str | None,
     periods: float | list[int] | None,
 ) -> pd.DataFrame:
     """Get data frame with correlations of factor scores.
@@ -329,8 +329,8 @@ def _get_measurement_data(
     data: pd.DataFrame,
     update_info_by_period: pd.DataFrame,
     periods: list[int],
-    latent_factors: list[str],
-    observed_factors: list[str],
+    latent_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
     """Get data frame with factor measurements in each period, in wide format.
 
@@ -376,8 +376,8 @@ def _get_measurement_data_for_single_period(
     data: pd.DataFrame,
     update_info_by_period: pd.DataFrame,
     period: int,
-    latent_factors: list[str],
-    observed_factors: list[str],
+    latent_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
     """Extract measurements of factors for the given period.
 
@@ -411,8 +411,8 @@ def _get_measurement_data_for_multiple_periods(
     data: pd.DataFrame,
     update_info_by_period: pd.DataFrame,
     periods: list[int],
-    latent_factors: list[str],
-    observed_factors: list[str],
+    latent_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
     """Extract measurements for factors for given periods.
 
@@ -451,8 +451,8 @@ def _get_quasi_factor_scores_data(
     data: pd.DataFrame,
     update_info_by_period: pd.DataFrame,
     periods: list[int],
-    latent_factors: list[str],
-    observed_factors: list[str],
+    latent_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
     """Get data frame with summary information on factor measurements in each period.
 
@@ -501,8 +501,8 @@ def _get_quasi_factor_scores_data_for_single_period(
     data: pd.DataFrame,
     update_info_by_period: pd.DataFrame,
     period: int,
-    latent_factors: list[str],
-    observed_factors: list[str],
+    latent_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
     """Get frame with summary scores on factor measurements in a given period.
 
@@ -543,8 +543,8 @@ def _get_quasi_factor_scores_data_for_multiple_periods(
     data: pd.DataFrame,
     update_info_by_period: pd.DataFrame,
     periods: list[int],
-    latent_factors: list[str],
-    observed_factors: list[str],
+    latent_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
     """Get frame with summary scores of factor measurements in a given period.
 
@@ -584,8 +584,8 @@ def _get_factor_scores_data(
     params: pd.DataFrame,
     model: ProcessedModel,
     periods: list[int],
-    latent_factors: list[str],
-    observed_factors: list[str],
+    latent_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
     """Get data frame with factor scores in each period.
 
@@ -637,8 +637,8 @@ def _get_factor_scores_data_for_single_period(
     params: pd.DataFrame,
     model: ProcessedModel,
     period: int,
-    latent_factors: list[str],
-    observed_factors: list[str],
+    latent_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
     """Get frame with factor scores in a given period.
 
@@ -691,8 +691,8 @@ def _get_factor_scores_data_for_single_model_period(
     update_info: pd.DataFrame,
     aug_period: int,
     period: int,
-    latent_factors: list[str],
-    observed_factors: list[str],
+    latent_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
     """Get frame with factor scores in a given model period.
 
@@ -748,8 +748,8 @@ def _get_factor_scores_data_for_multiple_periods(
     params: pd.DataFrame,
     model: ProcessedModel,
     periods: list[int],
-    latent_factors: list[str],
-    observed_factors: list[str],
+    latent_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
     """Get frame with factor scores in a given period.
 
@@ -787,27 +787,26 @@ def _get_factor_scores_data_for_multiple_periods(
 
 def _process_factors(
     model: ProcessedModel,
-    factors: list[str] | str | None,
-) -> tuple[list[str], list[str]]:
-    """Process factors to get a tuple of lists."""
+    factors: tuple[str, ...] | str | None,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Process factors to get a tuple of tuples."""
     if not factors:
-        latent_factors = list(model.labels.latent_factors)
-        observed_factors = list(model.labels.observed_factors)
+        latent_factors = model.labels.latent_factors
+        observed_factors = model.labels.observed_factors
     elif isinstance(factors, str):
         if factors in model.labels.latent_factors:
-            latent_factors = [factors]
-            observed_factors = []
+            latent_factors = (factors,)
+            observed_factors = ()
         elif factors in model.labels.observed_factors:
-            observed_factors = [factors]
-            latent_factors = []
+            observed_factors = (factors,)
+            latent_factors = ()
     else:
-        observed_factors = []
-        latent_factors = []
-        for factor in factors:
-            if factor in model.labels.latent_factors:
-                latent_factors.append(factor)
-            elif factor in model.labels.observed_factors:
-                observed_factors.append(factor)
+        latent_factors = tuple(
+            fac for fac in factors if fac in model.labels.latent_factors
+        )
+        observed_factors = tuple(
+            fac for fac in factors if fac in model.labels.observed_factors
+        )
     return latent_factors, observed_factors  # ty: ignore[possibly-unresolved-reference]
 
 

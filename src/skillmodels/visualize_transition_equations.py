@@ -28,8 +28,8 @@ if TYPE_CHECKING:
 
 def combine_transition_plots(
     plots_dict: dict[tuple[str, str], go.Figure],
-    column_order: list[str] | str | None = None,
-    row_order: list[str] | str | None = None,
+    column_order: tuple[str, ...] | str | None = None,
+    row_order: tuple[str, ...] | str | None = None,
     factor_mapping: dict[str, str] | None = None,
     make_subplot_kwargs: dict[str, Any] | None = None,
     *,
@@ -236,7 +236,7 @@ def _get_dictionary_with_plots(
     params: pd.DataFrame,
     states: pd.DataFrame,
     state_ranges: dict[str, pd.DataFrame] | None,
-    latent_factors: list[str],
+    latent_factors: tuple[str, ...],
     all_factors: tuple[str, ...],
     quantiles_of_other_factors: list[float] | None,
     period: int,
@@ -559,8 +559,8 @@ def _prepare_data_for_one_plot_average_2d(
 
 def _process_factor_mapping_trans(
     factor_mapper: dict[str, str] | None,
-    output_factors: list[str],
-    input_factors: list[str],
+    output_factors: tuple[str, ...],
+    input_factors: tuple[str, ...],
 ) -> dict[str, str]:
     """Process mapper to return dictionary with old and new factor names."""
     all_factors = input_factors + output_factors
@@ -574,29 +574,31 @@ def _process_factor_mapping_trans(
 
 
 def _process_orders(
-    columns: list[str] | str | None,
-    rows: list[str] | str | None,
+    columns: tuple[str, ...] | str | None,
+    rows: tuple[str, ...] | str | None,
     plots_dict: dict[tuple[str, str], go.Figure],
-) -> tuple[list[str], list[str]]:
-    """Process axes orders to return list of strings."""
-    out_columns: list[str]
-    out_rows: list[str]
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Process axes orders to return tuples of strings."""
+    out_columns: tuple[str, ...]
+    out_rows: tuple[str, ...]
     if columns is None:
-        out_columns = []
+        seen: list[str] = []
         for f in plots_dict:
-            if f[0] not in out_columns:
-                out_columns.append(f[0])
+            if f[0] not in seen:
+                seen.append(f[0])
+        out_columns = tuple(seen)
     elif isinstance(columns, str):
-        out_columns = [columns]
+        out_columns = (columns,)
     else:
         out_columns = columns
     if rows is None:
-        out_rows = []
+        seen = []
         for f in plots_dict:
-            if f[1] not in out_rows:
-                out_rows.append(f[1])
+            if f[1] not in seen:
+                seen.append(f[1])
+        out_rows = tuple(seen)
     elif isinstance(rows, str):
-        out_rows = [rows]
+        out_rows = (rows,)
     else:
         out_rows = rows
     return out_columns, out_rows
