@@ -16,6 +16,7 @@ from pandas import DataFrame
 import skillmodels.transition_functions as t_f_module
 from skillmodels.check_model import check_model, check_stagemap
 from skillmodels.decorators import extract_params, jax_array_output
+from skillmodels.model_spec import ModelSpec
 from skillmodels.types import (
     Anchoring,
     Dimensions,
@@ -35,7 +36,7 @@ if TYPE_CHECKING:
 pd.set_option("future.no_silent_downcasting", True)  # noqa:  FBT003
 
 
-def process_model(model_dict: dict) -> ProcessedModel:
+def process_model(model: dict | ModelSpec) -> ProcessedModel:
     """Check, clean, extend and transform the model specs.
 
     Check the completeness, consistency and validity of the model specifications.
@@ -43,7 +44,8 @@ def process_model(model_dict: dict) -> ProcessedModel:
     Set default values and extend the model specification where necessary.
 
     Args:
-        model_dict: The model specification. See: :ref:`model_specs`
+        model: The model specification, either as a dict or ModelSpec instance.
+            See: :ref:`model_specs`
 
     Returns:
         dict: nested dictionary of model specs. It has the following entries:
@@ -59,6 +61,7 @@ def process_model(model_dict: dict) -> ProcessedModel:
           loadings and intercepts for each factor. See :ref:`normalizations`.
 
     """
+    model_dict = model.to_dict() if isinstance(model, ModelSpec) else model
     has_endogenous_factors = get_has_endogenous_factors(model_dict["factors"])
     dims = get_dimensions(
         model_dict=model_dict, has_endogenous_factors=has_endogenous_factors

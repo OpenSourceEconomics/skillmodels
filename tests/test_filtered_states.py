@@ -31,7 +31,7 @@ def test_get_filtered_states(model2, model2_data) -> None:
     max_inputs = get_maximization_inputs(model2, model2_data)
     params = params.loc[max_inputs["params_template"].index]
 
-    calculated = get_filtered_states(model_dict=model2, data=model2_data, params=params)
+    calculated = get_filtered_states(model=model2, data=model2_data, params=params)
 
     factors = ["fac1", "fac2", "fac3"]
     expected_ratios = [1.187757, 1, 1]

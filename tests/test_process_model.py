@@ -124,12 +124,12 @@ def test_normalizations(model2) -> None:
 
 def test_anchoring_and_endogenous_factors_work_together() -> None:
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
+        model = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
-    model_dict["factors"]["fac3"]["is_endogenous"] = True
-    del model_dict["stagemap"]
+    model["factors"]["fac3"]["is_endogenous"] = True
+    del model["stagemap"]
     # Should not raise - anchoring and endogenous factors now work together
-    result = process_model(model_dict)
+    result = process_model(model)
     # Verify anchoring is enabled
     assert result.anchoring.anchoring
     assert result.anchoring.factors == ("fac1",)
@@ -147,37 +147,38 @@ def test_anchoring_and_endogenous_factors_work_together() -> None:
 
 def test_stagemap_with_endogenous_factors_wrong_labels() -> None:
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
+        model = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
-    model_dict["factors"]["fac3"]["is_endogenous"] = True
-    model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 4]
-    del model_dict["anchoring"]
+    model["factors"]["fac3"]["is_endogenous"] = True
+    model["stagemap"] = [0, 0, 1, 1, 2, 2, 4]
+    del model["anchoring"]
     with pytest.raises(ValueError, match="Invalid stage map:"):
-        process_model(model_dict)
+        process_model(model)
 
 
 def test_stagemap_with_endogenous_factors() -> None:
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
+        model = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
-    model_dict["factors"]["fac3"]["is_endogenous"] = True
-    model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 3]
-    del model_dict["anchoring"]
-    model = process_model(model_dict)
-    assert model.labels.stagemap == tuple(model_dict["stagemap"])
-    assert model.labels.stages == (0, 1, 2, 3)
-    assert model.labels.aug_stagemap == (0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 7)
+    model["factors"]["fac3"]["is_endogenous"] = True
+    stagemap = [0, 0, 1, 1, 2, 2, 3]
+    model["stagemap"] = stagemap
+    del model["anchoring"]
+    processed = process_model(model)
+    assert processed.labels.stagemap == tuple(stagemap)
+    assert processed.labels.stages == (0, 1, 2, 3)
+    assert processed.labels.aug_stagemap == (0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 7)
 
 
 @pytest.fixture
 def model2_inv():
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
+        model = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
-    model_dict["factors"]["fac3"]["is_endogenous"] = True
-    del model_dict["stagemap"]
-    del model_dict["anchoring"]
-    return model_dict
+    model["factors"]["fac3"]["is_endogenous"] = True
+    del model["stagemap"]
+    del model["anchoring"]
+    return model
 
 
 def test_with_endog_has_endogenous_factors(model2_inv) -> None:

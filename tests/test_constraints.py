@@ -414,8 +414,8 @@ def assert_list_equal_except_for_order(list1, list2) -> None:
 @pytest.fixture
 def simplest_augmented_model():
     with (TEST_DATA_DIR / "simplest_augmented_model.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
-    return process_model(model_dict)
+        model = yaml.load(y, Loader=yaml.SafeLoader)
+    return process_model(model)
 
 
 def test_get_constraints_for_augmented_periods(simplest_augmented_model) -> None:

@@ -14,6 +14,7 @@ from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 
 from skillmodels.filtered_states import get_filtered_states
+from skillmodels.model_spec import ModelSpec  # noqa: TC001
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info, parse_params
 from skillmodels.process_data import process_data
@@ -141,7 +142,7 @@ def combine_transition_plots(
 
 
 def get_transition_plots(
-    model_dict: dict[str, Any],
+    model: dict[str, Any] | ModelSpec,
     params: pd.DataFrame,
     data: pd.DataFrame,
     period: int,
@@ -161,7 +162,8 @@ def get_transition_plots(
     """Get dictionary with individual plots of transition equations for each factor.
 
     Args:
-        model_dict: The model specification. See: :ref:`model_specs`
+        model: The model specification, either as a dict or ModelSpec instance.
+            See: :ref:`model_specs`
         params: DataFrame with model parameters.
         data: Empirical dataset that is used to estimate the model.
         period: The start period of the transition equations that are plotted.
@@ -191,30 +193,30 @@ def get_transition_plots(
         quantiles_of_other_factors,
     )
 
-    model = process_model(model_dict)
+    processed_model = process_model(model)
 
-    if period >= model.labels.periods[-1]:
+    if period >= processed_model.labels.periods[-1]:
         raise ValueError(
             "*period* must be the penultimate period of the model or earlier.",
         )
 
     if (
         include_correction_factors
-        or not model.endogenous_factors_info.has_endogenous_factors
+        or not processed_model.endogenous_factors_info.has_endogenous_factors
     ):
-        latent_factors = model.labels.latent_factors
+        latent_factors = processed_model.labels.latent_factors
     else:
         latent_factors = [
             lf
-            for lf in model.labels.latent_factors
-            if not model.endogenous_factors_info.factor_info[lf].is_correction  # ty: ignore[invalid-argument-type]
+            for lf in processed_model.labels.latent_factors
+            if not processed_model.endogenous_factors_info.factor_info[lf].is_correction  # ty: ignore[invalid-argument-type]
         ]
-    all_factors = model.labels.all_factors
-    states = get_filtered_states(model_dict=model_dict, data=data, params=params)[
+    all_factors = processed_model.labels.all_factors
+    states = get_filtered_states(model=model, data=data, params=params)[
         "anchored_states"
     ]["states"]
     return _get_dictionary_with_plots(
-        model=model,
+        model=processed_model,
         data=data,
         params=params,
         states=states,

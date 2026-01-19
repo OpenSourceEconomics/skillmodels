@@ -20,6 +20,7 @@ from skillmodels.constraints import (
     get_constraints_dicts,
 )
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
+from skillmodels.model_spec import ModelSpec  # noqa: TC001
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.process_data import process_data
@@ -34,14 +35,15 @@ jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
 
 def get_maximization_inputs(
-    model_dict: dict,
+    model: dict | ModelSpec,
     data: pd.DataFrame,
     split_dataset: int = 1,
 ) -> dict[str, Any]:
     """Create inputs for optimagic's maximize function.
 
     Args:
-        model_dict: The model specification. See: :ref:`model_specs`
+        model: The model specification, either as a dict or ModelSpec instance.
+            See: :ref:`model_specs`
         data: dataset in long format.
         split_dataset(Int): Controls into how many sclices to split the dataset
             during the gradient computation.
@@ -68,34 +70,34 @@ def get_maximization_inputs(
             endogenous factors, we double up the number of periods in order to add
 
     """
-    model = process_model(model_dict)
+    processed_model = process_model(model)
     p_index = get_params_index(
-        update_info=model.update_info,
-        labels=model.labels,
-        dimensions=model.dimensions,
-        transition_info=model.transition_info,
-        endogenous_factors_info=model.endogenous_factors_info,
+        update_info=processed_model.update_info,
+        labels=processed_model.labels,
+        dimensions=processed_model.dimensions,
+        transition_info=processed_model.transition_info,
+        endogenous_factors_info=processed_model.endogenous_factors_info,
     )
 
     parsing_info = create_parsing_info(
         params_index=p_index,
-        update_info=model.update_info,
-        labels=model.labels,
-        anchoring=model.anchoring,
-        has_endogenous_factors=model.endogenous_factors_info.has_endogenous_factors,
+        update_info=processed_model.update_info,
+        labels=processed_model.labels,
+        anchoring=processed_model.anchoring,
+        has_endogenous_factors=processed_model.endogenous_factors_info.has_endogenous_factors,
     )
     processed_data = process_data(
         df=data,
-        has_endogenous_factors=model.endogenous_factors_info.has_endogenous_factors,
-        labels=model.labels,
-        update_info=model.update_info,
-        anchoring_info=model.anchoring,
+        has_endogenous_factors=processed_model.endogenous_factors_info.has_endogenous_factors,
+        labels=processed_model.labels,
+        update_info=processed_model.update_info,
+        anchoring_info=processed_model.anchoring,
         purpose="estimation",
     )
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
-        model.dimensions.n_latent_factors,
-        model.estimation_options.sigma_points_scale,
+        processed_model.dimensions.n_latent_factors,
+        processed_model.estimation_options.sigma_points_scale,
     )
 
     partialed_get_jnp_params_vec = functools.partial(
@@ -115,7 +117,7 @@ def get_maximization_inputs(
             measurements=processed_data["measurements"],
             controls=processed_data["controls"],
             observed_factors=processed_data["observed_factors"],
-            model=model,
+            model=processed_model,
             sigma_weights=sigma_weights,
             sigma_scaling_factor=sigma_scaling_factor,
         )
@@ -165,15 +167,15 @@ def get_maximization_inputs(
         jax_output = partialed_loglikes["debug_ll"](params_vec)
         tmp = _to_numpy(jax_output)
         tmp["value"] = float(tmp["value"])
-        return process_debug_data(debug_data=tmp, model=model)
+        return process_debug_data(debug_data=tmp, model=processed_model)
 
     _constraints_dicts = get_constraints_dicts(
-        dimensions=model.dimensions,
-        labels=model.labels,
-        anchoring_info=model.anchoring,
-        update_info=model.update_info,
-        normalizations=model.normalizations,
-        endogenous_factors_info=model.endogenous_factors_info,
+        dimensions=processed_model.dimensions,
+        labels=processed_model.labels,
+        anchoring_info=processed_model.anchoring,
+        update_info=processed_model.update_info,
+        normalizations=processed_model.normalizations,
+        endogenous_factors_info=processed_model.endogenous_factors_info,
     )
 
     constraints = constraints_dicts_to_om(_constraints_dicts)
@@ -181,7 +183,7 @@ def get_maximization_inputs(
     params_template = pd.DataFrame(columns=["value"], index=p_index)
     params_template = add_bounds(
         params=params_template,
-        bounds_distance=model.estimation_options.bounds_distance,
+        bounds_distance=processed_model.estimation_options.bounds_distance,
     )
     params_template = enforce_fixed_constraints(
         params_template=params_template,

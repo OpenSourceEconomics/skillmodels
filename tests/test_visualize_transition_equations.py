@@ -15,9 +15,9 @@ REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 def test_visualize_transition_equations_runs() -> None:
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
+        model = yaml.load(y, Loader=yaml.SafeLoader)
 
-    model_dict["observed_factors"] = ["ob1"]
+    model["observed_factors"] = ["ob1"]
 
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
@@ -26,12 +26,12 @@ def test_visualize_transition_equations_runs() -> None:
     data = data.set_index(["caseid", "period"])
     data["ob1"] = 0
 
-    max_inputs = get_maximization_inputs(model_dict, data)
+    max_inputs = get_maximization_inputs(model, data)
     full_index = max_inputs["params_template"].index
     params = params.reindex(full_index)
     params["value"] = params["value"].fillna(0)
     subplots = get_transition_plots(
-        model_dict=model_dict,
+        model=model,
         params=params,
         period=0,
         quantiles_of_other_factors=[0.1, 0.25, 0.5, 0.75, 0.9],
@@ -39,7 +39,7 @@ def test_visualize_transition_equations_runs() -> None:
     )
     combine_transition_plots(subplots)
     subplots = get_transition_plots(
-        model_dict=model_dict,
+        model=model,
         params=params,
         period=0,
         quantiles_of_other_factors=None,

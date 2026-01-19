@@ -27,9 +27,9 @@ def parsed_parameters():
     ).index
 
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
+        model = yaml.load(y, Loader=yaml.SafeLoader)
 
-    processed = process_model(model_dict)
+    processed = process_model(model)
 
     update_info = processed.update_info
     labels = processed.labels

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from plotly import graph_objects as go
 
+from skillmodels.model_spec import ModelSpec  # noqa: TC001
 from skillmodels.process_data import pre_process_data
 from skillmodels.process_model import process_model
 
@@ -136,7 +137,7 @@ def plot_correlation_heatmap(
 
 def get_measurements_corr(
     data: pd.DataFrame,
-    model_dict: dict,
+    model: dict | ModelSpec,
     factors: list[str] | tuple[str, ...] | str | None,
     periods: float | list[int] | None,
 ) -> pd.DataFrame:
@@ -147,8 +148,8 @@ def get_measurements_corr(
 
     Args:
         data: DataFrame with observed measurements.
-        model_dict: Dictionary of model attributes to be passed to process_model
-            and extract measurements for each period.
+        model: The model specification, either as a dict or ModelSpec instance.
+            See: :ref:`model_specs`
         factors: List of factors, to retrieve measurements for.
             If None, then calculate correlations of measurements of all factors.
         periods: If int, the period within which to
@@ -161,11 +162,11 @@ def get_measurements_corr(
 
     """
     data = data.copy(deep=True)
-    model = process_model(model_dict)
-    periods = _process_periods(periods, model)
+    processed_model = process_model(model)
+    periods = _process_periods(periods, processed_model)
     processed_data = pre_process_data(data, periods)
-    latent_factors, observed_factors = _process_factors(model, factors)
-    update_info_by_period = _get_update_info_for_periods(model)
+    latent_factors, observed_factors = _process_factors(processed_model, factors)
+    update_info_by_period = _get_update_info_for_periods(processed_model)
     df = _get_measurement_data(
         data=processed_data,
         update_info_by_period=update_info_by_period,
@@ -178,7 +179,7 @@ def get_measurements_corr(
 
 def get_quasi_scores_corr(
     data: pd.DataFrame,
-    model_dict: dict,
+    model: dict | ModelSpec,
     factors: list[str] | tuple[str, ...] | str | None,
     periods: float | list[int] | None,
 ) -> pd.DataFrame:
@@ -193,8 +194,8 @@ def get_quasi_scores_corr(
 
     Args:
         data: DataFrame with observed measurements.
-        model_dict: Dictionary of model attributes to be passed to process_model
-            and extract measurements for each period.
+        model: The model specification, either as a dict or ModelSpec instance.
+            See: :ref:`model_specs`
         factors: List of factors, to retrieve measurements for.
             If None, then calculate correlations of measurements of all factors.
         periods: If int, the period within which to
@@ -206,11 +207,11 @@ def get_quasi_scores_corr(
 
     """
     data = data.copy(deep=True)
-    model = process_model(model_dict)
-    periods = _process_periods(periods, model)
+    processed_model = process_model(model)
+    periods = _process_periods(periods, processed_model)
     processed_data = pre_process_data(data, periods)
-    latent_factors, observed_factors = _process_factors(model, factors)
-    update_info = _get_update_info_for_periods(model)
+    latent_factors, observed_factors = _process_factors(processed_model, factors)
+    update_info = _get_update_info_for_periods(processed_model)
     df = _get_quasi_factor_scores_data(
         data=processed_data,
         update_info_by_period=update_info,
@@ -224,7 +225,7 @@ def get_quasi_scores_corr(
 def get_scores_corr(
     data: pd.DataFrame,
     params: pd.DataFrame,
-    model_dict: dict,
+    model: dict | ModelSpec,
     factors: list[str] | tuple[str, ...] | str | None,
     periods: float | list[int] | None,
 ) -> pd.DataFrame:
@@ -238,8 +239,8 @@ def get_scores_corr(
     Args:
         data: DataFrame with observed measurements.
         params: DataFrame with estimated model parameters
-        model_dict: Dictionary of model attributes to be passed to process_model
-            and extract measurements for each period.
+        model: The model specification, either as a dict or ModelSpec instance.
+            See: :ref:`model_specs`
         factors: List of factors, to retrieve measurements for.
             If None, then calculate correlations of measurements of all factors.
         periods: If int, the period within which to
@@ -251,15 +252,15 @@ def get_scores_corr(
 
     """
     data = data.copy(deep=True)
-    model = process_model(model_dict)
-    periods = _process_periods(periods, model)
+    processed_model = process_model(model)
+    periods = _process_periods(periods, processed_model)
     processed_data = pre_process_data(data, periods)
-    latent_factors, observed_factors = _process_factors(model, factors)
+    latent_factors, observed_factors = _process_factors(processed_model, factors)
     params = params.loc[["controls", "loadings"]]
     df = _get_factor_scores_data(
         data=processed_data,
         params=params,
-        model=model,
+        model=processed_model,
         periods=periods,
         latent_factors=latent_factors,
         observed_factors=observed_factors,

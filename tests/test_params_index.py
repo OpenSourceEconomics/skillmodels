@@ -22,8 +22,8 @@ from skillmodels.types import TransitionInfo
 @pytest.fixture
 def model2_inputs():
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
-    processed = process_model(model_dict)
+        model = yaml.load(y, Loader=yaml.SafeLoader)
+    processed = process_model(model)
 
     return {
         "update_info": processed.update_info,

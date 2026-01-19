@@ -13,6 +13,7 @@ from plotly.subplots import make_subplots
 from scipy.stats import gaussian_kde
 
 from skillmodels.filtered_states import get_filtered_states
+from skillmodels.model_spec import ModelSpec  # noqa: TC001
 from skillmodels.process_model import process_model
 from skillmodels.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
 
@@ -164,7 +165,7 @@ def combine_distribution_plots(
 
 def univariate_densities(
     data: pd.DataFrame,
-    model_dict: dict[str, Any],
+    model: dict[str, Any] | ModelSpec,
     params: pd.DataFrame,
     period: int,
     factors: list[str] | tuple[str, ...] | None = None,
@@ -187,7 +188,8 @@ def univariate_densities(
 
     Args:
         data: Model estimation input data.
-        model_dict: Dictionary with model specifications.
+        model: The model specification, either as a dict or ModelSpec instance.
+            See: :ref:`model_specs`
         params: DataFrame with estimated parameter values.
         period: Model period for which to plot the distributions for.
         factors: List of factors for which to plot the densities.
@@ -196,7 +198,7 @@ def univariate_densities(
         states: List or dictionary with tidy
             DataFrames with filtered or simulated states or only one DataFrame with
             filtered or simulated states. If None, retrieve data frame with filtered
-            states using model_dict and data. States are used to estimate the state
+            states using model and data. States are used to estimate the state
             ranges in each period (if state_ranges are not given explicitly) and to
             estimate the distribution of the latent factors.
         show_hist: Add histogram to the distplot.
@@ -222,12 +224,12 @@ def univariate_densities(
 
     """
     if states is None:
-        states = get_filtered_states(model_dict=model_dict, data=data, params=params)[
+        states = get_filtered_states(model=model, data=data, params=params)[
             "anchored_states"
         ]["states"]
-    model = process_model(model_dict)
+    processed_model = process_model(model)
     factors = _get_factors(
-        model=model,
+        model=processed_model,
         factors=factors,
         observed_factors=observed_factors,
     )
@@ -236,7 +238,7 @@ def univariate_densities(
         states=states,
         period=period,
         factors=factors,
-        aug_periods_to_periods=model.labels.aug_periods_to_periods,
+        aug_periods_to_periods=processed_model.labels.aug_periods_to_periods,
         observed_states=observed_states,
     )
     scenarios = df["scenario"].unique()
@@ -274,7 +276,7 @@ def univariate_densities(
 
 def bivariate_density_contours(
     data: pd.DataFrame,
-    model_dict: dict[str, Any],
+    model: dict[str, Any] | ModelSpec,
     params: pd.DataFrame,
     period: int,
     factors: list[str] | tuple[str, ...] | None = None,
@@ -297,7 +299,8 @@ def bivariate_density_contours(
 
     Args:
         data: Model estimation input data.
-        model_dict: Dictionary with model specifications.
+        model: The model specification, either as a dict or ModelSpec instance.
+            See: :ref:`model_specs`
         params: DataFrame with estimated parameter values.
         period: Model period for which to plot the distributions for.
         factors: List of factors for which to plot the densities.
@@ -306,7 +309,7 @@ def bivariate_density_contours(
         states: List or dictionary with tidy
             DataFrames with filtered or simulated states or only one DataFrame with
             filtered or simulated states. If None, retrieve data frame with filtered
-            states using model_dict and data. States are used to estimate the state
+            states using model and data. States are used to estimate the state
             ranges in each period (if state_ranges are not given explicitly) and to
             estimate the distribution of the latent factors.
         n_points: Number of grid points used to create the mesh for calculation
@@ -338,12 +341,12 @@ def bivariate_density_contours(
 
     """
     if states is None:
-        states = get_filtered_states(model_dict=model_dict, data=data, params=params)[
+        states = get_filtered_states(model=model, data=data, params=params)[
             "anchored_states"
         ]["states"]
-    model = process_model(model_dict)
+    processed_model = process_model(model)
     factors = _get_factors(
-        model=model,
+        model=processed_model,
         factors=factors,
         observed_factors=observed_factors,
     )
@@ -352,7 +355,7 @@ def bivariate_density_contours(
         states=states,
         period=period,
         factors=factors,
-        aug_periods_to_periods=model.labels.aug_periods_to_periods,
+        aug_periods_to_periods=processed_model.labels.aug_periods_to_periods,
         observed_states=observed_states,
     )
     plots_dict = {}
@@ -405,7 +408,7 @@ def bivariate_density_contours(
 
 def bivariate_density_surfaces(
     data: pd.DataFrame,
-    model_dict: dict[str, Any],
+    model: dict[str, Any] | ModelSpec,
     params: pd.DataFrame,
     period: int,
     factors: list[str] | tuple[str, ...] | None = None,
@@ -428,7 +431,8 @@ def bivariate_density_surfaces(
 
     Args:
         data: Model estimation input data.
-        model_dict: Dictionary with model specifications.
+        model: The model specification, either as a dict or ModelSpec instance.
+            See: :ref:`model_specs`
         params: DataFrame with estimated parameter values.
         period: Model period for which to plot the distributions for.
         factors: List of factors for which to plot the densities.
@@ -437,7 +441,7 @@ def bivariate_density_surfaces(
         states: List or dictionary with tidy
             DataFrames with filtered or simulated states or only one DataFrame with
             filtered or simulated states. If None, retrieve data frame with filtered
-            states using model_dict and data. States are used to estimate the state
+            states using model and data. States are used to estimate the state
             ranges in each period (if state_ranges are not given explicitly) and to
             estimate the distribution of the latent factors.
         n_points: Number of grid points used to create the mesh for calculation
@@ -465,14 +469,14 @@ def bivariate_density_surfaces(
 
     """
     if states is None:
-        states = get_filtered_states(model_dict=model_dict, data=data, params=params)[
+        states = get_filtered_states(model=model, data=data, params=params)[
             "anchored_states"
         ]["states"]
     elif not isinstance(states, pd.DataFrame):
         raise ValueError("3d plots are only supported if states is a DataFrame")
-    model = process_model(model_dict)
+    processed_model = process_model(model)
     factors = _get_factors(
-        model=model,
+        model=processed_model,
         factors=factors,
         observed_factors=observed_factors,
     )
@@ -481,7 +485,7 @@ def bivariate_density_surfaces(
         states=states,
         period=period,
         factors=factors,
-        aug_periods_to_periods=model.labels.aug_periods_to_periods,
+        aug_periods_to_periods=processed_model.labels.aug_periods_to_periods,
         observed_states=observed_states,
     )
     plots_dict = {}

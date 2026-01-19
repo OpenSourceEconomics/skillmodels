@@ -121,12 +121,12 @@ def test_remove_from_dict(to_remove) -> None:
 
 
 def test_reduce_params_via_extract_factors(model2) -> None:
-    model_dict = reduce_n_periods(model2, 2)
+    model = reduce_n_periods(model2, 2)
 
-    full_index = _get_params_index_from_model_dict(model_dict)  # ty: ignore[invalid-argument-type]
+    full_index = _get_params_index_from_model_dict(model)  # ty: ignore[invalid-argument-type]
     params = pd.DataFrame(columns=["value"], index=full_index)
 
-    _, reduced_params = extract_factors("fac3", model_dict, params)  # ty: ignore[invalid-argument-type]
+    _, reduced_params = extract_factors("fac3", model, params)  # ty: ignore[invalid-argument-type]
 
     expected_index = pd.MultiIndex.from_tuples(
         [
@@ -154,11 +154,11 @@ def test_reduce_params_via_extract_factors(model2) -> None:
 
 
 def test_extend_params_via_switch_to_translog(model2) -> None:
-    model_dict = reduce_n_periods(model2, 2)
-    normal_index = _get_params_index_from_model_dict(model_dict)  # ty: ignore[invalid-argument-type]
+    model = reduce_n_periods(model2, 2)
+    normal_index = _get_params_index_from_model_dict(model)  # ty: ignore[invalid-argument-type]
     params = pd.DataFrame(columns=["value"], index=normal_index)
 
-    _, extended_params = switch_linear_to_translog(model_dict, params)  # ty: ignore[invalid-argument-type]
+    _, extended_params = switch_linear_to_translog(model, params)  # ty: ignore[invalid-argument-type]
 
     added_index = extended_params.index.difference(normal_index)  # ty: ignore[possibly-missing-attribute]
 
