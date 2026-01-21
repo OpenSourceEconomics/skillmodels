@@ -533,6 +533,34 @@ def bivariate_density_surfaces(
     return plots_dict
 
 
+def _get_one_state_per_period(
+    states: pd.DataFrame,
+    ap_to_p: pd.Series,
+) -> pd.DataFrame:
+    """Get one state per (period, id).
+
+    Handles aug_period and/or period index/columns.
+    """
+    # Always reset index to work with columns
+    df = states.reset_index()
+
+    has_aug_period = "aug_period" in df.columns
+    has_period = "period" in df.columns
+
+    if has_aug_period and not has_period:
+        # Only aug_period: merge to get period, then collapse to one per (period, id)
+        df = df.merge(ap_to_p, left_on="aug_period", right_index=True, how="left")
+        return df.sort_values(["aug_period", "id"]).groupby(["period", "id"]).last()
+    if has_aug_period and has_period:
+        # Both exist: collapse multiple aug_periods to one per (period, id)
+        return df.sort_values(["aug_period", "id"]).groupby(["period", "id"]).last()
+    if has_period:
+        # Only period (no aug_period): just set index
+        return df.set_index(["period", "id"])
+    msg = "States must have either 'aug_period' or 'period' column/index."
+    raise ValueError(msg)
+
+
 def _process_data(
     states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame],
     period: int,
@@ -543,12 +571,7 @@ def _process_data(
     ap_to_p = pd.Series(aug_periods_to_periods, name="period")
     ap_to_p.index.name = "aug_period"
     if isinstance(states, pd.DataFrame):
-        one_state_per_period = (
-            states.merge(ap_to_p, left_on="aug_period", right_index=True, how="left")
-            .sort_values(["aug_period", "id"])
-            .groupby(["period", "id"])
-            .last()
-        )
+        one_state_per_period = _get_one_state_per_period(states, ap_to_p)
         to_concat = []
         for fac in factors:
             if fac in one_state_per_period:
@@ -560,12 +583,7 @@ def _process_data(
             states = dict(enumerate(states))
         to_concat = []
         for name, df in states.items():
-            one_state_per_period = (
-                df.merge(ap_to_p, left_on="aug_period", right_index=True, how="left")
-                .sort_values(["aug_period", "id"])
-                .groupby(["period", "id"])
-                .last()
-            )
+            one_state_per_period = _get_one_state_per_period(df, ap_to_p)
             to_keep = one_state_per_period.query(f"period == {period}")[factors].copy()
             to_keep["scenario"] = name
             to_concat.append(to_keep)

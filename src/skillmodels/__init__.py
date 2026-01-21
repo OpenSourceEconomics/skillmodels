@@ -2,10 +2,8 @@
 
 import contextlib
 
-try:
+with contextlib.suppress(ImportError):
     import pdbp  # noqa: F401
-except ImportError:
-    contextlib.suppress(Exception)
 
 from skillmodels.filtered_states import get_filtered_states
 from skillmodels.maximization_inputs import get_maximization_inputs
