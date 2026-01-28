@@ -52,15 +52,17 @@ def test_simulate_dataset(model2, model2_data) -> None:
 
 
 def test_measurements_from_factors() -> None:
-    inputs = {
-        "states": np.array([[0, 0, 0], [1, 1, 1]]),
-        "controls": np.array([[1, 1], [1, 1]]),
-        "loadings": np.array([[0.3, 0.3, 0.3], [0.3, 0.3, 0.3], [0.3, 0.3, 0.3]]),
-        "control_params": np.array([[0.5, 0.5], [0.5, 0.5], [0.5, 0.5]]),
-        "sds": np.zeros(3),
-    }
+    rng = np.random.default_rng(42)
+    states = np.array([[0, 0, 0], [1, 1, 1]], dtype=np.float64)
+    controls = np.array([[1, 1], [1, 1]], dtype=np.float64)
+    loadings = np.array([[0.3, 0.3, 0.3], [0.3, 0.3, 0.3], [0.3, 0.3, 0.3]])
+    control_params = np.array([[0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
+    sds = np.zeros(3)
     expected = np.array([[1, 1, 1], [1.9, 1.9, 1.9]])
-    aaae(measurements_from_states(**inputs), expected)
+    aaae(
+        measurements_from_states(rng, states, controls, loadings, control_params, sds),
+        expected,
+    )
 
 
 @pytest.fixture
@@ -82,6 +84,7 @@ def test_collapse_aug_periods_to_periods_with_endogenous_factors(
     This is a regression test for a bug where MeasurementType enum values were
     compared against strings in pandas queries, causing empty results.
     """
+    rng = np.random.default_rng(42)
     processed_model = process_model(model2_with_endogenous)
     factors = processed_model.labels.latent_factors
 
@@ -95,7 +98,7 @@ def test_collapse_aug_periods_to_periods_with_endogenous_factors(
         for obs_id in range(n_obs):
             record = {"id": obs_id, "aug_period": aug_p}
             for fac in factors:
-                record[fac] = np.random.randn()
+                record[fac] = rng.standard_normal()
             records.append(record)
     aug_latent_data = pd.DataFrame(records)
 

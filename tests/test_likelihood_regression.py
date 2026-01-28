@@ -137,6 +137,7 @@ def test_likelihood_contributions_have_not_changed(
 def test_likelihood_contributions_large_nobs(
     model2, model2_data, model_type, fun_key
 ) -> None:
+    rng = np.random.default_rng(42)
     regvault = REGRESSION_VAULT
     model = _convert_model(model2, "no_stages_anchoring")
     params = pd.read_csv(regvault / "no_stages_anchoring.csv").set_index(
@@ -171,12 +172,12 @@ def test_likelihood_contributions_large_nobs(
         ]
         if model_type == "no_stages_anchoring":
             for col in cols:
-                this_round[col] += np.random.normal(0, 0.1, (len(model2_data),))
+                this_round[col] += rng.normal(0, 0.1, (len(model2_data),))
         elif model_type == "with_missings":
             fraction_to_set_missing = 0.9
             n_rows = len(this_round)
             n_missing = int(n_rows * fraction_to_set_missing)
-            rows_to_set_missing = this_round.sample(n=n_missing).index
+            rows_to_set_missing = this_round.sample(n=n_missing, random_state=rng).index
             this_round.loc[rows_to_set_missing, cols] = np.nan
         else:
             raise ValueError(f"Invalid model type: {model_type}")

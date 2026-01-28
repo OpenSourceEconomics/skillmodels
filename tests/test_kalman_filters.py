@@ -29,8 +29,8 @@ UPDATE_FUNCS = [kalman_update, kalman_update_debug]
 
 @pytest.mark.parametrize(("seed", "update_func"), product(SEEDS, UPDATE_FUNCS))
 def test_kalman_update(seed, update_func) -> None:
-    np.random.seed(seed)
-    dim = np.random.randint(low=1, high=10)
+    rng = np.random.default_rng(seed)
+    dim = int(rng.integers(low=1, high=10))
     n_obs = 5
     n_mix = 2
 
@@ -38,9 +38,11 @@ def test_kalman_update(seed, update_func) -> None:
     covs = np.zeros((n_obs, n_mix, dim, dim))
     for i in range(n_obs):
         for j in range(n_mix):
-            states[i, j], covs[i, j] = _random_state_and_covariance(dim=dim)
+            states[i, j], covs[i, j] = _random_state_and_covariance(rng, dim=dim)
 
-    loadings, measurements, meas_sd = _random_loadings_measurements_and_meas_sd(states)
+    loadings, measurements, meas_sd = _random_loadings_measurements_and_meas_sd(
+        rng, states
+    )
 
     expected_states = np.zeros_like(states)
     expected_covs = np.zeros_like(covs)
@@ -134,8 +136,8 @@ def test_kalman_update_with_missing(update_func) -> None:
 
 @pytest.mark.parametrize("seed", SEEDS)
 def test_sigma_points(seed: int) -> None:
-    np.random.seed(seed)
-    state, cov = _random_state_and_covariance()
+    rng = np.random.default_rng(seed)
+    state, cov = _random_state_and_covariance(rng)
     observed_factors = jnp.arange(2).reshape(1, 2)
     expected = JulierSigmaPoints(n=len(state), kappa=2).sigma_points(state, cov)
     observed_part = np.tile(observed_factors, len(expected)).reshape(-1, 2)
@@ -158,9 +160,9 @@ def test_sigma_points(seed: int) -> None:
 
 @pytest.mark.parametrize("seed", SEEDS)
 def test_sigma_scaling_factor_and_weights(seed) -> None:
-    np.random.seed(seed)
-    dim = np.random.randint(low=1, high=15)
-    kappa = np.random.uniform(low=0.5, high=5)
+    rng = np.random.default_rng(seed)
+    dim = int(rng.integers(low=1, high=15))
+    kappa = float(rng.uniform(low=0.5, high=5))
     # Test my assumption that weights for mean and cov are equal in the Julier algorithm
     expected_weights = JulierSigmaPoints(n=dim, kappa=kappa).Wm
     expected_weights2 = JulierSigmaPoints(n=dim, kappa=kappa).Wc
@@ -213,10 +215,10 @@ def test_transformation_of_sigma_points() -> None:
 
 @pytest.mark.parametrize("seed", SEEDS)
 def test_predict_against_linear_filterpy(seed) -> None:
-    np.random.seed(seed)
-    state, cov = _random_state_and_covariance()
+    rng = np.random.default_rng(seed)
+    state, cov = _random_state_and_covariance(rng)
     dim = len(state)
-    trans_mat = np.random.uniform(low=-1, high=1, size=(dim, dim))
+    trans_mat = rng.uniform(low=-1, high=1, size=(dim, dim))
 
     shock_sds = 0.5 * np.arange(dim) / dim
 
@@ -265,20 +267,20 @@ def test_predict_against_linear_filterpy(seed) -> None:
 # ======================================================================================
 
 
-def _random_state_and_covariance(dim=None):
+def _random_state_and_covariance(rng, dim=None):
     if dim is None:
-        dim = np.random.randint(low=1, high=10)
-    factorized = np.random.uniform(low=-1, high=3, size=(dim, dim))
+        dim = rng.integers(low=1, high=10)
+    factorized = rng.uniform(low=-1, high=3, size=(dim, dim))
     cov = factorized @ factorized.T * 0.5 + np.eye(dim)
-    state = np.random.uniform(low=-5, high=5, size=dim)
+    state = rng.uniform(low=-5, high=5, size=dim)
     return state, cov
 
 
-def _random_loadings_measurements_and_meas_sd(state):
+def _random_loadings_measurements_and_meas_sd(rng, state):
     n_obs, _n_mix, dim = state.shape
-    loadings = np.random.uniform(size=dim)
-    meas_sd = np.random.uniform()
-    epsilon = np.random.normal(loc=0, scale=meas_sd, size=(n_obs))
+    loadings = rng.uniform(size=dim)
+    meas_sd = rng.uniform()
+    epsilon = rng.normal(loc=0, scale=meas_sd, size=(n_obs))
     measurement = (state @ loadings).sum(axis=1) + epsilon
     return loadings, measurement, meas_sd
 
