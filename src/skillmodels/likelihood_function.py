@@ -1,7 +1,7 @@
 """Log-likelihood function for latent factor models."""
 
 import functools
-from collections.abc import Callable  # noqa: TC003
+from collections.abc import Callable
 from typing import Any
 
 import jax
@@ -14,7 +14,7 @@ from skillmodels.kalman_filters import (
     kalman_update,
 )
 from skillmodels.parse_params import parse_params
-from skillmodels.types import (  # noqa: TC001
+from skillmodels.types import (
     Dimensions,
     EstimationOptions,
     Labels,

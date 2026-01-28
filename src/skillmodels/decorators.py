@@ -1,7 +1,7 @@
 """Decorators for parameter extraction and registration in transition functions."""
 
 import functools
-from collections.abc import Callable  # noqa: TC003
+from collections.abc import Callable
 from typing import Any
 
 import jax.numpy as jnp

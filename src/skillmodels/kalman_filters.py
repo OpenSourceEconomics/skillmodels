@@ -1,6 +1,6 @@
 """Kalman filter operations for state estimation using the square-root form."""
 
-from collections.abc import Callable  # noqa: TC003
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp

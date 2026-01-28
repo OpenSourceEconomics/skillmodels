@@ -1,7 +1,7 @@
 """Debug version of log-likelihood function that returns intermediate results."""
 
 import functools
-from collections.abc import Callable  # noqa: TC003
+from collections.abc import Callable
 from typing import Any
 
 import jax
@@ -12,7 +12,7 @@ from skillmodels.clipping import soft_clipping
 from skillmodels.kalman_filters import kalman_predict
 from skillmodels.kalman_filters_debug import kalman_update
 from skillmodels.parse_params import parse_params
-from skillmodels.types import (  # noqa: TC001
+from skillmodels.types import (
     Dimensions,
     EstimationOptions,
     Labels,
