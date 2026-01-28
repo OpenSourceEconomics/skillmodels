@@ -27,12 +27,28 @@ pixi run -e test-cpu pytest tests/test_kalman_filters.py::test_function_name
 # Type checking
 pixi run ty
 
-# Install pre-commit hooks (required before committing)
-pre-commit install
+# Quality checks (linting, formatting)
+prek run --all-files
 
 # Build documentation (from docs/ directory)
 make html
 ```
+
+## Command Rules
+
+Always use these command mappings:
+
+- **Python**: Use `pixi run python` instead of `python` or `python3`
+- **Type checker**: Use `pixi run ty` instead of running ty/mypy/pyright directly
+- **Tests**: Use `pixi run tests` instead of `pytest` directly
+- **Linting/formatting**: Use `prek run --all-files` instead of `ruff` directly
+- **All quality checks**: Use `prek run --all-files`
+
+Before finishing any task that modifies code, always run:
+
+1. `pixi run ty` (type checker)
+1. `pixi run tests` (tests)
+1. `prek run --all-files` (quality checks)
 
 ## Architecture
 
@@ -82,7 +98,8 @@ The main package exports three functions:
 
 - `get_maximization_inputs()`: Prepare optimization problem for parameter estimation
 - `get_filtered_states()`: Extract filtered latent factor estimates
-- `simulate_dataset()`: Generate synthetic data from model specification
+- `simulate_dataset()`: Generate synthetic data from model specification (accepts
+  optional `seed` parameter for reproducibility)
 
 ## Code Style
 
@@ -92,6 +109,8 @@ The main package exports three functions:
 - Pre-commit hooks enforce formatting and linting
 - Type checking via `ty` with strict rules
 - Do not use `from __future__ import annotations`
+- Use modern numpy random API: `rng = np.random.default_rng(seed)` instead of
+  `np.random.seed()` or legacy functions like `np.random.randn()`
 
 ## Testing
 
