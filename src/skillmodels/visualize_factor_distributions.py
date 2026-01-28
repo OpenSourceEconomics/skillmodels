@@ -1,28 +1,24 @@
 """Functions to visualize distributions of latent factors."""
 
 import warnings
+from collections.abc import Mapping
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.figure_factory as ff
 import plotly.graph_objects as go
+from numpy.typing import NDArray
 from plotly.subplots import make_subplots
 from scipy.stats import gaussian_kde
 
 from skillmodels.filtered_states import get_filtered_states
-from skillmodels.model_spec import ModelSpec  # noqa: TC001
+from skillmodels.model_spec import ModelSpec
 from skillmodels.process_model import process_model
+from skillmodels.types import ProcessedModel
 from skillmodels.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-
-    from numpy.typing import NDArray
-
-    from skillmodels.types import ProcessedModel
 
 
 def combine_distribution_plots(

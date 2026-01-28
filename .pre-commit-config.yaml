@@ -4,7 +4,6 @@ repos:
     hooks:
       - id: check-hooks-apply
       - id: check-useless-excludes
-      # - id: identity  # Prints all files passed to pre-commits. Debugging.
   - repo: https://github.com/lyz-code/yamlfix
     rev: 1.19.1
     hooks:
@@ -41,7 +40,7 @@ repos:
       - id: check-ast
       - id: check-docstring-first
   - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.37.1
+    rev: v1.38.0
     hooks:
       - id: yamllint
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -71,10 +70,12 @@ repos:
     hooks:
       - id: mdformat
         additional_dependencies:
-          - mdformat-myst
+          - mdformat-gfm
+          - mdformat-gfm-alerts
           - mdformat-ruff
         args:
           - --wrap
           - '88'
+        files: (CLAUDE\.md|README\.md)
 ci:
   autoupdate_schedule: monthly

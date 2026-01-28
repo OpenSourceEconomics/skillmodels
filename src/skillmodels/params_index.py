@@ -1,16 +1,13 @@
 """Functions to construct the parameter index for model estimation."""
 
-from typing import TYPE_CHECKING
-
 import pandas as pd
 
-if TYPE_CHECKING:
-    from skillmodels.types import (
-        Dimensions,
-        EndogenousFactorsInfo,
-        Labels,
-        TransitionInfo,
-    )
+from skillmodels.types import (
+    Dimensions,
+    EndogenousFactorsInfo,
+    Labels,
+    TransitionInfo,
+)
 
 
 def get_params_index(

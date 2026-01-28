@@ -3,18 +3,20 @@
 import functools
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import optimagic as om
+import pandas as pd
 
 import skillmodels.transition_functions as t_f_module
-from skillmodels.types import MeasurementType
-
-if TYPE_CHECKING:
-    import pandas as pd
-
-    from skillmodels.types import Anchoring, Dimensions, EndogenousFactorsInfo, Labels
+from skillmodels.types import (
+    Anchoring,
+    Dimensions,
+    EndogenousFactorsInfo,
+    Labels,
+    MeasurementType,
+)
 
 
 def get_constraints_dicts(

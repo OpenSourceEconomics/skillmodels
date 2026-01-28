@@ -5,14 +5,12 @@ in a type-safe, immutable manner. All collections use immutable types
 (tuples, frozendict) to ensure the specification cannot be accidentally modified.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Self
+from typing import Self
 
 from frozendict import frozendict
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 
 @dataclass(frozen=True)

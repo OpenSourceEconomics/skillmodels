@@ -100,8 +100,9 @@ networkx = "*"
 numpy = ">=2.3,<2.4"
 # optimagic = "*"
 plotly = ">=6.2"
-pre-commit = "*"
+prek = "*"
 pybaum = "*"
+python = "~=3.14.0"
 python-kaleido = ">=1.0"
 scipy = "*"
 
@@ -174,19 +175,22 @@ unsafe-fixes = false
 [tool.ruff.lint]
 select = ["ALL"]
 extend-ignore = [
-    "ANN401", # Dynamically typed expressions (typing.Any) are disallowed - too strict
-    "COM812", # In conflict with formatter
-    "EM101", # exception must not use a string literal
-    "EM102", # exception must not use an f-string literal
-    "FBT002", # Boolean default positional argument in function definition
-    "ISC001", # In conflict with formatter
-    "NPY002", # Leave Numpy's legacy RNG
-    "PD015", # pd.merge is fine
+    "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed - too strict
+    "COM812",  # Conflicts with ruff-format
+    "EM101",   # Exception must not use a string literal
+    "EM102",   # Exception must not use an f-string literal
+    "FBT002",  # Boolean default positional argument in function definition
+    "FIX002",  # Line contains TODO
+    "ISC001",  # Conflicts with ruff-format
+    "PD015",   # pd.merge is fine
     "PERF401", # Many suggestions to use list comprehension are not helpful
     "PLR0913", # Too many arguments to function call
     "PLR2004", # Magic values are fine
-    "S301", # `pickle` module is unsafe
-    "TRY003", # long messages outside the exception class
+    "S301",    # `pickle` module is unsafe
+    "TC001",   # Move application import into a type-checking block
+    "TC002",   # Move third-party import into a type-checking block
+    "TC003",   # Move standard library import into a type-checking block
+    "TRY003",  # Long messages outside exception class
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -241,12 +245,18 @@ unused-ignore-comment = "error"
 useless-overload-body = "error"
 
 
+# ======================================================================================
+# pytest configuration
+# ======================================================================================
+
 [tool.pytest.ini_options]
+addopts = ["--pdbcls=pdbp:Pdb"]
+filterwarnings = []
 markers = [
-    "wip: Tests that are work-in-progress.",
-    "unit: Flag for unit tests which target mainly a single function.",
-    "integration: Flag for integration tests which may comprise of multiple unit tests.",
     "end_to_end: Flag for tests that cover the whole program.",
+    "integration: Flag for integration tests which may comprise of multiple unit tests.",
+    "unit: Flag for unit tests which target mainly a single function.",
+    "wip: Tests that are work-in-progress.",
 ]
 norecursedirs = ["docs", ".envs"]
 

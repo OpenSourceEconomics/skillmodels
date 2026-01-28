@@ -1,9 +1,10 @@
 """Functions to process model specifications from user-friendly to internal form."""
 
+from collections.abc import KeysView, Mapping
 from copy import deepcopy
 from dataclasses import replace
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -29,9 +30,6 @@ from skillmodels.types import (
     ProcessedModel,
     TransitionInfo,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import KeysView, Mapping
 
 pd.set_option("future.no_silent_downcasting", True)  # noqa:  FBT003
 

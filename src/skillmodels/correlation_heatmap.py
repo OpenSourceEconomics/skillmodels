@@ -1,19 +1,16 @@
 """Functions for creating correlation heatmap visualizations."""
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 from plotly import graph_objects as go
 
-from skillmodels.model_spec import ModelSpec  # noqa: TC001
+from skillmodels.model_spec import ModelSpec
 from skillmodels.process_data import pre_process_data
 from skillmodels.process_model import process_model
-
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
-    from skillmodels.types import ProcessedModel
+from skillmodels.types import ProcessedModel
 
 
 def plot_correlation_heatmap(

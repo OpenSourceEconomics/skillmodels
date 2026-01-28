@@ -1,15 +1,14 @@
 """Functions to process and prepare data for model estimation."""
 
 import warnings
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from jax import Array
 
-if TYPE_CHECKING:
-    from skillmodels.types import Anchoring, Labels
+from skillmodels.types import Anchoring, Labels
 
 
 def process_data(

@@ -1,19 +1,17 @@
 """Functions to compute and process filtered latent states."""
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
+import pandas as pd
 
 from skillmodels.maximization_inputs import get_maximization_inputs
-from skillmodels.model_spec import ModelSpec  # noqa: TC001
+from skillmodels.model_spec import ModelSpec
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info, parse_params
 from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 def get_filtered_states(

@@ -1,15 +1,13 @@
 """Functions to process debug output from likelihood function into DataFrames."""
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
+from jax import Array
+from numpy.typing import NDArray
 
-if TYPE_CHECKING:
-    from jax import Array
-    from numpy.typing import NDArray
-
-    from skillmodels.types import ProcessedModel
+from skillmodels.types import ProcessedModel
 
 
 def process_debug_data(

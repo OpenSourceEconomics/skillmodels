@@ -1,17 +1,20 @@
 """Functions to parse parameter vectors into structured dictionaries."""
 
 import warnings
-from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from jax import Array
 
-from skillmodels.types import LoadingsParsingInfo, ParsedParams, ParsingInfo
-
-if TYPE_CHECKING:
-    from skillmodels.types import Anchoring, Dimensions, Labels
+from skillmodels.types import (
+    Anchoring,
+    Dimensions,
+    Labels,
+    LoadingsParsingInfo,
+    ParsedParams,
+    ParsingInfo,
+)
 
 
 def create_parsing_info(

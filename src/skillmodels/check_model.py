@@ -1,11 +1,8 @@
 """Functions to validate model specifications."""
 
-from typing import TYPE_CHECKING
-
 import numpy as np
 
-if TYPE_CHECKING:
-    from skillmodels.types import Anchoring, Dimensions, Labels
+from skillmodels.types import Anchoring, Dimensions, Labels
 
 
 def check_model(

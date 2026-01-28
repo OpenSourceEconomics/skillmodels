@@ -1,17 +1,13 @@
 """Tests for custom QR decomposition."""
 
-from typing import TYPE_CHECKING
-
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 from numpy.testing import assert_array_almost_equal as aaae
+from numpy.typing import NDArray
 
 from skillmodels.qr import qr_gpu
-
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
 
 SEED = 20
 

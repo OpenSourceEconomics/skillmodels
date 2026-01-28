@@ -1,15 +1,15 @@
 """Functions to create inputs for optimization of the log-likelihood."""
 
 import functools
-from collections.abc import Callable  # noqa: TC003
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from jax import Array
-from numpy.typing import NDArray  # noqa: TC002
+from numpy.typing import NDArray
 
 import skillmodels.likelihood_function as lf
 import skillmodels.likelihood_function_debug as lfd
@@ -20,16 +20,13 @@ from skillmodels.constraints import (
     get_constraints_dicts,
 )
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
-from skillmodels.model_spec import ModelSpec  # noqa: TC001
+from skillmodels.model_spec import ModelSpec
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
-from skillmodels.types import ParsingInfo  # noqa: TC001
-
-if TYPE_CHECKING:
-    from skillmodels.types import ProcessedModel
+from skillmodels.types import ParsingInfo, ProcessedModel
 
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 

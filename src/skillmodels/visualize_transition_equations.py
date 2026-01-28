@@ -1,9 +1,9 @@
 """Functions to visualize transition equations and production functions."""
 
 import itertools
-from collections.abc import Callable  # noqa: TC003
+from collections.abc import Callable
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
@@ -14,17 +14,14 @@ from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 
 from skillmodels.filtered_states import get_filtered_states
-from skillmodels.model_spec import ModelSpec  # noqa: TC001
+from skillmodels.model_spec import ModelSpec
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info, parse_params
 from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
-from skillmodels.types import ParsedParams  # noqa: TC001
+from skillmodels.types import ParsedParams, ProcessedModel
 from skillmodels.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
-
-if TYPE_CHECKING:
-    from skillmodels.types import ProcessedModel
 
 
 def combine_transition_plots(
