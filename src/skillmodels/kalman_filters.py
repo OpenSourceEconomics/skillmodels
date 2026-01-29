@@ -206,17 +206,17 @@ def kalman_predict(
 
     """
     sigma_points = _calculate_sigma_points(
-        states,
-        upper_chols,
-        sigma_scaling_factor,
-        observed_factors,
+        states=states,
+        upper_chols=upper_chols,
+        scaling_factor=sigma_scaling_factor,
+        observed_factors=observed_factors,
     )
     transformed = transform_sigma_points(
-        sigma_points,
-        transition_func,
-        trans_coeffs,
-        anchoring_scaling_factors,
-        anchoring_constants,
+        sigma_points=sigma_points,
+        transition_func=transition_func,
+        trans_coeffs=trans_coeffs,
+        anchoring_scaling_factors=anchoring_scaling_factors,
+        anchoring_constants=anchoring_constants,
     )
 
     # do not use sigma_points.shape because sigma_points contain observed factors

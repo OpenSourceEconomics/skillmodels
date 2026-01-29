@@ -95,16 +95,16 @@ def plot_correlation_heatmap(
 
     """
     corr = _process_corr_data_for_plotting(
-        corr,
-        rounding,
+        corr=corr,
+        rounding=rounding,
         show_upper_triangle=show_upper_triangle,
         show_diagonal=show_diagonal,
         trim_heatmap=trim_heatmap,
     )
     heatmap_kwargs = _get_heatmap_kwargs(
-        corr,
-        heatmap_kwargs,
-        colorscale,
+        corr=corr,
+        heatmap_kwargs=heatmap_kwargs,
+        colorscale=colorscale,
         show_color_bar=show_color_bar,
         zmax=zmax,
         zmin=zmin,
@@ -160,9 +160,11 @@ def get_measurements_corr(
     """
     data = data.copy(deep=True)
     processed_model = process_model(model)
-    periods = _process_periods(periods, processed_model)
-    processed_data = pre_process_data(data, periods)
-    latent_factors, observed_factors = _process_factors(processed_model, factors)
+    periods = _process_periods(periods=periods, model=processed_model)
+    processed_data = pre_process_data(df=data, periods=periods)
+    latent_factors, observed_factors = _process_factors(
+        model=processed_model, factors=factors
+    )
     update_info_by_period = _get_update_info_for_periods(processed_model)
     df = _get_measurement_data(
         data=processed_data,
@@ -205,9 +207,11 @@ def get_quasi_scores_corr(
     """
     data = data.copy(deep=True)
     processed_model = process_model(model)
-    periods = _process_periods(periods, processed_model)
-    processed_data = pre_process_data(data, periods)
-    latent_factors, observed_factors = _process_factors(processed_model, factors)
+    periods = _process_periods(periods=periods, model=processed_model)
+    processed_data = pre_process_data(df=data, periods=periods)
+    latent_factors, observed_factors = _process_factors(
+        model=processed_model, factors=factors
+    )
     update_info = _get_update_info_for_periods(processed_model)
     df = _get_quasi_factor_scores_data(
         data=processed_data,
@@ -250,9 +254,11 @@ def get_scores_corr(
     """
     data = data.copy(deep=True)
     processed_model = process_model(model)
-    periods = _process_periods(periods, processed_model)
-    processed_data = pre_process_data(data, periods)
-    latent_factors, observed_factors = _process_factors(processed_model, factors)
+    periods = _process_periods(periods=periods, model=processed_model)
+    processed_data = pre_process_data(df=data, periods=periods)
+    latent_factors, observed_factors = _process_factors(
+        model=processed_model, factors=factors
+    )
     params = params.loc[["controls", "loadings"]]
     df = _get_factor_scores_data(
         data=processed_data,
@@ -477,19 +483,19 @@ def _get_quasi_factor_scores_data(
     if len(periods) == 1:
         period = periods[0]
         df = _get_quasi_factor_scores_data_for_single_period(
-            data,
-            update_info_by_period,
-            period,
-            latent_factors,
-            observed_factors,
+            data=data,
+            update_info_by_period=update_info_by_period,
+            period=period,
+            latent_factors=latent_factors,
+            observed_factors=observed_factors,
         )
     else:
         df = _get_quasi_factor_scores_data_for_multiple_periods(
-            data,
-            update_info_by_period,
-            periods,
-            latent_factors,
-            observed_factors,
+            data=data,
+            update_info_by_period=update_info_by_period,
+            periods=periods,
+            latent_factors=latent_factors,
+            observed_factors=observed_factors,
         )
 
     return df
@@ -565,11 +571,11 @@ def _get_quasi_factor_scores_data_for_multiple_periods(
     for period in periods:
         to_concat.append(
             _get_quasi_factor_scores_data_for_single_period(
-                data,
-                update_info_by_period,
-                period,
-                latent_factors,
-                observed_factors,
+                data=data,
+                update_info_by_period=update_info_by_period,
+                period=period,
+                latent_factors=latent_factors,
+                observed_factors=observed_factors,
             )
             .add_suffix(f", {period}")
             .reset_index(drop=True),
@@ -610,21 +616,21 @@ def _get_factor_scores_data(
     if len(periods) == 1:
         period = periods[0]
         df = _get_factor_scores_data_for_single_period(
-            data,
-            params,
-            model,
-            period,
-            latent_factors,
-            observed_factors,
+            data=data,
+            params=params,
+            model=model,
+            period=period,
+            latent_factors=latent_factors,
+            observed_factors=observed_factors,
         )
     else:
         df = _get_factor_scores_data_for_multiple_periods(
-            data,
-            params,
-            model,
-            periods,
-            latent_factors,
-            observed_factors,
+            data=data,
+            params=params,
+            model=model,
+            periods=periods,
+            latent_factors=latent_factors,
+            observed_factors=observed_factors,
         )
 
     return df
@@ -770,12 +776,12 @@ def _get_factor_scores_data_for_multiple_periods(
     for period in periods:
         to_concat.append(
             _get_factor_scores_data_for_single_period(
-                data,
-                params,
-                model,
-                period,
-                latent_factors,
-                observed_factors,
+                data=data,
+                params=params,
+                model=model,
+                period=period,
+                latent_factors=latent_factors,
+                observed_factors=observed_factors,
             )
             .add_suffix(f", {period}")
             .reset_index(drop=True),
@@ -868,9 +874,9 @@ def _get_layout_kwargs(
     )
     default_layout_kwargs.update(
         _get_axes_ticks_kwargs(
-            axes_tick_fontsize,
-            axes_tick_label_angle,
-            axes_tick_label_color,
+            axes_tick_fontsize=axes_tick_fontsize,
+            axes_tick_label_angle=axes_tick_label_angle,
+            axes_tick_label_color=axes_tick_label_color,
         ),
     )
     if layout_kwargs:

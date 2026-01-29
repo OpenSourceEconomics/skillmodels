@@ -38,7 +38,7 @@ def extract_factors(
         factors = [factors]
 
     to_remove = list(set(model_dict["factors"]).difference(factors))
-    return remove_factors(to_remove, model_dict, params)
+    return remove_factors(factors=to_remove, model_dict=model_dict, params=params)
 
 
 def update_parameter_values(
@@ -103,16 +103,16 @@ def remove_factors(
 
     out = deepcopy(model_dict)
 
-    out["factors"] = _remove_from_dict(out["factors"], factors)
+    out["factors"] = _remove_from_dict(dict_=out["factors"], to_remove=factors)
 
     # adjust anchoring
     if "anchoring" in model_dict:
         out["anchoring"]["outcomes"] = _remove_from_dict(
-            out["anchoring"]["outcomes"],
-            factors,
+            dict_=out["anchoring"]["outcomes"],
+            to_remove=factors,
         )
         if out["anchoring"]["outcomes"] == {}:
-            out = _remove_from_dict(out, "anchoring")
+            out = _remove_from_dict(dict_=out, to_remove="anchoring")
 
     # Remove periods if necessary, but only if no endogenous factors are present.
     # (else we would mess up the mapping between raw periods model periods)
@@ -120,7 +120,7 @@ def remove_factors(
         new_n_periods = get_dimensions(
             out, has_endogenous_factors=has_endogenous_factors
         ).n_periods
-        out = reduce_n_periods(out, new_n_periods)
+        out = reduce_n_periods(model_dict=out, new_n_periods=new_n_periods)
 
     if params is not None:
         out_params = _reduce_params(
@@ -156,23 +156,26 @@ def remove_measurements(
 
     for factor in model_dict["factors"]:
         full = model_dict["factors"][factor]["measurements"]
-        reduced = [_remove_from_list(meas_list, measurements) for meas_list in full]
+        reduced = [
+            _remove_from_list(list_=meas_list, to_remove=measurements)
+            for meas_list in full
+        ]
         out["factors"][factor]["measurements"] = reduced
 
         norminfo = model_dict["factors"][factor].get("normalizations", {})
         if "loadings" in norminfo:
             out["factors"][factor]["normalizations"]["loadings"] = (
                 _remove_measurements_from_normalizations(
-                    measurements,
-                    norminfo["loadings"],
+                    measurements=measurements,
+                    normalizations=norminfo["loadings"],
                 )
             )
 
         if "intercepts" in norminfo:
             out["factors"][factor]["normalizations"]["intercepts"] = (
                 _remove_measurements_from_normalizations(
-                    measurements,
-                    norminfo["intercepts"],
+                    measurements=measurements,
+                    normalizations=norminfo["intercepts"],
                 )
             )
 
@@ -204,9 +207,9 @@ def remove_controls(
 
     """
     out = deepcopy(model_dict)
-    out["controls"] = _remove_from_list(out["controls"], controls)
+    out["controls"] = _remove_from_list(list_=out["controls"], to_remove=controls)
     if out["controls"] == []:
-        out = _remove_from_dict(out, "controls")
+        out = _remove_from_dict(dict_=out, to_remove="controls")
 
     if params is not None:
         # This likely won't work if we have endogenous factors.
@@ -272,7 +275,7 @@ def switch_linear_to_translog(
             out["factors"][factor]["transition_function"] = "translog"
 
     if params is not None:
-        out_params = _extend_params(params, out, 0.05)
+        out_params = _extend_params(params=params, model_dict=out, fill_value=0.05)
         out = (out, out_params)
     return out
 
@@ -297,26 +300,30 @@ def reduce_n_periods(
     out = deepcopy(model_dict)
     for factor in model_dict["factors"]:
         out["factors"][factor]["measurements"] = _shorten_if_necessary(
-            out["factors"][factor]["measurements"],
-            new_n_periods,
+            list_=out["factors"][factor]["measurements"],
+            length=new_n_periods,
         )
 
         norminfo = model_dict["factors"][factor].get("normalizations", {})
         if "loadings" in norminfo:
             out["factors"][factor]["normalizations"]["loadings"] = (
-                _shorten_if_necessary(norminfo["loadings"], new_n_periods)
+                _shorten_if_necessary(list_=norminfo["loadings"], length=new_n_periods)
             )
 
         if "intercepts" in norminfo:
             out["factors"][factor]["normalizations"]["intercepts"] = (
-                _shorten_if_necessary(norminfo["intercepts"], new_n_periods)
+                _shorten_if_necessary(
+                    list_=norminfo["intercepts"], length=new_n_periods
+                )
             )
 
     if "stagemap" in out:
-        out["stagemap"] = _shorten_if_necessary(out["stagemap"], new_n_periods - 1)
+        out["stagemap"] = _shorten_if_necessary(
+            list_=out["stagemap"], length=new_n_periods - 1
+        )
 
     if params is not None:
-        out_params = _extend_params(params, out, 0.05)
+        out_params = _extend_params(params=params, model_dict=out, fill_value=0.05)
         out = (out, out_params)
 
     return out
@@ -410,7 +417,9 @@ def _remove_measurements_from_normalizations(
     measurements: str | list[str],
     normalizations: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    reduced = [_remove_from_dict(norm, measurements) for norm in normalizations]
+    reduced = [
+        _remove_from_dict(dict_=norm, to_remove=measurements) for norm in normalizations
+    ]
     if reduced != normalizations:
         warnings.warn(
             "Your removed a normalized measurement from a model. Make sure there are "

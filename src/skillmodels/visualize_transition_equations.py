@@ -80,7 +80,9 @@ def combine_transition_plots(
     """
     plots_dict = deepcopy(plots_dict)
 
-    column_order, row_order = _process_orders(column_order, row_order, plots_dict)
+    column_order, row_order = _process_orders(
+        columns=column_order, rows=row_order, plots_dict=plots_dict
+    )
     make_subplot_kwargs = get_make_subplot_kwargs(
         sharex=sharex,
         sharey=sharey,
@@ -89,9 +91,9 @@ def combine_transition_plots(
         make_subplot_kwargs=make_subplot_kwargs,
     )
     factor_mapping = _process_factor_mapping_trans(
-        factor_mapping,
-        row_order,
-        column_order,
+        factor_mapper=factor_mapping,
+        output_factors=row_order,
+        input_factors=column_order,
     )
     fig = make_subplots(**make_subplot_kwargs)
     for (output_factor, input_factor), (row, col) in zip(
@@ -287,10 +289,18 @@ def _get_dictionary_with_plots(
 
     """
     observed_factors = model.labels.observed_factors
-    states_data = _get_states_data(model, period, data, states, observed_factors)
-    params = _set_index_params(model, params)
-    parsed_params = _get_parsed_params(model, params)
-    state_ranges = _get_state_ranges(state_ranges, states_data, all_factors)
+    states_data = _get_states_data(
+        model=model,
+        period=period,
+        data=data,
+        states=states,
+        observed_factors=observed_factors,
+    )
+    params = _set_index_params(model=model, params=params)
+    parsed_params = _get_parsed_params(model=model, params=params)
+    state_ranges = _get_state_ranges(
+        state_ranges=state_ranges, states_data=states_data, all_factors=all_factors
+    )
     layout_kwargs = get_layout_kwargs(
         layout_kwargs=layout_kwargs,
         legend_kwargs=None,
@@ -373,7 +383,9 @@ def _get_state_ranges(
 ) -> dict[str, pd.DataFrame]:
     """Create state ranges if none is given."""
     if state_ranges is None:
-        state_ranges = create_state_ranges(states_data, list(all_factors))
+        state_ranges = create_state_ranges(
+            filtered_states=states_data, factors=list(all_factors)
+        )
     return state_ranges
 
 

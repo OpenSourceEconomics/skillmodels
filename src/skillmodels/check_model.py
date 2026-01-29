@@ -40,15 +40,19 @@ def check_model(
         is_augmented=has_endogenous_factors,
     )
     report += _check_anchoring(anchoring)
-    invalid_measurements = _check_measurements(model_dict, labels.latent_factors)
+    invalid_measurements = _check_measurements(
+        model_dict=model_dict, factors=labels.latent_factors
+    )
     if invalid_measurements:
         report += invalid_measurements
     elif has_endogenous_factors:
         # Make this conditional because the check only works for valid meas.
         report += _check_no_overlap_in_measurements_of_states_and_inv(
-            model_dict, labels
+            model_dict=model_dict, labels=labels
         )
-    report += _check_normalizations(model_dict, labels.latent_factors)
+    report += _check_normalizations(
+        model_dict=model_dict, factors=labels.latent_factors
+    )
 
     report = "\n".join(report)
     if report != "":
@@ -112,7 +116,7 @@ def _check_measurements(
     report: list[str] = []
     for factor in factors:
         candidate = model_dict["factors"][factor]["measurements"]
-        if not _is_list_of(candidate, list):
+        if not _is_list_of(candidate=candidate, type_=list):
             report.append(
                 f"measurements must be lists of lists. Check measurements of {factor}.",
             )
@@ -156,22 +160,22 @@ def _check_normalizations(
         norminfo = model_dict["factors"][factor].get("normalizations", {})
         for norm_type in ["loadings", "intercepts"]:
             candidate = norminfo.get(norm_type, [])
-            if not _is_list_of(candidate, dict):
+            if not _is_list_of(candidate=candidate, type_=dict):
                 report.append(
                     f"normalizations must be lists of dicts. Check {norm_type} "
                     f"normalizations for {factor}.",
                 )
             else:
                 report += _check_normalized_variables_are_present(
-                    candidate,
-                    model_dict,
-                    factor,
+                    list_of_normdicts=candidate,
+                    model_dict=model_dict,
+                    factor=factor,
                 )
 
                 if norm_type == "loadings":
                     report += _check_loadings_are_not_normalized_to_zero(
-                        candidate,
-                        factor,
+                        list_of_normdicts=candidate,
+                        factor=factor,
                     )
     return report
 

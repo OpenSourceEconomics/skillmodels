@@ -45,12 +45,18 @@ def create_parsing_info(
     range_sr = pd.Series(data=np.arange(len(params_index)), index=params_index)
 
     # Simple quantities
-    initial_states = _get_positional_selector_from_loc(range_sr, "initial_states")
-    initial_cholcovs = _get_positional_selector_from_loc(range_sr, "initial_cholcovs")
-    mixture_weights = _get_positional_selector_from_loc(range_sr, "mixture_weights")
-    controls = _get_positional_selector_from_loc(range_sr, "controls")
-    meas_sds = _get_positional_selector_from_loc(range_sr, "meas_sds")
-    shock_sds = _get_positional_selector_from_loc(range_sr, "shock_sds")
+    initial_states = _get_positional_selector_from_loc(
+        range_sr=range_sr, loc="initial_states"
+    )
+    initial_cholcovs = _get_positional_selector_from_loc(
+        range_sr=range_sr, loc="initial_cholcovs"
+    )
+    mixture_weights = _get_positional_selector_from_loc(
+        range_sr=range_sr, loc="mixture_weights"
+    )
+    controls = _get_positional_selector_from_loc(range_sr=range_sr, loc="controls")
+    meas_sds = _get_positional_selector_from_loc(range_sr=range_sr, loc="meas_sds")
+    shock_sds = _get_positional_selector_from_loc(range_sr=range_sr, loc="shock_sds")
 
     # loadings:
     mask = update_info[list(labels.latent_factors)].to_numpy()
@@ -58,7 +64,7 @@ def create_parsing_info(
     flat_indices = helper[mask]
 
     loadings = LoadingsParsingInfo(
-        slice=_get_positional_selector_from_loc(range_sr, "loadings"),
+        slice=_get_positional_selector_from_loc(range_sr=range_sr, loc="loadings"),
         flat_indices=jnp.array(flat_indices),
         shape=mask.shape,
         size=mask.size,
@@ -69,7 +75,9 @@ def create_parsing_info(
     for factor in list(labels.latent_factors):
         helper_df = pd.DataFrame(index=params_index)
         loc = helper_df.query(f"category == 'transition' & name1 == '{factor}'").index
-        transition[factor] = _get_positional_selector_from_loc(range_sr, loc)
+        transition[factor] = _get_positional_selector_from_loc(
+            range_sr=range_sr, loc=loc
+        )
 
     # anchoring_scaling_factors
     is_free_loading = update_info[list(labels.latent_factors)].to_numpy()
@@ -147,26 +155,34 @@ def parse_params(
             - ParsedParams dataclass with other model parameters.
 
     """
-    states = _get_initial_states(params, parsing_info, dimensions, n_obs)
-    upper_chols = _get_initial_upper_chols(params, parsing_info, dimensions, n_obs)
-    log_weights = _get_initial_log_mixture_weights(params, parsing_info, n_obs)
+    states = _get_initial_states(
+        params=params, info=parsing_info, dimensions=dimensions, n_obs=n_obs
+    )
+    upper_chols = _get_initial_upper_chols(
+        params=params, info=parsing_info, dimensions=dimensions, n_obs=n_obs
+    )
+    log_weights = _get_initial_log_mixture_weights(
+        params=params, info=parsing_info, n_obs=n_obs
+    )
 
-    controls = _get_control_params(params, parsing_info, dimensions)
-    loadings = _get_loadings(params, parsing_info)
-    meas_sds = _get_meas_sds(params, parsing_info)
-    shock_sds = _get_shock_sds(params, parsing_info, dimensions)
-    transition = _get_transition_params(params, parsing_info, labels)
+    controls = _get_control_params(
+        params=params, info=parsing_info, dimensions=dimensions
+    )
+    loadings = _get_loadings(params=params, info=parsing_info)
+    meas_sds = _get_meas_sds(params=params, info=parsing_info)
+    shock_sds = _get_shock_sds(params=params, info=parsing_info, dimensions=dimensions)
+    transition = _get_transition_params(params=params, info=parsing_info, labels=labels)
 
     anchoring_scaling_factors = _get_anchoring_scaling_factors(
-        loadings,
-        parsing_info,
-        dimensions,
+        loadings=loadings,
+        info=parsing_info,
+        dimensions=dimensions,
     )
 
     anchoring_constants = _get_anchoring_constants(
-        controls,
-        parsing_info,
-        dimensions,
+        controls=controls,
+        info=parsing_info,
+        dimensions=dimensions,
     )
 
     parsed = ParsedParams(

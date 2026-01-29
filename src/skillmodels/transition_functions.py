@@ -181,7 +181,7 @@ def robust_translog(states: Array, params: Array) -> Array:
 
     """
     clipped_states = jnp.clip(states, -1e12, 1e12)
-    return translog(clipped_states, params)
+    return translog(states=clipped_states, params=params)
 
 
 def params_robust_translog(factors: tuple[str, ...]) -> list[str]:
@@ -195,7 +195,9 @@ def identity_constraints_robust_translog(
     all_factors: tuple[str, ...],
 ) -> list[dict]:
     """Identity constraints for robust_translog."""
-    return identity_constraints_translog(factor, aug_period, all_factors)
+    return identity_constraints_translog(
+        factor=factor, aug_period=aug_period, all_factors=all_factors
+    )
 
 
 def linear_and_squares(states: Array, params: Array) -> Array:

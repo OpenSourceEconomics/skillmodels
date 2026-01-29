@@ -56,7 +56,7 @@ def get_constraints_dicts(
     constraints_dicts = []
 
     constraints_dicts += _get_normalization_constraints(
-        normalizations, labels.latent_factors
+        normalizations=normalizations, factors=labels.latent_factors
     )
     constraints_dicts += _get_mixture_weights_constraints(dimensions.n_mixtures)
     constraints_dicts += _get_stage_constraints(

@@ -87,8 +87,8 @@ def combine_distribution_plots(
     contour_plots = deepcopy(contour_plots)
     surface_plots = deepcopy(surface_plots)
     factors = list(kde_plots.keys())
-    factor_names = _process_factor_mapping_dist(factor_mapping, factors)
-    ordered_factors = _get_ordered_factors(factor_order, factors)
+    factor_names = _process_factor_mapping_dist(mapper=factor_mapping, factors=factors)
+    ordered_factors = _get_ordered_factors(factor_order=factor_order, factors=factors)
     make_subplot_kwargs = get_make_subplot_kwargs(
         sharex=sharex,
         sharey=sharey,
@@ -229,7 +229,7 @@ def univariate_densities(
         factors=factors,
         observed_factors=observed_factors,
     )
-    observed_states = _get_data_observed_factors(data, factors)
+    observed_states = _get_data_observed_factors(data=data, factors=factors)
     df = _process_data(
         states=states,
         period=period,
@@ -374,9 +374,9 @@ def bivariate_density_contours(
         for i, scenario in enumerate(df["scenario"].unique()):
             try:
                 x, y, z = _calculate_kde_for_3d(
-                    df[df["scenario"] == scenario],
-                    pair,
-                    n_points,
+                    data=df[df["scenario"] == scenario],
+                    factors=pair,
+                    n_points=n_points,
                 )
                 contour = go.Contour(
                     x=x[:, 0],
@@ -476,7 +476,7 @@ def bivariate_density_surfaces(
         factors=factors,
         observed_factors=observed_factors,
     )
-    observed_states = _get_data_observed_factors(data, factors)
+    observed_states = _get_data_observed_factors(data=data, factors=factors)
     df = _process_data(
         states=states,
         period=period,
@@ -499,7 +499,7 @@ def bivariate_density_surfaces(
     pairs = list(set(pairs))
     for pair in pairs:
         try:
-            x, y, z = _calculate_kde_for_3d(df, pair, n_points)
+            x, y, z = _calculate_kde_for_3d(data=df, factors=pair, n_points=n_points)
             fig = go.Figure(
                 go.Surface(
                     x=x,
@@ -567,7 +567,7 @@ def _process_data(
     ap_to_p = pd.Series(aug_periods_to_periods, name="period")
     ap_to_p.index.name = "aug_period"
     if isinstance(states, pd.DataFrame):
-        one_state_per_period = _get_one_state_per_period(states, ap_to_p)
+        one_state_per_period = _get_one_state_per_period(states=states, ap_to_p=ap_to_p)
         to_concat = []
         for fac in factors:
             if fac in one_state_per_period:
@@ -579,7 +579,7 @@ def _process_data(
             states = dict(enumerate(states))
         to_concat = []
         for name, df in states.items():
-            one_state_per_period = _get_one_state_per_period(df, ap_to_p)
+            one_state_per_period = _get_one_state_per_period(states=df, ap_to_p=ap_to_p)
             to_keep = one_state_per_period.query(f"period == {period}")[factors].copy()
             to_keep["scenario"] = name
             to_concat.append(to_keep)

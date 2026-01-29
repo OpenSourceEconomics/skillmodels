@@ -113,7 +113,7 @@ def process_model(model: dict | ModelSpec) -> ProcessedModel:
         anchoring=anchoring,
         has_endogenous_factors=has_endogenous_factors,
     )
-    transition_info = _get_transition_info(_model_dict_aug, labels)
+    transition_info = _get_transition_info(model_dict=_model_dict_aug, labels=labels)
     labels = replace(
         labels, transition_names=tuple(transition_info.function_names.values())
     )
@@ -124,8 +124,15 @@ def process_model(model: dict | ModelSpec) -> ProcessedModel:
         anchoring=anchoring,
         estimation_options=_process_estimation_options(_model_dict_aug),
         transition_info=transition_info,
-        update_info=_get_update_info(_model_dict_aug, dims, labels, anchoring),
-        normalizations=_process_normalizations(_model_dict_aug, dims, labels),
+        update_info=_get_update_info(
+            model_dict=_model_dict_aug,
+            dimensions=dims,
+            labels=labels,
+            anchoring_info=anchoring,
+        ),
+        normalizations=_process_normalizations(
+            model_dict=_model_dict_aug, dimensions=dims, labels=labels
+        ),
         endogenous_factors_info=endogenous_factors_info,
     )
 

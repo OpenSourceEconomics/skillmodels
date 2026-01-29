@@ -164,22 +164,22 @@ def simulate_dataset(
         "unanchored_states": {
             "states": latent_data,
             "state_ranges": create_state_ranges(
-                latent_data,
-                processed_model.labels.latent_factors,
+                filtered_states=latent_data,
+                factors=processed_model.labels.latent_factors,
             ),
         },
         "anchored_states": {
             "states": anchored_latent_data,
             "state_ranges": create_state_ranges(
-                anchored_latent_data,
-                processed_model.labels.latent_factors,
+                filtered_states=anchored_latent_data,
+                factors=processed_model.labels.latent_factors,
             ),
         },
         "aug_unanchored_states": {
             "states": aug_latent_data,
             "state_ranges": create_state_ranges(
-                aug_latent_data,
-                processed_model.labels.latent_factors,
+                filtered_states=aug_latent_data,
+                factors=processed_model.labels.latent_factors,
             ),
         },
         "aug_measurements": aug_measurements,
@@ -265,7 +265,13 @@ def _simulate_dataset(
         dist_args.append(args)
 
     latent_states = np.zeros((n_aug_periods, n_obs, n_states))  # ty: ignore[invalid-assignment]
-    latent_states[0] = generate_start_states(rng, n_obs, dimensions, dist_args, weights)
+    latent_states[0] = generate_start_states(
+        rng=rng,
+        n_obs=n_obs,
+        dimensions=dimensions,
+        dist_args=dist_args,
+        weights=weights,
+    )
 
     for t in range(n_aug_periods - 1):
         # if there is a shock in period t, add it here
@@ -320,12 +326,12 @@ def _simulate_dataset(
     for t in range(n_aug_periods):
         meas = pd.DataFrame(
             data=measurements_from_states(
-                rng,
-                latent_states[t],  # ty: ignore[invalid-argument-type]
-                control_data[t],  # ty: ignore[invalid-argument-type]
-                loadings_df.loc[t].to_numpy(),
-                control_params_df.loc[t].to_numpy(),
-                meas_sds.loc[t].to_numpy().flatten(),
+                rng=rng,
+                states=latent_states[t],  # ty: ignore[invalid-argument-type]
+                controls=control_data[t],  # ty: ignore[invalid-argument-type]
+                loadings=loadings_df.loc[t].to_numpy(),
+                control_params=control_params_df.loc[t].to_numpy(),
+                sds=meas_sds.loc[t].to_numpy().flatten(),
             ),
             columns=loadings_df.loc[t].index,
         )

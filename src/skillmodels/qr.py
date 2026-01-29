@@ -10,7 +10,7 @@ def qr_gpu(a: Array) -> tuple[Array, Array]:
     """Custom implementation of the QR Decomposition."""
     r, tau = jnp.linalg.qr(a, mode="raw")
 
-    q = _householder(r.mT, tau)
+    q = _householder(r=r.mT, tau=tau)
     return q, jnp.triu(r.mT[: tau.shape[0]])
 
 
@@ -65,7 +65,7 @@ def qr_jvp_rule(
     q, r = qr_gpu(x)
     dx_rinv = jax.lax.linalg.triangular_solve(r, dx)  # Right side solve by default
     qt_dx_rinv = _h(q) @ dx_rinv
-    qt_dx_rinv_lower = _tril(qt_dx_rinv, -1)
+    qt_dx_rinv_lower = _tril(m=qt_dx_rinv, k=-1)
     do = qt_dx_rinv_lower - _h(qt_dx_rinv_lower)  # This is skew-symmetric
     # The following correction is necessary for complex inputs
     n = x.shape[-1]

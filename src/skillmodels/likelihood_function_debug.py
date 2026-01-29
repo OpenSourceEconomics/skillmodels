@@ -73,11 +73,11 @@ def log_likelihood(
     """
     n_obs = measurements.shape[1]
     states, upper_chols, log_mixture_weights, parsed_params = parse_params(
-        params,
-        parsing_info,
-        dimensions,
-        labels,
-        n_obs,
+        params=params,
+        parsing_info=parsing_info,
+        dimensions=dimensions,
+        labels=labels,
+        n_obs=n_obs,
     )
 
     carry = {
@@ -132,11 +132,11 @@ def log_likelihood(
     out["residual_sds"] = static_out["residual_sds"]
 
     initial_states, _, initial_log_mixture_weights, _ = parse_params(
-        params,
-        parsing_info,
-        dimensions,
-        labels,
-        n_obs,
+        params=params,
+        parsing_info=parsing_info,
+        dimensions=dimensions,
+        labels=labels,
+        n_obs=n_obs,
     )
     out["initial_states"] = initial_states
     out["initial_log_mixture_weights"] = initial_log_mixture_weights

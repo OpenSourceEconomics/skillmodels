@@ -93,8 +93,8 @@ def get_maximization_inputs(
     )
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
-        processed_model.dimensions.n_latent_factors,
-        processed_model.estimation_options.sigma_points_scale,
+        n_states=processed_model.dimensions.n_latent_factors,
+        kappa=processed_model.estimation_options.sigma_points_scale,
     )
 
     partialed_get_jnp_params_vec = functools.partial(

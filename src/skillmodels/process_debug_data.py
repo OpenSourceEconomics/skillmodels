@@ -66,9 +66,9 @@ def process_debug_data(
     factors = model.labels.latent_factors
 
     post_update_states = _create_post_update_states(
-        debug_data["filtered_states"],
-        factors,
-        update_info,
+        filtered_states=debug_data["filtered_states"],
+        factors=factors,
+        update_info=update_info,
     )
 
     filtered_states = _create_filtered_states(
@@ -78,14 +78,18 @@ def process_debug_data(
         factors=factors,
     )
 
-    state_ranges = create_state_ranges(filtered_states, factors)
+    state_ranges = create_state_ranges(filtered_states=filtered_states, factors=factors)
 
-    residuals = _process_residuals(debug_data["residuals"], update_info)
-    residual_sds = _process_residual_sds(debug_data["residual_sds"], update_info)
+    residuals = _process_residuals(
+        residuals=debug_data["residuals"], update_info=update_info
+    )
+    residual_sds = _process_residual_sds(
+        residual_sds=debug_data["residual_sds"], update_info=update_info
+    )
 
     all_contributions = _process_all_contributions(
-        debug_data["all_contributions"],
-        update_info,
+        all_contributions=debug_data["all_contributions"],
+        update_info=update_info,
     )
 
     res = {
@@ -113,7 +117,7 @@ def _create_post_update_states(
     for (aug_period, meas), data in zip(
         update_info.index, filtered_states, strict=False
     ):
-        df = _convert_state_array_to_df(data, factors)
+        df = _convert_state_array_to_df(arr=data, factor_names=factors)
         df["aug_period"] = aug_period
         df["id"] = np.arange(len(df))
         df["measurement"] = meas
@@ -206,7 +210,7 @@ def _process_residual_sds(
     residual_sds: Array,
     update_info: pd.DataFrame,
 ) -> pd.DataFrame:
-    return _process_residuals(residual_sds, update_info)
+    return _process_residuals(residuals=residual_sds, update_info=update_info)
 
 
 def _process_all_contributions(

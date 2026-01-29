@@ -45,24 +45,32 @@ def process_data(
             Only returned if estimation==True
 
     """
-    df = pre_process_data(df, labels.periods)
+    df = pre_process_data(df=df, periods=labels.periods)
     df["constant"] = 1
     out = {}
 
-    df = _add_copies_of_anchoring_outcome(df, anchoring_info)
+    df = _add_copies_of_anchoring_outcome(df=df, anchoring_info=anchoring_info)
     if has_endogenous_factors:
-        df = _augment_data_for_endogenous_factors(df, labels, update_info)
+        df = _augment_data_for_endogenous_factors(
+            df=df, labels=labels, update_info=update_info
+        )
     else:
         df.index = df.index.set_names(["id", "aug_period"])
 
-    _check_data(df, update_info, labels, purpose=purpose)
+    _check_data(df=df, update_info=update_info, labels=labels, purpose=purpose)
     n_obs = int(len(df) / len(labels.aug_periods))
-    df = _handle_controls_with_missings(df, labels.controls, update_info)
-    out["controls"] = _generate_controls_array(df, labels, n_obs)
-    out["observed_factors"] = _generate_observed_factor_array(df, labels, n_obs)
+    df = _handle_controls_with_missings(
+        df=df, controls=labels.controls, update_info=update_info
+    )
+    out["controls"] = _generate_controls_array(df=df, labels=labels, n_obs=n_obs)
+    out["observed_factors"] = _generate_observed_factor_array(
+        df=df, labels=labels, n_obs=n_obs
+    )
 
     if purpose == "estimation":
-        out["measurements"] = _generate_measurements_array(df, update_info, n_obs)
+        out["measurements"] = _generate_measurements_array(
+            df=df, update_info=update_info, n_obs=n_obs
+        )
     return out
 
 
@@ -108,7 +116,7 @@ def _get_period_data_for_endogenous_factors(
     labels: Labels,
     update_info: pd.DataFrame,
 ) -> pd.DataFrame:
-    meas = _get_period_measurements(update_info, aug_period)
+    meas = _get_period_measurements(update_info=update_info, aug_period=aug_period)
     controls = labels.controls
     observed = labels.observed_factors
 
@@ -188,7 +196,9 @@ def _check_data(  # noqa: C901
                 var_report.loc[(aug_period, cont), "problem"] = "Variable is missing"
 
         if purpose == "estimation":
-            for meas in _get_period_measurements(update_info, aug_period):
+            for meas in _get_period_measurements(
+                update_info=update_info, aug_period=aug_period
+            ):
                 if meas not in period_data.columns:
                     var_report.loc[(aug_period, meas), "problem"] = (
                         "Variable is missing"
@@ -222,7 +232,9 @@ def _handle_controls_with_missings(
     for aug_period in aug_periods:
         period_data = df.query(f"aug_period == {aug_period}")
         control_data = period_data[list(controls)]
-        meas_data = period_data[_get_period_measurements(update_info, aug_period)]
+        meas_data = period_data[
+            _get_period_measurements(update_info=update_info, aug_period=aug_period)
+        ]
         problem = control_data.isna().any(axis=1) & meas_data.notna().any(axis=1)
         problematic_index = problematic_index.union(period_data[problem].index)
 
