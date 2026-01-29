@@ -1,0 +1,172 @@
+# Model Specifications
+
+Models can be specified using Python dataclasses or dictionaries. The dataclass approach
+is recommended for type safety and IDE support.
+
+## Using Dataclasses (Recommended)
+
+```python
+from skillmodels import (
+    AnchoringSpec,
+    EstimationOptionsSpec,
+    FactorSpec,
+    ModelSpec,
+    Normalizations,
+)
+
+# Define factors
+fac1 = FactorSpec(
+    measurements=[
+        ["y1", "y2", "y3"],  # period 0
+        ["y1", "y2", "y3"],  # period 1
+        # ...
+    ],
+    normalizations=Normalizations(
+        loadings=[{"y1": 1.0}, {}, {}],  # fix loading of y1 to 1 in period 0
+        intercepts=[{}, {}, {}],
+    ),
+    transition_equation="log_ces",
+)
+
+# Create model
+model = ModelSpec(
+    factors={"fac1": fac1, "fac2": fac2, "fac3": fac3},
+    anchoring=AnchoringSpec(
+        outcomes={"fac1": "Q1"},
+        free_loadings=True,
+    ),
+    controls=["x1", "x2"],
+    stagemap=[0, 0, 1, 1, 2, 2, 3],
+    estimation_options=EstimationOptionsSpec(),
+)
+```
+
+## Using Dictionaries
+
+For backwards compatibility and interoperability with YAML/JSON files, models can also
+be specified as dictionaries:
+
+```python
+import yaml
+
+with open("model.yaml") as f:
+    model = yaml.safe_load(f)
+```
+
+The dictionary structure mirrors the dataclass structure:
+
+```yaml
+factors:
+  fac1:
+    measurements:
+      - [y1, y2, y3]
+      - [y1, y2, y3]
+    normalizations:
+      loadings:
+        - {y1: 1.0}
+        - {}
+      intercepts:
+        - {}
+        - {}
+    transition_equation: log_ces
+  fac2:
+    measurements:
+      - [y4, y5, y6]
+      - [y4, y5, y6]
+    transition_equation: linear
+  fac3:
+    measurements:
+      - [y7, y8, y9]
+      - []
+    transition_equation: constant
+
+anchoring:
+  outcomes:
+    fac1: Q1
+  free_loadings: true
+
+controls:
+  - x1
+  - x2
+
+stagemap: [0, 0, 1, 1, 2, 2, 3]
+```
+
+## Factor Specification
+
+Each factor requires:
+
+- **measurements**: A nested list with measurement variable names for each period. Empty
+  lists indicate no measurements in that period.
+- **transition_equation**: Name of a transition function (`linear`, `log_ces`,
+  `constant`, `translog`) or a custom function.
+- **normalizations** (optional): Fixed values for loadings and intercepts to identify
+  the model.
+
+## Anchoring
+
+Anchoring links latent factors to observable outcomes. Options:
+
+- **outcomes**: Dictionary mapping factor names to anchoring outcome variables
+- **free_controls**: Whether to estimate control coefficients in anchoring equations
+  (default: false)
+- **free_constant**: Whether to estimate a constant in anchoring equations
+  (default: false)
+- **free_loadings**: Whether to estimate loadings in anchoring equations
+  (default: false)
+- **ignore_constant_when_anchoring**: Skip constant when anchoring (default: false)
+
+## Controls
+
+A list of variable names used as control variables in measurement equations. A constant
+is always included automatically.
+
+## Stagemap
+
+Maps periods to development stages. Has one entry less than the number of periods.
+Parameters are constrained to be equal within a stage.
+
+Example: `[0, 0, 1, 1]` means periods 0-1 share stage 0 parameters, and periods 2-3
+share stage 1 parameters.
+
+## Observed Factors
+
+Variables in the dataset that represent observed (not latent) factors. These don't need
+transition equations or multiple measurements.
+
+```python
+model = ModelSpec(
+    factors={...},
+    observed_factors=["income", "treatment"],
+)
+```
+
+## Estimation Options
+
+Fine-tune the estimation:
+
+- **sigma_points_scale**: Scaling for Julier sigma points (default: 2)
+- **robust_bounds**: Make bounds stricter to avoid numerical issues (default: true)
+- **bounds_distance**: How much stricter to make bounds (default: 0.001)
+- **clipping_lower_bound**: Clip log-likelihood from below (default: -1e250)
+- **clipping_upper_bound**: Clip log-likelihood from above (default: null)
+- **clipping_lower_hardness**: Hardness of lower clipping (default: 1)
+- **clipping_upper_hardness**: Hardness of upper clipping (default: 1)
+
+## Custom Transition Functions
+
+Define custom transition equations using the `@register_params` decorator:
+
+```python
+from skillmodels.decorators import register_params
+
+@register_params(params=["lincoeff"])
+def my_linear(fac, params):
+    return params["lincoeff"] * fac
+```
+
+Custom functions must:
+- Accept `params` as a required argument (dictionary with registered parameters)
+- Accept factor values as floats or use `states` for a JAX array of all states
+- Return a float
+- Be JAX jit and vmap compatible

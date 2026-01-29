@@ -1,10 +1,4 @@
 ---
-yaml-files:
-  - '*.yaml'
-  - '*.yml'
-  - .yamllint
-ignore:
-  - src/skillmodels/test_data/simplest_augmented_model.yaml
 rules:
   braces: enable
   brackets: enable
@@ -35,5 +29,11 @@ rules:
   quoted-strings: disable
   trailing-spaces: enable
   truthy:
-    level: warning
     check-keys: false
+    level: warning
+yaml-files:
+  - '*.yaml'
+  - '*.yml'
+  - .yamllint
+ignore:
+  - src/skillmodels/test_data/simplest_augmented_model.yaml
