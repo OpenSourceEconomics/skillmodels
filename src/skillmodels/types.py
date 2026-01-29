@@ -3,10 +3,10 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
+from types import MappingProxyType
 from typing import NewType
 
 import pandas as pd
-from frozendict import frozendict
 from jax import Array
 
 # NewType definitions for domain safety
@@ -66,10 +66,10 @@ class Labels:
     stagemap: tuple[int, ...]
     stages: tuple[int, ...]
     aug_periods: tuple[int, ...]
-    aug_periods_to_periods: frozendict[int, int]
+    aug_periods_to_periods: MappingProxyType[int, int]
     aug_stagemap: tuple[int, ...]
     aug_stages: tuple[int, ...]
-    aug_stages_to_stages: frozendict[int, int]
+    aug_stages_to_stages: MappingProxyType[int, int]
     transition_names: tuple[str, ...] = ()
 
     @property
@@ -83,7 +83,7 @@ class Anchoring:
     """Information about how latent factors are anchored to observed outcomes."""
 
     anchoring: bool
-    outcomes: frozendict[str, str]
+    outcomes: MappingProxyType[str, str]
     factors: tuple[str, ...]
     free_controls: bool
     free_constant: bool
@@ -95,7 +95,7 @@ class Anchoring:
         """Create an Anchoring config with anchoring disabled."""
         return cls(
             anchoring=False,
-            outcomes=frozendict({}),
+            outcomes=MappingProxyType({}),
             factors=(),
             free_controls=False,
             free_constant=False,
@@ -128,7 +128,7 @@ class Anchoring:
         """
         return cls(
             anchoring=True,
-            outcomes=frozendict(outcomes),
+            outcomes=MappingProxyType(outcomes),
             factors=tuple(outcomes.keys()),
             free_controls=free_controls,
             free_constant=free_constant,
@@ -155,9 +155,9 @@ class TransitionInfo:
     """Information about transition functions."""
 
     func: Callable
-    param_names: frozendict[str, list[str]]
-    individual_functions: frozendict[str, Callable]
-    function_names: frozendict[str, str]
+    param_names: MappingProxyType[str, list[str]]
+    individual_functions: MappingProxyType[str, Callable]
+    function_names: MappingProxyType[str, str]
 
 
 @dataclass(frozen=True)
@@ -213,10 +213,10 @@ class EndogenousFactorsInfo:
     """Information about endogenous factors in the model."""
 
     has_endogenous_factors: bool
-    aug_periods_to_aug_period_meas_types: frozendict[int, MeasurementType]
+    aug_periods_to_aug_period_meas_types: MappingProxyType[int, MeasurementType]
     bounds_distance: float
     aug_periods_from_period: Callable[[int], list[int]]
-    factor_info: frozendict[str, FactorInfo]
+    factor_info: MappingProxyType[str, FactorInfo]
 
 
 @dataclass(frozen=True)

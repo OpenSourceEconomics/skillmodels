@@ -1,12 +1,17 @@
 """Utility functions for manipulating model specifications and parameters."""
 
 import warnings
-from copy import deepcopy
-from typing import Any
+from dataclasses import replace
+from types import MappingProxyType
 
 import numpy as np
 import pandas as pd
 
+from skillmodels.model_spec import (
+    FactorSpec,
+    ModelSpec,
+    Normalizations,
+)
 from skillmodels.params_index import get_params_index
 from skillmodels.process_model import (
     get_dimensions,
@@ -17,28 +22,28 @@ from skillmodels.process_model import (
 
 def extract_factors(
     factors: str | list[str],
-    model_dict: dict[str, Any],
+    model_spec: ModelSpec,
     params: pd.DataFrame | None = None,
-) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
+) -> ModelSpec | tuple[ModelSpec, pd.DataFrame]:
     """Reduce a specification to a model with fewer latent factors.
 
     If provided, a params DataFrame is also reduced correspondingly.
 
     Args:
         factors: Name(s) of the factor(s) to extract.
-        model_dict: The model specification. See: :ref:`model_specs`.
+        model_spec: The model specification. See: :ref:`model_specs`.
         params: The params DataFrame for the full model.
 
     Returns:
-        dict: The reduced model dictionary
+        ModelSpec: The reduced model specification
         pandas.DataFrame: The reduced parameter DataFrame (only if params is not None)
 
     """
     if isinstance(factors, str):
         factors = [factors]
 
-    to_remove = list(set(model_dict["factors"]).difference(factors))
-    return remove_factors(factors=to_remove, model_dict=model_dict, params=params)
+    to_remove = list(set(model_spec.factors).difference(factors))
+    return remove_factors(factors=to_remove, model_spec=model_spec, params=params)
 
 
 def update_parameter_values(
@@ -78,9 +83,9 @@ def update_parameter_values(
 
 def remove_factors(
     factors: str | list[str],
-    model_dict: dict[str, Any],
+    model_spec: ModelSpec,
     params: pd.DataFrame | None = None,
-) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
+) -> ModelSpec | tuple[ModelSpec, pd.DataFrame]:
     """Remove factors from a model specification.
 
     If provided, a params DataFrame is also reduced correspondingly.
@@ -90,29 +95,39 @@ def remove_factors(
 
     Args:
         factors: Name(s) of the factor(s) to remove.
-        model_dict: The model specification. See: :ref:`model_specs`.
+        model_spec: The model specification. See: :ref:`model_specs`.
         params: The params DataFrame for the full model.
 
     Returns:
-        dict: The reduced model dictionary
+        ModelSpec: The reduced model specification
         pandas.DataFrame: The reduced parameter DataFrame (only if params is not None)
 
     """
+    if isinstance(factors, str):
+        factors = [factors]
+
     # We need this for the full model when endogenous factors are present.
-    has_endogenous_factors = get_has_endogenous_factors(model_dict["factors"])
+    has_endogenous_factors = get_has_endogenous_factors(model_spec.factors)
 
-    out = deepcopy(model_dict)
-
-    out["factors"] = _remove_from_dict(dict_=out["factors"], to_remove=factors)
+    new_factors = {k: v for k, v in model_spec.factors.items() if k not in factors}
 
     # adjust anchoring
-    if "anchoring" in model_dict:
-        out["anchoring"]["outcomes"] = _remove_from_dict(
-            dict_=out["anchoring"]["outcomes"],
-            to_remove=factors,
-        )
-        if out["anchoring"]["outcomes"] == {}:
-            out = _remove_from_dict(dict_=out, to_remove="anchoring")
+    new_anchoring = model_spec.anchoring
+    if new_anchoring is not None:
+        new_outcomes = {
+            k: v for k, v in new_anchoring.outcomes.items() if k not in factors
+        }
+        if new_outcomes:
+            new_anchoring = replace(
+                new_anchoring, outcomes=MappingProxyType(new_outcomes)
+            )
+        else:
+            new_anchoring = None
+
+    out = model_spec._replace(
+        factors=MappingProxyType(new_factors),
+        anchoring=new_anchoring,
+    )
 
     # Remove periods if necessary, but only if no endogenous factors are present.
     # (else we would mess up the mapping between raw periods model periods)
@@ -120,139 +135,159 @@ def remove_factors(
         new_n_periods = get_dimensions(
             out, has_endogenous_factors=has_endogenous_factors
         ).n_periods
-        out = reduce_n_periods(model_dict=out, new_n_periods=new_n_periods)
+        reduced = reduce_n_periods(model_spec=out, new_n_periods=new_n_periods)
+        if not isinstance(reduced, ModelSpec):
+            msg = "Expected ModelSpec from reduce_n_periods without params"
+            raise TypeError(msg)
+        out = reduced
 
     if params is not None:
         out_params = _reduce_params(
             params,
-            out,  # ty: ignore[invalid-argument-type]
+            out,
             has_endogenous_factors=has_endogenous_factors,
         )
-        out = (out, out_params)
+        return (out, out_params)
 
-    return out  # ty: ignore[invalid-return-type]
+    return out
 
 
 def remove_measurements(
     measurements: str | list[str],
-    model_dict: dict[str, Any],
+    model_spec: ModelSpec,
     params: pd.DataFrame | None = None,
-) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
+) -> ModelSpec | tuple[ModelSpec, pd.DataFrame]:
     """Remove measurements from a model specification.
 
     If provided, a params DataFrame is also reduced correspondingly.
 
     Args:
         measurements: Name(s) of the measurement(s) to remove.
-        model_dict: The model specification. See: :ref:`model_specs`.
+        model_spec: The model specification. See: :ref:`model_specs`.
         params: The params DataFrame for the full model.
 
     Returns:
-        dict: The reduced model dictionary
+        ModelSpec: The reduced model specification
         pandas.DataFrame: The reduced parameter DataFrame (only if params is not None)
 
     """
-    out = deepcopy(model_dict)
+    if isinstance(measurements, str):
+        measurements = [measurements]
 
-    for factor in model_dict["factors"]:
-        full = model_dict["factors"][factor]["measurements"]
-        reduced = [
-            _remove_from_list(list_=meas_list, to_remove=measurements)
-            for meas_list in full
-        ]
-        out["factors"][factor]["measurements"] = reduced
+    new_factors: dict[str, FactorSpec] = {}
+    for factor, fspec in model_spec.factors.items():
+        new_meas = tuple(
+            tuple(m for m in period_meas if m not in measurements)
+            for period_meas in fspec.measurements
+        )
 
-        norminfo = model_dict["factors"][factor].get("normalizations", {})
-        if "loadings" in norminfo:
-            out["factors"][factor]["normalizations"]["loadings"] = (
-                _remove_measurements_from_normalizations(
-                    measurements=measurements,
-                    normalizations=norminfo["loadings"],
+        new_normalizations = fspec.normalizations
+        if new_normalizations is not None:
+            new_loadings = tuple(
+                MappingProxyType({k: v for k, v in d.items() if k not in measurements})
+                for d in new_normalizations.loadings
+            )
+            new_intercepts = tuple(
+                MappingProxyType({k: v for k, v in d.items() if k not in measurements})
+                for d in new_normalizations.intercepts
+            )
+            if new_loadings != new_normalizations.loadings or (
+                new_intercepts != new_normalizations.intercepts
+            ):
+                warnings.warn(
+                    "Your removed a normalized measurement from a model. Make sure "
+                    "there are enough normalizations left to ensure identification.",
+                    stacklevel=2,
                 )
+            new_normalizations = Normalizations(
+                loadings=new_loadings,
+                intercepts=new_intercepts,
             )
 
-        if "intercepts" in norminfo:
-            out["factors"][factor]["normalizations"]["intercepts"] = (
-                _remove_measurements_from_normalizations(
-                    measurements=measurements,
-                    normalizations=norminfo["intercepts"],
-                )
-            )
+        new_factors[factor] = replace(
+            fspec, measurements=new_meas, normalizations=new_normalizations
+        )
+
+    out = model_spec._replace(factors=MappingProxyType(new_factors))
 
     if params is not None:
         # This likely won't work if we have endogenous factors.
         out_params = _reduce_params(params, out, has_endogenous_factors=False)
-        out = (out, out_params)
+        return (out, out_params)
 
     return out
 
 
 def remove_controls(
     controls: str | list[str],
-    model_dict: dict[str, Any],
+    model_spec: ModelSpec,
     params: pd.DataFrame | None = None,
-) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
+) -> ModelSpec | tuple[ModelSpec, pd.DataFrame]:
     """Remove control variables from a model specification.
 
     If provided, a params DataFrame is also reduced correspondingly.
 
     Args:
         controls: Name(s) of the contral variable(s) to remove.
-        model_dict: The model specification. See: :ref:`model_specs`.
+        model_spec: The model specification. See: :ref:`model_specs`.
         params: The params DataFrame for the full model.
 
     Returns:
-        dict: The reduced model dictionary
+        ModelSpec: The reduced model specification
         pandas.DataFrame: The reduced parameter DataFrame (only if params is not None)
 
     """
-    out = deepcopy(model_dict)
-    out["controls"] = _remove_from_list(list_=out["controls"], to_remove=controls)
-    if out["controls"] == []:
-        out = _remove_from_dict(dict_=out, to_remove="controls")
+    if isinstance(controls, str):
+        controls = [controls]
+
+    new_controls = tuple(c for c in model_spec.controls if c not in controls)
+    out = model_spec._replace(controls=new_controls)
 
     if params is not None:
         # This likely won't work if we have endogenous factors.
         out_params = _reduce_params(params, out, has_endogenous_factors=False)
-        out = (out, out_params)
+        return (out, out_params)
 
     return out
 
 
 def switch_translog_to_linear(
-    model_dict: dict[str, Any],
+    model_spec: ModelSpec,
     params: pd.DataFrame | None = None,
-) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
+) -> ModelSpec | tuple[ModelSpec, pd.DataFrame]:
     """Switch all translog production functions to linear.
 
     If provided, a params DataFrame is also reduced correspondingly.
 
     Args:
-        model_dict: The model specification. See: :ref:`model_specs`.
+        model_spec: The model specification. See: :ref:`model_specs`.
         params: The params DataFrame for the full model.
 
     Returns:
-        dict: The reduced model dictionary
+        ModelSpec: The reduced model specification
         pandas.DataFrame: The reduced parameter DataFrame (only if params is not None)
 
     """
-    out = deepcopy(model_dict)
-    for factor in model_dict["factors"]:
-        if model_dict["factors"][factor]["transition_function"] == "translog":
-            out["factors"][factor]["transition_function"] = "linear"
+    new_factors: dict[str, FactorSpec] = {}
+    for name, fspec in model_spec.factors.items():
+        if fspec.transition_function == "translog":
+            new_factors[name] = fspec.with_transition_function("linear")
+        else:
+            new_factors[name] = fspec
+    out = model_spec._replace(factors=MappingProxyType(new_factors))
 
     if params is not None:
         # This likely won't work if we have endogenous factors.
         out_params = _reduce_params(params, out, has_endogenous_factors=False)
-        out = (out, out_params)
+        return (out, out_params)
 
     return out
 
 
 def switch_linear_to_translog(
-    model_dict: dict[str, Any],
+    model_spec: ModelSpec,
     params: pd.DataFrame | None = None,
-) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
+) -> ModelSpec | tuple[ModelSpec, pd.DataFrame]:
     """Switch all linear production functions to translog.
 
     If provided, a params DataFrame is also extended correspondingly. The fill value
@@ -261,96 +296,78 @@ def switch_linear_to_translog(
     the additional parameters are not initialized at zero.
 
     Args:
-        model_dict: The model specification. See: :ref:`model_specs`.
+        model_spec: The model specification. See: :ref:`model_specs`.
         params: The params DataFrame for the full model.
 
     Returns:
-        dict: The reduced model dictionary
+        ModelSpec: The reduced model specification
         pandas.DataFrame: The reduced parameter DataFrame (only if params is not None)
 
     """
-    out = deepcopy(model_dict)
-    for factor in model_dict["factors"]:
-        if model_dict["factors"][factor]["transition_function"] == "linear":
-            out["factors"][factor]["transition_function"] = "translog"
+    new_factors: dict[str, FactorSpec] = {}
+    for name, fspec in model_spec.factors.items():
+        if fspec.transition_function == "linear":
+            new_factors[name] = fspec.with_transition_function("translog")
+        else:
+            new_factors[name] = fspec
+    out = model_spec._replace(factors=MappingProxyType(new_factors))
 
     if params is not None:
-        out_params = _extend_params(params=params, model_dict=out, fill_value=0.05)
-        out = (out, out_params)
+        out_params = _extend_params(params=params, model_spec=out, fill_value=0.05)
+        return (out, out_params)
+
     return out
 
 
 def reduce_n_periods(
-    model_dict: dict[str, Any],
+    model_spec: ModelSpec,
     new_n_periods: int,
     params: pd.DataFrame | None = None,
-) -> dict[str, Any] | tuple[dict[str, Any], pd.DataFrame]:
+) -> ModelSpec | tuple[ModelSpec, pd.DataFrame]:
     """Remove all periods after n_periods.
 
     Args:
-        model_dict: The model specification. See: :ref:`model_specs`.
+        model_spec: The model specification. See: :ref:`model_specs`.
         new_n_periods: The new number of periods.
         params: The params DataFrame for the full model.
 
     Returns:
-        dict: The reduced model dictionary
+        ModelSpec: The reduced model specification
         pandas.DataFrame: The reduced parameter DataFrame (only if params is not None)
 
     """
-    out = deepcopy(model_dict)
-    for factor in model_dict["factors"]:
-        out["factors"][factor]["measurements"] = _shorten_if_necessary(
-            list_=out["factors"][factor]["measurements"],
-            length=new_n_periods,
+    new_factors: dict[str, FactorSpec] = {}
+    for name, fspec in model_spec.factors.items():
+        new_meas = fspec.measurements[:new_n_periods]
+        new_normalizations = fspec.normalizations
+        if new_normalizations is not None:
+            new_normalizations = Normalizations(
+                loadings=new_normalizations.loadings[:new_n_periods],
+                intercepts=new_normalizations.intercepts[:new_n_periods],
+            )
+        new_factors[name] = replace(
+            fspec, measurements=new_meas, normalizations=new_normalizations
         )
 
-        norminfo = model_dict["factors"][factor].get("normalizations", {})
-        if "loadings" in norminfo:
-            out["factors"][factor]["normalizations"]["loadings"] = (
-                _shorten_if_necessary(list_=norminfo["loadings"], length=new_n_periods)
-            )
+    new_stagemap = model_spec.stagemap
+    if new_stagemap is not None and len(new_stagemap) > new_n_periods - 1:
+        new_stagemap = new_stagemap[: new_n_periods - 1]
 
-        if "intercepts" in norminfo:
-            out["factors"][factor]["normalizations"]["intercepts"] = (
-                _shorten_if_necessary(
-                    list_=norminfo["intercepts"], length=new_n_periods
-                )
-            )
-
-    if "stagemap" in out:
-        out["stagemap"] = _shorten_if_necessary(
-            list_=out["stagemap"], length=new_n_periods - 1
-        )
+    out = model_spec._replace(
+        factors=MappingProxyType(new_factors),
+        stagemap=new_stagemap,
+    )
 
     if params is not None:
-        out_params = _extend_params(params=params, model_dict=out, fill_value=0.05)
-        out = (out, out_params)
+        out_params = _extend_params(params=params, model_spec=out, fill_value=0.05)
+        return (out, out_params)
 
     return out
 
 
-def _remove_from_list(
-    list_: list[Any],
-    to_remove: str | list[str],
-) -> list[Any]:
-    if isinstance(to_remove, str):
-        to_remove = [to_remove]
-    return [element for element in list_ if element not in to_remove]
-
-
-def _remove_from_dict(
-    dict_: dict[str, Any],
-    to_remove: str | list[str],
-) -> dict[str, Any]:
-    if isinstance(to_remove, str):
-        to_remove = [to_remove]
-
-    return {key: val for key, val in dict_.items() if key not in to_remove}
-
-
 def _reduce_params(
     params: pd.DataFrame,
-    model_dict: dict[str, Any],
+    model_spec: ModelSpec,
     *,
     has_endogenous_factors: bool,
 ) -> pd.DataFrame:
@@ -361,14 +378,14 @@ def _reduce_params(
 
     Args:
         params: The params DataFrame for the full model.
-        model_dict: The model specification. See: :ref:`model_specs`.
+        model_spec: The model specification. See: :ref:`model_specs`.
         has_endogenous_factors: Whether the model has endogenous factors.
 
     Returns:
         pandas.DataFrame: The reduced parameters DataFrame.
 
     """
-    index = _get_params_index_from_model_dict(model_dict)
+    index = _get_params_index(model_spec)
     # If we have endogenous factors, we need to keep the periods from params.
     if has_endogenous_factors:
         df = pd.merge(
@@ -385,10 +402,10 @@ def _reduce_params(
 
 def _extend_params(
     params: pd.DataFrame,
-    model_dict: dict[str, Any],
+    model_spec: ModelSpec,
     fill_value: float,
 ) -> pd.DataFrame:
-    index = _get_params_index_from_model_dict(model_dict)
+    index = _get_params_index(model_spec)
     out = params.reindex(index)
     out["value"] = out["value"].fillna(fill_value)
     if "lower_bound" in out:
@@ -400,10 +417,10 @@ def _extend_params(
     return out
 
 
-def _get_params_index_from_model_dict(
-    model_dict: dict[str, Any],
+def _get_params_index(
+    model_spec: ModelSpec,
 ) -> pd.MultiIndex:
-    mod = process_model(model_dict)
+    mod = process_model(model_spec)
     return get_params_index(
         update_info=mod.update_info,
         labels=mod.labels,
@@ -411,28 +428,3 @@ def _get_params_index_from_model_dict(
         transition_info=mod.transition_info,
         endogenous_factors_info=mod.endogenous_factors_info,
     )
-
-
-def _remove_measurements_from_normalizations(
-    measurements: str | list[str],
-    normalizations: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    reduced = [
-        _remove_from_dict(dict_=norm, to_remove=measurements) for norm in normalizations
-    ]
-    if reduced != normalizations:
-        warnings.warn(
-            "Your removed a normalized measurement from a model. Make sure there are "
-            "enough normalizations left to ensure identification.",
-            stacklevel=2,
-        )
-    return reduced
-
-
-def _shorten_if_necessary(
-    list_: list[Any],
-    length: int,
-) -> list[Any]:
-    if len(list_) > length:
-        list_ = list_[:length]
-    return list_

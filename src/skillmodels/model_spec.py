@@ -2,15 +2,14 @@
 
 This module provides frozen dataclasses for defining model specifications
 in a type-safe, immutable manner. All collections use immutable types
-(tuples, frozendict) to ensure the specification cannot be accidentally modified.
+(tuples, MappingProxyType) to ensure the specification cannot be accidentally
+modified.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import Self
-
-from frozendict import frozendict
+from typing import Any, Self
 
 
 @dataclass(frozen=True)
@@ -25,16 +24,8 @@ class Normalizations:
 
     """
 
-    loadings: tuple[frozendict[str, float], ...]
-    intercepts: tuple[frozendict[str, float], ...]
-
-    @classmethod
-    def from_dict(cls, d: dict) -> Self:
-        """Create Normalizations from a dictionary specification."""
-        return cls(
-            loadings=tuple(frozendict(x) for x in d["loadings"]),
-            intercepts=tuple(frozendict(x) for x in d["intercepts"]),
-        )
+    loadings: tuple[MappingProxyType[str, float], ...]
+    intercepts: tuple[MappingProxyType[str, float], ...]
 
     def to_dict(self) -> dict:
         """Convert to dictionary for backwards compatibility."""
@@ -65,21 +56,6 @@ class FactorSpec:
     is_correction: bool = False
     transition_function: str | Callable | None = None
 
-    @classmethod
-    def from_dict(cls, d: dict) -> Self:
-        """Create FactorSpec from a dictionary specification."""
-        normalizations = None
-        if "normalizations" in d:
-            normalizations = Normalizations.from_dict(d["normalizations"])
-
-        return cls(
-            measurements=tuple(tuple(m) for m in d["measurements"]),
-            normalizations=normalizations,
-            is_endogenous=d.get("is_endogenous", False),
-            is_correction=d.get("is_correction", False),
-            transition_function=d.get("transition_function"),
-        )
-
     def to_dict(self) -> dict:
         """Convert to dictionary for backwards compatibility."""
         result: dict = {
@@ -95,23 +71,11 @@ class FactorSpec:
 
     def with_transition_function(self, func: str | Callable) -> Self:
         """Return a new FactorSpec with the given transition function."""
-        return type(self)(
-            measurements=self.measurements,
-            normalizations=self.normalizations,
-            is_endogenous=self.is_endogenous,
-            is_correction=self.is_correction,
-            transition_function=func,
-        )
+        return replace(self, transition_function=func)
 
     def with_normalizations(self, normalizations: Normalizations) -> Self:
         """Return a new FactorSpec with the given normalizations."""
-        return type(self)(
-            measurements=self.measurements,
-            normalizations=normalizations,
-            is_endogenous=self.is_endogenous,
-            is_correction=self.is_correction,
-            transition_function=self.transition_function,
-        )
+        return replace(self, normalizations=normalizations)
 
 
 @dataclass(frozen=True)
@@ -139,20 +103,6 @@ class EstimationOptionsSpec:
     clipping_lower_hardness: float = 1
     clipping_upper_hardness: float = 1
 
-    @classmethod
-    def from_dict(cls, d: dict) -> Self:
-        """Create EstimationOptionsSpec from a dictionary specification."""
-        return cls(
-            robust_bounds=d.get("robust_bounds", True),
-            bounds_distance=d.get("bounds_distance", 1e-3),
-            n_mixtures=d.get("n_mixtures", 1),
-            sigma_points_scale=d.get("sigma_points_scale", 2),
-            clipping_lower_bound=d.get("clipping_lower_bound", -1e30),
-            clipping_upper_bound=d.get("clipping_upper_bound"),
-            clipping_lower_hardness=d.get("clipping_lower_hardness", 1),
-            clipping_upper_hardness=d.get("clipping_upper_hardness", 1),
-        )
-
     def to_dict(self) -> dict:
         """Convert to dictionary for backwards compatibility."""
         result = {
@@ -169,8 +119,8 @@ class EstimationOptionsSpec:
         return result
 
 
-def _default_empty_frozendict() -> frozendict[str, str]:
-    return frozendict({})
+def _default_empty_mapping_proxy() -> MappingProxyType[str, str]:
+    return MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -186,24 +136,13 @@ class AnchoringSpec:
 
     """
 
-    outcomes: frozendict[str, str] = field(default_factory=_default_empty_frozendict)
+    outcomes: MappingProxyType[str, str] = field(
+        default_factory=_default_empty_mapping_proxy,
+    )
     free_controls: bool = False
     free_constant: bool = False
     free_loadings: bool = False
     ignore_constant_when_anchoring: bool = False
-
-    @classmethod
-    def from_dict(cls, d: dict) -> Self:
-        """Create AnchoringSpec from a dictionary specification."""
-        outcomes = d.get("outcomes", {})
-        ignore_constant = d.get("ignore_constant_when_anchoring", False)
-        return cls(
-            outcomes=frozendict(outcomes),
-            free_controls=d.get("free_controls", False),
-            free_constant=d.get("free_constant", False),
-            free_loadings=d.get("free_loadings", False),
-            ignore_constant_when_anchoring=ignore_constant,
-        )
 
     def to_dict(self) -> dict:
         """Convert to dictionary for backwards compatibility."""
@@ -260,43 +199,92 @@ class ModelSpec:
         object.__setattr__(self, "anchoring", anchoring)
         object.__setattr__(self, "estimation_options", estimation_options)
 
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> Self:
+        """Create a ModelSpec from a dictionary (e.g. loaded from YAML).
+
+        Args:
+            d: A dictionary with keys like "factors", "observed_factors",
+                "controls", "stagemap", "anchoring", "estimation_options".
+
+        Returns:
+            A ModelSpec instance.
+
+        """
+        factors = {}
+        for name, spec in d["factors"].items():
+            normalizations = None
+            if "normalizations" in spec:
+                nd = spec["normalizations"]
+                if "intercepts" not in nd:
+                    n_periods = len(nd.get("loadings", []))
+                    nd["intercepts"] = [{} for _ in range(n_periods)]
+                normalizations = Normalizations(
+                    loadings=tuple(MappingProxyType(x) for x in nd["loadings"]),
+                    intercepts=tuple(MappingProxyType(x) for x in nd["intercepts"]),
+                )
+            factors[name] = FactorSpec(
+                measurements=tuple(tuple(m) for m in spec["measurements"]),
+                normalizations=normalizations,
+                is_endogenous=spec.get("is_endogenous", False),
+                is_correction=spec.get("is_correction", False),
+                transition_function=spec.get("transition_function"),
+            )
+
+        anchoring = None
+        if "anchoring" in d:
+            ad = d["anchoring"]
+            anchoring = AnchoringSpec(
+                outcomes=MappingProxyType(ad.get("outcomes", {})),
+                free_controls=ad.get("free_controls", False),
+                free_constant=ad.get("free_constant", False),
+                free_loadings=ad.get("free_loadings", False),
+                ignore_constant_when_anchoring=ad.get(
+                    "ignore_constant_when_anchoring", False
+                ),
+            )
+
+        estimation = None
+        if "estimation_options" in d:
+            ed = d["estimation_options"]
+            estimation = EstimationOptionsSpec(
+                robust_bounds=ed.get("robust_bounds", True),
+                bounds_distance=ed.get("bounds_distance", 1e-3),
+                n_mixtures=ed.get("n_mixtures", 1),
+                sigma_points_scale=ed.get("sigma_points_scale", 2),
+                clipping_lower_bound=ed.get("clipping_lower_bound", -1e30),
+                clipping_upper_bound=ed.get("clipping_upper_bound"),
+                clipping_lower_hardness=ed.get("clipping_lower_hardness", 1),
+                clipping_upper_hardness=ed.get("clipping_upper_hardness", 1),
+            )
+
+        stagemap = d.get("stagemap")
+
+        return cls(
+            factors=factors,
+            observed_factors=tuple(d.get("observed_factors", [])),
+            controls=tuple(d.get("controls", [])),
+            stagemap=tuple(stagemap) if stagemap is not None else None,
+            anchoring=anchoring,
+            estimation_options=estimation,
+        )
+
     @property
     def factors(self) -> MappingProxyType[str, FactorSpec]:
         """Immutable mapping of factor names to specifications."""
         return self._factors
 
-    @classmethod
-    def from_dict(cls, d: dict) -> Self:
-        """Create ModelSpec from a dictionary specification.
-
-        Args:
-            d: Dictionary with keys 'factors', and optionally 'observed_factors',
-                'controls', 'stagemap', 'anchoring', and 'estimation_options'.
-
-        Returns:
-            Immutable ModelSpec instance.
-
-        """
-        factors = {
-            name: FactorSpec.from_dict(spec) for name, spec in d["factors"].items()
-        }
-        observed = d.get("observed_factors", [])
-        controls = d.get("controls", [])
-        stagemap = d.get("stagemap")
-        anchoring = None
-        if "anchoring" in d:
-            anchoring = AnchoringSpec.from_dict(d["anchoring"])
-        estimation = None
-        if "estimation_options" in d:
-            estimation = EstimationOptionsSpec.from_dict(d["estimation_options"])
-
-        return cls(
-            factors=MappingProxyType(factors),
-            observed_factors=tuple(observed),
-            controls=tuple(controls),
-            stagemap=tuple(stagemap) if stagemap is not None else None,
-            anchoring=anchoring,
-            estimation_options=estimation,
+    def _replace(self, **changes: Any) -> Self:
+        """Return a new ModelSpec with the specified fields replaced."""
+        return type(self)(
+            factors=changes.get("factors", self.factors),
+            observed_factors=changes.get("observed_factors", self.observed_factors),
+            controls=changes.get("controls", self.controls),
+            stagemap=changes.get("stagemap", self.stagemap),
+            anchoring=changes.get("anchoring", self.anchoring),
+            estimation_options=changes.get(
+                "estimation_options", self.estimation_options
+            ),
         )
 
     def to_dict(self) -> dict:
@@ -348,14 +336,7 @@ class ModelSpec:
             name: spec.with_transition_function(transition_functions[name])
             for name, spec in self.factors.items()
         }
-        return type(self)(
-            factors=MappingProxyType(new_factors),
-            observed_factors=self.observed_factors,
-            controls=self.controls,
-            stagemap=self.stagemap,
-            anchoring=self.anchoring,
-            estimation_options=self.estimation_options,
-        )
+        return self._replace(factors=MappingProxyType(new_factors))
 
     def with_added_factor(
         self,
@@ -374,14 +355,7 @@ class ModelSpec:
         """
         new_factors = dict(self.factors)
         new_factors[name] = spec
-        return type(self)(
-            factors=MappingProxyType(new_factors),
-            observed_factors=self.observed_factors,
-            controls=self.controls,
-            stagemap=self.stagemap,
-            anchoring=self.anchoring,
-            estimation_options=self.estimation_options,
-        )
+        return self._replace(factors=MappingProxyType(new_factors))
 
     def with_added_observed_factors(
         self,
@@ -396,13 +370,8 @@ class ModelSpec:
             New ModelSpec with the additional observed factors.
 
         """
-        return type(self)(
-            factors=self.factors,
+        return self._replace(
             observed_factors=self.observed_factors + names,
-            controls=self.controls,
-            stagemap=self.stagemap,
-            anchoring=self.anchoring,
-            estimation_options=self.estimation_options,
         )
 
     def with_estimation_options(
@@ -418,14 +387,7 @@ class ModelSpec:
             New ModelSpec with the updated estimation options.
 
         """
-        return type(self)(
-            factors=self.factors,
-            observed_factors=self.observed_factors,
-            controls=self.controls,
-            stagemap=self.stagemap,
-            anchoring=self.anchoring,
-            estimation_options=estimation_options,
-        )
+        return self._replace(estimation_options=estimation_options)
 
     def with_anchoring(
         self,
@@ -440,14 +402,7 @@ class ModelSpec:
             New ModelSpec with the updated anchoring.
 
         """
-        return type(self)(
-            factors=self.factors,
-            observed_factors=self.observed_factors,
-            controls=self.controls,
-            stagemap=self.stagemap,
-            anchoring=anchoring,
-            estimation_options=self.estimation_options,
-        )
+        return self._replace(anchoring=anchoring)
 
     def with_controls(
         self,
@@ -462,14 +417,7 @@ class ModelSpec:
             New ModelSpec with the updated controls.
 
         """
-        return type(self)(
-            factors=self.factors,
-            observed_factors=self.observed_factors,
-            controls=controls,
-            stagemap=self.stagemap,
-            anchoring=self.anchoring,
-            estimation_options=self.estimation_options,
-        )
+        return self._replace(controls=controls)
 
     def with_stagemap(
         self,
@@ -484,11 +432,4 @@ class ModelSpec:
             New ModelSpec with the updated stagemap.
 
         """
-        return type(self)(
-            factors=self.factors,
-            observed_factors=self.observed_factors,
-            controls=self.controls,
-            stagemap=stagemap,
-            anchoring=self.anchoring,
-            estimation_options=self.estimation_options,
-        )
+        return self._replace(stagemap=stagemap)

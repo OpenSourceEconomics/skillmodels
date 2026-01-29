@@ -141,7 +141,7 @@ def combine_transition_plots(
 
 
 def get_transition_plots(
-    model: dict[str, Any] | ModelSpec,
+    model_spec: ModelSpec,
     params: pd.DataFrame,
     data: pd.DataFrame,
     period: int,
@@ -161,10 +161,9 @@ def get_transition_plots(
     """Get dictionary with individual plots of transition equations for each factor.
 
     Args:
-        model: The model specification, either as a dict or ModelSpec instance.
-            See: :ref:`model_specs`
-        params: DataFrame with model parameters.
-        data: Empirical dataset that is used to estimate the model.
+        model_spec: The model specification. See: :ref:`model_specs`
+        params: Model parameters.
+        data: Empirical dataset used to estimate the model.
         period: The start period of the transition equations that are plotted.
         state_ranges: The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
@@ -192,7 +191,7 @@ def get_transition_plots(
         quantiles_of_other_factors,
     )
 
-    processed_model = process_model(model)
+    processed_model = process_model(model_spec)
 
     if period >= processed_model.labels.periods[-1]:
         raise ValueError(
@@ -208,10 +207,10 @@ def get_transition_plots(
         latent_factors = [
             lf
             for lf in processed_model.labels.latent_factors
-            if not processed_model.endogenous_factors_info.factor_info[lf].is_correction  # ty: ignore[invalid-argument-type]
+            if not processed_model.endogenous_factors_info.factor_info[lf].is_correction
         ]
     all_factors = processed_model.labels.all_factors
-    states = get_filtered_states(model=model, data=data, params=params)[
+    states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
         "anchored_states"
     ]["states"]
     return _get_dictionary_with_plots(
@@ -314,10 +313,10 @@ def _get_dictionary_with_plots(
         _aug_periods = [period]
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
-        transition_function = model.transition_info.individual_functions[output_factor]  # ty: ignore[invalid-argument-type]
+        transition_function = model.transition_info.individual_functions[output_factor]
         if (
             has_endogenous_factors
-            and model.endogenous_factors_info.factor_info[output_factor].is_endogenous  # ty: ignore[invalid-argument-type]
+            and model.endogenous_factors_info.factor_info[output_factor].is_endogenous
         ):
             aug_period = min(_aug_periods)
         else:

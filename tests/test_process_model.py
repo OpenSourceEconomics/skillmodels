@@ -3,9 +3,11 @@ import inspect
 import pandas as pd
 import pytest
 import yaml
+from conftest import model_spec_from_yaml_dict
 from pandas.testing import assert_frame_equal
 
 from skillmodels.config import TEST_DATA_DIR
+from skillmodels.model_spec import FactorSpec
 from skillmodels.process_model import get_has_endogenous_factors, process_model
 from skillmodels.types import TransitionInfo
 
@@ -17,7 +19,7 @@ from skillmodels.types import TransitionInfo
 @pytest.fixture
 def model2():
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        return yaml.load(y, Loader=yaml.SafeLoader)
+        return model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
 
 
 def test_has_endogenous_factors(model2) -> None:
@@ -124,12 +126,12 @@ def test_normalizations(model2) -> None:
 
 def test_anchoring_and_endogenous_factors_work_together() -> None:
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
-    model["factors"]["fac3"]["is_endogenous"] = True
-    del model["stagemap"]
+    model_dict["factors"]["fac3"]["is_endogenous"] = True
+    del model_dict["stagemap"]
     # Should not raise - anchoring and endogenous factors now work together
-    result = process_model(model)
+    result = process_model(model_spec_from_yaml_dict(model_dict))
     # Verify anchoring is enabled
     assert result.anchoring.anchoring
     assert result.anchoring.factors == ("fac1",)
@@ -147,24 +149,24 @@ def test_anchoring_and_endogenous_factors_work_together() -> None:
 
 def test_stagemap_with_endogenous_factors_wrong_labels() -> None:
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
-    model["factors"]["fac3"]["is_endogenous"] = True
-    model["stagemap"] = [0, 0, 1, 1, 2, 2, 4]
-    del model["anchoring"]
+    model_dict["factors"]["fac3"]["is_endogenous"] = True
+    model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 4]
+    del model_dict["anchoring"]
     with pytest.raises(ValueError, match="Invalid stage map:"):
-        process_model(model)
+        process_model(model_spec_from_yaml_dict(model_dict))
 
 
 def test_stagemap_with_endogenous_factors() -> None:
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
-    model["factors"]["fac3"]["is_endogenous"] = True
+    model_dict["factors"]["fac3"]["is_endogenous"] = True
     stagemap = [0, 0, 1, 1, 2, 2, 3]
-    model["stagemap"] = stagemap
-    del model["anchoring"]
-    processed = process_model(model)
+    model_dict["stagemap"] = stagemap
+    del model_dict["anchoring"]
+    processed = process_model(model_spec_from_yaml_dict(model_dict))
     assert processed.labels.stagemap == tuple(stagemap)
     assert processed.labels.stages == (0, 1, 2, 3)
     assert processed.labels.aug_stagemap == (0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 7)
@@ -173,12 +175,12 @@ def test_stagemap_with_endogenous_factors() -> None:
 @pytest.fixture
 def model2_inv():
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
     # Set fac3 to be endogenous
-    model["factors"]["fac3"]["is_endogenous"] = True
-    del model["stagemap"]
-    del model["anchoring"]
-    return model
+    model_dict["factors"]["fac3"]["is_endogenous"] = True
+    del model_dict["stagemap"]
+    del model_dict["anchoring"]
+    return model_spec_from_yaml_dict(model_dict)
 
 
 def test_with_endog_has_endogenous_factors(model2_inv) -> None:
@@ -372,35 +374,34 @@ def test_with_endog_normalizations(model2_inv) -> None:
 # ======================================================================================
 
 
+def _fspec(**kwargs) -> FactorSpec:
+    """Create a minimal FactorSpec for unit tests."""
+    return FactorSpec(measurements=((),), **kwargs)
+
+
 def test_model_has_endogenous_factors_not_specified() -> None:
-    factors = {"a": {}}
+    factors = {"a": _fspec()}
     assert get_has_endogenous_factors(factors) == False
 
 
-def test_get_has_endogenous_factors_wrong_type() -> None:
-    factors = {"a": {"is_endogenous": 3}}
-    with pytest.raises(ValueError):
-        get_has_endogenous_factors(factors)
-
-
 def test_get_has_endogenous_factors_wrong_constellation() -> None:
-    factors = {"a": {"is_endogenous": False, "is_correction": True}}
+    factors = {"a": _fspec(is_endogenous=False, is_correction=True)}
     with pytest.raises(ValueError):
         get_has_endogenous_factors(factors)
 
 
 def test_get_has_endogenous_factors_indeed() -> None:
     factors = {
-        "a": {"is_endogenous": True, "is_correction": False},
-        "b": {"is_endogenous": False, "is_correction": False},
+        "a": _fspec(is_endogenous=True, is_correction=False),
+        "b": _fspec(is_endogenous=False, is_correction=False),
     }
     assert get_has_endogenous_factors(factors) == True
 
 
 def test_get_has_endogenous_factors_and_correction() -> None:
     factors = {
-        "a": {"is_endogenous": True, "is_correction": False},
-        "b": {"is_endogenous": False, "is_correction": False},
-        "c": {"is_endogenous": True, "is_correction": True},
+        "a": _fspec(is_endogenous=True, is_correction=False),
+        "b": _fspec(is_endogenous=False, is_correction=False),
+        "c": _fspec(is_endogenous=True, is_correction=True),
     }
     assert get_has_endogenous_factors(factors) == True

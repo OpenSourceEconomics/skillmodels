@@ -20,7 +20,6 @@ classifiers = [
 ]
 dependencies = [
   "dags",
-  "frozendict",
   "jax>=0.8",
   "numpy",
   "pandas",

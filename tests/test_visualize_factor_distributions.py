@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
+from conftest import model_spec_from_yaml_dict
 
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.filtered_states import get_filtered_states
@@ -20,7 +21,7 @@ REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 def test_visualize_factor_distributions_runs_with_filtered_states() -> None:
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
+        model = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
 
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
@@ -32,19 +33,19 @@ def test_visualize_factor_distributions_runs_with_filtered_states() -> None:
     params = params.loc[max_inputs["params_template"].index]
     kde = univariate_densities(
         data=data,
-        model=model,
+        model_spec=model,
         params=params,
         period=1,
     )
     contours = bivariate_density_contours(
         data=data,
-        model=model,
+        model_spec=model,
         params=params,
         period=1,
     )
     surfaces = bivariate_density_surfaces(
         data=data,
-        model=model,
+        model_spec=model,
         params=params,
         period=1,
     )
@@ -57,7 +58,7 @@ def test_visualize_factor_distributions_runs_with_filtered_states() -> None:
 
 def test_visualize_factor_distributions_runs_with_simulated_states() -> None:
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
+        model = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
 
     data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])
@@ -75,14 +76,14 @@ def test_visualize_factor_distributions_runs_with_simulated_states() -> None:
     kde = univariate_densities(
         data=data,
         states=latent_data,
-        model=model,
+        model_spec=model,
         params=params,
         period=1,
     )
     contours = bivariate_density_contours(
         data=data,
         states=latent_data,
-        model=model,
+        model_spec=model,
         params=params,
         period=1,
     )
@@ -100,7 +101,7 @@ def test_visualize_factor_distributions_with_period_indexed_states() -> None:
     already mapped aug_period to period and dropped the aug_period column.
     """
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
+        model = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
 
     data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])
@@ -112,7 +113,7 @@ def test_visualize_factor_distributions_with_period_indexed_states() -> None:
     params = params.loc[max_inputs["params_template"].index]
 
     # Get filtered states and convert to (id, period) index without aug_period
-    filtered_states = get_filtered_states(model=model, data=data, params=params)[
+    filtered_states = get_filtered_states(model_spec=model, data=data, params=params)[
         "anchored_states"
     ]["states"]
     processed = process_model(model)
@@ -129,14 +130,14 @@ def test_visualize_factor_distributions_with_period_indexed_states() -> None:
     kde = univariate_densities(
         data=data,
         states=filtered_states,
-        model=model,
+        model_spec=model,
         params=params,
         period=1,
     )
     contours = bivariate_density_contours(
         data=data,
         states=filtered_states,
-        model=model,
+        model_spec=model,
         params=params,
         period=1,
     )
@@ -154,7 +155,7 @@ def test_visualize_factor_distributions_with_both_aug_period_and_period() -> Non
     in the index (or both as columns).
     """
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
+        model = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
 
     data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])
@@ -166,7 +167,7 @@ def test_visualize_factor_distributions_with_both_aug_period_and_period() -> Non
     params = params.loc[max_inputs["params_template"].index]
 
     # Get filtered states and add period while keeping aug_period
-    filtered_states = get_filtered_states(model=model, data=data, params=params)[
+    filtered_states = get_filtered_states(model_spec=model, data=data, params=params)[
         "anchored_states"
     ]["states"]
     processed = process_model(model)
@@ -180,14 +181,14 @@ def test_visualize_factor_distributions_with_both_aug_period_and_period() -> Non
     kde = univariate_densities(
         data=data,
         states=filtered_states,
-        model=model,
+        model_spec=model,
         params=params,
         period=1,
     )
     contours = bivariate_density_contours(
         data=data,
         states=filtered_states,
-        model=model,
+        model_spec=model,
         params=params,
         period=1,
     )

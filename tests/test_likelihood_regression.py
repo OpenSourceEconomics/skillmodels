@@ -7,11 +7,13 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from conftest import model_spec_from_yaml_dict
 from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.decorators import register_params
 from skillmodels.maximization_inputs import get_maximization_inputs
+from skillmodels.model_spec import ModelSpec
 from skillmodels.utilities import reduce_n_periods
 
 jax.config.update("jax_enable_x64", True)
@@ -66,7 +68,7 @@ def _convert_model(base_model, model_name):
         model["factors"]["fac3"]["transition_function"] = constant
     else:
         raise ValueError("Invalid model name.")
-    return model
+    return model_spec_from_yaml_dict(model)
 
 
 @pytest.mark.parametrize(
@@ -94,8 +96,9 @@ def test_likelihood_values_have_not_changed(
 
 
 def test_splitting_does_not_change_gradient(model2, model2_data) -> None:
-    inputs = get_maximization_inputs(model2, model2_data)
-    inputs_split = get_maximization_inputs(model2, model2_data, 13)
+    model = model_spec_from_yaml_dict(model2)
+    inputs = get_maximization_inputs(model, model2_data)
+    inputs_split = get_maximization_inputs(model, model2_data, 13)
 
     params = inputs["params_template"]
     params["value"] = 0.1
@@ -201,7 +204,7 @@ def test_likelihood_runs_with_empty_periods(model2, model2_data) -> None:
         model2["factors"][factor]["measurements"][-1] = []
         model2["factors"][factor]["normalizations"]["loadings"][-1] = {}
 
-    func_dict = get_maximization_inputs(model2, model2_data)
+    func_dict = get_maximization_inputs(model_spec_from_yaml_dict(model2), model2_data)
 
     params = func_dict["params_template"]
     params["value"] = 0.1
@@ -211,8 +214,11 @@ def test_likelihood_runs_with_empty_periods(model2, model2_data) -> None:
 
 
 def test_likelihood_runs_with_too_long_data(model2, model2_data) -> None:
-    model = reduce_n_periods(model2, 2)
-    func_dict = get_maximization_inputs(model, model2_data)  # ty: ignore[invalid-argument-type]
+    full_model = model_spec_from_yaml_dict(model2)
+    reduced = reduce_n_periods(full_model, 2)
+    assert isinstance(reduced, ModelSpec)
+    model = reduced
+    func_dict = get_maximization_inputs(model, model2_data)
 
     params = func_dict["params_template"]
     params["value"] = 0.1
@@ -225,7 +231,7 @@ def test_likelihood_runs_with_observed_factors(model2, model2_data) -> None:
     model2["observed_factors"] = ["ob1", "ob2"]
     model2_data["ob1"] = np.arange(len(model2_data))
     model2_data["ob2"] = np.ones(len(model2_data))
-    func_dict = get_maximization_inputs(model2, model2_data)
+    func_dict = get_maximization_inputs(model_spec_from_yaml_dict(model2), model2_data)
 
     params = func_dict["params_template"]
     params["value"] = 0.1

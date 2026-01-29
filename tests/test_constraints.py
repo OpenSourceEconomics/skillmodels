@@ -1,8 +1,10 @@
+from types import MappingProxyType
+
 import numpy as np
 import pandas as pd
 import pytest
 import yaml
-from frozendict import frozendict
+from conftest import model_spec_from_yaml_dict
 from pandas.testing import assert_frame_equal
 
 from skillmodels.config import TEST_DATA_DIR
@@ -178,10 +180,10 @@ def test_constant_factor_constraints() -> None:
         stagemap=(0, 0, 0),
         stages=(0,),
         aug_periods=(0, 1, 2),
-        aug_periods_to_periods=frozendict({0: 0, 1: 1, 2: 2}),
+        aug_periods_to_periods=MappingProxyType({0: 0, 1: 1, 2: 2}),
         aug_stagemap=(0, 0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages=frozendict({0: 0}),
+        aug_stages_to_stages=MappingProxyType({0: 0}),
         transition_names=("bla", "constant"),
     )
 
@@ -232,10 +234,10 @@ def test_trans_coeff_constraints() -> None:
         stagemap=(0, 0, 0),
         stages=(0,),
         aug_periods=(0, 1, 2),
-        aug_periods_to_periods=frozendict({0: 0, 1: 1, 2: 2}),
+        aug_periods_to_periods=MappingProxyType({0: 0, 1: 1, 2: 2}),
         aug_stagemap=(0, 0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages=frozendict({0: 0}),
+        aug_stages_to_stages=MappingProxyType({0: 0}),
         transition_names=("log_ces", "bla", "blubb"),
     )
 
@@ -289,7 +291,7 @@ def base_anchoring_info():
     return Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes=frozendict({"f1": "outcome", "f2": "outcome"}),
+        outcomes=MappingProxyType({"f1": "outcome", "f2": "outcome"}),
         free_controls=True,
         free_constant=True,
         free_loadings=True,
@@ -308,7 +310,7 @@ def test_anchoring_constraints_for_constants(anch_uinfo) -> None:
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes=frozendict({"f1": "outcome", "f2": "outcome"}),
+        outcomes=MappingProxyType({"f1": "outcome", "f2": "outcome"}),
         free_controls=True,
         free_constant=False,
         free_loadings=True,
@@ -337,7 +339,7 @@ def test_anchoring_constraints_for_controls(anch_uinfo) -> None:
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes=frozendict({"f1": "outcome", "f2": "outcome"}),
+        outcomes=MappingProxyType({"f1": "outcome", "f2": "outcome"}),
         free_controls=False,
         free_constant=True,
         free_loadings=True,
@@ -377,7 +379,7 @@ def test_anchoring_constraints_for_loadings(anch_uinfo) -> None:
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes=frozendict({"f1": "outcome", "f2": "outcome"}),
+        outcomes=MappingProxyType({"f1": "outcome", "f2": "outcome"}),
         free_controls=True,
         free_constant=True,
         free_loadings=False,
@@ -414,7 +416,7 @@ def assert_list_equal_except_for_order(list1, list2) -> None:
 @pytest.fixture
 def simplest_augmented_model():
     with (TEST_DATA_DIR / "simplest_augmented_model.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
+        model = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
     return process_model(model)
 
 

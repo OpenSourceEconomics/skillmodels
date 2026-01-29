@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
+from conftest import model_spec_from_yaml_dict
 
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.maximization_inputs import get_maximization_inputs
@@ -15,9 +16,10 @@ REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 def test_visualize_transition_equations_runs() -> None:
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
 
-    model["observed_factors"] = ["ob1"]
+    model_dict["observed_factors"] = ["ob1"]
+    model = model_spec_from_yaml_dict(model_dict)
 
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
@@ -31,7 +33,7 @@ def test_visualize_transition_equations_runs() -> None:
     params = params.reindex(full_index)
     params["value"] = params["value"].fillna(0)
     subplots = get_transition_plots(
-        model=model,
+        model_spec=model,
         params=params,
         period=0,
         quantiles_of_other_factors=[0.1, 0.25, 0.5, 0.75, 0.9],
@@ -39,7 +41,7 @@ def test_visualize_transition_equations_runs() -> None:
     )
     combine_transition_plots(subplots)
     subplots = get_transition_plots(
-        model=model,
+        model_spec=model,
         params=params,
         period=0,
         quantiles_of_other_factors=None,

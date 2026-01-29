@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from conftest import model_spec_from_yaml_dict
 
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.filtered_states import get_filtered_states
@@ -15,7 +16,7 @@ REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 @pytest.fixture
 def model2():
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        return yaml.load(y, Loader=yaml.SafeLoader)
+        return model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
 
 
 @pytest.fixture
@@ -31,7 +32,7 @@ def test_get_filtered_states(model2, model2_data) -> None:
     max_inputs = get_maximization_inputs(model2, model2_data)
     params = params.loc[max_inputs["params_template"].index]
 
-    calculated = get_filtered_states(model=model2, data=model2_data, params=params)
+    calculated = get_filtered_states(model_spec=model2, data=model2_data, params=params)
 
     factors = ["fac1", "fac2", "fac3"]
     expected_ratios = [1.187757, 1, 1]

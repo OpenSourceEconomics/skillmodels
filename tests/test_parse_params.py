@@ -5,12 +5,14 @@ implementation details.
 
 """
 
+from types import MappingProxyType
+
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import pytest
 import yaml
-from frozendict import frozendict
+from conftest import model_spec_from_yaml_dict
 from numpy.testing import assert_array_equal as aae
 
 from skillmodels.config import TEST_DATA_DIR
@@ -27,7 +29,7 @@ def parsed_parameters():
     ).index
 
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
+        model = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
 
     processed = process_model(model)
 
@@ -38,7 +40,7 @@ def parsed_parameters():
     # more meaningful test
     anchoring = Anchoring(
         anchoring=False,
-        outcomes=frozendict({}),
+        outcomes=MappingProxyType({}),
         factors=(),
         free_controls=True,
         free_constant=True,

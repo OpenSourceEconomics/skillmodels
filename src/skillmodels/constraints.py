@@ -389,7 +389,7 @@ def _get_anchoring_constraints(
         ind_tups = []
         for period in periods:
             for factor in anchoring_info.factors:
-                outcome = anchoring_info.outcomes[factor]  # ty: ignore[invalid-argument-type]
+                outcome = anchoring_info.outcomes[factor]
                 meas = f"{outcome}_{factor}"
                 ind_tups.append(("loadings", period, meas, factor))
 
@@ -431,7 +431,7 @@ def _get_constraints_for_augmented_periods(
         # look counterintuitive...
         aug_period_meas_type_to_constrain = (
             MeasurementType.STATES
-            if endogenous_factors_info.factor_info[factor].is_state  # ty: ignore[invalid-argument-type]
+            if endogenous_factors_info.factor_info[factor].is_state
             else MeasurementType.ENDOGENOUS_FACTORS
         )
         aug_period_meas_types = (

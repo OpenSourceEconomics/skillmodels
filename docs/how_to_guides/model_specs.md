@@ -1,11 +1,12 @@
 # Model Specifications
 
-Models can be specified using Python dataclasses or dictionaries. The dataclass approach
-is recommended for type safety and IDE support.
+Models are specified using Python dataclasses.
 
-## Using Dataclasses (Recommended)
+## Defining a Model
 
 ```python
+from types import MappingProxyType
+
 from skillmodels import (
     AnchoringSpec,
     EstimationOptionsSpec,
@@ -16,80 +17,55 @@ from skillmodels import (
 
 # Define factors
 fac1 = FactorSpec(
-    measurements=[
-        ["y1", "y2", "y3"],  # period 0
-        ["y1", "y2", "y3"],  # period 1
+    measurements=(
+        ("y1", "y2", "y3"),  # period 0
+        ("y1", "y2", "y3"),  # period 1
         # ...
-    ],
-    normalizations=Normalizations(
-        loadings=[{"y1": 1.0}, {}, {}],  # fix loading of y1 to 1 in period 0
-        intercepts=[{}, {}, {}],
     ),
-    transition_equation="log_ces",
+    normalizations=Normalizations(
+        loadings=(
+            MappingProxyType({"y1": 1.0}),  # fix loading of y1 to 1 in period 0
+            MappingProxyType({}),
+        ),
+        intercepts=(MappingProxyType({}), MappingProxyType({})),
+    ),
+    transition_function="log_ces",
 )
 
 # Create model
 model = ModelSpec(
     factors={"fac1": fac1, "fac2": fac2, "fac3": fac3},
     anchoring=AnchoringSpec(
-        outcomes={"fac1": "Q1"},
+        outcomes=MappingProxyType({"fac1": "Q1"}),
         free_loadings=True,
     ),
-    controls=["x1", "x2"],
-    stagemap=[0, 0, 1, 1, 2, 2, 3],
+    controls=("x1", "x2"),
+    stagemap=(0, 0, 1, 1, 2, 2, 3),
     estimation_options=EstimationOptionsSpec(),
 )
 ```
 
-## Using Dictionaries
-
-For backwards compatibility and interoperability with YAML/JSON files, models can also
-be specified as dictionaries:
+For a more ergonomic approach, use `ModelSpec.from_dict()` which accepts plain Python
+lists and dicts:
 
 ```python
-import yaml
+from skillmodels import ModelSpec
 
-with open("model.yaml") as f:
-    model = yaml.safe_load(f)
-```
-
-The dictionary structure mirrors the dataclass structure:
-
-```yaml
-factors:
-  fac1:
-    measurements:
-      - [y1, y2, y3]
-      - [y1, y2, y3]
-    normalizations:
-      loadings:
-        - {y1: 1.0}
-        - {}
-      intercepts:
-        - {}
-        - {}
-    transition_equation: log_ces
-  fac2:
-    measurements:
-      - [y4, y5, y6]
-      - [y4, y5, y6]
-    transition_equation: linear
-  fac3:
-    measurements:
-      - [y7, y8, y9]
-      - []
-    transition_equation: constant
-
-anchoring:
-  outcomes:
-    fac1: Q1
-  free_loadings: true
-
-controls:
-  - x1
-  - x2
-
-stagemap: [0, 0, 1, 1, 2, 2, 3]
+model = ModelSpec.from_dict({
+    "factors": {
+        "fac1": {
+            "measurements": [["y1", "y2", "y3"], ["y1", "y2", "y3"]],
+            "normalizations": {
+                "loadings": [{"y1": 1.0}, {}],
+                "intercepts": [{}, {}],
+            },
+            "transition_function": "log_ces",
+        },
+    },
+    "anchoring": {"outcomes": {"fac1": "Q1"}, "free_loadings": True},
+    "controls": ["x1", "x2"],
+    "stagemap": [0, 0, 1, 1, 2, 2, 3],
+})
 ```
 
 ## Factor Specification
@@ -98,7 +74,7 @@ Each factor requires:
 
 - **measurements**: A nested list with measurement variable names for each period. Empty
   lists indicate no measurements in that period.
-- **transition_equation**: Name of a transition function (`linear`, `log_ces`,
+- **transition_function**: Name of a transition function (`linear`, `log_ces`,
   `constant`, `translog`) or a custom function.
 - **normalizations** (optional): Fixed values for loadings and intercepts to identify
   the model.

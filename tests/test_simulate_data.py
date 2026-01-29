@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from conftest import model_spec_from_yaml_dict
 from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.config import TEST_DATA_DIR
@@ -22,7 +23,7 @@ REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 @pytest.fixture
 def model2():
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        return yaml.load(y, Loader=yaml.SafeLoader)
+        return model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
 
 
 @pytest.fixture
@@ -37,7 +38,7 @@ def test_simulate_dataset(model2, model2_data) -> None:
     params = params.set_index(["category", "period", "name1", "name2"])
 
     calculated = simulate_dataset(
-        model=model,
+        model_spec=model,
         params=params,
         data=model2_data,
     )
@@ -69,11 +70,11 @@ def test_measurements_from_factors() -> None:
 def model2_with_endogenous():
     """Model2 with fac3 set as endogenous factor."""
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = yaml.load(y, Loader=yaml.SafeLoader)
-    model["factors"]["fac3"]["is_endogenous"] = True
-    del model["stagemap"]
-    del model["anchoring"]
-    return model
+        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
+    model_dict["factors"]["fac3"]["is_endogenous"] = True
+    del model_dict["stagemap"]
+    del model_dict["anchoring"]
+    return model_spec_from_yaml_dict(model_dict)
 
 
 def test_collapse_aug_periods_to_periods_with_endogenous_factors(

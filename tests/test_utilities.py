@@ -9,15 +9,14 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from conftest import model_spec_from_yaml_dict
 from pandas.testing import assert_frame_equal, assert_index_equal
 
 from skillmodels.config import TEST_DATA_DIR
+from skillmodels.model_spec import ModelSpec
 from skillmodels.process_model import process_model
 from skillmodels.utilities import (
-    _get_params_index_from_model_dict,
-    _remove_from_dict,
-    _remove_from_list,
-    _shorten_if_necessary,
+    _get_params_index,
     extract_factors,
     reduce_n_periods,
     remove_controls,
@@ -32,17 +31,19 @@ from skillmodels.utilities import (
 @pytest.fixture
 def model2():
     with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        return yaml.load(y, Loader=yaml.SafeLoader)
+        return model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
 
 
 @pytest.mark.parametrize("factors", ["fac2", ["fac2"]])
 def test_extract_factors_single(model2, factors) -> None:
     reduced = extract_factors(factors, model2)
-    assert list(reduced["factors"]) == ["fac2"]  # ty: ignore[invalid-argument-type]
-    assert list(model2["factors"]) == ["fac1", "fac2", "fac3"]
-    assert "anchoring" not in reduced
-    assert model2["anchoring"]["outcomes"] == {"fac1": "Q1"}
-    process_model(reduced)  # ty: ignore[invalid-argument-type]
+    assert isinstance(reduced, ModelSpec)
+    assert list(reduced.factors) == ["fac2"]
+    assert list(model2.factors) == ["fac1", "fac2", "fac3"]
+    assert reduced.anchoring is None
+    assert model2.anchoring is not None
+    assert dict(model2.anchoring.outcomes) == {"fac1": "Q1"}
+    process_model(reduced)
 
 
 def test_update_parameter_values() -> None:
@@ -64,69 +65,76 @@ def test_update_parameter_values() -> None:
 @pytest.mark.parametrize("factors", ["fac2", ["fac2"]])
 def test_remove_factors(model2, factors) -> None:
     reduced = remove_factors(factors, model2)
-    assert list(reduced["factors"]) == ["fac1", "fac3"]  # ty: ignore[invalid-argument-type]
-    assert list(model2["factors"]) == ["fac1", "fac2", "fac3"]
-    assert "anchoring" in reduced
-    process_model(reduced)  # ty: ignore[invalid-argument-type]
+    assert isinstance(reduced, ModelSpec)
+    assert list(reduced.factors) == ["fac1", "fac3"]
+    assert list(model2.factors) == ["fac1", "fac2", "fac3"]
+    assert reduced.anchoring is not None
+    process_model(reduced)
 
 
 @pytest.mark.parametrize("measurements", ["y5", ["y5"]])
 def test_remove_measurements(model2, measurements) -> None:
     reduced = remove_measurements(measurements, model2)
-    assert reduced["factors"]["fac2"]["measurements"] == [["y4", "y6"]] * 8  # ty: ignore[invalid-argument-type]
-    assert "y5" in model2["factors"]["fac2"]["measurements"][0]
-    process_model(reduced)  # ty: ignore[invalid-argument-type]
+    assert isinstance(reduced, ModelSpec)
+    for period_meas in reduced.factors["fac2"].measurements:
+        assert list(period_meas) == ["y4", "y6"]
+    assert "y5" in model2.factors["fac2"].measurements[0]
+    process_model(reduced)
 
 
 @pytest.mark.parametrize("controls", ["x1", ["x1"]])
 def test_remove_controls(model2, controls) -> None:
     reduced = remove_controls(controls, model2)
-    assert "controls" not in reduced
-    assert "controls" in model2
-    process_model(reduced)  # ty: ignore[invalid-argument-type]
+    assert isinstance(reduced, ModelSpec)
+    assert reduced.controls == ()
+    assert model2.controls == ("x1",)
+    process_model(reduced)
 
 
 def test_reduce_n_periods(model2) -> None:
     reduced = reduce_n_periods(model2, 1)
-    assert reduced["factors"]["fac1"]["measurements"] == [["y1", "y2", "y3"]]  # ty: ignore[invalid-argument-type]
-    assert reduced["factors"]["fac2"]["normalizations"]["loadings"] == [{"y4": 1}]  # ty: ignore[invalid-argument-type]
-    process_model(reduced)  # ty: ignore[invalid-argument-type]
+    assert isinstance(reduced, ModelSpec)
+    assert list(reduced.factors["fac1"].measurements[0]) == ["y1", "y2", "y3"]
+    assert len(reduced.factors["fac1"].measurements) == 1
+    norms = reduced.factors["fac2"].normalizations
+    assert norms is not None
+    assert dict(norms.loadings[0]) == {"y4": 1}
+    assert len(norms.loadings) == 1
+    process_model(reduced)
 
 
 def test_switch_linear_to_translog(model2) -> None:
     switched = switch_linear_to_translog(model2)
-    assert switched["factors"]["fac2"]["transition_function"] == "translog"  # ty: ignore[invalid-argument-type]
+    assert isinstance(switched, ModelSpec)
+    assert switched.factors["fac2"].transition_function == "translog"
 
 
 def test_switch_linear_and_translog_back_and_forth(model2) -> None:
     with_translog = switch_linear_to_translog(model2)
-    with_linear = switch_translog_to_linear(with_translog)  # ty: ignore[invalid-argument-type]
-    assert model2 == with_linear
-
-
-@pytest.mark.parametrize("to_remove", ["a", ["a"]])
-def test_remove_from_list(to_remove) -> None:
-    list_ = ["a", "b", "c"]
-    calculated = _remove_from_list(list_, to_remove)
-    assert calculated == ["b", "c"]
-    assert list_ == ["a", "b", "c"]
-
-
-@pytest.mark.parametrize("to_remove", ["a", ["a"]])
-def test_remove_from_dict(to_remove) -> None:
-    dict_ = {"a": 1, "b": 2, "c": 3}
-    calculated = _remove_from_dict(dict_, to_remove)
-    assert calculated == {"b": 2, "c": 3}
-    assert dict_ == {"a": 1, "b": 2, "c": 3}
+    assert isinstance(with_translog, ModelSpec)
+    with_linear = switch_translog_to_linear(with_translog)
+    assert isinstance(with_linear, ModelSpec)
+    # Check equivalence of factors
+    for name in model2.factors:
+        orig = model2.factors[name]
+        back = with_linear.factors[name]
+        assert orig.measurements == back.measurements
+        assert orig.normalizations == back.normalizations
+        assert orig.transition_function == back.transition_function
+        assert orig.is_endogenous == back.is_endogenous
+        assert orig.is_correction == back.is_correction
 
 
 def test_reduce_params_via_extract_factors(model2) -> None:
     model = reduce_n_periods(model2, 2)
+    assert isinstance(model, ModelSpec)
 
-    full_index = _get_params_index_from_model_dict(model)  # ty: ignore[invalid-argument-type]
+    full_index = _get_params_index(model)
     params = pd.DataFrame(columns=["value"], index=full_index)
 
-    _, reduced_params = extract_factors("fac3", model, params)  # ty: ignore[invalid-argument-type]
+    result = extract_factors("fac3", model, params)
+    assert not isinstance(result, ModelSpec)
+    _, reduced_params = result
 
     expected_index = pd.MultiIndex.from_tuples(
         [
@@ -150,17 +158,20 @@ def test_reduce_params_via_extract_factors(model2) -> None:
         names=["category", "aug_period", "name1", "name2"],
     )
 
-    assert_index_equal(reduced_params.index, expected_index)  # ty: ignore[invalid-argument-type]
+    assert_index_equal(reduced_params.index, expected_index)
 
 
 def test_extend_params_via_switch_to_translog(model2) -> None:
     model = reduce_n_periods(model2, 2)
-    normal_index = _get_params_index_from_model_dict(model)  # ty: ignore[invalid-argument-type]
+    assert isinstance(model, ModelSpec)
+    normal_index = _get_params_index(model)
     params = pd.DataFrame(columns=["value"], index=normal_index)
 
-    _, extended_params = switch_linear_to_translog(model, params)  # ty: ignore[invalid-argument-type]
+    result = switch_linear_to_translog(model, params)
+    assert not isinstance(result, ModelSpec)
+    _, extended_params = result
 
-    added_index = extended_params.index.difference(normal_index)  # ty: ignore[possibly-missing-attribute]
+    added_index = extended_params.index.difference(normal_index)
 
     expected_added_index = pd.MultiIndex.from_tuples(
         [
@@ -176,13 +187,4 @@ def test_extend_params_via_switch_to_translog(model2) -> None:
 
     assert_index_equal(added_index, expected_added_index)
 
-    assert extended_params.loc[added_index, "value"].unique()[0] == 0.05  # ty: ignore[possibly-missing-attribute]
-
-
-def test_shorten_if_necessary() -> None:
-    list_ = list(range(3))
-    not_necessary = _shorten_if_necessary(list_, 5)
-    assert not_necessary == list_
-
-    necessary = _shorten_if_necessary(list_, 2)
-    assert necessary == [0, 1]
+    assert extended_params.loc[added_index, "value"].unique()[0] == 0.05

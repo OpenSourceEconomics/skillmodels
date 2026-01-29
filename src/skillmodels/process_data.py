@@ -177,7 +177,7 @@ def _add_copies_of_anchoring_outcome(
 ) -> pd.DataFrame:
     df = df.copy()
     for factor in anchoring_info.factors:
-        outcome = anchoring_info.outcomes[factor]  # ty: ignore[invalid-argument-type]
+        outcome = anchoring_info.outcomes[factor]
         df[f"{outcome}_{factor}"] = df[outcome]
     return df
 

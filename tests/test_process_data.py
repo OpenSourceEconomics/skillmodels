@@ -1,12 +1,13 @@
 import io
 import textwrap
+from types import MappingProxyType
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import pytest
 import yaml
-from frozendict import frozendict
+from conftest import model_spec_from_yaml_dict
 from numpy.testing import assert_array_equal as aae
 
 from skillmodels.config import TEST_DATA_DIR
@@ -48,7 +49,7 @@ def test_pre_process_data() -> None:
 def simplest_augmented():
     out = {}
     with (TEST_DATA_DIR / "simplest_augmented_model.yaml").open() as y:
-        out["model"] = yaml.load(y, Loader=yaml.SafeLoader)
+        out["model"] = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
     _df = pd.DataFrame(data=np.arange(15).reshape(3, 5).T, columns=["var", "inv", "of"])
     _df["period"] = [1, 1, 2, 1, 2]
     _df["id"] = [1, 3, 3, 5, 5]
@@ -129,10 +130,10 @@ def test_generate_controls_array() -> None:
         stagemap=(0, 0),
         stages=(0,),
         aug_periods=(0, 1),
-        aug_periods_to_periods=frozendict({0: 0, 1: 1}),
+        aug_periods_to_periods=MappingProxyType({0: 0, 1: 1}),
         aug_stagemap=(0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages=frozendict({0: 0}),
+        aug_stages_to_stages=MappingProxyType({0: 0}),
     )
 
     calculated = _generate_controls_array(data, labels, 2)
@@ -158,10 +159,10 @@ def test_generate_observed_factor_array() -> None:
         stagemap=(0, 0),
         stages=(0,),
         aug_periods=(0, 1),
-        aug_periods_to_periods=frozendict({0: 0, 1: 1}),
+        aug_periods_to_periods=MappingProxyType({0: 0, 1: 1}),
         aug_stagemap=(0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages=frozendict({0: 0}),
+        aug_stages_to_stages=MappingProxyType({0: 0}),
     )
 
     calculated = _generate_observed_factor_array(data, labels, 2)

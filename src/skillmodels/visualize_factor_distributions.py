@@ -161,7 +161,7 @@ def combine_distribution_plots(
 
 def univariate_densities(
     data: pd.DataFrame,
-    model: dict[str, Any] | ModelSpec,
+    model_spec: ModelSpec,
     params: pd.DataFrame,
     period: int,
     factors: list[str] | tuple[str, ...] | None = None,
@@ -184,46 +184,42 @@ def univariate_densities(
 
     Args:
         data: Model estimation input data.
-        model: The model specification, either as a dict or ModelSpec instance.
-            See: :ref:`model_specs`
-        params: DataFrame with estimated parameter values.
+        model_spec: The model specification. See: :ref:`model_specs`
+        params: Estimated parameter values.
         period: Model period for which to plot the distributions for.
-        factors: List of factors for which to plot the densities.
+        factors: Factors for which to plot the densities.
             If None, plot pairwise distributions for all latent factors.
         observed_factors: If True, plot densities of observed factors too.
-        states: List or dictionary with tidy
-            DataFrames with filtered or simulated states or only one DataFrame with
-            filtered or simulated states. If None, retrieve data frame with filtered
-            states using model and data. States are used to estimate the state
-            ranges in each period (if state_ranges are not given explicitly) and to
-            estimate the distribution of the latent factors.
+        states: Filtered or simulated states. Can be a single DataFrame, a list,
+            or a dictionary of DataFrames. If None, retrieve filtered states using
+            model and data. Used to estimate state ranges and factor distributions.
         show_hist: Add histogram to the distplot.
-        show_curve: Add density curve to the displot.
+        show_curve: Add density curve to the distplot.
         show_rug: Add rug to the distplot.
         curve_type: Curve type, 'normal' or 'kde', to add to the distplot.
         colorscale: The color palette used when plotting multiple data. Must be
             a valid attribute of px.colors.qualitative.
         bin_size: Size of the histogram bins.
-        distplot_kwargs: Dictionary with additional keyword
-            arguments passed to ff.create_distplot() to initiate
-            the distplot.
-        layout_kwargs: Dictionary of keyword arguments to update
-            layout of the plot figures. Some essential layout kwargs are:
-            - xaxis_title: label label
+        distplot_kwargs: Additional keyword arguments passed to
+            ff.create_distplot().
+        layout_kwargs: Keyword arguments to update layout of the plot figures.
+            Some essential layout kwargs are:
+            - xaxis_title: label of x axis
             - yaxis_title: label of y axis
             - xaxis_showgrid: display axis grid
             - yaxis_showgrid: display axis grid
             - template: figure background theme
             - showlegend: add legend
+
     Returns:
-        plots_dict: Dictionary with density plots.
+        plots_dict: Density plots keyed by factor name.
 
     """
     if states is None:
-        states = get_filtered_states(model=model, data=data, params=params)[
+        states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
             "anchored_states"
         ]["states"]
-    processed_model = process_model(model)
+    processed_model = process_model(model_spec)
     factors = _get_factors(
         model=processed_model,
         factors=factors,
@@ -272,7 +268,7 @@ def univariate_densities(
 
 def bivariate_density_contours(
     data: pd.DataFrame,
-    model: dict[str, Any] | ModelSpec,
+    model_spec: ModelSpec,
     params: pd.DataFrame,
     period: int,
     factors: list[str] | tuple[str, ...] | None = None,
@@ -295,25 +291,20 @@ def bivariate_density_contours(
 
     Args:
         data: Model estimation input data.
-        model: The model specification, either as a dict or ModelSpec instance.
-            See: :ref:`model_specs`
-        params: DataFrame with estimated parameter values.
+        model_spec: The model specification. See: :ref:`model_specs`
+        params: Estimated parameter values.
         period: Model period for which to plot the distributions for.
-        factors: List of factors for which to plot the densities.
+        factors: Factors for which to plot the densities.
             If None, plot pairwise distributions for all latent factors.
         observed_factors: If True, plot densities of observed factors too.
-        states: List or dictionary with tidy
-            DataFrames with filtered or simulated states or only one DataFrame with
-            filtered or simulated states. If None, retrieve data frame with filtered
-            states using model and data. States are used to estimate the state
-            ranges in each period (if state_ranges are not given explicitly) and to
-            estimate the distribution of the latent factors.
+        states: Filtered or simulated states. Can be a single DataFrame, a list,
+            or a dictionary of DataFrames. If None, retrieve filtered states using
+            model and data. Used to estimate state ranges and factor distributions.
         n_points: Number of grid points used to create the mesh for calculation
             of kernel densities.
-        contour_kwargs: Dictionary with keyword arguments to set
-            contour line properties (such as annotation, colorscale).
-        layout_kwargs: Dictionary with keyword arguments to set
-            figure layout properties.
+        contour_kwargs: Keyword arguments to set contour line properties
+            (such as annotation, colorscale).
+        layout_kwargs: Keyword arguments to set figure layout properties.
 
         The following are various essential keyword arguments defining various features
         of plots. All features can also be changed ex-post via 'update_layout' or
@@ -329,18 +320,17 @@ def bivariate_density_contours(
         lines_colorscale: The color palette used for contour lines when plotting
             multiple scenarios. Must be a valid px.colors.qualitative attribute.
             Default 'D3'.
-        showcolorbar: A boolean variable for displaying color bar.
+        showcolorbar: Whether to display the color bar.
 
     Returns:
-        plots_dict: Dictionary with factor combinations as keys and respective
-            pariwise plots of density contours as values.
+        plots_dict: Pairwise density contour plots keyed by factor combinations.
 
     """
     if states is None:
-        states = get_filtered_states(model=model, data=data, params=params)[
+        states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
             "anchored_states"
         ]["states"]
-    processed_model = process_model(model)
+    processed_model = process_model(model_spec)
     factors = _get_factors(
         model=processed_model,
         factors=factors,
@@ -404,7 +394,7 @@ def bivariate_density_contours(
 
 def bivariate_density_surfaces(
     data: pd.DataFrame,
-    model: dict[str, Any] | ModelSpec,
+    model_spec: ModelSpec,
     params: pd.DataFrame,
     period: int,
     factors: list[str] | tuple[str, ...] | None = None,
@@ -427,19 +417,15 @@ def bivariate_density_surfaces(
 
     Args:
         data: Model estimation input data.
-        model: The model specification, either as a dict or ModelSpec instance.
-            See: :ref:`model_specs`
-        params: DataFrame with estimated parameter values.
+        model_spec: The model specification. See: :ref:`model_specs`
+        params: Estimated parameter values.
         period: Model period for which to plot the distributions for.
-        factors: List of factors for which to plot the densities.
+        factors: Factors for which to plot the densities.
             If None, plot pairwise distributions for all latent factors.
         observed_factors: If True, plot densities of observed factors too.
-        states: List or dictionary with tidy
-            DataFrames with filtered or simulated states or only one DataFrame with
-            filtered or simulated states. If None, retrieve data frame with filtered
-            states using model and data. States are used to estimate the state
-            ranges in each period (if state_ranges are not given explicitly) and to
-            estimate the distribution of the latent factors.
+        states: Filtered or simulated states as a single DataFrame.
+            If None, retrieve filtered states using model and data. Used to estimate
+            state ranges and factor distributions.
         n_points: Number of grid points used to create the mesh for calculation
             of kernel densities.
 
@@ -448,29 +434,27 @@ def bivariate_density_surfaces(
         'update_traces'. Some default figure layout properties (such as background
         theme) are defined if layout_kwargs is None.
 
-        layout_kwargs: Dictionary with keyword arguments to set
-            figure layout properties.
+        layout_kwargs: Keyword arguments to set figure layout properties.
         colorscale: The color scale to use for line legends. Must be a valid
             plotly.express.colors.sequential attribute. Default 'RdBu_r'.
         opacity: Opacity of the surface. Default 0.9.
-        showcolorbar: A boolean variable for displaying the colorbar associated
-            with the surface color scale.
-        showgrids: A boolean variable for showing axes grids.
-        showaxlines: A boolean variable for showing axes lines.
-        showlabels: A boolean variable for displaying axes labels.
+        showcolorbar: Whether to display the colorbar associated with the
+            surface color scale.
+        showgrids: Whether to show axes grids.
+        showaxlines: Whether to show axes lines.
+        showlabels: Whether to display axes labels.
 
     Returns:
-        plots_dict: Dictionary with factor combinations as keys and respective
-            pariwise plots of 3d density plots as values.
+        plots_dict: Pairwise 3d density surface plots keyed by factor combinations.
 
     """
     if states is None:
-        states = get_filtered_states(model=model, data=data, params=params)[
+        states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
             "anchored_states"
         ]["states"]
     elif not isinstance(states, pd.DataFrame):
         raise ValueError("3d plots are only supported if states is a DataFrame")
-    processed_model = process_model(model)
+    processed_model = process_model(model_spec)
     factors = _get_factors(
         model=processed_model,
         factors=factors,

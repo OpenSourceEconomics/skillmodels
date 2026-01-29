@@ -32,17 +32,16 @@ jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
 
 def get_maximization_inputs(
-    model: dict | ModelSpec,
+    model_spec: ModelSpec,
     data: pd.DataFrame,
     split_dataset: int = 1,
 ) -> dict[str, Any]:
     """Create inputs for optimagic's maximize function.
 
     Args:
-        model: The model specification, either as a dict or ModelSpec instance.
-            See: :ref:`model_specs`
-        data: dataset in long format.
-        split_dataset(Int): Controls into how many sclices to split the dataset
+        model_spec: The model specification. See: :ref:`model_specs`
+        data: Dataset in long format.
+        split_dataset: Controls into how many slices to split the dataset
             during the gradient computation.
 
     Returns a dictionary with keys:
@@ -67,7 +66,7 @@ def get_maximization_inputs(
             endogenous factors, we double up the number of periods in order to add
 
     """
-    processed_model = process_model(model)
+    processed_model = process_model(model_spec)
     p_index = get_params_index(
         update_info=processed_model.update_info,
         labels=processed_model.labels,

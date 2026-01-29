@@ -15,22 +15,22 @@ from skillmodels.process_model import process_model
 
 
 def get_filtered_states(
-    model: dict | ModelSpec,
+    model_spec: ModelSpec,
     data: pd.DataFrame,
     params: pd.DataFrame,
 ) -> dict[str, dict[str, Any]]:
     """Compute filtered latent states given data and estimated parameters."""
-    max_inputs = get_maximization_inputs(model=model, data=data)
+    max_inputs = get_maximization_inputs(model_spec=model_spec, data=data)
     params = params.loc[max_inputs["params_template"].index]
     debug_loglike = max_inputs["debug_loglike"]
     debug_data = debug_loglike(params)
     unanchored_states_df = debug_data["filtered_states"]
     unanchored_ranges = debug_data["state_ranges"]
-    processed_model = process_model(model)
+    processed_model = process_model(model_spec)
 
     anchored_states_df = anchor_states_df(
         states_df=unanchored_states_df,
-        model=model,
+        model_spec=model_spec,
         params=params,
         use_aug_period=True,
     )
@@ -54,7 +54,7 @@ def get_filtered_states(
 
 def anchor_states_df(
     states_df: pd.DataFrame,
-    model: dict | ModelSpec,
+    model_spec: ModelSpec,
     params: pd.DataFrame,
     *,
     use_aug_period: bool,
@@ -70,7 +70,7 @@ def anchor_states_df(
     as an internal function that only works with jax objects).
 
     """
-    processed_model = process_model(model)
+    processed_model = process_model(model_spec)
 
     p_index = get_params_index(
         update_info=processed_model.update_info,

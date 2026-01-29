@@ -1,8 +1,7 @@
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 
 import numpy as np
 import pandas as pd
-from frozendict import frozendict
 from pandas.testing import assert_frame_equal as afe
 
 from skillmodels.correlation_heatmap import (
@@ -255,10 +254,10 @@ def test_process_factors() -> None:
             stagemap=(0,),
             stages=(0,),
             aug_periods=(0,),
-            aug_periods_to_periods=frozendict({0: 0}),
+            aug_periods_to_periods=MappingProxyType({0: 0}),
             aug_stagemap=(0,),
             aug_stages=(0,),
-            aug_stages_to_stages=frozendict({0: 0}),
+            aug_stages_to_stages=MappingProxyType({0: 0}),
         ),
     )
     latent_factor = "c"
