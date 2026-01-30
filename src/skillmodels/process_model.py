@@ -3,7 +3,6 @@
 from collections.abc import KeysView, Mapping
 from dataclasses import replace
 from functools import partial
-from types import MappingProxyType
 
 import numpy as np
 import pandas as pd
@@ -244,10 +243,10 @@ def _get_labels(
         stagemap=tuple(stagemap),
         stages=tuple(stages),
         aug_periods=tuple(aug_periods_to_periods.keys()),
-        aug_periods_to_periods=MappingProxyType(aug_periods_to_periods),
+        aug_periods_to_periods=aug_periods_to_periods,
         aug_stagemap=tuple(aug_stagemap),
         aug_stages=tuple(sorted(int(v) for v in np.unique(aug_stagemap))),
-        aug_stages_to_stages=MappingProxyType(aug_stages_to_stages),
+        aug_stages_to_stages=aug_stages_to_stages,
     )
 
 
@@ -339,7 +338,7 @@ def _augment_periods_for_endogenous_factors(
         # Insert empty elements into normalizations when we do not have those.
         aug_normalizations = None
         if fspec.normalizations is not None:
-            aug_norm_parts: dict[str, tuple[MappingProxyType[str, float], ...]] = {}
+            aug_norm_parts: dict[str, tuple[Mapping[str, float], ...]] = {}
             for norm_type in ("loadings", "intercepts"):
                 norms = getattr(fspec.normalizations, norm_type)
                 if len(norms) != dimensions.n_periods:
@@ -348,7 +347,7 @@ def _augment_periods_for_endogenous_factors(
                         f"got {norms} for {fac}['normalizations']['{norm_type}']"
                     )
                 aug_norm_parts[norm_type] = tuple(
-                    MappingProxyType({}) if aug_p % 2 == insert_at_modulo else norms[p]
+                    {} if aug_p % 2 == insert_at_modulo else norms[p]
                     for aug_p, p in labels.aug_periods_to_periods.items()
                 )
             aug_normalizations = Normalizations(
@@ -364,7 +363,7 @@ def _augment_periods_for_endogenous_factors(
             transition_function=fspec.transition_function,
         )
 
-    return model_spec._replace(factors=MappingProxyType(new_factors))
+    return model_spec._replace(factors=new_factors)
 
 
 def _get_transition_info(model_spec: ModelSpec, labels: Labels) -> TransitionInfo:
@@ -428,13 +427,9 @@ def _get_transition_info(model_spec: ModelSpec, labels: Labels) -> TransitionInf
 
     return TransitionInfo(
         func=transition_function,
-        param_names=MappingProxyType(
-            dict(zip(latent_factors, param_names, strict=False))
-        ),
-        individual_functions=MappingProxyType(individual_functions),
-        function_names=MappingProxyType(
-            dict(zip(latent_factors, function_names, strict=False))
-        ),
+        param_names=dict(zip(latent_factors, param_names, strict=False)),
+        individual_functions=individual_functions,
+        function_names=dict(zip(latent_factors, function_names, strict=False)),
     )
 
 
@@ -455,18 +450,16 @@ def _get_endogenous_factors_info(
 
     return EndogenousFactorsInfo(
         has_endogenous_factors=has_endogenous_factors,
-        aug_periods_to_aug_period_meas_types=MappingProxyType(
-            _get_aug_periods_to_aug_period_meas_types(
-                aug_periods=labels.aug_periods_to_periods.keys(),
-                has_endogenous_factors=has_endogenous_factors,
-            )
+        aug_periods_to_aug_period_meas_types=_get_aug_periods_to_aug_period_meas_types(
+            aug_periods=labels.aug_periods_to_periods.keys(),
+            has_endogenous_factors=has_endogenous_factors,
         ),
         bounds_distance=bounds_distance,
         aug_periods_from_period=partial(
             _aug_periods_from_period,
             aug_periods_to_periods=labels.aug_periods_to_periods,
         ),
-        factor_info=MappingProxyType(factor_info),
+        factor_info=factor_info,
     )
 
 

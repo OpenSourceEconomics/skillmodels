@@ -1,4 +1,4 @@
-from types import MappingProxyType, SimpleNamespace
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -254,10 +254,10 @@ def test_process_factors() -> None:
             stagemap=(0,),
             stages=(0,),
             aug_periods=(0,),
-            aug_periods_to_periods=MappingProxyType({0: 0}),
+            aug_periods_to_periods={0: 0},
             aug_stagemap=(0,),
             aug_stages=(0,),
-            aug_stages_to_stages=MappingProxyType({0: 0}),
+            aug_stages_to_stages={0: 0},
         ),
     )
     latent_factor = "c"

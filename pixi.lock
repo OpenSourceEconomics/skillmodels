@@ -2869,7 +2869,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/65/44/bb509c3d2c0b5a87e7a5af1d5917a402a32ff026f777a6d7cb6990746cbb/tabcompleter-1.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/74/18/8dd4fe6df1fd66f3e83b4798eddb1d8482d9d9b105f25099b76703402ebb/ty-0.0.11-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/e7/c1/56ef16bf5dcd255155cc736d276efa6ae0a5c26fd685e28f0412a4013c01/types_pytz-2025.2.0.20251108-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/bd/e0/1eed384f02555dde685fff1a1ac805c1c7dcb6dd019c916fe659b1c1f9ec/types_pyyaml-6.0.12.20250915-py3-none-any.whl
       - pypi: ./
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/_openmp_mutex-4.5-7_kmp_llvm.conda
@@ -3098,7 +3097,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/65/44/bb509c3d2c0b5a87e7a5af1d5917a402a32ff026f777a6d7cb6990746cbb/tabcompleter-1.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ad/01/3a563dba8b1255e474c35e1c3810b7589e81ae8c41df401b6a37c8e2cde9/ty-0.0.11-py3-none-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/e7/c1/56ef16bf5dcd255155cc736d276efa6ae0a5c26fd685e28f0412a4013c01/types_pytz-2025.2.0.20251108-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/bd/e0/1eed384f02555dde685fff1a1ac805c1c7dcb6dd019c916fe659b1c1f9ec/types_pyyaml-6.0.12.20250915-py3-none-any.whl
       - pypi: ./
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/win-64/_openmp_mutex-4.5-2_gnu.conda
@@ -3326,7 +3324,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/65/44/bb509c3d2c0b5a87e7a5af1d5917a402a32ff026f777a6d7cb6990746cbb/tabcompleter-1.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/04/5a5dfd0aec0ea99ead1e824ee6e347fb623c464da7886aa1e3660fb0f36c/ty-0.0.11-py3-none-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/e7/c1/56ef16bf5dcd255155cc736d276efa6ae0a5c26fd685e28f0412a4013c01/types_pytz-2025.2.0.20251108-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/bd/e0/1eed384f02555dde685fff1a1ac805c1c7dcb6dd019c916fe659b1c1f9ec/types_pyyaml-6.0.12.20250915-py3-none-any.whl
       - pypi: ./
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2
@@ -9168,8 +9165,8 @@ packages:
   timestamp: 1753199211006
 - pypi: ./
   name: skillmodels
-  version: 0.0.24.dev261+g5012a8bbc.d20260129
-  sha256: 9293ca106ac1c10ef614af441b7e40cb7282ea24b26d4b5775398f556e5e2dc4
+  version: 0.0.24.dev262+g7e7784e59.d20260130
+  sha256: d7b8e677f24dc24e6a4c7b146f578efbc96c4494d1242caaf376ae8a7453f5f4
   requires_dist:
   - dags
   - jax>=0.8
@@ -9556,11 +9553,6 @@ packages:
   name: types-pytz
   version: 2025.2.0.20251108
   sha256: 0f1c9792cab4eb0e46c52f8845c8f77cf1e313cb3d68bf826aa867fe4717d91c
-  requires_python: '>=3.9'
-- pypi: https://files.pythonhosted.org/packages/bd/e0/1eed384f02555dde685fff1a1ac805c1c7dcb6dd019c916fe659b1c1f9ec/types_pyyaml-6.0.12.20250915-py3-none-any.whl
-  name: types-pyyaml
-  version: 6.0.12.20250915
-  sha256: e7d4d9e064e89a3b3cae120b4990cd370874d2bf12fa5f46c97018dd5d3c9ab6
   requires_python: '>=3.9'
 - conda: https://conda.anaconda.org/conda-forge/noarch/typing-extensions-4.15.0-h396c80c_0.conda
   sha256: 7c2df5721c742c2a47b2c8f960e718c930031663ac1174da67c1ed5999f7938c

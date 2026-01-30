@@ -5,8 +5,6 @@ Models are specified using Python dataclasses.
 ## Defining a Model
 
 ```python
-from types import MappingProxyType
-
 from skillmodels import (
     AnchoringSpec,
     EstimationOptionsSpec,
@@ -24,10 +22,10 @@ fac1 = FactorSpec(
     ),
     normalizations=Normalizations(
         loadings=(
-            MappingProxyType({"y1": 1.0}),  # fix loading of y1 to 1 in period 0
-            MappingProxyType({}),
+            {"y1": 1.0},  # fix loading of y1 to 1 in period 0
+            {},
         ),
-        intercepts=(MappingProxyType({}), MappingProxyType({})),
+        intercepts=({}, {}),
     ),
     transition_function="log_ces",
 )
@@ -36,7 +34,7 @@ fac1 = FactorSpec(
 model = ModelSpec(
     factors={"fac1": fac1, "fac2": fac2, "fac3": fac3},
     anchoring=AnchoringSpec(
-        outcomes=MappingProxyType({"fac1": "Q1"}),
+        outcomes={"fac1": "Q1"},
         free_loadings=True,
     ),
     controls=("x1", "x2"),
@@ -45,35 +43,12 @@ model = ModelSpec(
 )
 ```
 
-For a more ergonomic approach, use `ModelSpec.from_dict()` which accepts plain Python
-lists and dicts:
-
-```python
-from skillmodels import ModelSpec
-
-model = ModelSpec.from_dict({
-    "factors": {
-        "fac1": {
-            "measurements": [["y1", "y2", "y3"], ["y1", "y2", "y3"]],
-            "normalizations": {
-                "loadings": [{"y1": 1.0}, {}],
-                "intercepts": [{}, {}],
-            },
-            "transition_function": "log_ces",
-        },
-    },
-    "anchoring": {"outcomes": {"fac1": "Q1"}, "free_loadings": True},
-    "controls": ["x1", "x2"],
-    "stagemap": [0, 0, 1, 1, 2, 2, 3],
-})
-```
-
 ## Factor Specification
 
 Each factor requires:
 
-- **measurements**: A nested list with measurement variable names for each period. Empty
-  lists indicate no measurements in that period.
+- **measurements**: A nested tuple with measurement variable names for each period.
+  Empty tuples indicate no measurements in that period.
 - **transition_function**: Name of a transition function (`linear`, `log_ces`,
   `constant`, `translog`) or a custom function.
 - **normalizations** (optional): Fixed values for loadings and intercepts to identify
@@ -94,7 +69,7 @@ Anchoring links latent factors to observable outcomes. Options:
 
 ## Controls
 
-A list of variable names used as control variables in measurement equations. A constant
+A tuple of variable names used as control variables in measurement equations. A constant
 is always included automatically.
 
 ## Stagemap
@@ -102,7 +77,7 @@ is always included automatically.
 Maps periods to development stages. Has one entry less than the number of periods.
 Parameters are constrained to be equal within a stage.
 
-Example: `[0, 0, 1, 1]` means periods 0-1 share stage 0 parameters, and periods 2-3
+Example: `(0, 0, 1, 1)` means periods 0-1 share stage 0 parameters, and periods 2-3
 share stage 1 parameters.
 
 ## Observed Factors
@@ -113,7 +88,7 @@ transition equations or multiple measurements.
 ```python
 model = ModelSpec(
     factors={...},
-    observed_factors=["income", "treatment"],
+    observed_factors=("income", "treatment"),
 )
 ```
 

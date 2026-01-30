@@ -6,10 +6,12 @@ in a type-safe, immutable manner. All collections use immutable types
 modified.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Any, Self
+
+from skillmodels.types import _make_immutable, ensure_containers_are_immutable
 
 
 @dataclass(frozen=True)
@@ -24,8 +26,20 @@ class Normalizations:
 
     """
 
-    loadings: tuple[MappingProxyType[str, float], ...]
-    intercepts: tuple[MappingProxyType[str, float], ...]
+    loadings: tuple[Mapping[str, float], ...]
+    intercepts: tuple[Mapping[str, float], ...]
+
+    def __post_init__(self) -> None:  # noqa: D105
+        object.__setattr__(
+            self,
+            "loadings",
+            tuple(_make_immutable(dict(m)) for m in self.loadings),
+        )
+        object.__setattr__(
+            self,
+            "intercepts",
+            tuple(_make_immutable(dict(m)) for m in self.intercepts),
+        )
 
     def to_dict(self) -> dict:
         """Convert to dictionary for backwards compatibility."""
@@ -119,10 +133,6 @@ class EstimationOptionsSpec:
         return result
 
 
-def _default_empty_mapping_proxy() -> MappingProxyType[str, str]:
-    return MappingProxyType({})
-
-
 @dataclass(frozen=True)
 class AnchoringSpec:
     """Specification for anchoring latent factors to outcomes.
@@ -136,13 +146,16 @@ class AnchoringSpec:
 
     """
 
-    outcomes: MappingProxyType[str, str] = field(
-        default_factory=_default_empty_mapping_proxy,
-    )
+    outcomes: Mapping[str, str] = field(default_factory=dict)
     free_controls: bool = False
     free_constant: bool = False
     free_loadings: bool = False
     ignore_constant_when_anchoring: bool = False
+
+    def __post_init__(self) -> None:  # noqa: D105
+        object.__setattr__(
+            self, "outcomes", ensure_containers_are_immutable(self.outcomes)
+        )
 
     def to_dict(self) -> dict:
         """Convert to dictionary for backwards compatibility."""
@@ -181,7 +194,7 @@ class ModelSpec:
 
     def __init__(
         self,
-        factors: dict[str, FactorSpec] | MappingProxyType[str, FactorSpec],
+        factors: Mapping[str, FactorSpec],
         observed_factors: tuple[str, ...] = (),
         controls: tuple[str, ...] = (),
         stagemap: tuple[int, ...] | None = None,
@@ -189,10 +202,7 @@ class ModelSpec:
         estimation_options: EstimationOptionsSpec | None = None,
     ) -> None:
         """Create ModelSpec, wrapping factors dict in MappingProxyType."""
-        if isinstance(factors, MappingProxyType):
-            object.__setattr__(self, "_factors", factors)
-        else:
-            object.__setattr__(self, "_factors", MappingProxyType(factors))
+        object.__setattr__(self, "_factors", ensure_containers_are_immutable(factors))
         object.__setattr__(self, "observed_factors", observed_factors)
         object.__setattr__(self, "controls", controls)
         object.__setattr__(self, "stagemap", stagemap)
@@ -220,8 +230,8 @@ class ModelSpec:
                     n_periods = len(nd.get("loadings", []))
                     nd["intercepts"] = [{} for _ in range(n_periods)]
                 normalizations = Normalizations(
-                    loadings=tuple(MappingProxyType(x) for x in nd["loadings"]),
-                    intercepts=tuple(MappingProxyType(x) for x in nd["intercepts"]),
+                    loadings=tuple(nd["loadings"]),
+                    intercepts=tuple(nd["intercepts"]),
                 )
             factors[name] = FactorSpec(
                 measurements=tuple(tuple(m) for m in spec["measurements"]),
@@ -235,7 +245,7 @@ class ModelSpec:
         if "anchoring" in d:
             ad = d["anchoring"]
             anchoring = AnchoringSpec(
-                outcomes=MappingProxyType(ad.get("outcomes", {})),
+                outcomes=ad.get("outcomes", {}),
                 free_controls=ad.get("free_controls", False),
                 free_constant=ad.get("free_constant", False),
                 free_loadings=ad.get("free_loadings", False),
@@ -336,7 +346,7 @@ class ModelSpec:
             name: spec.with_transition_function(transition_functions[name])
             for name, spec in self.factors.items()
         }
-        return self._replace(factors=MappingProxyType(new_factors))
+        return self._replace(factors=new_factors)
 
     def with_added_factor(
         self,
@@ -355,7 +365,7 @@ class ModelSpec:
         """
         new_factors = dict(self.factors)
         new_factors[name] = spec
-        return self._replace(factors=MappingProxyType(new_factors))
+        return self._replace(factors=new_factors)
 
     def with_added_observed_factors(
         self,

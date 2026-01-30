@@ -1,6 +1,6 @@
 """Dataclass definitions for skillmodels internal data structures."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
 from types import MappingProxyType
@@ -8,6 +8,31 @@ from typing import NewType
 
 import pandas as pd
 from jax import Array
+
+
+def _make_immutable(value: object) -> object:
+    """Recursively convert mutable containers to immutable equivalents.
+
+    - dict → MappingProxyType
+    - list → tuple
+
+    Other types are returned unchanged.
+    """
+    if isinstance(value, dict):
+        return MappingProxyType({k: _make_immutable(v) for k, v in value.items()})
+    if isinstance(value, list):
+        return tuple(_make_immutable(v) for v in value)
+    return value
+
+
+def ensure_containers_are_immutable(
+    value: Mapping,
+) -> MappingProxyType:
+    """Convert a Mapping to a MappingProxyType, leaving existing proxies unchanged."""
+    if isinstance(value, MappingProxyType):
+        return value
+    return MappingProxyType(dict(value))
+
 
 # NewType definitions for domain safety
 # These prevent accidentally mixing up semantically different int values
@@ -66,11 +91,23 @@ class Labels:
     stagemap: tuple[int, ...]
     stages: tuple[int, ...]
     aug_periods: tuple[int, ...]
-    aug_periods_to_periods: MappingProxyType[int, int]
+    aug_periods_to_periods: Mapping[int, int]
     aug_stagemap: tuple[int, ...]
     aug_stages: tuple[int, ...]
-    aug_stages_to_stages: MappingProxyType[int, int]
+    aug_stages_to_stages: Mapping[int, int]
     transition_names: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:  # noqa: D105
+        object.__setattr__(
+            self,
+            "aug_periods_to_periods",
+            ensure_containers_are_immutable(self.aug_periods_to_periods),
+        )
+        object.__setattr__(
+            self,
+            "aug_stages_to_stages",
+            ensure_containers_are_immutable(self.aug_stages_to_stages),
+        )
 
     @property
     def all_factors(self) -> tuple[str, ...]:
@@ -83,19 +120,24 @@ class Anchoring:
     """Information about how latent factors are anchored to observed outcomes."""
 
     anchoring: bool
-    outcomes: MappingProxyType[str, str]
+    outcomes: Mapping[str, str]
     factors: tuple[str, ...]
     free_controls: bool
     free_constant: bool
     free_loadings: bool
     ignore_constant_when_anchoring: bool
 
+    def __post_init__(self) -> None:  # noqa: D105
+        object.__setattr__(
+            self, "outcomes", ensure_containers_are_immutable(self.outcomes)
+        )
+
     @classmethod
     def disabled(cls) -> Anchoring:
         """Create an Anchoring config with anchoring disabled."""
         return cls(
             anchoring=False,
-            outcomes=MappingProxyType({}),
+            outcomes={},
             factors=(),
             free_controls=False,
             free_constant=False,
@@ -128,7 +170,7 @@ class Anchoring:
         """
         return cls(
             anchoring=True,
-            outcomes=MappingProxyType(outcomes),
+            outcomes=outcomes,
             factors=tuple(outcomes.keys()),
             free_controls=free_controls,
             free_constant=free_constant,
@@ -155,9 +197,24 @@ class TransitionInfo:
     """Information about transition functions."""
 
     func: Callable
-    param_names: MappingProxyType[str, list[str]]
-    individual_functions: MappingProxyType[str, Callable]
-    function_names: MappingProxyType[str, str]
+    param_names: Mapping[str, list[str]]
+    individual_functions: Mapping[str, Callable]
+    function_names: Mapping[str, str]
+
+    def __post_init__(self) -> None:  # noqa: D105
+        object.__setattr__(
+            self, "param_names", ensure_containers_are_immutable(self.param_names)
+        )
+        object.__setattr__(
+            self,
+            "individual_functions",
+            ensure_containers_are_immutable(self.individual_functions),
+        )
+        object.__setattr__(
+            self,
+            "function_names",
+            ensure_containers_are_immutable(self.function_names),
+        )
 
 
 @dataclass(frozen=True)
@@ -213,10 +270,22 @@ class EndogenousFactorsInfo:
     """Information about endogenous factors in the model."""
 
     has_endogenous_factors: bool
-    aug_periods_to_aug_period_meas_types: MappingProxyType[int, MeasurementType]
+    aug_periods_to_aug_period_meas_types: Mapping[int, MeasurementType]
     bounds_distance: float
     aug_periods_from_period: Callable[[int], list[int]]
-    factor_info: MappingProxyType[str, FactorInfo]
+    factor_info: Mapping[str, FactorInfo]
+
+    def __post_init__(self) -> None:  # noqa: D105
+        object.__setattr__(
+            self,
+            "aug_periods_to_aug_period_meas_types",
+            ensure_containers_are_immutable(self.aug_periods_to_aug_period_meas_types),
+        )
+        object.__setattr__(
+            self,
+            "factor_info",
+            ensure_containers_are_immutable(self.factor_info),
+        )
 
 
 @dataclass(frozen=True)

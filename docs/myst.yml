@@ -22,6 +22,8 @@ project:
     - python
   github: https://github.com/OpenSourceEconomics/skillmodels
   jupyter: true
+  execute:
+    enabled: true
   toc:
     - file: index.md
     - title: Getting Started

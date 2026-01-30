@@ -1,14 +1,14 @@
 import inspect
+from dataclasses import replace
 
 import pandas as pd
 import pytest
-import yaml
-from conftest import model_spec_from_yaml_dict
 from pandas.testing import assert_frame_equal
 
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.model_spec import FactorSpec
 from skillmodels.process_model import get_has_endogenous_factors, process_model
+from skillmodels.test_data.model2 import MODEL2
 from skillmodels.types import TransitionInfo
 
 # ======================================================================================
@@ -18,8 +18,7 @@ from skillmodels.types import TransitionInfo
 
 @pytest.fixture
 def model2():
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        return model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
+    return MODEL2
 
 
 def test_has_endogenous_factors(model2) -> None:
@@ -124,14 +123,18 @@ def test_normalizations(model2) -> None:
 # ======================================================================================
 
 
+def _make_fac3_endogenous(model):
+    """Return a new model with fac3 set as endogenous."""
+    fac3 = model.factors["fac3"]
+    new_fac3 = replace(fac3, is_endogenous=True)
+    new_factors = dict(model.factors) | {"fac3": new_fac3}
+    return model._replace(factors=new_factors)
+
+
 def test_anchoring_and_endogenous_factors_work_together() -> None:
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
-    # Set fac3 to be endogenous
-    model_dict["factors"]["fac3"]["is_endogenous"] = True
-    del model_dict["stagemap"]
+    model = _make_fac3_endogenous(MODEL2)._replace(stagemap=None)
     # Should not raise - anchoring and endogenous factors now work together
-    result = process_model(model_spec_from_yaml_dict(model_dict))
+    result = process_model(model)
     # Verify anchoring is enabled
     assert result.anchoring.anchoring
     assert result.anchoring.factors == ("fac1",)
@@ -148,39 +151,32 @@ def test_anchoring_and_endogenous_factors_work_together() -> None:
 
 
 def test_stagemap_with_endogenous_factors_wrong_labels() -> None:
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
-    # Set fac3 to be endogenous
-    model_dict["factors"]["fac3"]["is_endogenous"] = True
-    model_dict["stagemap"] = [0, 0, 1, 1, 2, 2, 4]
-    del model_dict["anchoring"]
+    model = _make_fac3_endogenous(MODEL2)._replace(
+        stagemap=(0, 0, 1, 1, 2, 2, 4),
+        anchoring=None,
+    )
     with pytest.raises(ValueError, match="Invalid stage map:"):
-        process_model(model_spec_from_yaml_dict(model_dict))
+        process_model(model)
 
 
 def test_stagemap_with_endogenous_factors() -> None:
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
-    # Set fac3 to be endogenous
-    model_dict["factors"]["fac3"]["is_endogenous"] = True
-    stagemap = [0, 0, 1, 1, 2, 2, 3]
-    model_dict["stagemap"] = stagemap
-    del model_dict["anchoring"]
-    processed = process_model(model_spec_from_yaml_dict(model_dict))
-    assert processed.labels.stagemap == tuple(stagemap)
+    stagemap = (0, 0, 1, 1, 2, 2, 3)
+    model = _make_fac3_endogenous(MODEL2)._replace(
+        stagemap=stagemap,
+        anchoring=None,
+    )
+    processed = process_model(model)
+    assert processed.labels.stagemap == stagemap
     assert processed.labels.stages == (0, 1, 2, 3)
     assert processed.labels.aug_stagemap == (0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 7)
 
 
 @pytest.fixture
 def model2_inv():
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
-    # Set fac3 to be endogenous
-    model_dict["factors"]["fac3"]["is_endogenous"] = True
-    del model_dict["stagemap"]
-    del model_dict["anchoring"]
-    return model_spec_from_yaml_dict(model_dict)
+    return _make_fac3_endogenous(MODEL2)._replace(
+        stagemap=None,
+        anchoring=None,
+    )
 
 
 def test_with_endog_has_endogenous_factors(model2_inv) -> None:

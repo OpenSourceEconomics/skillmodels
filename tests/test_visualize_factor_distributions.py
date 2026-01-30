@@ -1,14 +1,13 @@
 from pathlib import Path
 
 import pandas as pd
-import yaml
-from conftest import model_spec_from_yaml_dict
 
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.filtered_states import get_filtered_states
 from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.process_model import process_model
 from skillmodels.simulate_data import simulate_dataset
+from skillmodels.test_data.model2 import MODEL2
 from skillmodels.visualize_factor_distributions import (
     bivariate_density_contours,
     bivariate_density_surfaces,
@@ -20,8 +19,7 @@ REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 
 def test_visualize_factor_distributions_runs_with_filtered_states() -> None:
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
+    model = MODEL2
 
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
@@ -57,8 +55,7 @@ def test_visualize_factor_distributions_runs_with_filtered_states() -> None:
 
 
 def test_visualize_factor_distributions_runs_with_simulated_states() -> None:
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
+    model = MODEL2
 
     data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])
@@ -100,8 +97,7 @@ def test_visualize_factor_distributions_with_period_indexed_states() -> None:
     This mimics the scenario where states come from a downstream task that has
     already mapped aug_period to period and dropped the aug_period column.
     """
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
+    model = MODEL2
 
     data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])
@@ -154,8 +150,7 @@ def test_visualize_factor_distributions_with_both_aug_period_and_period() -> Non
     This mimics the scenario where states have aug_period as a column and period
     in the index (or both as columns).
     """
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
+    model = MODEL2
 
     data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])

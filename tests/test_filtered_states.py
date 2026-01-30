@@ -3,20 +3,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
-from conftest import model_spec_from_yaml_dict
 
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.filtered_states import get_filtered_states
 from skillmodels.maximization_inputs import get_maximization_inputs
+from skillmodels.test_data.model2 import MODEL2
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 
 @pytest.fixture
 def model2():
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        return model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
+    return MODEL2
 
 
 @pytest.fixture

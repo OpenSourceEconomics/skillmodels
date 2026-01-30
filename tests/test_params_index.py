@@ -1,9 +1,5 @@
-from types import MappingProxyType
-
 import pandas as pd
 import pytest
-import yaml
-from conftest import model_spec_from_yaml_dict
 
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.params_index import (
@@ -18,14 +14,13 @@ from skillmodels.params_index import (
     initial_mean_index_tuples,
 )
 from skillmodels.process_model import process_model
+from skillmodels.test_data.model2 import MODEL2
 from skillmodels.types import TransitionInfo
 
 
 @pytest.fixture
 def model2_inputs():
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model = model_spec_from_yaml_dict(yaml.load(y, Loader=yaml.SafeLoader))
-    processed = process_model(model)
+    processed = process_model(MODEL2)
 
     return {
         "update_info": processed.update_info,
@@ -186,9 +181,9 @@ def test_trans_coeffs_index_tuples_no_endogenous_factors() -> None:
     }
     trans_info = TransitionInfo(
         func=lambda x: x,  # dummy function
-        param_names=MappingProxyType(param_names),
-        individual_functions=MappingProxyType({}),
-        function_names=MappingProxyType({}),
+        param_names=param_names,
+        individual_functions={},
+        function_names={},
     )
 
     expected = [
@@ -229,9 +224,9 @@ def test_trans_coeffs_index_tuples_has_endogenous_factors() -> None:
     }
     trans_info = TransitionInfo(
         func=lambda x: x,  # dummy function
-        param_names=MappingProxyType(param_names),
-        individual_functions=MappingProxyType({}),
-        function_names=MappingProxyType({}),
+        param_names=param_names,
+        individual_functions={},
+        function_names={},
     )
 
     expected = [

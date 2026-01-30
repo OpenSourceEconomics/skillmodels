@@ -2,7 +2,6 @@
 
 import warnings
 from dataclasses import replace
-from types import MappingProxyType
 
 import numpy as np
 import pandas as pd
@@ -118,14 +117,12 @@ def remove_factors(
             k: v for k, v in new_anchoring.outcomes.items() if k not in factors
         }
         if new_outcomes:
-            new_anchoring = replace(
-                new_anchoring, outcomes=MappingProxyType(new_outcomes)
-            )
+            new_anchoring = replace(new_anchoring, outcomes=new_outcomes)
         else:
             new_anchoring = None
 
     out = model_spec._replace(
-        factors=MappingProxyType(new_factors),
+        factors=new_factors,
         anchoring=new_anchoring,
     )
 
@@ -184,11 +181,11 @@ def remove_measurements(
         new_normalizations = fspec.normalizations
         if new_normalizations is not None:
             new_loadings = tuple(
-                MappingProxyType({k: v for k, v in d.items() if k not in measurements})
+                {k: v for k, v in d.items() if k not in measurements}
                 for d in new_normalizations.loadings
             )
             new_intercepts = tuple(
-                MappingProxyType({k: v for k, v in d.items() if k not in measurements})
+                {k: v for k, v in d.items() if k not in measurements}
                 for d in new_normalizations.intercepts
             )
             if new_loadings != new_normalizations.loadings or (
@@ -208,7 +205,7 @@ def remove_measurements(
             fspec, measurements=new_meas, normalizations=new_normalizations
         )
 
-    out = model_spec._replace(factors=MappingProxyType(new_factors))
+    out = model_spec._replace(factors=new_factors)
 
     if params is not None:
         # This likely won't work if we have endogenous factors.
@@ -274,7 +271,7 @@ def switch_translog_to_linear(
             new_factors[name] = fspec.with_transition_function("linear")
         else:
             new_factors[name] = fspec
-    out = model_spec._replace(factors=MappingProxyType(new_factors))
+    out = model_spec._replace(factors=new_factors)
 
     if params is not None:
         # This likely won't work if we have endogenous factors.
@@ -310,7 +307,7 @@ def switch_linear_to_translog(
             new_factors[name] = fspec.with_transition_function("translog")
         else:
             new_factors[name] = fspec
-    out = model_spec._replace(factors=MappingProxyType(new_factors))
+    out = model_spec._replace(factors=new_factors)
 
     if params is not None:
         out_params = _extend_params(params=params, model_spec=out, fill_value=0.05)
@@ -354,7 +351,7 @@ def reduce_n_periods(
         new_stagemap = new_stagemap[: new_n_periods - 1]
 
     out = model_spec._replace(
-        factors=MappingProxyType(new_factors),
+        factors=new_factors,
         stagemap=new_stagemap,
     )
 

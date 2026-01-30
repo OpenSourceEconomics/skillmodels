@@ -138,7 +138,6 @@ mem-cuda = "pytest -x -s --pdb --memray --fail-on-increase tests/test_likelihood
 matplotlib = "*"   # required because of pandas
 pandas-stubs = "*"
 ty = "*"
-types-PyYAML = "*"
 types-pytz = "*"
 
 [tool.pixi.feature.ty.tasks]

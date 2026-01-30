@@ -1,11 +1,10 @@
 from pathlib import Path
 
 import pandas as pd
-import yaml
-from conftest import model_spec_from_yaml_dict
 
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.maximization_inputs import get_maximization_inputs
+from skillmodels.test_data.model2 import MODEL2
 from skillmodels.visualize_transition_equations import (
     combine_transition_plots,
     get_transition_plots,
@@ -15,11 +14,7 @@ REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 
 def test_visualize_transition_equations_runs() -> None:
-    with (TEST_DATA_DIR / "model2.yaml").open() as y:
-        model_dict = yaml.load(y, Loader=yaml.SafeLoader)
-
-    model_dict["observed_factors"] = ["ob1"]
-    model = model_spec_from_yaml_dict(model_dict)
+    model = MODEL2.with_added_observed_factors("ob1")
 
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
