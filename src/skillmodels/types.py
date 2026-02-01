@@ -1,5 +1,6 @@
 """Dataclass definitions for skillmodels internal data structures."""
 
+import copyreg
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -32,6 +33,13 @@ def ensure_containers_are_immutable(
     if isinstance(value, MappingProxyType):
         return value
     return MappingProxyType(dict(value))
+
+
+def _reduce_mapping_proxy(mp: MappingProxyType) -> tuple:
+    return ensure_containers_are_immutable, (dict(mp),)
+
+
+copyreg.pickle(MappingProxyType, _reduce_mapping_proxy)
 
 
 # NewType definitions for domain safety
