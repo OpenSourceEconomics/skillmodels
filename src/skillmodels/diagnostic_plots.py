@@ -8,7 +8,6 @@ import plotly.graph_objects as go
 
 from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.model_spec import ModelSpec
-from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
 
 
@@ -41,10 +40,10 @@ def plot_residual_boxplots(
 
     """
     max_inputs = get_maximization_inputs(model_spec=model_spec, data=data)
-    debug_data = max_inputs["debug_loglike"](params)
+    # debug_loglike already returns processed debug data
+    processed_debug = max_inputs["debug_loglike"](params)
 
     processed_model = process_model(model_spec)
-    processed_debug = process_debug_data(debug_data, processed_model)
 
     residuals_df = processed_debug["residuals"]
     update_info = processed_model.update_info
@@ -154,10 +153,10 @@ def plot_likelihood_contributions(
 
     """
     max_inputs = get_maximization_inputs(model_spec=model_spec, data=data)
-    debug_data = max_inputs["debug_loglike"](params)
+    # debug_loglike already returns processed debug data
+    processed_debug = max_inputs["debug_loglike"](params)
 
     processed_model = process_model(model_spec)
-    processed_debug = process_debug_data(debug_data, processed_model)
 
     contributions_df = processed_debug["all_contributions"]
     update_info = processed_model.update_info
