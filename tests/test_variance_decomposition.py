@@ -22,7 +22,7 @@ def setup_variance_decomposition():
             "fac1": [0.1, 0.1, 0.1, 0.2],
             "fac2": [0.1, 0.1, 0.1, 0.1],
             "fac3": [0.2, 0.2, 0.2, 0.4],
-            "period": [0, 0, 0, 0],
+            "aug_period": [0, 0, 0, 0],
             "id": [0, 1, 2, 3],
         }
     )
@@ -33,7 +33,7 @@ def setup_variance_decomposition():
     # y3: loading=2 on fac3, meas_sd=0.1
 
     loadings_data = []
-    for period in [0]:
+    for aug_period in [0]:
         for meas, factor, loading in [
             ("y1", "fac1", 1.0),
             ("y1", "fac2", 0.0),
@@ -45,18 +45,18 @@ def setup_variance_decomposition():
             ("y3", "fac2", 0.0),
             ("y3", "fac3", 2.0),
         ]:
-            loadings_data.append((period, meas, factor, loading))
+            loadings_data.append((aug_period, meas, factor, loading))
 
     loadings_df = pd.DataFrame(
-        loadings_data, columns=["period", "name1", "name2", "value"]
+        loadings_data, columns=["aug_period", "name1", "name2", "value"]
     )
-    loadings_df = loadings_df.set_index(["period", "name1", "name2"])
+    loadings_df = loadings_df.set_index(["aug_period", "name1", "name2"])
 
     meas_sds_data = [(0, "y1", "-", 0.05), (0, "y2", "-", 1.1), (0, "y3", "-", 0.1)]
     meas_sds_df = pd.DataFrame(
-        meas_sds_data, columns=["period", "name1", "name2", "value"]
+        meas_sds_data, columns=["aug_period", "name1", "name2", "value"]
     )
-    meas_sds_df = meas_sds_df.set_index(["period", "name1", "name2"])
+    meas_sds_df = meas_sds_df.set_index(["aug_period", "name1", "name2"])
 
     params = pd.concat([loadings_df, meas_sds_df], keys=["loadings", "meas_sds"])
 
@@ -74,7 +74,7 @@ def expected_variance_decomposition():
     """
     index = pd.MultiIndex.from_tuples(
         [(0, "y1", "fac1"), (0, "y2", "fac2"), (0, "y3", "fac3")],
-        names=["period", "measurement", "factor"],
+        names=["aug_period", "measurement", "factor"],
     )
     return pd.DataFrame(
         {

@@ -34,7 +34,7 @@ def decompose_measurement_variance(
         data: Empirical dataset used to estimate the model.
 
     Returns:
-        DataFrame indexed by (period, measurement, factor) with columns:
+        DataFrame indexed by (aug_period, measurement, factor) with columns:
         - loading: The factor loading (L)
         - factor_variance: Var(F) for that period
         - meas_sd: The measurement error standard deviation
@@ -68,29 +68,29 @@ def _compute_variance_decomposition(
 
     Args:
         filtered_states: DataFrame with filtered states, must have columns for
-            each factor plus "period" and "id".
+            each factor plus "aug_period" and "id".
         params: DataFrame with model parameters indexed by
-            (category, period, name1, name2).
+            (category, aug_period, name1, name2).
 
     Returns:
         DataFrame with variance decomposition results.
 
     """
     # Compute factor variances by period
-    periods = filtered_states["period"].unique()
+    periods = filtered_states["aug_period"].unique()
     factor_cols = [
-        c for c in filtered_states.columns if c not in ("period", "id", "mixture")
+        c for c in filtered_states.columns if c not in ("aug_period", "id", "mixture")
     ]
 
     factor_variances = {}
     for period in periods:
-        period_data = filtered_states[filtered_states["period"] == period]
+        period_data = filtered_states[filtered_states["aug_period"] == period]
         factor_variances[period] = period_data[factor_cols].var()
 
     variance_df = pd.DataFrame.from_dict(factor_variances, orient="index")
     variance_df = variance_df.melt(
         var_name="factor", value_name="factor_variance", ignore_index=False
-    ).reset_index(names="period")
+    ).reset_index(names="aug_period")
 
     # Extract loadings (non-zero only)
     loadings_df = params.loc["loadings"].reset_index()
@@ -103,7 +103,7 @@ def _compute_variance_decomposition(
     merged = pd.merge(
         loadings_df,
         variance_df,
-        on=["period", "factor"],
+        on=["aug_period", "factor"],
     )
 
     # Extract measurement standard deviations
@@ -111,10 +111,10 @@ def _compute_variance_decomposition(
     meas_sds_df = meas_sds_df.rename(
         columns={"name1": "measurement", "value": "meas_sd"}
     )
-    meas_sds_df = meas_sds_df[["period", "measurement", "meas_sd"]]
+    meas_sds_df = meas_sds_df[["aug_period", "measurement", "meas_sd"]]
 
     # Merge with measurement SDs
-    merged = pd.merge(merged, meas_sds_df, on=["period", "measurement"])
+    merged = pd.merge(merged, meas_sds_df, on=["aug_period", "measurement"])
 
     # Compute variance decomposition
     # Total variance of measurement: Var(y) = L^2 * Var(F) + sd^2
@@ -127,7 +127,7 @@ def _compute_variance_decomposition(
     merged["signal_to_noise_ratio"] = signal_var / noise_var
 
     # Set index and select columns
-    return merged.set_index(["period", "measurement", "factor"])[
+    return merged.set_index(["aug_period", "measurement", "factor"])[
         [
             "loading",
             "factor_variance",
