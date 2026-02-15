@@ -3,6 +3,7 @@
 from collections.abc import KeysView, Mapping
 from dataclasses import replace
 from functools import partial
+from types import MappingProxyType
 
 import numpy as np
 import pandas as pd
@@ -14,7 +15,7 @@ from pandas import DataFrame
 import skillmodels.transition_functions as t_f_module
 from skillmodels.check_model import check_model, check_stagemap
 from skillmodels.decorators import extract_params, jax_array_output
-from skillmodels.model_spec import FactorSpec, ModelSpec, Normalizations
+from skillmodels.model_spec import FactorSpec, ModelSpec
 from skillmodels.types import (
     Anchoring,
     Dimensions,
@@ -23,6 +24,7 @@ from skillmodels.types import (
     FactorInfo,
     Labels,
     MeasurementType,
+    Normalizations,
     ProcessedModel,
     TransitionInfo,
 )
@@ -55,7 +57,6 @@ def process_model(model_spec: ModelSpec) -> ProcessedModel:
 
     """
     has_endogenous_factors = get_has_endogenous_factors(model_spec.factors)
-    est_opts = model_spec.estimation_options
     dims = get_dimensions(
         model_spec=model_spec, has_endogenous_factors=has_endogenous_factors
     )
@@ -73,12 +74,12 @@ def process_model(model_spec: ModelSpec) -> ProcessedModel:
         )
     else:
         _model_spec_aug = model_spec
-    bounds_distance = est_opts.bounds_distance if est_opts else 1e-3
+    estimation_options = _model_spec_aug.estimation_options or EstimationOptions()
     endogenous_factors_info = _get_endogenous_factors_info(
         has_endogenous_factors=has_endogenous_factors,
         model_spec=_model_spec_aug,
         labels=labels,
-        bounds_distance=bounds_distance,
+        bounds_distance=estimation_options.bounds_distance,
     )
     check_model(
         model_spec=_model_spec_aug,
@@ -96,7 +97,7 @@ def process_model(model_spec: ModelSpec) -> ProcessedModel:
         dimensions=dims,
         labels=labels,
         anchoring=anchoring,
-        estimation_options=_process_estimation_options(_model_spec_aug),
+        estimation_options=estimation_options,
         transition_info=transition_info,
         update_info=_get_update_info(
             model_spec=_model_spec_aug,
@@ -247,39 +248,6 @@ def _get_labels(
         aug_stagemap=tuple(aug_stagemap),
         aug_stages=tuple(sorted(int(v) for v in np.unique(aug_stagemap))),
         aug_stages_to_stages=aug_stages_to_stages,
-    )
-
-
-def _process_estimation_options(model_spec: ModelSpec) -> EstimationOptions:
-    """Process options.
-
-    Args:
-        model_spec: The model specification. See: :ref:`model_specs`
-
-    Returns:
-        EstimationOptions dataclass with tuning parameters for the estimation.
-
-    """
-    opts = model_spec.estimation_options
-    if opts is None:
-        return EstimationOptions(
-            sigma_points_scale=2,
-            robust_bounds=True,
-            bounds_distance=1e-3,
-            clipping_lower_bound=-1e30,
-            clipping_upper_bound=None,
-            clipping_lower_hardness=1,
-            clipping_upper_hardness=1,
-        )
-
-    return EstimationOptions(
-        sigma_points_scale=opts.sigma_points_scale,
-        robust_bounds=opts.robust_bounds,
-        bounds_distance=opts.bounds_distance if opts.robust_bounds else 0,
-        clipping_lower_bound=opts.clipping_lower_bound,
-        clipping_upper_bound=opts.clipping_upper_bound,
-        clipping_lower_hardness=opts.clipping_lower_hardness,
-        clipping_upper_hardness=opts.clipping_upper_hardness,
     )
 
 
@@ -530,7 +498,7 @@ def _get_update_info(
 
 def _process_normalizations(
     model_spec: ModelSpec, dimensions: Dimensions, labels: Labels
-) -> dict[str, dict[str, list]]:
+) -> Mapping[str, Normalizations]:
     """Process the normalizations of intercepts and factor loadings.
 
     Args:
@@ -539,18 +507,16 @@ def _process_normalizations(
         labels: Labels for model quantities.
 
     Returns:
-        Nested dictionary with information on normalized factor loadings and
-        intercepts for each factor.
+        Mapping from factor name to Normalizations instance.
 
     """
-    normalizations: dict[str, dict[str, list]] = {}
+    result: dict[str, Normalizations] = {}
     for factor in labels.latent_factors:
-        normalizations[factor] = {}
         fspec = model_spec.factors[factor]
-        for norm_type in ["loadings", "intercepts"]:
+        parts: dict[str, tuple[Mapping[str, float], ...]] = {}
+        for norm_type in ("loadings", "intercepts"):
             if fspec.normalizations is not None:
-                norms = getattr(fspec.normalizations, norm_type)
-                candidate = [dict(m) for m in norms]
+                candidate = list(getattr(fspec.normalizations, norm_type))
             else:
                 candidate = [{} for _ in range(dimensions.n_aug_periods)]
             if len(candidate) != dimensions.n_aug_periods:
@@ -558,6 +524,7 @@ def _process_normalizations(
                     "Normalizations must be of length `n_aug_periods`, "
                     f"got {candidate} for {factor}['{norm_type}']"
                 )
-            normalizations[factor][norm_type] = candidate
+            parts[norm_type] = tuple(candidate)
+        result[factor] = Normalizations(**parts)
 
-    return normalizations
+    return MappingProxyType(result)

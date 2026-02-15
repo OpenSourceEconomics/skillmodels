@@ -9,7 +9,7 @@ from skillmodels.filtered_states import get_filtered_states
 from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.model_spec import (
     AnchoringSpec,
-    EstimationOptionsSpec,
+    EstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -18,7 +18,7 @@ from skillmodels.simulate_data import simulate_dataset
 
 __all__ = [
     "AnchoringSpec",
-    "EstimationOptionsSpec",
+    "EstimationOptions",
     "FactorSpec",
     "ModelSpec",
     "Normalizations",

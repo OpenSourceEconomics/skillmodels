@@ -6,7 +6,7 @@ periods. Used for testing endogenous factor augmentation.
 """
 
 from skillmodels.model_spec import (
-    EstimationOptionsSpec,
+    EstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -33,7 +33,7 @@ SIMPLEST_AUGMENTED_MODEL = ModelSpec(
         ),
     },
     observed_factors=("of",),
-    estimation_options=EstimationOptionsSpec(
+    estimation_options=EstimationOptions(
         bounds_distance=1e-8,
     ),
 )

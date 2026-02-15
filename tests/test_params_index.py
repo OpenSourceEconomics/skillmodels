@@ -175,9 +175,9 @@ def test_trans_coeffs_index_tuples_no_endogenous_factors() -> None:
     periods = (0, 1, 2)
 
     param_names = {
-        "fac1": ["fac1", "fac2", "fac3", "constant"],
-        "fac2": [],
-        "fac3": ["fac1", "fac2", "fac3", "phi"],
+        "fac1": ("fac1", "fac2", "fac3", "constant"),
+        "fac2": (),
+        "fac3": ("fac1", "fac2", "fac3", "phi"),
     }
     trans_info = TransitionInfo(
         func=lambda x: x,  # dummy function
@@ -218,9 +218,9 @@ def test_trans_coeffs_index_tuples_has_endogenous_factors() -> None:
     periods = (0, 1, 2, 3, 4, 5)
 
     param_names = {
-        "fac1": ["fac1", "fac2", "fac3", "constant"],
-        "fac2": [],
-        "fac3": ["fac1", "fac2", "fac3", "phi"],
+        "fac1": ("fac1", "fac2", "fac3", "constant"),
+        "fac2": (),
+        "fac3": ("fac1", "fac2", "fac3", "phi"),
     }
     trans_info = TransitionInfo(
         func=lambda x: x,  # dummy function

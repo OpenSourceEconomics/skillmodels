@@ -7,7 +7,7 @@ anchoring of fac1 to outcome Q1 and a single control variable x1.
 
 from skillmodels.model_spec import (
     AnchoringSpec,
-    EstimationOptionsSpec,
+    EstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -49,7 +49,7 @@ MODEL2 = ModelSpec(
     ),
     controls=("x1",),
     stagemap=(0, 0, 0, 0, 0, 0, 0),
-    estimation_options=EstimationOptionsSpec(
+    estimation_options=EstimationOptions(
         robust_bounds=True,
         bounds_distance=0.001,
         n_mixtures=1,

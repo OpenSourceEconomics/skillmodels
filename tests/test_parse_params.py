@@ -5,6 +5,8 @@ implementation details.
 
 """
 
+from collections.abc import Mapping
+
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
@@ -108,7 +110,7 @@ def test_transition_parameters(parsed_parameters) -> None:
     aae(calculated["fac2"], jnp.arange(413, 441).reshape(7, 4) - 118)
     aae(calculated["fac3"], jnp.zeros((7, 0)))
 
-    assert isinstance(calculated, dict)
+    assert isinstance(calculated, Mapping)
 
 
 def test_anchoring_scaling_factors(parsed_parameters) -> None:

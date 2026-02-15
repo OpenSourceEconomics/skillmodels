@@ -16,7 +16,7 @@ from skillmodels.constraints import (
 )
 from skillmodels.process_model import process_model
 from skillmodels.test_data.simplest_augmented_model import SIMPLEST_AUGMENTED_MODEL
-from skillmodels.types import Anchoring, Labels
+from skillmodels.types import Anchoring, Labels, Normalizations
 
 
 def test_add_bounds() -> None:
@@ -45,11 +45,14 @@ def test_add_bounds() -> None:
 
 def test_normalization_constraints() -> None:
     norm = {
-        "fac1": {
-            "loadings": [{"m1": 2, "m2": 1.5}, {"m1": 3}],
-            "intercepts": [{"m1": 0.5}, {}],
-        },
-        "fac2": {"loadings": [{"m3": 1}, {}], "intercepts": [{}, {}]},
+        "fac1": Normalizations(
+            loadings=({"m1": 2, "m2": 1.5}, {"m1": 3}),
+            intercepts=({"m1": 0.5}, {}),
+        ),
+        "fac2": Normalizations(
+            loadings=({"m3": 1}, {}),
+            intercepts=({}, {}),
+        ),
     }
 
     expected = [

@@ -2,28 +2,13 @@
 
 import copyreg
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from types import MappingProxyType
 from typing import NewType
 
 import pandas as pd
 from jax import Array
-
-
-def _make_immutable(value: object) -> object:
-    """Recursively convert mutable containers to immutable equivalents.
-
-    - dict → MappingProxyType
-    - list → tuple
-
-    Other types are returned unchanged.
-    """
-    if isinstance(value, dict):
-        return MappingProxyType({k: _make_immutable(v) for k, v in value.items()})
-    if isinstance(value, list):
-        return tuple(_make_immutable(v) for v in value)
-    return value
 
 
 def ensure_containers_are_immutable(
@@ -127,13 +112,13 @@ class Labels:
 class Anchoring:
     """Information about how latent factors are anchored to observed outcomes."""
 
-    anchoring: bool
-    outcomes: Mapping[str, str]
-    factors: tuple[str, ...]
-    free_controls: bool
-    free_constant: bool
-    free_loadings: bool
-    ignore_constant_when_anchoring: bool
+    anchoring: bool = False
+    outcomes: Mapping[str, str] = field(default_factory=dict)
+    factors: tuple[str, ...] = ()
+    free_controls: bool = False
+    free_constant: bool = False
+    free_loadings: bool = False
+    ignore_constant_when_anchoring: bool = False
 
     def __post_init__(self) -> None:  # noqa: D105
         object.__setattr__(
@@ -143,15 +128,7 @@ class Anchoring:
     @classmethod
     def disabled(cls) -> Anchoring:
         """Create an Anchoring config with anchoring disabled."""
-        return cls(
-            anchoring=False,
-            outcomes={},
-            factors=(),
-            free_controls=False,
-            free_constant=False,
-            free_loadings=False,
-            ignore_constant_when_anchoring=False,
-        )
+        return cls()
 
     @classmethod
     def from_config(
@@ -189,15 +166,32 @@ class Anchoring:
 
 @dataclass(frozen=True)
 class EstimationOptions:
-    """Tuning parameters for the estimation."""
+    """Options for model estimation.
 
-    sigma_points_scale: float
-    robust_bounds: bool
-    bounds_distance: float
-    clipping_lower_bound: float | None
-    clipping_upper_bound: float | None
-    clipping_lower_hardness: float
-    clipping_upper_hardness: float
+    Attributes:
+        robust_bounds: Whether to use robust bounds.
+        bounds_distance: Distance for bounds. Zeroed out if robust_bounds is False.
+        n_mixtures: Number of mixture components.
+        sigma_points_scale: Scaling factor for sigma points in unscented transform.
+        clipping_lower_bound: Lower bound for soft clipping.
+        clipping_upper_bound: Upper bound for soft clipping (None for no upper bound).
+        clipping_lower_hardness: Hardness of lower clipping.
+        clipping_upper_hardness: Hardness of upper clipping.
+
+    """
+
+    robust_bounds: bool = True
+    bounds_distance: float = 1e-3
+    n_mixtures: int = 1
+    sigma_points_scale: float = 2
+    clipping_lower_bound: float = -1e30
+    clipping_upper_bound: float | None = None
+    clipping_lower_hardness: float = 1
+    clipping_upper_hardness: float = 1
+
+    def __post_init__(self) -> None:  # noqa: D105
+        if not self.robust_bounds:
+            object.__setattr__(self, "bounds_distance", 0.0)
 
 
 @dataclass(frozen=True)
@@ -205,13 +199,15 @@ class TransitionInfo:
     """Information about transition functions."""
 
     func: Callable
-    param_names: Mapping[str, list[str]]
+    param_names: Mapping[str, tuple[str, ...]]
     individual_functions: Mapping[str, Callable]
     function_names: Mapping[str, str]
 
     def __post_init__(self) -> None:  # noqa: D105
         object.__setattr__(
-            self, "param_names", ensure_containers_are_immutable(self.param_names)
+            self,
+            "param_names",
+            MappingProxyType({k: tuple(v) for k, v in self.param_names.items()}),
         )
         object.__setattr__(
             self,
@@ -297,6 +293,34 @@ class EndogenousFactorsInfo:
 
 
 @dataclass(frozen=True)
+class Normalizations:
+    """Normalizations for factor identification.
+
+    Attributes:
+        loadings: Per-period loading normalizations. Each element is a mapping
+            from variable name to fixed loading value.
+        intercepts: Per-period intercept normalizations. Each element is a mapping
+            from variable name to fixed intercept value.
+
+    """
+
+    loadings: tuple[Mapping[str, float], ...]
+    intercepts: tuple[Mapping[str, float], ...]
+
+    def __post_init__(self) -> None:  # noqa: D105
+        object.__setattr__(
+            self,
+            "loadings",
+            tuple(ensure_containers_are_immutable(m) for m in self.loadings),
+        )
+        object.__setattr__(
+            self,
+            "intercepts",
+            tuple(ensure_containers_are_immutable(m) for m in self.intercepts),
+        )
+
+
+@dataclass(frozen=True)
 class ProcessedModel:
     """Complete processed model specification.
 
@@ -310,7 +334,7 @@ class ProcessedModel:
     estimation_options: EstimationOptions
     transition_info: TransitionInfo
     update_info: pd.DataFrame
-    normalizations: dict[str, dict[str, list]]
+    normalizations: Mapping[str, Normalizations]
     endogenous_factors_info: EndogenousFactorsInfo
 
 
@@ -338,12 +362,17 @@ class ParsingInfo:
     meas_sds: Array | slice
     shock_sds: Array | slice
     loadings: LoadingsParsingInfo
-    transition: dict[str, Array | slice]
+    transition: Mapping[str, Array | slice]
     is_anchoring_loading: Array
     is_anchored_factor: Array
     is_anchoring_update: Array
     ignore_constant_when_anchoring: bool
     has_endogenous_factors: bool
+
+    def __post_init__(self) -> None:  # noqa: D105
+        object.__setattr__(
+            self, "transition", ensure_containers_are_immutable(self.transition)
+        )
 
 
 @dataclass(frozen=True)
@@ -357,9 +386,14 @@ class ParsedParams:
     loadings: Array
     meas_sds: Array
     shock_sds: Array
-    transition: dict[str, Array]
+    transition: Mapping[str, Array]
     anchoring_scaling_factors: Array
     anchoring_constants: Array
+
+    def __post_init__(self) -> None:  # noqa: D105
+        object.__setattr__(
+            self, "transition", ensure_containers_are_immutable(self.transition)
+        )
 
 
 @dataclass(frozen=True)
