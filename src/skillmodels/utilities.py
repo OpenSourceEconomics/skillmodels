@@ -55,7 +55,7 @@ def update_parameter_values(
         params: The params DataFrame for the full model.
         others: Another DataFrame with parameters or list
             of thereof. The values from other are used to update the value column
-            of ``params``. If other is a list, the updates will be in order, i.e.
+            of `params`. If other is a list, the updates will be in order, i.e.
             later elements overwrite earlier ones.
 
     Returns:

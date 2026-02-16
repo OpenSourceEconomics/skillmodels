@@ -13,10 +13,10 @@ filter-based maximum likelihood estimation following Cunha, Heckman, Schennach (
 
 ```bash
 # Run tests
-pixi run tests
+pixi run -e test-cpu tests
 
 # Run tests with coverage
-pixi run tests-with-cov
+pixi run -e test-cpu tests-with-cov
 
 # Run a single test file
 pixi run -e test-cpu pytest tests/test_kalman_filters.py
@@ -30,8 +30,8 @@ pixi run ty
 # Quality checks (linting, formatting)
 prek run --all-files
 
-# Build documentation (from docs/ directory)
-make html
+# Build documentation (mystmd, from docs/ directory)
+myst build
 ```
 
 ## Command Rules
@@ -40,14 +40,14 @@ Always use these command mappings:
 
 - **Python**: Use `pixi run python` instead of `python` or `python3`
 - **Type checker**: Use `pixi run ty` instead of running ty/mypy/pyright directly
-- **Tests**: Use `pixi run tests` instead of `pytest` directly
+- **Tests**: Use `pixi run -e test-cpu tests` instead of `pytest` directly
 - **Linting/formatting**: Use `prek run --all-files` instead of `ruff` directly
 - **All quality checks**: Use `prek run --all-files`
 
 Before finishing any task that modifies code, always run:
 
 1. `pixi run ty` (type checker)
-1. `pixi run tests` (tests)
+1. `pixi run -e test-cpu tests` (tests)
 1. `prek run --all-files` (quality checks)
 
 ## Architecture
@@ -55,9 +55,9 @@ Before finishing any task that modifies code, always run:
 ### Core Pipeline Flow
 
 ```
-Model Dict + Data
+ModelSpec + Data
        ↓
-process_model() → Validates/extends model specification
+process_model() → Validates/extends model specification → ProcessedModel
        ↓
 process_data() → Transforms data to estimation format
        ↓
@@ -70,8 +70,12 @@ get_filtered_states() → Extract estimated latent factors
 
 ### Key Modules
 
-- **process_model.py**: Model specification validation and preprocessing. Handles
-  dimensions, labels, stagemap, anchoring, and endogenous factors.
+- **model_spec.py**: User-facing frozen dataclasses for model specification
+  (`ModelSpec`, `FactorSpec`, `AnchoringSpec`, `EstimationOptions`, `Normalizations`).
+- **types.py**: Internal frozen dataclasses (`ProcessedModel`, `Labels`, `Dimensions`,
+  `Anchoring`, `ParsingInfo`, `ParsedParams`, etc.) and immutability utilities.
+- **process_model.py**: Model specification validation and preprocessing. Converts
+  `ModelSpec` into `ProcessedModel`.
 - **kalman_filters.py**: Core Kalman filter implementation (predict/update steps). Uses
   square-root form for numerical stability.
 - **likelihood_function.py**: Log-likelihood computation using Kalman filtering.
@@ -94,8 +98,10 @@ The codebase uses:
 
 ### Public API
 
-The main package exports three functions:
+The main package exports model specification classes and core functions:
 
+- `ModelSpec`, `FactorSpec`, `AnchoringSpec`, `EstimationOptions`, `Normalizations`:
+  Frozen dataclasses for defining models
 - `get_maximization_inputs()`: Prepare optimization problem for parameter estimation
 - `get_filtered_states()`: Extract filtered latent factor estimates
 - `simulate_dataset()`: Generate synthetic data from model specification (accepts
@@ -105,12 +111,30 @@ The main package exports three functions:
 
 - Require Python 3.14
 - Uses Ruff for linting (target: Python 3.14, line length: 88)
-- Google-style docstrings
+- Google-style docstrings with imperative mood ("Return" not "Returns")
+- Use MyST syntax in docstrings (single backticks `like this`), not reStructuredText (no
+  double backticks, no `:ref:`, `:func:`, etc.)
+- Dataclass attributes use inline docstrings (docstring on the line after the field):
+  ```python
+  name: str
+  """Description of name."""
+  ```
 - Pre-commit hooks enforce formatting and linting
 - Type checking via `ty` with strict rules
 - Do not use `from __future__ import annotations`
 - Use modern numpy random API: `rng = np.random.default_rng(seed)` instead of
   `np.random.seed()` or legacy functions like `np.random.randn()`
+
+### Immutability Conventions
+
+- All model configuration and internal data structures use frozen dataclasses
+- Dict fields on internal dataclasses use `MappingProxyType` (not `Mapping`); wrap at
+  the call site with `MappingProxyType(...)`
+- Dict fields on user-facing dataclasses (`AnchoringSpec`, `Normalizations`) use
+  `Mapping` with `__post_init__` conversion via `ensure_containers_are_immutable()`
+- List fields use `tuple`, set fields use `frozenset`
+- `ensure_containers_are_immutable()` recursively converts dict→MappingProxyType,
+  list→tuple, set→frozenset
 
 ## Testing
 

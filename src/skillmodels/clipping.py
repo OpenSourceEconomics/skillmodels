@@ -25,8 +25,8 @@ def soft_clipping(
     `article by John Cook: <https://www.johndcook.com/soft_maximum.pdf>`_
 
     Note that contrary to the name, the soft maximum can be calculated using
-    ``scipy.special.logsumexp``. ``scipy.special.softmax`` is the gradient of
-    ``scipy.special.logsumexp``.
+    `scipy.special.logsumexp`. `scipy.special.softmax` is the gradient of
+    `scipy.special.logsumexp`.
 
     Args:
         arr: Array that is clipped elementwise.

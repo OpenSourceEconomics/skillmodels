@@ -58,7 +58,7 @@ def qr_jvp_rule(
     primals: tuple[Array],
     tangents: tuple[Array],
 ) -> tuple[tuple[Array, Array], tuple[Array, Array]]:
-    """Calculates the derivative of the custom QR composition."""
+    """Calculate the derivative of the custom QR composition."""
     # See j-towns.github.io/papers/qr-derivative.pdf for a terse derivation.
     (x,) = primals
     (dx,) = tangents
