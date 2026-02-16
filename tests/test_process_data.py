@@ -1,5 +1,6 @@
 import io
 import textwrap
+from types import MappingProxyType
 
 import jax.numpy as jnp
 import numpy as np
@@ -127,10 +128,10 @@ def test_generate_controls_array() -> None:
         stagemap=(0, 0),
         stages=(0,),
         aug_periods=(0, 1),
-        aug_periods_to_periods={0: 0, 1: 1},
+        aug_periods_to_periods=MappingProxyType({0: 0, 1: 1}),
         aug_stagemap=(0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages={0: 0},
+        aug_stages_to_stages=MappingProxyType({0: 0}),
     )
 
     calculated = _generate_controls_array(data, labels, 2)
@@ -156,10 +157,10 @@ def test_generate_observed_factor_array() -> None:
         stagemap=(0, 0),
         stages=(0,),
         aug_periods=(0, 1),
-        aug_periods_to_periods={0: 0, 1: 1},
+        aug_periods_to_periods=MappingProxyType({0: 0, 1: 1}),
         aug_stagemap=(0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages={0: 0},
+        aug_stages_to_stages=MappingProxyType({0: 0}),
     )
 
     calculated = _generate_observed_factor_array(data, labels, 2)

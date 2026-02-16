@@ -6,6 +6,7 @@ implementation details.
 """
 
 from collections.abc import Mapping
+from types import MappingProxyType
 
 import jax.numpy as jnp
 import numpy as np
@@ -36,7 +37,7 @@ def parsed_parameters():
     # more meaningful test
     anchoring = Anchoring(
         anchoring=False,
-        outcomes={},
+        outcomes=MappingProxyType({}),
         factors=(),
         free_controls=True,
         free_constant=True,

@@ -244,10 +244,10 @@ def _get_labels(
         stagemap=tuple(stagemap),
         stages=tuple(stages),
         aug_periods=tuple(aug_periods_to_periods.keys()),
-        aug_periods_to_periods=aug_periods_to_periods,
+        aug_periods_to_periods=MappingProxyType(aug_periods_to_periods),
         aug_stagemap=tuple(aug_stagemap),
         aug_stages=tuple(sorted(int(v) for v in np.unique(aug_stagemap))),
-        aug_stages_to_stages=aug_stages_to_stages,
+        aug_stages_to_stages=MappingProxyType(aug_stages_to_stages),
     )
 
 
@@ -395,9 +395,13 @@ def _get_transition_info(model_spec: ModelSpec, labels: Labels) -> TransitionInf
 
     return TransitionInfo(
         func=transition_function,
-        param_names=dict(zip(latent_factors, param_names, strict=False)),
-        individual_functions=individual_functions,
-        function_names=dict(zip(latent_factors, function_names, strict=False)),
+        param_names=MappingProxyType(
+            dict(zip(latent_factors, param_names, strict=False))
+        ),
+        individual_functions=MappingProxyType(individual_functions),
+        function_names=MappingProxyType(
+            dict(zip(latent_factors, function_names, strict=False))
+        ),
     )
 
 
@@ -427,7 +431,7 @@ def _get_endogenous_factors_info(
             _aug_periods_from_period,
             aug_periods_to_periods=labels.aug_periods_to_periods,
         ),
-        factor_info=factor_info,
+        factor_info=MappingProxyType(factor_info),
     )
 
 
@@ -435,17 +439,19 @@ def _get_aug_periods_to_aug_period_meas_types(
     aug_periods: tuple[int, ...] | KeysView[int],
     *,
     has_endogenous_factors: bool,
-) -> dict[int, MeasurementType]:
+) -> MappingProxyType[int, MeasurementType]:
     if has_endogenous_factors:
-        return {
-            aug_p: (
-                MeasurementType.STATES
-                if aug_p % 2 == 0
-                else MeasurementType.ENDOGENOUS_FACTORS
-            )
-            for aug_p in aug_periods
-        }
-    return dict.fromkeys(aug_periods, MeasurementType.STATES)
+        return MappingProxyType(
+            {
+                aug_p: (
+                    MeasurementType.STATES
+                    if aug_p % 2 == 0
+                    else MeasurementType.ENDOGENOUS_FACTORS
+                )
+                for aug_p in aug_periods
+            }
+        )
+    return MappingProxyType(dict.fromkeys(aug_periods, MeasurementType.STATES))
 
 
 def _get_update_info(
@@ -498,7 +504,7 @@ def _get_update_info(
 
 def _process_normalizations(
     model_spec: ModelSpec, dimensions: Dimensions, labels: Labels
-) -> Mapping[str, Normalizations]:
+) -> MappingProxyType[str, Normalizations]:
     """Process the normalizations of intercepts and factor loadings.
 
     Args:

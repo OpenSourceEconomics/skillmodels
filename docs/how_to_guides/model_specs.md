@@ -7,7 +7,7 @@ Models are specified using Python dataclasses.
 ```python
 from skillmodels import (
     AnchoringSpec,
-    EstimationOptionsSpec,
+    EstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -39,7 +39,7 @@ model = ModelSpec(
     ),
     controls=("x1", "x2"),
     stagemap=(0, 0, 1, 1, 2, 2, 3),
-    estimation_options=EstimationOptionsSpec(),
+    estimation_options=EstimationOptions(),
 )
 ```
 
@@ -53,6 +53,10 @@ Each factor requires:
   `constant`, `translog`) or a custom function.
 - **normalizations** (optional): Fixed values for loadings and intercepts to identify
   the model.
+- **is_endogenous** (optional): Whether this factor is endogenous (default: false).
+  See [Endogeneity Corrections](../reference_guides/endogeneity_corrections.md).
+- **is_correction** (optional): Whether this is a correction factor (default: false).
+  Must also be endogenous.
 
 ## Anchoring
 
@@ -96,10 +100,11 @@ model = ModelSpec(
 
 Fine-tune the estimation:
 
-- **sigma_points_scale**: Scaling for Julier sigma points (default: 2)
 - **robust_bounds**: Make bounds stricter to avoid numerical issues (default: true)
 - **bounds_distance**: How much stricter to make bounds (default: 0.001)
-- **clipping_lower_bound**: Clip log-likelihood from below (default: -1e250)
+- **n_mixtures**: Number of mixture components (default: 1)
+- **sigma_points_scale**: Scaling for Julier sigma points (default: 2)
+- **clipping_lower_bound**: Clip log-likelihood from below (default: -1e30)
 - **clipping_upper_bound**: Clip log-likelihood from above (default: null)
 - **clipping_lower_hardness**: Hardness of lower clipping (default: 1)
 - **clipping_upper_hardness**: Hardness of upper clipping (default: 1)

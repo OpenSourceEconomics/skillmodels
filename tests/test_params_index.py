@@ -1,3 +1,5 @@
+from types import MappingProxyType
+
 import pandas as pd
 import pytest
 
@@ -181,9 +183,9 @@ def test_trans_coeffs_index_tuples_no_endogenous_factors() -> None:
     }
     trans_info = TransitionInfo(
         func=lambda x: x,  # dummy function
-        param_names=param_names,
-        individual_functions={},
-        function_names={},
+        param_names=MappingProxyType(param_names),
+        individual_functions=MappingProxyType({}),
+        function_names=MappingProxyType({}),
     )
 
     expected = [
@@ -224,9 +226,9 @@ def test_trans_coeffs_index_tuples_has_endogenous_factors() -> None:
     }
     trans_info = TransitionInfo(
         func=lambda x: x,  # dummy function
-        param_names=param_names,
-        individual_functions={},
-        function_names={},
+        param_names=MappingProxyType(param_names),
+        individual_functions=MappingProxyType({}),
+        function_names=MappingProxyType({}),
     )
 
     expected = [

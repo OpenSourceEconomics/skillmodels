@@ -28,7 +28,7 @@ And dataclasses for model specification:
 - `ModelSpec`: Main model specification container
 - `FactorSpec`: Specification for individual factors
 - `AnchoringSpec`: Anchoring settings
-- `EstimationOptionsSpec`: Options for estimation
+- `EstimationOptions`: Options for estimation
 - `Normalizations`: Normalization settings for loadings and intercepts
 
 ## Implementation Notes

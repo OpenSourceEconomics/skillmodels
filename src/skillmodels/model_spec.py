@@ -20,24 +20,18 @@ from skillmodels.types import (
 
 @dataclass(frozen=True)
 class FactorSpec:
-    """Specification for a single latent factor.
-
-    Attributes:
-        measurements: Per-period measurement variables. Each element is a tuple
-            of variable names measured in that period.
-        normalizations: Identification normalizations for this factor.
-        is_endogenous: Whether this factor is endogenous.
-        is_correction: Whether this factor is a correction factor.
-        transition_function: Optional transition function for this factor.
-            Can be a string (referencing built-in functions) or a callable.
-
-    """
+    """Specification for a single latent factor."""
 
     measurements: tuple[tuple[str, ...], ...]
+    """Per-period measurement variables. Each element is a tuple of variable names."""
     normalizations: Normalizations | None = None
+    """Identification normalizations for this factor."""
     is_endogenous: bool = False
+    """Whether this factor is endogenous."""
     is_correction: bool = False
+    """Whether this factor is a correction factor."""
     transition_function: str | Callable | None = None
+    """Transition function name (e.g. `"linear"`, `"log_ces"`) or a callable."""
 
     def with_transition_function(self, func: str | Callable) -> Self:
         """Return a new FactorSpec with the given transition function."""
@@ -50,22 +44,18 @@ class FactorSpec:
 
 @dataclass(frozen=True)
 class AnchoringSpec:
-    """Specification for anchoring latent factors to outcomes.
-
-    Attributes:
-        outcomes: Mapping from factor names to outcome variable names.
-        free_controls: Whether control coefficients are free in anchoring equations.
-        free_constant: Whether the constant is free in anchoring equations.
-        free_loadings: Whether loadings are free in anchoring equations.
-        ignore_constant_when_anchoring: Whether to ignore constant when anchoring.
-
-    """
+    """Specification for anchoring latent factors to outcomes."""
 
     outcomes: Mapping[str, str] = field(default_factory=dict)
+    """Mapping from factor names to outcome variable names."""
     free_controls: bool = False
+    """Whether control coefficients are free in anchoring equations."""
     free_constant: bool = False
+    """Whether the constant is free in anchoring equations."""
     free_loadings: bool = False
+    """Whether loadings are free in anchoring equations."""
     ignore_constant_when_anchoring: bool = False
+    """Whether to ignore constant when anchoring."""
 
     def __post_init__(self) -> None:  # noqa: D105
         object.__setattr__(
@@ -77,25 +67,20 @@ class AnchoringSpec:
 class ModelSpec:
     """Complete model specification.
 
-    This is the main strongly-typed container for model specifications.
     All fields are immutable to prevent accidental modifications.
-
-    Attributes:
-        factors: Mapping from factor name to FactorSpec.
-        observed_factors: Tuple of observed factor variable names.
-        controls: Tuple of control variable names.
-        stagemap: Stage mapping for transition functions.
-        anchoring: Anchoring specification.
-        estimation_options: Estimation tuning parameters.
-
     """
 
     _factors: MappingProxyType[str, FactorSpec]
     observed_factors: tuple[str, ...] = ()
+    """Observed factor variable names."""
     controls: tuple[str, ...] = ()
+    """Control variable names."""
     stagemap: tuple[int, ...] | None = None
+    """Stage mapping for transition functions."""
     anchoring: AnchoringSpec | None = None
+    """Anchoring specification."""
     estimation_options: EstimationOptions | None = None
+    """Estimation tuning parameters."""
 
     def __init__(
         self,
