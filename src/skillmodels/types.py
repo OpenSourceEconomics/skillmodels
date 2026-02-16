@@ -5,19 +5,47 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from types import MappingProxyType
-from typing import NewType
+from typing import Any, NewType, cast
 
 import pandas as pd
 from jax import Array
 
 
-def ensure_containers_are_immutable(
-    value: Mapping,
-) -> MappingProxyType:
-    """Convert a Mapping to a MappingProxyType, leaving existing proxies unchanged."""
-    if isinstance(value, MappingProxyType):
+def _make_immutable(value: Any) -> Any:
+    """Recursively convert a value to its immutable equivalent."""
+    if isinstance(value, (MappingProxyType, tuple, frozenset)):
         return value
-    return MappingProxyType(dict(value))
+    if isinstance(value, Mapping):
+        return MappingProxyType({k: _make_immutable(v) for k, v in value.items()})
+    if isinstance(value, set):
+        return frozenset(_make_immutable(v) for v in value)
+    if isinstance(value, list):
+        return tuple(_make_immutable(v) for v in value)
+    return value
+
+
+def ensure_containers_are_immutable[K, V](
+    value: Mapping[K, V],
+) -> MappingProxyType[K, V]:
+    """Recursively convert mutable containers to immutable equivalents.
+
+    Conversions:
+        - dict/Mapping -> MappingProxyType
+        - list -> tuple
+        - set -> frozenset
+
+    Values that are already immutable (MappingProxyType, tuple, frozenset) are
+    returned as-is.
+
+    Args:
+        value: Any Mapping to convert.
+
+    Returns:
+        A MappingProxyType with all nested containers converted to their
+        immutable equivalents.
+
+    """
+    return cast("MappingProxyType[K, V]", _make_immutable(value))
 
 
 def _reduce_mapping_proxy(mp: MappingProxyType) -> tuple:
