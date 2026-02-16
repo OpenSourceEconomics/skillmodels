@@ -1,3 +1,5 @@
+from types import MappingProxyType
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -16,7 +18,7 @@ from skillmodels.constraints import (
 )
 from skillmodels.process_model import process_model
 from skillmodels.test_data.simplest_augmented_model import SIMPLEST_AUGMENTED_MODEL
-from skillmodels.types import Anchoring, Labels
+from skillmodels.types import Anchoring, Labels, Normalizations
 
 
 def test_add_bounds() -> None:
@@ -45,11 +47,14 @@ def test_add_bounds() -> None:
 
 def test_normalization_constraints() -> None:
     norm = {
-        "fac1": {
-            "loadings": [{"m1": 2, "m2": 1.5}, {"m1": 3}],
-            "intercepts": [{"m1": 0.5}, {}],
-        },
-        "fac2": {"loadings": [{"m3": 1}, {}], "intercepts": [{}, {}]},
+        "fac1": Normalizations(
+            loadings=({"m1": 2, "m2": 1.5}, {"m1": 3}),
+            intercepts=({"m1": 0.5}, {}),
+        ),
+        "fac2": Normalizations(
+            loadings=({"m3": 1}, {}),
+            intercepts=({}, {}),
+        ),
     }
 
     expected = [
@@ -176,10 +181,10 @@ def test_constant_factor_constraints() -> None:
         stagemap=(0, 0, 0),
         stages=(0,),
         aug_periods=(0, 1, 2),
-        aug_periods_to_periods={0: 0, 1: 1, 2: 2},
+        aug_periods_to_periods=MappingProxyType({0: 0, 1: 1, 2: 2}),
         aug_stagemap=(0, 0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages={0: 0},
+        aug_stages_to_stages=MappingProxyType({0: 0}),
         transition_names=("bla", "constant"),
     )
 
@@ -230,10 +235,10 @@ def test_trans_coeff_constraints() -> None:
         stagemap=(0, 0, 0),
         stages=(0,),
         aug_periods=(0, 1, 2),
-        aug_periods_to_periods={0: 0, 1: 1, 2: 2},
+        aug_periods_to_periods=MappingProxyType({0: 0, 1: 1, 2: 2}),
         aug_stagemap=(0, 0, 0),
         aug_stages=(0,),
-        aug_stages_to_stages={0: 0},
+        aug_stages_to_stages=MappingProxyType({0: 0}),
         transition_names=("log_ces", "bla", "blubb"),
     )
 
@@ -287,7 +292,7 @@ def base_anchoring_info():
     return Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes={"f1": "outcome", "f2": "outcome"},
+        outcomes=MappingProxyType({"f1": "outcome", "f2": "outcome"}),
         free_controls=True,
         free_constant=True,
         free_loadings=True,
@@ -306,7 +311,7 @@ def test_anchoring_constraints_for_constants(anch_uinfo) -> None:
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes={"f1": "outcome", "f2": "outcome"},
+        outcomes=MappingProxyType({"f1": "outcome", "f2": "outcome"}),
         free_controls=True,
         free_constant=False,
         free_loadings=True,
@@ -335,7 +340,7 @@ def test_anchoring_constraints_for_controls(anch_uinfo) -> None:
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes={"f1": "outcome", "f2": "outcome"},
+        outcomes=MappingProxyType({"f1": "outcome", "f2": "outcome"}),
         free_controls=False,
         free_constant=True,
         free_loadings=True,
@@ -375,7 +380,7 @@ def test_anchoring_constraints_for_loadings(anch_uinfo) -> None:
     anchoring_info = Anchoring(
         anchoring=True,
         factors=("f1", "f2"),
-        outcomes={"f1": "outcome", "f2": "outcome"},
+        outcomes=MappingProxyType({"f1": "outcome", "f2": "outcome"}),
         free_controls=True,
         free_constant=True,
         free_loadings=False,

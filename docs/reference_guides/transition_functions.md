@@ -105,7 +105,7 @@ from skillmodels import FactorSpec
 
 factor = FactorSpec(
     measurements=[...],
-    transition_equation=my_transition,  # Pass the function object
+    transition_function=my_transition,  # Pass the function object
 )
 ```
 

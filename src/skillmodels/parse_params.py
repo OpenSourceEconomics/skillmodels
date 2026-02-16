@@ -1,6 +1,7 @@
 """Functions to parse parameter vectors into structured dictionaries."""
 
 import warnings
+from types import MappingProxyType
 
 import jax.numpy as jnp
 import numpy as np
@@ -98,7 +99,7 @@ def create_parsing_info(
         meas_sds=meas_sds,
         shock_sds=shock_sds,
         loadings=loadings,
-        transition=transition,
+        transition=MappingProxyType(transition),
         is_anchoring_loading=is_anchoring_loading,
         is_anchored_factor=is_anchored_factor,
         is_anchoring_update=is_anchoring_update,
@@ -285,7 +286,7 @@ def _get_transition_params(
     params: Array,
     info: ParsingInfo,
     labels: Labels,
-) -> dict[str, Array]:
+) -> MappingProxyType[str, Array]:
     """Create a list of arrays with transition equation parameters."""
     trans_params = {}
     n_aug_periods = len(labels.aug_periods)
@@ -295,7 +296,7 @@ def _get_transition_params(
     for factor in list(labels.latent_factors):
         ilocs = info.transition[factor]
         trans_params[factor] = params[ilocs].reshape(n_aug_periods - len_reduction, -1)
-    return trans_params
+    return MappingProxyType(trans_params)
 
 
 def _get_anchoring_scaling_factors(

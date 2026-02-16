@@ -78,6 +78,10 @@ of factors are arbitrary).
 
 The `EstimationOptions` dataclass controls numerical aspects:
 
-- **sigma_points_scale**: Controls spread of sigma points in unscented Kalman filter
 - **robust_bounds**: Tightens parameter bounds to avoid numerical issues
-- **clipping_***: Parameters for soft-clipping the log-likelihood to prevent infinities
+- **bounds_distance**: How much stricter to make bounds (zeroed if robust_bounds is
+  false)
+- **n_mixtures**: Number of mixture components in the distribution
+- **sigma_points_scale**: Controls spread of sigma points in unscented Kalman filter
+- **clipping_\***: Parameters for soft-clipping the log-likelihood to prevent
+  infinities

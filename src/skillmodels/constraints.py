@@ -2,6 +2,7 @@
 
 import functools
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,6 +17,7 @@ from skillmodels.types import (
     EndogenousFactorsInfo,
     Labels,
     MeasurementType,
+    Normalizations,
 )
 
 
@@ -24,7 +26,7 @@ def get_constraints_dicts(
     labels: Labels,
     anchoring_info: Anchoring,
     update_info: pd.DataFrame,
-    normalizations: dict[str, dict[str, list]],
+    normalizations: Mapping[str, Normalizations],
     endogenous_factors_info: EndogenousFactorsInfo,
 ) -> list[dict]:
     """Generate constraints implied by the model specification.
@@ -138,14 +140,13 @@ def _is_diagonal_entry(ind_tup: tuple[str, ...]) -> bool:
 
 
 def _get_normalization_constraints(
-    normalizations: dict[str, dict[str, list]],
+    normalizations: Mapping[str, Normalizations],
     factors: tuple[str, ...],
 ) -> list[dict]:
     """List of constraints to enforce normalizations.
 
     Args:
-        normalizations: Nested dictionary with information on normalized factor
-            loadings and intercepts for each factor. See :ref:`normalizations`.
+        normalizations: Mapping from factor name to Normalizations instance.
         factors: Tuple of factor names to process.
 
     Returns:
@@ -153,14 +154,12 @@ def _get_normalization_constraints(
 
     """
     msg = "This constraint was generated because of an explicit normalization."
-    periods = range(len(normalizations[factors[0]]["loadings"]))
+    periods = range(len(normalizations[factors[0]].loadings))
 
     constraints_dicts = []
     for factor in factors:
-        if "variances" in normalizations[factor]:
-            raise ValueError("normalization for variances cannot be provided")
         for period in periods:
-            for meas, normval in normalizations[factor]["loadings"][period].items():
+            for meas, normval in normalizations[factor].loadings[period].items():
                 constraints_dicts.append(
                     {
                         "loc": ("loadings", period, meas, factor),
@@ -169,7 +168,7 @@ def _get_normalization_constraints(
                         "description": msg,
                     }
                 )
-            for meas, normval in normalizations[factor]["intercepts"][period].items():
+            for meas, normval in normalizations[factor].intercepts[period].items():
                 constraints_dicts.append(
                     {
                         "loc": ("controls", period, meas, "constant"),

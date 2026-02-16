@@ -9,7 +9,7 @@ from skillmodels.config import TEST_DATA_DIR
 from skillmodels.model_spec import FactorSpec
 from skillmodels.process_model import get_has_endogenous_factors, process_model
 from skillmodels.test_data.model2 import MODEL2
-from skillmodels.types import TransitionInfo
+from skillmodels.types import Normalizations, TransitionInfo
 
 # ======================================================================================
 # Integration test with model2 from the replication files of CHS2010
@@ -82,8 +82,8 @@ def test_update_info(model2) -> None:
 
 def test_normalizations(model2) -> None:
     expected = {
-        "fac1": {
-            "loadings": [
+        "fac1": Normalizations(
+            loadings=(
                 {"y1": 1},
                 {"y1": 1},
                 {"y1": 1},
@@ -92,11 +92,11 @@ def test_normalizations(model2) -> None:
                 {"y1": 1},
                 {"y1": 1},
                 {"y1": 1},
-            ],
-            "intercepts": [{}, {}, {}, {}, {}, {}, {}, {}],
-        },
-        "fac2": {
-            "loadings": [
+            ),
+            intercepts=({}, {}, {}, {}, {}, {}, {}, {}),
+        ),
+        "fac2": Normalizations(
+            loadings=(
                 {"y4": 1},
                 {"y4": 1},
                 {"y4": 1},
@@ -105,13 +105,13 @@ def test_normalizations(model2) -> None:
                 {"y4": 1},
                 {"y4": 1},
                 {"y4": 1},
-            ],
-            "intercepts": [{}, {}, {}, {}, {}, {}, {}, {}],
-        },
-        "fac3": {
-            "loadings": [{"y7": 1}, {}, {}, {}, {}, {}, {}, {}],
-            "intercepts": [{}, {}, {}, {}, {}, {}, {}, {}],
-        },
+            ),
+            intercepts=({}, {}, {}, {}, {}, {}, {}, {}),
+        ),
+        "fac3": Normalizations(
+            loadings=({"y7": 1}, {}, {}, {}, {}, {}, {}, {}),
+            intercepts=({}, {}, {}, {}, {}, {}, {}, {}),
+        ),
     }
     res = process_model(model2).normalizations
 
@@ -244,121 +244,71 @@ def test_with_endog_update_info(model2_inv) -> None:
 
 
 def test_with_endog_normalizations(model2_inv) -> None:
+    e = {}
     expected = {
-        "fac1": {
-            "loadings": [
+        "fac1": Normalizations(
+            loadings=(
                 {"y1": 1},
-                {},
+                e,
                 {"y1": 1},
-                {},
+                e,
                 {"y1": 1},
-                {},
+                e,
                 {"y1": 1},
-                {},
+                e,
                 {"y1": 1},
-                {},
+                e,
                 {"y1": 1},
-                {},
+                e,
                 {"y1": 1},
-                {},
+                e,
                 {"y1": 1},
-                {},
-            ],
-            "intercepts": [
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-            ],
-        },
-        "fac2": {
-            "loadings": [
+                e,
+            ),
+            intercepts=(e, e, e, e, e, e, e, e, e, e, e, e, e, e, e, e),
+        ),
+        "fac2": Normalizations(
+            loadings=(
                 {"y4": 1},
-                {},
+                e,
                 {"y4": 1},
-                {},
+                e,
                 {"y4": 1},
-                {},
+                e,
                 {"y4": 1},
-                {},
+                e,
                 {"y4": 1},
-                {},
+                e,
                 {"y4": 1},
-                {},
+                e,
                 {"y4": 1},
-                {},
+                e,
                 {"y4": 1},
-                {},
-            ],
-            "intercepts": [
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-            ],
-        },
-        "fac3": {
-            "loadings": [
-                {},
+                e,
+            ),
+            intercepts=(e, e, e, e, e, e, e, e, e, e, e, e, e, e, e, e),
+        ),
+        "fac3": Normalizations(
+            loadings=(
+                e,
                 {"y7": 1},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-            ],
-            "intercepts": [
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-                {},
-            ],
-        },
+                e,
+                e,
+                e,
+                e,
+                e,
+                e,
+                e,
+                e,
+                e,
+                e,
+                e,
+                e,
+                e,
+                e,
+            ),
+            intercepts=(e, e, e, e, e, e, e, e, e, e, e, e, e, e, e, e),
+        ),
     }
     res = process_model(model2_inv).normalizations
 
