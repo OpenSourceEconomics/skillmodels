@@ -84,7 +84,7 @@ def kalman_update(
     _m = _m.at[..., 1:, :1].set(_f_stars)
     _m = _m.at[..., 1:, 1:].set(upper_chols)
 
-    _r = array_qr_jax(_m)[1]
+    _r = array_qr_jax(_m)
 
     _new_upper_chols = _r[..., 1:, 1:]
     _root_sigmas = _r[..., 0, 0]
@@ -223,7 +223,7 @@ def kalman_predict(
     qr_points = jnp.zeros((n_obs, n_mixtures, n_sigma + n_fac, n_fac))
     qr_points = qr_points.at[:, :, 0:n_sigma].set(devs * qr_weights)
     qr_points = qr_points.at[:, :, n_sigma:].set(jnp.diag(shock_sds))
-    predicted_covs = array_qr_jax(qr_points)[1][:, :, :n_fac]
+    predicted_covs = array_qr_jax(qr_points)[:, :, :n_fac]
 
     return predicted_states, predicted_covs
 
