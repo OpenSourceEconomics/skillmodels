@@ -38,6 +38,7 @@ dependencies = [
   "dags",
   "jax>=0.8",
   "numpy",
+  "optimagic>=0.5.3",
   "pandas",
 ]
 [[project.authors]]
@@ -169,7 +170,6 @@ jupyterlab = "*"
 nbformat = "*"
 networkx = "*"
 numpy = ">=2.3,<2.4"
-# optimagic = "*"
 plotly = ">=6.2"
 prek = "*"
 pybaum = "*"
@@ -235,7 +235,7 @@ types-pytz = "*"
 [tool.pixi.feature.ty.tasks]
 ty = "ty check src tests docs"
 [tool.pixi.pypi-dependencies]
-optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main" }
+# optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main" }
 pdbp = "*"
 skillmodels = { path = ".", editable = true }
 
