@@ -65,7 +65,6 @@ metadata.allow-direct-references = true
 version.source = "vcs"
 
 [tool.ruff]
-target-version = "py314"
 fix = true
 unsafe-fixes = false
 [tool.ruff.lint]
@@ -141,7 +140,7 @@ expand_tables = [
 
 [tool.pytest]
 ini_options.addopts = [ "--pdbcls=pdbp:Pdb" ]
-ini_options.filterwarnings = [  ]
+ini_options.filterwarnings = []
 ini_options.norecursedirs = [ "docs" ]
 
 [tool.ty]
@@ -184,7 +183,7 @@ cuda = { features = [ "cuda" ], solve-group = "cuda" }
 docs = { features = [ "docs" ], solve-group = "default" }
 test-cpu = { features = [ "test" ], solve-group = "default" }
 test-gpu = { features = [ "test", "cuda" ], solve-group = "cuda" }
-ty = { features = [ "test", "ty" ], solve-group = "default" }
+ty = { features = [ "ty" ], solve-group = "default" }
 
 # ======================================================================================
 # Ruff configuration
@@ -206,7 +205,7 @@ mem-cuda = """\
 [tool.pixi.feature.docs.dependencies]
 jupyter-book = ">=2.0"
 [tool.pixi.feature.docs.tasks]
-docs = { cmd = "jupyter book build --html", cwd = "docs" }
+build-docs = { cmd = "jupyter book build --html", cwd = "docs" }
 view-docs = { cmd = "jupyter book start", cwd = "docs" }
 [tool.pixi.feature.test.dependencies]
 pytest = "*"
@@ -228,7 +227,7 @@ mem-on-clean-repo = """\
   tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs\
   """
 [tool.pixi.feature.ty.pypi-dependencies]
-matplotlib = "*"   # required because of pandas
+matplotlib = "*"  # required because of pandas
 pandas-stubs = "*"
 ty = "*"
 types-pytz = "*"
