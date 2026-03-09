@@ -14,8 +14,6 @@ Args:
 
 Returns:
         * float
-
-
 **names_example_func(** *factors* **)**:
 
     Generate a list of names for the params of the transition function.
@@ -33,21 +31,26 @@ from itertools import combinations
 
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 
-def linear(states, params):
+def linear(states: Array, params: Array) -> Array:
     """Linear production function where the constant is the last parameter."""
     constant = params[-1]
     betas = params[:-1]
     return jnp.dot(states, betas) + constant
 
 
-def params_linear(factors):
+def params_linear(factors: tuple[str, ...]) -> list[str]:
     """Index tuples for linear transition function."""
     return [*factors, "constant"]
 
 
-def identity_constraints_linear(factor, aug_period, all_factors) -> list[dict]:
+def identity_constraints_linear(
+    factor: str,
+    aug_period: int,
+    all_factors: tuple[str, ...],
+) -> list[dict]:
     """Identity constraints for linear transition function."""
     constraints_dicts = []
     for regressor in params_linear(all_factors):
@@ -63,7 +66,7 @@ def identity_constraints_linear(factor, aug_period, all_factors) -> list[dict]:
     return constraints_dicts
 
 
-def translog(states, params):
+def translog(states: Array, params: Array) -> Array:
     """Translog transition function.
 
     The name is a convention in the skill formation literature even though the function
@@ -85,18 +88,21 @@ def translog(states, params):
     return res
 
 
-def params_translog(factors):
+def params_translog(factors: tuple[str, ...]) -> list[str]:
     """Index tuples for the translog production function."""
-    names = (
-        factors
+    return (
+        list(factors)
         + [f"{factor} ** 2" for factor in factors]
         + [f"{a} * {b}" for a, b in combinations(factors, 2)]
         + ["constant"]
     )
-    return names
 
 
-def identity_constraints_translog(factor, aug_period, all_factors) -> list[dict]:
+def identity_constraints_translog(
+    factor: str,
+    aug_period: int,
+    all_factors: tuple[str, ...],
+) -> list[dict]:
     """Identity constraints for translog transition function."""
     constraints_dicts = []
     for regressor in params_translog(all_factors):
@@ -112,7 +118,7 @@ def identity_constraints_translog(factor, aug_period, all_factors) -> list[dict]
     return constraints_dicts
 
 
-def log_ces(states, params):
+def log_ces(states: Array, params: Array) -> Array:
     """Log CES production function (KLS version)."""
     phi = params[-1]
     gammas = params[:-1]
@@ -124,38 +130,45 @@ def log_ces(states, params):
     # the log step for gammas underflows for gamma = 0, but this is handled correctly
     # by logsumexp and does not raise a warning.
     unscaled = jax.scipy.special.logsumexp(jnp.log(gammas) + states * phi)
-    result = unscaled * scaling_factor
-    return result
+    return unscaled * scaling_factor
 
 
-def params_log_ces(factors):
+def params_log_ces(factors: tuple[str, ...]) -> list[str]:
     """Index tuples for the log_ces production function."""
     return [*factors, "phi"]
 
 
-def constraints_log_ces(factor, factors, aug_period):
+def constraints_log_ces(
+    factor: str,
+    factors: tuple[str, ...],
+    aug_period: int,
+) -> dict:
     """Constraints for log_ces production function."""
     names = params_log_ces(factors)
     loc = [("transition", aug_period, factor, name) for name in names[:-1]]
     return {"loc": loc, "type": "probability"}
 
 
-def identity_constraints_log_ces(factors, aug_period, all_factors):
+def identity_constraints_log_ces(
+    factors: tuple[str, ...],
+    aug_period: int,
+    all_factors: tuple[str, ...],
+) -> list[dict]:
     """Identity constraints for log_ces."""
     raise NotImplementedError
 
 
-def constant(state, params):  # noqa: ARG001
+def constant(state: Array, params: Array) -> Array:  # noqa: ARG001
     """Constant production function."""
     return state
 
 
-def params_constant(factors):  # noqa: ARG001
+def params_constant(factors: tuple[str, ...]) -> list[str]:  # noqa: ARG001
     """Index tuples for the constant production function."""
     return []
 
 
-def robust_translog(states, params):
+def robust_translog(states: Array, params: Array) -> Array:
     """Numerically robust version of the translog transition function.
 
     This function does a clipping of the state vector at +- 1e12 before calling
@@ -168,19 +181,26 @@ def robust_translog(states, params):
 
     """
     clipped_states = jnp.clip(states, -1e12, 1e12)
-    return translog(clipped_states, params)
+    return translog(states=clipped_states, params=params)
 
 
-def params_robust_translog(factors):
+def params_robust_translog(factors: tuple[str, ...]) -> list[str]:
+    """Return parameter names for robust translog transition function."""
     return params_translog(factors)
 
 
-def identity_constraints_robust_translog(factor, aug_period, all_factors) -> list[dict]:
+def identity_constraints_robust_translog(
+    factor: str,
+    aug_period: int,
+    all_factors: tuple[str, ...],
+) -> list[dict]:
     """Identity constraints for robust_translog."""
-    return identity_constraints_translog(factor, aug_period, all_factors)
+    return identity_constraints_translog(
+        factor=factor, aug_period=aug_period, all_factors=all_factors
+    )
 
 
-def linear_and_squares(states, params):
+def linear_and_squares(states: Array, params: Array) -> Array:
     """linear_and_squares transition function."""
     nfac = len(states)
     constant = params[-1]
@@ -193,14 +213,15 @@ def linear_and_squares(states, params):
     return res
 
 
-def params_linear_and_squares(factors):
+def params_linear_and_squares(factors: tuple[str, ...]) -> list[str]:
     """Index tuples for the linear_and_squares production function."""
-    names = factors + [f"{factor} ** 2" for factor in factors] + ["constant"]
-    return names
+    return list(factors) + [f"{factor} ** 2" for factor in factors] + ["constant"]
 
 
 def identity_constraints_linear_and_squares(
-    factor, aug_period, all_factors
+    factor: str,
+    aug_period: int,
+    all_factors: tuple[str, ...],
 ) -> list[dict]:
     """Identity constraints for linear_and_squares transition function."""
     constraints_dicts = []
@@ -217,7 +238,7 @@ def identity_constraints_linear_and_squares(
     return constraints_dicts
 
 
-def log_ces_general(states, params):
+def log_ces_general(states: Array, params: Array) -> Array:
     """Generalized log_ces production function without known location and scale."""
     n = states.shape[-1]
     tfp = params[-1]
@@ -230,15 +251,18 @@ def log_ces_general(states, params):
     # the log step for gammas underflows for gamma = 0, but this is handled correctly
     # by logsumexp and does not raise a warning.
     unscaled = jax.scipy.special.logsumexp(jnp.log(gammas) + states * sigmas)
-    result = unscaled * tfp
-    return result
+    return unscaled * tfp
 
 
-def params_log_ces_general(factors):
+def params_log_ces_general(factors: tuple[str, ...]) -> list[str]:
     """Index tuples for the generalized log_ces production function."""
-    return factors + [f"sigma_{fac}" for fac in factors] + ["tfp"]
+    return list(factors) + [f"sigma_{fac}" for fac in factors] + ["tfp"]
 
 
-def identity_constraints_log_ces_general(factors, aug_period, all_factors):
+def identity_constraints_log_ces_general(
+    factors: tuple[str, ...],
+    aug_period: int,
+    all_factors: tuple[str, ...],
+) -> list[dict]:
     """Identity constraints for log_ces_general."""
     raise NotImplementedError

@@ -1,31 +1,42 @@
+"""Functions to process debug output from likelihood function into DataFrames."""
+
+from typing import Any
+
 import numpy as np
 import pandas as pd
+from jax import Array
+from numpy.typing import NDArray
+
+from skillmodels.types import ProcessedModel
 
 
-def process_debug_data(debug_data, model):
+def process_debug_data(
+    debug_data: dict[str, Any],
+    model: ProcessedModel,
+) -> dict[str, Any]:
     """Process the raw debug data into pandas objects that make visualization easy.
 
     Args:
-        debug_data (dict): Dictionary containing the following entries (
+        debug_data: Dictionary containing the following entries (
         and potentially others which are not modified):
-        - filtered_states (jax.numpy.array): Array of shape (n_updates, n_obs,
+        - filtered_states: Array of shape (n_updates, n_obs,
             n_mixtures, n_states) containing the filtered states after each Kalman
             update.
-        - initial_states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states)
+        - initial_states: Array of shape (n_obs, n_mixtures, n_states)
             with the state estimates before the first Kalman update.
-        - residuals (jax.numpy.array): Array of shape (n_updates, n_obs, n_mixtures)
+        - residuals: Array of shape (n_updates, n_obs, n_mixtures)
             containing the residuals of a Kalman update.
-        - residual_sds (jax.numpy.ndarray): Array of shape (n_updates, n_obs,
+        - residual_sds: Array of shape (n_updates, n_obs,
             n_mixtures) containing the theoretical standard deviation of the residuals.
-        - all_contributions (jax.numpy.array): Array of shape (n_updates, n_obs) with
+        - all_contributions: Array of shape (n_updates, n_obs) with
             the likelihood contributions per update and individual.
-        - log_mixture_weights (jax.numpy.array): Array of shape (n_updates, n_obs,
+        - log_mixture_weights: Array of shape (n_updates, n_obs,
             n_mixtures) containing the log mixture weights after each update.
-        - initial_log_mixture_weights (jax.numpy.array): Array of shape (n_obs,
+        - initial_log_mixture_weights: Array of shape (n_obs,
             n_mixtures) containing the log mixture weights before the first
             kalman update.
 
-        model (dict): Processed model dictionary.
+        model: Processed model dictionary.
 
     Returns:
         dict: Dictionary with processed debug data. It has the following entries:
@@ -36,28 +47,28 @@ def process_debug_data(debug_data, model):
             after the last update of each period. The columns are the factor names,
             "period" and "id". The filtered states are already aggregated over
             mixture distributions.
-        - state_ranges (dict): The keys are the names of the latent factors.
+        - state_ranges: The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
             Note that this aggregates over mixture distributions.
-        - residuals (pd.DataFrame): Tidy DataFrame with residuals of each Kalman update.
+        - residuals: Tidy DataFrame with residuals of each Kalman update.
             Columns are "residual", "mixture", "period", "measurement" and "id".
             "period" and "measurement" identify the Kalman update to which the residual
             belongs.
-        - residual_sds (pd.DataFrame): As residuals but containing the theoretical
+        - residual_sds: As residuals but containing the theoretical
             standard deviation of the corresponding residual.
-        - all_contributions (pd.DataFrame): Tidy DataFrame with log likelihood
+        - all_contributions: Tidy DataFrame with log likelihood
             contribution per individual and Kalman Update. The columns are
             "contribution", "period", "measurement" and "id". "period" and "measurement"
             identify the Kalman Update to which the likelihood contribution corresponds.
 
     """
-    update_info = model["update_info"]
-    factors = model["labels"]["latent_factors"]
+    update_info = model.update_info
+    factors = model.labels.latent_factors
 
     post_update_states = _create_post_update_states(
-        debug_data["filtered_states"],
-        factors,
-        update_info,
+        filtered_states=debug_data["filtered_states"],
+        factors=factors,
+        update_info=update_info,
     )
 
     filtered_states = _create_filtered_states(
@@ -67,14 +78,18 @@ def process_debug_data(debug_data, model):
         factors=factors,
     )
 
-    state_ranges = create_state_ranges(filtered_states, factors)
+    state_ranges = create_state_ranges(filtered_states=filtered_states, factors=factors)
 
-    residuals = _process_residuals(debug_data["residuals"], update_info)
-    residual_sds = _process_residual_sds(debug_data["residual_sds"], update_info)
+    residuals = _process_residuals(
+        residuals=debug_data["residuals"], update_info=update_info
+    )
+    residual_sds = _process_residual_sds(
+        residual_sds=debug_data["residual_sds"], update_info=update_info
+    )
 
     all_contributions = _process_all_contributions(
-        debug_data["all_contributions"],
-        update_info,
+        all_contributions=debug_data["all_contributions"],
+        update_info=update_info,
     )
 
     res = {
@@ -93,41 +108,51 @@ def process_debug_data(debug_data, model):
     return res
 
 
-def _create_post_update_states(filtered_states, factors, update_info):
+def _create_post_update_states(
+    filtered_states: Array,
+    factors: tuple[str, ...],
+    update_info: pd.DataFrame,
+) -> pd.DataFrame:
     to_concat = []
     for (aug_period, meas), data in zip(
         update_info.index, filtered_states, strict=False
     ):
-        df = _convert_state_array_to_df(data, factors)
+        df = _convert_state_array_to_df(arr=data, factor_names=factors)
         df["aug_period"] = aug_period
         df["id"] = np.arange(len(df))
         df["measurement"] = meas
         to_concat.append(df)
 
-    post_states = pd.concat(to_concat)
-
-    return post_states
+    return pd.concat(to_concat)
 
 
-def _convert_state_array_to_df(arr, factor_names):
+def _convert_state_array_to_df(
+    arr: NDArray[np.floating[Any]],
+    factor_names: tuple[str, ...],
+) -> pd.DataFrame:
     """Convert a 3d state array into a 2d DataFrame.
 
     Args:
-        arr (np.ndarray): Array of shape (n_obs, n_mixtures, n_states)
-        factor_names (list): Names of the latent factors.
+        arr: Array of shape (n_obs, n_mixtures, n_states)
+        factor_names: Names of the latent factors.
     """
     n_obs, n_mixtures, n_states = arr.shape
-    df = pd.DataFrame(data=arr.reshape(-1, n_states), columns=factor_names)
+    df = pd.DataFrame(data=arr.reshape(-1, n_states), columns=list(factor_names))
     df["mixture"] = np.full((n_obs, n_mixtures), np.arange(n_mixtures)).flatten()
     return df
 
 
-def _create_filtered_states(filtered_states, log_mixture_weights, update_info, factors):
-    filtered_states = np.array(filtered_states)
-    log_mixture_weights = np.array(log_mixture_weights)
-    weights = np.exp(log_mixture_weights)
+def _create_filtered_states(
+    filtered_states: Array,
+    log_mixture_weights: Array,
+    update_info: pd.DataFrame,
+    factors: tuple[str, ...],
+) -> pd.DataFrame:
+    filtered_states_np = np.array(filtered_states)
+    log_mixture_weights_np = np.array(log_mixture_weights)
+    weights = np.exp(log_mixture_weights_np)
 
-    agg_states = (filtered_states * weights.reshape(*weights.shape, 1)).sum(axis=-2)
+    agg_states = (filtered_states_np * weights.reshape(*weights.shape, 1)).sum(axis=-2)
 
     keep = []
     for i, (aug_period, measurement) in enumerate(update_info.index):
@@ -145,25 +170,30 @@ def _create_filtered_states(filtered_states, log_mixture_weights, update_info, f
         df["id"] = np.arange(len(df))
         to_concat.append(df)
 
-    filtered_states = pd.concat(to_concat)
-
-    return filtered_states
+    return pd.concat(to_concat)
 
 
-def create_state_ranges(filtered_states, factors):
-    ranges = {}
+def create_state_ranges(
+    filtered_states: pd.DataFrame,
+    factors: tuple[str, ...] | list[str],
+) -> dict[str, pd.DataFrame]:
+    """Compute minimum and maximum state values for each factor by period."""
+    ranges: dict[str, pd.DataFrame] = {}
     # Group by whichever period column is present
     period_col = "aug_period" if "aug_period" in filtered_states.columns else "period"
     minima = filtered_states.groupby(period_col).min()
     maxima = filtered_states.groupby(period_col).max()
     for factor in factors:
         df = pd.concat([minima[factor], maxima[factor]], axis=1)
-        df.columns = ["minimum", "maximum"]
+        df.columns = pd.Index(["minimum", "maximum"])
         ranges[factor] = df
     return ranges
 
 
-def _process_residuals(residuals, update_info):
+def _process_residuals(
+    residuals: Array,
+    update_info: pd.DataFrame,
+) -> pd.DataFrame:
     to_concat = []
     n_obs, n_mixtures = residuals[0].shape
     for (aug_period, meas), data in zip(update_info.index, residuals, strict=False):
@@ -176,11 +206,17 @@ def _process_residuals(residuals, update_info):
     return pd.concat(to_concat)
 
 
-def _process_residual_sds(residual_sds, update_info):
-    return _process_residuals(residual_sds, update_info)
+def _process_residual_sds(
+    residual_sds: Array,
+    update_info: pd.DataFrame,
+) -> pd.DataFrame:
+    return _process_residuals(residuals=residual_sds, update_info=update_info)
 
 
-def _process_all_contributions(all_contributions, update_info):
+def _process_all_contributions(
+    all_contributions: Array,
+    update_info: pd.DataFrame,
+) -> pd.DataFrame:
     to_concat = []
     for (period, meas), contribs in zip(
         update_info.index, all_contributions, strict=False

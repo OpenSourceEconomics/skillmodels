@@ -1,10 +1,13 @@
+"""Tests for soft clipping functions."""
+
 import jax.numpy as jnp
 import numpy as np
 
 from skillmodels.clipping import soft_clipping
 
 
-def test_one_sided_soft_maximum():
+def test_one_sided_soft_maximum() -> None:
+    """Test soft maximum clipping with lower bound."""
     arr = jnp.array([-10.0, -5, -1, 1, 5, 10])
     lower_bound = -8
     lower_hardness = 3
@@ -21,7 +24,8 @@ def test_one_sided_soft_maximum():
     np.testing.assert_allclose(res[1:], arr[1:], rtol=1e-05)
 
 
-def test_one_sided_soft_minimum():
+def test_one_sided_soft_minimum() -> None:
+    """Test soft minimum clipping with upper bound."""
     arr = jnp.array([-10.0, -5, -1, 1, 5, 10])
     upper_bound = 8
     upper_hardness = 3

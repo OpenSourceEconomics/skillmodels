@@ -1,0 +1,53 @@
+---
+# Jupyter Book 2.0 configuration
+# See: https://jupyterbook.org/
+version: 1
+project:
+  id: skillmodels
+  title: skillmodels
+  description: >-
+    Python implementation of estimators for nonlinear dynamic latent factor models,
+    primarily used for skill formation research in economics.
+  authors:
+    - name: Janos Gabler
+      email: janos.gabler@gmail.com
+    - name: Hans-Martin von Gaudecker
+      email: hmgaudecker@uni-bonn.de
+  keywords:
+    - skill formation
+    - latent factor models
+    - kalman filter
+    - economics
+    - econometrics
+    - python
+  github: https://github.com/OpenSourceEconomics/skillmodels
+  jupyter: true
+  execute:
+    enabled: true
+  toc:
+    - file: index.md
+    - title: Getting Started
+      children:
+        - file: getting_started/tutorial.ipynb
+    - title: How-to Guides
+      children:
+        - file: how_to_guides/model_specs.md
+        - file: how_to_guides/how_to_simulate_dataset.ipynb
+        - file: how_to_guides/how_to_visualize_transition_equations.ipynb
+        - file: how_to_guides/how_to_visualize_pairwise_factor_distribution.ipynb
+        - file: how_to_guides/how_to_visualize_correlations.ipynb
+    - title: Explanations
+      children:
+        - file: explanations/names_and_concepts.md
+        - file: explanations/notes_on_factor_scales.md
+    - title: Reference Guides
+      children:
+        - file: reference_guides/transition_functions.md
+        - file: reference_guides/endogeneity_corrections.md
+  error_rules:
+    - rule: link-resolves
+      severity: ignore
+site:
+  template: book-theme
+  options:
+    logo_text: skillmodels

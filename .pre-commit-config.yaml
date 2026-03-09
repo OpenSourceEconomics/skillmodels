@@ -4,7 +4,10 @@ repos:
     hooks:
       - id: check-hooks-apply
       - id: check-useless-excludes
-      # - id: identity  # Prints all files passed to pre-commits. Debugging.
+  - repo: https://github.com/tox-dev/tox-toml-fmt
+    rev: v1.2.2
+    hooks:
+      - id: tox-toml-fmt
   - repo: https://github.com/lyz-code/yamlfix
     rev: 1.19.1
     hooks:
@@ -15,53 +18,51 @@ repos:
       - id: check-added-large-files
         args:
           - --maxkb=50000
+      - id: check-ast
       - id: check-case-conflict
+      - id: check-docstring-first
       - id: check-merge-conflict
+      - id: check-toml
       - id: check-vcs-permalinks
       - id: check-yaml
-      - id: check-toml
       - id: debug-statements
       - id: end-of-file-fixer
       - id: fix-byte-order-marker
         types:
           - text
-      - id: forbid-submodules
       - id: mixed-line-ending
         args:
           - --fix=lf
         description: Forces to replace line ending by the UNIX 'lf' character.
+      - id: name-tests-test
+        args:
+          - --pytest-test-first
       - id: no-commit-to-branch
         args:
           - --branch
           - main
-      - id: name-tests-test
-        args:
-          - --pytest-test-first
       - id: trailing-whitespace
-      - id: check-ast
-      - id: check-docstring-first
   - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.37.1
+    rev: v1.38.0
     hooks:
       - id: yamllint
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.10
+    rev: v0.14.14
     hooks:
       - id: ruff-check
-        types_or:
-          - python
-          - pyi
-          - jupyter
         args:
           - --fix
-          # - --unsafe-fixes
+        types_or:
+          - jupyter
+          - pyi
+          - python
       - id: ruff-format
         types_or:
-          - python
-          - pyi
           - jupyter
+          - pyi
+          - python
   - repo: https://github.com/kynan/nbstripout
-    rev: 0.8.2
+    rev: 0.9.0
     hooks:
       - id: nbstripout
         args:
@@ -72,10 +73,12 @@ repos:
     hooks:
       - id: mdformat
         additional_dependencies:
-          - mdformat-myst
+          - mdformat-gfm
+          - mdformat-gfm-alerts
           - mdformat-ruff
         args:
           - --wrap
           - '88'
+        files: (CLAUDE\.md|README\.md)
 ci:
   autoupdate_schedule: monthly

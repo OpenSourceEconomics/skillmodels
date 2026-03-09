@@ -3,89 +3,82 @@
 # ======================================================================================
 
 [project]
-name = "skillmodels"
 authors = [
-    { name = "Janoś Gabler", email = "janos.gabler@gmail.com" },
-]
-maintainers = [
-    { name = "Janoś Gabler", email = "janos.gabler@gmail.com" },
-    { name = "Hans-Martin von Gaudecker", email = "hmgaudecker@uni-bonn.de" },
-]
-description = "Estimators for skill formation models"
-dynamic = ["version"]
-keywords = [
-    "Skill formation",
-    "Econometrics",
-    "Economics",
-    "Estimation",
-    "Statistics",
+  { name = "Janoś Gabler", email = "janos.gabler@gmail.com" },
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: MacOS :: MacOS X",
-    "Operating System :: Microsoft :: Windows",
-    "Operating System :: POSIX",
-    "Operating System :: Unix",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3 :: Only",
-    "Topic :: Scientific/Engineering",
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS :: MacOS X",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX",
+  "Operating System :: Unix",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering",
 ]
-requires-python = ">=3.13,<3.14"
 dependencies = [
-    "dags",
-    "jax>=0.8",
-    "numpy",
-    "pandas",
+  "dags",
+  "jax>=0.8",
+  "numpy",
+  "pandas",
 ]
-
-[project.readme]
-file = "README.md"
-content-type = "text/markdown"
-
-[project.license]
-text = "MIT"
+description = "Estimators for skill formation models"
+dynamic = [ "version" ]
+keywords = [
+  "Skill formation",
+  "Econometrics",
+  "Economics",
+  "Estimation",
+  "Statistics",
+]
+license = { text = "MIT" }
+maintainers = [
+  { name = "Janoś Gabler", email = "janos.gabler@gmail.com" },
+  { name = "Hans-Martin von Gaudecker", email = "hmgaudecker@uni-bonn.de" },
+]
+name = "skillmodels"
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.14,<3.15"
 
 [project.urls]
-Repository = "https://github.com/OpenSourceEconomics/skillmodels"
 Github = "https://github.com/OpenSourceEconomics/skillmodels"
+Repository = "https://github.com/OpenSourceEconomics/skillmodels"
 Tracker = "https://github.com/OpenSourceEconomics/skillmodels/issues"
-
 
 # ======================================================================================
 # Build system configuration
 # ======================================================================================
 
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+requires = [ "hatchling", "hatch-vcs" ]
 
 [tool.hatch.build.hooks.vcs]
 version-file = "src/skillmodels/_version.py"
 
 [tool.hatch.build.targets.sdist]
-exclude = ["tests"]
+exclude = [ "tests" ]
 only-packages = true
 
 [tool.hatch.build.targets.wheel]
-only-include = ["src"]
-sources = ["src"]
-
-[tool.hatch.version]
-source = "vcs"
+only-include = [ "src" ]
+sources = [ "src" ]
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
+[tool.hatch.version]
+source = "vcs"
 
 # ======================================================================================
-# Pixi
+# Pixi configuration
 # ======================================================================================
 
 [tool.pixi.workspace]
-channels = ["conda-forge"]
-platforms = ["linux-64", "osx-arm64", "win-64"]
+channels = [ "conda-forge" ]
+platforms = [ "linux-64", "osx-arm64", "win-64" ]
 
 # Development Dependencies (conda)
 # --------------------------------------------------------------------------------------
@@ -99,28 +92,29 @@ networkx = "*"
 numpy = ">=2.3,<2.4"
 # optimagic = "*"
 plotly = ">=6.2"
-pre-commit = "*"
+prek = "*"
 pybaum = "*"
+python = "~=3.14.0"
 python-kaleido = ">=1.0"
 scipy = "*"
 
 [tool.pixi.pypi-dependencies]
-skillmodels = {path = ".", editable = true}
-optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main"}
+optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main" }
 pdbp = "*"
+skillmodels = { path = ".", editable = true }
 
 # Features and Tasks
 # --------------------------------------------------------------------------------------
 
 [tool.pixi.feature.cuda]
-platforms = ["linux-64"]
-system-requirements = {cuda = "12"}
+platforms = [ "linux-64" ]
+system-requirements = { cuda = "12" }
 
 [tool.pixi.feature.cuda.dependencies]
 cuda-nvcc = ">=12"
 
 [tool.pixi.feature.cuda.pypi-dependencies]
-jax = {version = ">=0.7", extras = ["cuda12"]}
+jax = { version = ">=0.7", extras = [ "cuda12" ] }
 
 [tool.pixi.feature.test.dependencies]
 pytest = "*"
@@ -130,7 +124,6 @@ snakeviz = "*"
 
 [tool.pixi.feature.test.target.unix.dependencies]
 pytest-memray = "*"
-
 
 [tool.pixi.feature.test.tasks]
 tests = "pytest tests"
@@ -142,161 +135,97 @@ mem-on-clean-repo = "git status --porcelain && git diff-index --quiet HEAD -- &&
 mem-cuda = "pytest -x -s --pdb --memray --fail-on-increase tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs"
 
 [tool.pixi.feature.ty.pypi-dependencies]
-matplotlib = "*"  # required because of pandas
+matplotlib = "*"   # required because of pandas
 pandas-stubs = "*"
 ty = "*"
-types-PyYAML = "*"
 types-pytz = "*"
 
 [tool.pixi.feature.ty.tasks]
-ty = "ty check"
+ty = "ty check src tests docs"
+
+[tool.pixi.feature.docs.dependencies]
+jupyter-book = ">=2.0"
+
+[tool.pixi.feature.docs.tasks]
+docs = { cmd = "jupyter book build --html", cwd = "docs" }
+view-docs = { cmd = "jupyter book start", cwd = "docs" }
 
 # Environments
 # --------------------------------------------------------------------------------------
 
 [tool.pixi.environments]
-cuda = {features = ["cuda"], solve-group = "cuda"}
-test-cpu = {features = ["test"], solve-group = "default"}
-test-gpu = {features = ["test", "cuda"], solve-group = "cuda"}
-ty = {features = ["test", "ty"], solve-group = "default"}
+cuda = { features = [ "cuda" ], solve-group = "cuda" }
+docs = { features = [ "docs" ], solve-group = "default" }
+test-cpu = { features = [ "test" ], solve-group = "default" }
+test-gpu = { features = [ "test", "cuda" ], solve-group = "cuda" }
+ty = { features = [ "test", "ty" ], solve-group = "default" }
 
 # ======================================================================================
 # Ruff configuration
 # ======================================================================================
 
 [tool.ruff]
-target-version = "py313"
 fix = true
 line-length = 88
-
+target-version = "py314"
+unsafe-fixes = false
 
 [tool.ruff.lint]
-select = ["ALL"]
 extend-ignore = [
-    # missing type annotation
-    "ANN001",
-
-    # missing type annotation for `*args`
-    "ANN002",
-
-    # missing type annotation for `**kwargs`
-    "ANN003",
-
-    # missing return type annotation for public function
-    "ANN201",
-
-    # missing return type annotation for private function
-    "ANN202",
-
-    # No explicit `stacklevel` keyword argument found
-    "B028",
-
-    # In conflict with formatter
-    "COM812",
-
-    # Missing docstring in public module
-    "D100",
-
-    # missing docstring in public function
-    "D103",
-
-    # missing docstring in public package
-    "D104",
-
-    # exception must not use a string literal
-    "EM101",
-
-    # exception must not use an f-string literal
-    "EM102",
-
-    # Boolean-typed positional arguments.
-    "FBT001",
-
-    # Boolean default positional argument in function definition
-    "FBT002",
-
-    # line contains a todo
-    "FIX002",
-
-    # In conflict with formatter
-    "ISC001",
-
-    # Leave Numpy's legacy RNG
-    "NPY002",
-
-    # array.at is perfectly valid Jax, but linter thinks it's Pandas...
-    "PD008",
-
-    # pd.merge is fine
-    "PD015",
-
-    # Many suggestions to use list comprehension are not helpful
-    "PERF401",
-
-    # Magic values are fine
-    "PLR2004",
-
-    # Too many arguments to function call
-    "PLR0913",
-
-    # Assignment before return statement is fine.
-    "RET504",
-
-    # use of `assert` detected
-    "S101",
-
-    # `pickle` module is unsafe
-    "S301",
-
-    # Private member accessed: `_stochastic_info`
-    "SLF001",
-
-    # long messages outside the exception class
-    "TRY003",
+  "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed - too strict
+  "COM812",  # Conflicts with ruff-format
+  "EM101",   # Exception must not use a string literal
+  "EM102",   # Exception must not use an f-string literal
+  "FBT002",  # Boolean default positional argument in function definition
+  "FIX002",  # Line contains TODO
+  "ISC001",  # Conflicts with ruff-format
+  "PD015",   # pd.merge is fine
+  "PERF401", # Many suggestions to use list comprehension are not helpful
+  "PLR0913", # Too many arguments to function call
+  "PLR2004", # Magic values are fine
+  "S301",    # `pickle` module is unsafe
+  "TC001",   # Move application import into a type-checking block
+  "TC002",   # Move third-party import into a type-checking block
+  "TC003",   # Move standard library import into a type-checking block
+  "TRY003",  # Long messages outside exception class
 ]
+select = [ "ALL" ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/skillmodels/constraints.py" = ["D417"]
-"src/skillmodels/decorators.py" = ["D417"]
-"src/skillmodels/kalman_filters.py" = ["D417"]
-"src/skillmodels/likelihood_function.py" = ["D417"]
-"src/skillmodels/likelihood_function_debug.py" = ["D417"]
-"src/skillmodels/params_index.py" = ["D417"]
-"src/skillmodels/parse_params.py" = ["D417"]
-"src/skillmodels/process_data.py" = ["D417"]
-"src/skillmodels/simulate_data.py" = ["D417"]
-"src/skillmodels/visualize_*.py" = ["BLE001", "D417"]
-"src/skillmodels/*_heatmap*.py" = ["D417"]
-"**/*.ipynb" = ["B018", "T201", "E402", "PLR2004", "INP001", "PTH100"]
-"docs/**/*" = ["A001", "ERA001", "INP001", "PTH100", "PTH123", "S506"]
+"src/skillmodels/types.py" = [ "TC" ] # Dataclasses need types at runtime
+"src/skillmodels/visualize_*.py" = [ "BLE001" ]
+"**/*.ipynb" = [
+  "B018",   # Seemingly useless expression for printing.
+  "INP001", # No need for a namespace.
+  "T201",   # Printing is fine here.
+]
 "tests/*" = [
-    "ARG001",
-    "E712",
-    "FBT003",
-    "INP001",
-    "PD002",
-    "PT011",
-    "NPY002",
-    "PTH123",
-    "S506"
+  "ANN",    # No type annotations needed for tests
+  "ARG001", # Unused arguments are common in fixture-heavy tests
+  "D100",   # No module docstrings needed for tests
+  "D103",   # No function docstrings needed for tests
+  "E712",   # Comparison to True/False using == might be necessary for arrays.
+  "FBT003", # Boolean positional values are common in test setup
+  "INP001", # No need for a namespace.
+  "PT011",  # Broad pytest.raises() blocks are okay
+  "S101",   # use of `assert` detected
 ]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
-
 
 # ======================================================================================
 # ty configuration
 # ======================================================================================
 
 [tool.ty.rules]
-invalid-return-type = "error"
 ambiguous-protocol-member = "error"
 deprecated = "error"
 division-by-zero = "error"
 ignore-comment-unknown-rule = "error"
 invalid-argument-type = "error"
 invalid-ignore-comment = "error"
+invalid-return-type = "error"
 possibly-missing-attribute = "error"
 possibly-missing-implicit-call = "error"
 possibly-missing-import = "error"
@@ -308,16 +237,20 @@ unsupported-base = "error"
 unused-ignore-comment = "error"
 useless-overload-body = "error"
 
+# ======================================================================================
+# pytest configuration
+# ======================================================================================
 
 [tool.pytest.ini_options]
+addopts = [ "--pdbcls=pdbp:Pdb" ]
+filterwarnings = [  ]
 markers = [
-    "wip: Tests that are work-in-progress.",
-    "unit: Flag for unit tests which target mainly a single function.",
-    "integration: Flag for integration tests which may comprise of multiple unit tests.",
-    "end_to_end: Flag for tests that cover the whole program.",
+  "end_to_end: Flag for tests that cover the whole program.",
+  "integration: Flag for integration tests which may comprise of multiple unit tests.",
+  "unit: Flag for unit tests which target mainly a single function.",
+  "wip: Tests that are work-in-progress.",
 ]
-norecursedirs = ["docs", ".envs"]
-
+norecursedirs = [ "docs", ".envs" ]
 
 # ======================================================================================
 # yamlfix configuration
@@ -325,5 +258,5 @@ norecursedirs = ["docs", ".envs"]
 
 [tool.yamlfix]
 line_length = 88
-sequence_style = "block_style"
 none_representation = "null"
+sequence_style = "block_style"

@@ -1,9 +1,9 @@
-from pathlib import Path
+from types import MappingProxyType
 
 import pandas as pd
 import pytest
-import yaml
 
+from skillmodels.config import TEST_DATA_DIR
 from skillmodels.params_index import (
     get_control_params_index_tuples,
     get_initial_cholcovs_index_tuples,
@@ -16,40 +16,37 @@ from skillmodels.params_index import (
     initial_mean_index_tuples,
 )
 from skillmodels.process_model import process_model
+from skillmodels.test_data.model2 import MODEL2
+from skillmodels.types import TransitionInfo
 
 
 @pytest.fixture
 def model2_inputs():
-    test_dir = Path(__file__).parent.resolve()
-    with open(test_dir / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
-    processed = process_model(model_dict)
+    processed = process_model(MODEL2)
 
-    out = {
-        "update_info": processed["update_info"],
-        "labels": processed["labels"],
-        "dimensions": processed["dimensions"],
-        "transition_info": processed["transition_info"],
-        "endogenous_factors_info": processed["endogenous_factors_info"],
+    return {
+        "update_info": processed.update_info,
+        "labels": processed.labels,
+        "dimensions": processed.dimensions,
+        "transition_info": processed.transition_info,
+        "endogenous_factors_info": processed.endogenous_factors_info,
     }
-    return out
 
 
-def test_params_index_with_model2(model2_inputs):
-    test_dir = Path(__file__).parent.resolve()
+def test_params_index_with_model2(model2_inputs) -> None:
     calculated = get_params_index(**model2_inputs)
     expected = pd.read_csv(
-        test_dir / "model2_correct_params_index.csv",
+        TEST_DATA_DIR / "model2_correct_params_index.csv",
         index_col=["category", "period", "name1", "name2"],
     ).index
 
     assert calculated.equals(expected)
 
 
-def test_control_coeffs_index_tuples():
+def test_control_coeffs_index_tuples() -> None:
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
     uinfo = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_tups))
-    controls = ["constant", "c1"]
+    controls = ("constant", "c1")
 
     expected = [
         ("controls", 0, "m1", "constant"),
@@ -68,14 +65,14 @@ def test_control_coeffs_index_tuples():
     assert calculated == expected
 
 
-def test_loading_index_tuples():
+def test_loading_index_tuples() -> None:
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
     uinfo = pd.DataFrame(
         True,
         index=pd.MultiIndex.from_tuples(uinfo_tups),
         columns=["fac1", "fac2"],
     )
-    factors = ["fac1", "fac2"]
+    factors = ("fac1", "fac2")
     expected = [
         ("loadings", 0, "m1", "fac1"),
         ("loadings", 0, "m1", "fac2"),
@@ -93,7 +90,7 @@ def test_loading_index_tuples():
     assert calculated == expected
 
 
-def test_meas_sd_index_tuples():
+def test_meas_sd_index_tuples() -> None:
     uinfo_tups = [(0, "m1"), (0, "m2"), (0, "bla"), (1, "m1"), (1, "m2")]
     uinfo = pd.DataFrame(index=pd.MultiIndex.from_tuples(uinfo_tups))
 
@@ -109,9 +106,9 @@ def test_meas_sd_index_tuples():
     assert calculated == expected
 
 
-def test_shock_sd_index_tuples():
-    periods = [0, 1, 2]
-    factors = ["fac1", "fac2"]
+def test_shock_sd_index_tuples() -> None:
+    periods = (0, 1, 2)
+    factors = ("fac1", "fac2")
 
     expected = [
         ("shock_sds", 0, "fac1", "-"),
@@ -120,13 +117,15 @@ def test_shock_sd_index_tuples():
         ("shock_sds", 1, "fac2", "-"),
     ]
 
-    calculated = get_shock_sds_index_tuples(periods, factors, False)
+    calculated = get_shock_sds_index_tuples(
+        periods, factors, has_endogenous_factors=False
+    )
     assert calculated == expected
 
 
-def test_initial_mean_index_tuples():
+def test_initial_mean_index_tuples() -> None:
     nmixtures = 3
-    factors = ["fac1", "fac2"]
+    factors = ("fac1", "fac2")
 
     expected = [
         ("initial_states", 0, "mixture_0", "fac1"),
@@ -141,7 +140,7 @@ def test_initial_mean_index_tuples():
     assert calculated == expected
 
 
-def test_mixture_weight_index_tuples():
+def test_mixture_weight_index_tuples() -> None:
     nmixtures = 3
     expected = [
         ("mixture_weights", 0, "mixture_0", "-"),
@@ -152,9 +151,9 @@ def test_mixture_weight_index_tuples():
     assert calculated == expected
 
 
-def test_initial_cov_index_tuples():
+def test_initial_cov_index_tuples() -> None:
     nmixtures = 2
-    factors = ["fac1", "fac2", "fac3"]
+    factors = ("fac1", "fac2", "fac3")
     expected = [
         ("initial_cholcovs", 0, "mixture_0", "fac1-fac1"),
         ("initial_cholcovs", 0, "mixture_0", "fac2-fac1"),
@@ -174,15 +173,20 @@ def test_initial_cov_index_tuples():
     assert calculated == expected
 
 
-def test_trans_coeffs_index_tuples_no_endogenous_factors():
-    periods = [0, 1, 2]
+def test_trans_coeffs_index_tuples_no_endogenous_factors() -> None:
+    periods = (0, 1, 2)
 
     param_names = {
-        "fac1": ["fac1", "fac2", "fac3", "constant"],
-        "fac2": [],
-        "fac3": ["fac1", "fac2", "fac3", "phi"],
+        "fac1": ("fac1", "fac2", "fac3", "constant"),
+        "fac2": (),
+        "fac3": ("fac1", "fac2", "fac3", "phi"),
     }
-    trans_info = {"param_names": param_names}
+    trans_info = TransitionInfo(
+        func=lambda x: x,  # dummy function
+        param_names=MappingProxyType(param_names),
+        individual_functions=MappingProxyType({}),
+        function_names=MappingProxyType({}),
+    )
 
     expected = [
         ("transition", 0, "fac1", "fac1"),
@@ -212,15 +216,20 @@ def test_trans_coeffs_index_tuples_no_endogenous_factors():
     assert calculated == expected
 
 
-def test_trans_coeffs_index_tuples_has_endogenous_factors():
-    periods = [0, 1, 2, 3, 4, 5]
+def test_trans_coeffs_index_tuples_has_endogenous_factors() -> None:
+    periods = (0, 1, 2, 3, 4, 5)
 
     param_names = {
-        "fac1": ["fac1", "fac2", "fac3", "constant"],
-        "fac2": [],
-        "fac3": ["fac1", "fac2", "fac3", "phi"],
+        "fac1": ("fac1", "fac2", "fac3", "constant"),
+        "fac2": (),
+        "fac3": ("fac1", "fac2", "fac3", "phi"),
     }
-    trans_info = {"param_names": param_names}
+    trans_info = TransitionInfo(
+        func=lambda x: x,  # dummy function
+        param_names=MappingProxyType(param_names),
+        individual_functions=MappingProxyType({}),
+        function_names=MappingProxyType({}),
+    )
 
     expected = [
         ("transition", 0, "fac1", "fac1"),

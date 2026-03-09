@@ -1,60 +1,70 @@
+"""Functions for creating correlation heatmap visualizations."""
+
+from typing import Any
+
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 from plotly import graph_objects as go
 
+from skillmodels.model_spec import ModelSpec
 from skillmodels.process_data import pre_process_data
 from skillmodels.process_model import process_model
+from skillmodels.types import ProcessedModel
 
 
 def plot_correlation_heatmap(
-    corr,
-    heatmap_kwargs=None,
-    layout_kwargs=None,
-    rounding=2,
-    zmax=None,
-    zmin=None,
-    zmid=None,
-    colorscale="RdBu_r",
-    show_color_bar=True,
-    show_diagonal=True,
-    show_upper_triangle=True,
-    trim_heatmap=False,
-    annotate=True,
-    annotation_fontsize=13,
-    annotation_text_color="black",
-    annotation_text_angle=0,
-    axes_tick_fontsize=(12, 12),
-    axes_tick_label_angle=(90, 0),
-    axes_tick_label_color=("black", "black"),
-):
+    corr: pd.DataFrame,
+    heatmap_kwargs: dict[str, Any] | None = None,
+    layout_kwargs: dict[str, Any] | None = None,
+    rounding: int = 2,
+    zmax: float | None = None,
+    zmin: float | None = None,
+    zmid: float | None = None,
+    colorscale: str = "RdBu_r",
+    *,
+    show_color_bar: bool = True,
+    show_diagonal: bool = True,
+    show_upper_triangle: bool = True,
+    trim_heatmap: bool = False,
+    annotate: bool = True,
+    annotation_fontsize: int = 13,
+    annotation_text_color: str = "black",
+    annotation_text_angle: float = 0,
+    axes_tick_fontsize: tuple[int, int] = (12, 12),
+    axes_tick_label_angle: tuple[float, float] = (90, 0),
+    axes_tick_label_color: tuple[str, str] = ("black", "black"),
+) -> go.Figure:
     """Plot correlation heatmaps for factor measurements.
 
     Args:
-        corr (DataFrame): Data frame of measurement or factor score correlations.
-        heatmap_kwargs (dct): Dictionary of key word arguments to pass to go.Heatmap ().
+        corr: Data frame of measurement or factor score correlations.
+        heatmap_kwargs: Dictionary of key word arguments to pass to go.Heatmap ().
             If None, the default kwargs defined in the function will be used.
-        layout_kwargs (dct): Dictionary of key word arguments used to update layout of
+        layout_kwargs: Dictionary of key word arguments used to update layout of
             go.Figure object. If None, the default kwargs defined in the function will
             be used. Through layout_kwargs, you can edit figure properties such as
             - template
             - title
             - figsize
-        rounding (int): Number of digits after the decimal point to round the
+        rounding: Number of digits after the decimal point to round the
             correlation values to. Default 2.
-        zmax (float ot NoneType): Upper bound to set on correlation color map. If None,
+        zmax: Upper bound to set on correlation color map. If None,
             is set to maximum absolute correlation value.
-        zmin (float or NoneType): Lower bound to set on correlation color map. If None,
+        zmin: Lower bound to set on correlation color map. If None,
             is set to -zmax.
-        zmid (float or NoneType): Midpoint to set on correlation color map. If None,
+        zmid: Midpoint to set on correlation color map. If None,
             is set to 0.
-        colorscale (str): Name of the color palette to use in the heatmap.
+        colorscale: Name of the color palette to use in the heatmap.
             Default 'RdBu_r'.
-        show_color_bar (bool): A boolean variable for displaying heatmap colorbar.
+        show_color_bar: A boolean variable for displaying heatmap colorbar.
             Default True.
-        show_diagonal (bool): A boolean for displaying the correlations on the diagonal.
+        show_diagonal: A boolean for displaying the correlations on the diagonal.
             Default False.
-        show_upper_triangle (bool): A boolean for displaying upper triangular part
+        show_upper_triangle: A boolean for displaying upper triangular part
             of the correlation heatmap. Default False.
+        trim_heatmap: If True, trim empty rows/columns from the heatmap.
+            Default False.
 
         The following arguments are processed into dictionaries or special plotly
         objects and passed to layout_kwargs. Defining them as additional arguments
@@ -67,38 +77,38 @@ def plot_correlation_heatmap(
         defined in layout_kwargs will overwrite values passed via the individual
         arguments.
 
-        annotate (bool): If True, annotate the heatmap figure with correlation values.
+        annotate: If True, annotate the heatmap figure with correlation values.
             Default False.
-        annotation_font_size (int): Font size of the annotation text. Default 13.
-        annotation_font_color (str): Collor of the annotation text. Default 'black'.
-        annotation_text_angle (float): The angle at which to rotate annotation text.
+        annotation_fontsize: Font size of the annotation text. Default 13.
+        annotation_text_color: Color of the annotation text. Default 'black'.
+        annotation_text_angle: The angle at which to rotate annotation text.
             Default 0.
-        axes_tick_fontsize (list, tuple, other iterable or dict): Fontsize of axes
+        axes_tick_fontsize: Fontsize of axes
             ticks. Default (12,12)
-        axes_tick_label_angle (list, tuple, other iterable or dict): Rotation angles of
+        axes_tick_label_angle: Rotation angles of
             axes tick labels. Default (90,0).
-        axes_tick_label_color (list, tuple, other iterable or dict): Colors of the axes
+        axes_tick_label_color: Colors of the axes
             tick labels. Default ('black', 'black').
 
     Returns:
-        fig (plotly graph object): The figure with correlaiton heatmap.
+        fig: The figure with correlaiton heatmap.
 
     """
     corr = _process_corr_data_for_plotting(
-        corr,
-        rounding,
-        show_upper_triangle,
-        show_diagonal,
-        trim_heatmap,
+        corr=corr,
+        rounding=rounding,
+        show_upper_triangle=show_upper_triangle,
+        show_diagonal=show_diagonal,
+        trim_heatmap=trim_heatmap,
     )
     heatmap_kwargs = _get_heatmap_kwargs(
-        corr,
-        heatmap_kwargs,
-        colorscale,
-        show_color_bar,
-        zmax,
-        zmin,
-        zmid,
+        corr=corr,
+        heatmap_kwargs=heatmap_kwargs,
+        colorscale=colorscale,
+        show_color_bar=show_color_bar,
+        zmax=zmax,
+        zmin=zmin,
+        zmid=zmid,
     )
     layout_kwargs = _get_layout_kwargs(
         corr=corr,
@@ -122,33 +132,39 @@ def plot_correlation_heatmap(
     return fig
 
 
-def get_measurements_corr(data, model_dict, factors, periods):
+def get_measurements_corr(
+    data: pd.DataFrame,
+    model_spec: ModelSpec,
+    factors: list[str] | tuple[str, ...] | str | None,
+    periods: float | list[int] | None,
+) -> pd.DataFrame:
     """Get data frame with measurement correlations.
 
     Process data to retrieve measurements for each period and calculate correlations
     across period specific measurements.
 
     Args:
-        data (pd.DataFrame): DataFrame with observed measurements.
-        model_dict (dct): Dictionary of model attributes to be passed to process_model
-            and extract measurements for each period.
-        factors (list, str or NoneType): List of factors, to retrieve measurements for.
+        data: The observed measurements.
+        model_spec: The model specification. See: :ref:`model_specs`
+        factors: Factors to retrieve measurements for.
             If None, then calculate correlations of measurements of all factors.
-        periods (int, float, list or NoneType): If int, the period within which to
+        periods: If int, the period within which to
             calculate measurement correlations. If a list, calculate correlations over
             periods. If None, calculate correlations across all periods. Note: Periods
-            refer to originl periods, not the augmented periods.
+            refer to original periods, not the augmented periods.
 
     Returns:
-        corr (DataFrame): DataFrame with measurement correlations.
+        corr: Measurement correlations.
 
     """
     data = data.copy(deep=True)
-    model = process_model(model_dict)
-    periods = _process_periods(periods, model)
-    processed_data = pre_process_data(data, periods)
-    latent_factors, observed_factors = _process_factors(model, factors)
-    update_info_by_period = _get_update_info_for_periods(model)
+    processed_model = process_model(model_spec)
+    periods = _process_periods(periods=periods, model=processed_model)
+    processed_data = pre_process_data(df=data, periods=periods)
+    latent_factors, observed_factors = _process_factors(
+        model=processed_model, factors=factors
+    )
+    update_info_by_period = _get_update_info_for_periods(processed_model)
     df = _get_measurement_data(
         data=processed_data,
         update_info_by_period=update_info_by_period,
@@ -156,11 +172,15 @@ def get_measurements_corr(data, model_dict, factors, periods):
         latent_factors=latent_factors,
         observed_factors=observed_factors,
     )
-    corr = df.corr()
-    return corr
+    return df.corr()
 
 
-def get_quasi_scores_corr(data, model_dict, factors, periods):
+def get_quasi_scores_corr(
+    data: pd.DataFrame,
+    model_spec: ModelSpec,
+    factors: list[str] | tuple[str, ...] | str | None,
+    periods: float | list[int] | None,
+) -> pd.DataFrame:
     """Get data frame with correlations of factor scores.
 
     Process data to retrieve measurements for each period, standardize measurements
@@ -171,25 +191,26 @@ def get_quasi_scores_corr(data, model_dict, factors, periods):
     The calculated scores coincide with factor scores for linear models.
 
     Args:
-        data (pd.DataFrame): DataFrame with observed measurements.
-        model_dict (dct): Dictionary of model attributes to be passed to process_model
-            and extract measurements for each period.
-        factors (list, str or NoneType): List of factors, to retrieve measurements for.
+        data: The observed measurements.
+        model_spec: The model specification. See: :ref:`model_specs`
+        factors: Factors to retrieve measurements for.
             If None, then calculate correlations of measurements of all factors.
-        periods (int,float, list or NoneType): If int, the period within which to
+        periods: If int, the period within which to
             calculate measurement correlations. If a list, calculate correlations over
             periods. If None, calculate correlations across all periods.
 
     Returns:
-        corr (DataFrame): DataFrame with score correlations.
+        corr: Score correlations.
 
     """
     data = data.copy(deep=True)
-    model = process_model(model_dict)
-    periods = _process_periods(periods, model)
-    processed_data = pre_process_data(data, periods)
-    latent_factors, observed_factors = _process_factors(model, factors)
-    update_info = _get_update_info_for_periods(model)
+    processed_model = process_model(model_spec)
+    periods = _process_periods(periods=periods, model=processed_model)
+    processed_data = pre_process_data(df=data, periods=periods)
+    latent_factors, observed_factors = _process_factors(
+        model=processed_model, factors=factors
+    )
+    update_info = _get_update_info_for_periods(processed_model)
     df = _get_quasi_factor_scores_data(
         data=processed_data,
         update_info_by_period=update_info,
@@ -197,11 +218,16 @@ def get_quasi_scores_corr(data, model_dict, factors, periods):
         latent_factors=latent_factors,
         observed_factors=observed_factors,
     )
-    corr = df.corr()
-    return corr
+    return df.corr()
 
 
-def get_scores_corr(data, params, model_dict, factors, periods):
+def get_scores_corr(
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    model_spec: ModelSpec,
+    factors: list[str] | tuple[str, ...] | str | None,
+    periods: float | list[int] | None,
+) -> pd.DataFrame:
     """Get data frame with correlations of factor scores.
 
     Process data to retrieve measurements for each period, standardize measurements
@@ -210,47 +236,50 @@ def get_scores_corr(data, params, model_dict, factors, periods):
     scores.
 
     Args:
-        data (pd.DataFrame): DataFrame with observed measurements.
-        params (pd.DataFrame): DataFrame with estimated model parameters
-        model_dict (dct): Dictionary of model attributes to be passed to process_model
-            and extract measurements for each period.
-        factors (list, str or NoneType): List of factors, to retrieve measurements for.
+        data: The observed measurements.
+        params: Estimated model parameters.
+        model_spec: The model specification. See: :ref:`model_specs`
+        factors: Factors to retrieve measurements for.
             If None, then calculate correlations of measurements of all factors.
-        periods (int,float, list or NoneType): If int, the period within which to
+        periods: If int, the period within which to
             calculate measurement correlations. If a list, calculate correlations over
             periods. If None, calculate correlations across all periods.
 
     Returns:
-        corr (DataFrame): DataFrame with score correlations.
+        corr: DataFrame with score correlations.
 
     """
     data = data.copy(deep=True)
-    model = process_model(model_dict)
-    periods = _process_periods(periods, model)
-    processed_data = pre_process_data(data, periods)
-    latent_factors, observed_factors = _process_factors(model, factors)
+    processed_model = process_model(model_spec)
+    periods = _process_periods(periods=periods, model=processed_model)
+    processed_data = pre_process_data(df=data, periods=periods)
+    latent_factors, observed_factors = _process_factors(
+        model=processed_model, factors=factors
+    )
     params = params.loc[["controls", "loadings"]]
     df = _get_factor_scores_data(
         data=processed_data,
         params=params,
-        model=model,
+        model=processed_model,
         periods=periods,
         latent_factors=latent_factors,
         observed_factors=observed_factors,
     )
-    corr = df.corr()
-    return corr
+    return df.corr()
 
 
 def _process_corr_data_for_plotting(
-    corr,
-    rounding,
-    show_upper_triangle,
-    show_diagonal,
-    trim_heatmap,
-):
+    corr: pd.DataFrame,
+    rounding: int,
+    *,
+    show_upper_triangle: bool,
+    show_diagonal: bool,
+    trim_heatmap: bool,
+) -> pd.DataFrame:
     """Apply mask and rounding to correlation DataFrame."""
-    mask = _get_mask(corr, show_upper_triangle, show_diagonal)
+    mask = _get_mask(
+        corr, show_upper_triangle=show_upper_triangle, show_diagonal=show_diagonal
+    )
     corr = corr.where(mask).round(rounding)
     if trim_heatmap:
         keeprows = mask.any(axis=1) & corr.notna().any(axis="columns").to_numpy()
@@ -262,7 +291,12 @@ def _process_corr_data_for_plotting(
     return corr
 
 
-def _get_mask(corr, show_upper_triangle, show_diagonal):
+def _get_mask(
+    corr: pd.DataFrame,
+    *,
+    show_upper_triangle: bool,
+    show_diagonal: bool,
+) -> NDArray[np.bool_]:
     """Get array to mask the correlation DataFrame."""
     mask = np.zeros_like(corr, dtype=bool)
     mask[np.tril_indices_from(mask, k=-1)] = True
@@ -273,15 +307,15 @@ def _get_mask(corr, show_upper_triangle, show_diagonal):
     return mask
 
 
-def _get_update_info_for_periods(model):
+def _get_update_info_for_periods(model: ProcessedModel) -> pd.DataFrame:
     """Return update_info with user-provided periods instead of augmented periods."""
-    update_info = model["update_info"].copy()
+    update_info = model.update_info.copy()
 
     # Replace period level with user-provided period using set_codes
     period_values = update_info.index.get_level_values("aug_period").map(
-        model["labels"]["aug_periods_to_periods"]
+        model.labels.aug_periods_to_periods
     )
-    update_info.index = update_info.index.set_codes(period_values, level="aug_period")
+    update_info.index = update_info.index.set_codes(period_values, level="aug_period")  # ty: ignore[unresolved-attribute]
     update_info.index = update_info.index.set_names(["period", "variable"])
 
     # Group by period and variable, apply OR logic for boolean columns
@@ -293,26 +327,30 @@ def _get_update_info_for_periods(model):
 
 
 def _get_measurement_data(
-    data, update_info_by_period, periods, latent_factors, observed_factors
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    periods: list[int],
+    latent_factors: list[str] | tuple[str, ...],
+    observed_factors: list[str] | tuple[str, ...],
+) -> pd.DataFrame:
     """Get data frame with factor measurements in each period, in wide format.
 
     For each factor, retrieve the data on measurements in each period and stack
     the data columns into a data frame.
 
     Args:
-        data (pd.DataFrame): Data with observable variables.
-        update_info (pd.DataFrame): DataFrame with information on measurements
+        data: Data with observable variables.
+        update_info_by_period: DataFrame with information on measurements
             for each factor in each model period.
-        periods (list): The list of periods that correlations are
+        periods: The list of periods that correlations are
             calculated for.
-        latent_factors (list): List of latent factors the measurements of which
+        latent_factors: List of latent factors the measurements of which
             correlations are calculated for.
-        observed_factors (list): List of observed factors the measurements of which
+        observed_factors: List of observed factors the measurements of which
             correlations are calculated for.
 
     Returns:
-        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
+        df: Processed DataFrame to calculate correlations over.
 
     """
     if len(periods) == 1:
@@ -336,26 +374,26 @@ def _get_measurement_data(
 
 
 def _get_measurement_data_for_single_period(
-    data,
-    update_info_by_period,
-    period,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    period: int,
+    latent_factors: list[str] | tuple[str, ...],
+    observed_factors: list[str] | tuple[str, ...],
+) -> pd.DataFrame:
     """Extract measurements of factors for the given period.
 
     Args:
-        data (pd.DataFrame): Data with observable variables.
-        update_info (pd.DataFrame): DataFrame with information on measurements
+        data: Data with observable variables.
+        update_info_by_period: DataFrame with information on measurements
             for each factor in each model period.
-        periods (int or float): The period to extract measurements for.
-        latent_factors (list): List of latent factors the measurements of which
+        period: The period to extract measurements for.
+        latent_factors: List of latent factors the measurements of which
             correlations are calculated for.
-        observed_factors (list): List of observed factors the measurements of which
+        observed_factors: List of observed factors the measurements of which
             correlations are calculated for.
 
     Returns:
-        df (pd.DataFrame): DataFrame with measurements of factors for period 'period'.
+        df: DataFrame with measurements of factors for period 'period'.
 
     """
     period_info = update_info_by_period.loc[period].reset_index()
@@ -367,31 +405,30 @@ def _get_measurement_data_for_single_period(
         )["variable"].to_list()
     for fac in observed_factors:
         measurements.append(fac)
-    df = data.query(f"{update_info_by_period.index.names[0]}=={period}")[measurements]
-    return df
+    return data.query(f"{update_info_by_period.index.names[0]}=={period}")[measurements]
 
 
 def _get_measurement_data_for_multiple_periods(
-    data,
-    update_info_by_period,
-    periods,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    periods: list[int],
+    latent_factors: list[str] | tuple[str, ...],
+    observed_factors: list[str] | tuple[str, ...],
+) -> pd.DataFrame:
     """Extract measurements for factors for given periods.
 
     Args:
-        data (pd.DataFrame): Data with observable variables.
-        update_info_by_period (pd.DataFrame): DataFrame with information on measurements
+        data: Data with observable variables.
+        update_info_by_period: DataFrame with information on measurements
             for each factor in each user-provided period.
-        periods (list): The periods to extract measurements for.
-        latent_factors (list): List of latent factors the measurements of which
+        periods: The periods to extract measurements for.
+        latent_factors: List of latent factors the measurements of which
             correlations are calculated for.
-        observed_factors (list): List of observed factors the measurements of which
+        observed_factors: List of observed factors the measurements of which
             correlations are calculated for.
 
     Returns:
-        df (pd.DataFrame): DataFrame with measurements of factors in each period as
+        df: DataFrame with measurements of factors in each period as
             columns.
 
     """
@@ -408,17 +445,16 @@ def _get_measurement_data_for_multiple_periods(
             .add_suffix(f", {period}")
             .reset_index(drop=True),
         )
-    df = pd.concat(to_concat, axis=1)
-    return df
+    return pd.concat(to_concat, axis=1)
 
 
 def _get_quasi_factor_scores_data(
-    data,
-    update_info_by_period,
-    periods,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    periods: list[int],
+    latent_factors: list[str] | tuple[str, ...],
+    observed_factors: list[str] | tuple[str, ...],
+) -> pd.DataFrame:
     """Get data frame with summary information on factor measurements in each period.
 
     In each period, standardize factor measurements to zero mean and unit standard
@@ -427,63 +463,62 @@ def _get_quasi_factor_scores_data(
     models.
 
     Args:
-        data (pd.DataFrame): Data with observable variables.
-        update_info (pd.DataFrame): DataFrame with information on measurements
+        data: Data with observable variables.
+        update_info_by_period: DataFrame with information on measurements
             for each factor in each model period.
-        periods (list): The list of periods that correlations are
+        periods: The list of periods that correlations are
             calculated for.
-        latent_factors (list): List of latent factors the scores of which
+        latent_factors: List of latent factors the scores of which
             correlations are calculated for.
-        observed_factors (list): List of observed factors the scores of which
+        observed_factors: List of observed factors the scores of which
             correlations are calculated for.
 
     Returns:
-        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
+        df: Processed DataFrame to calculate correlations over.
 
     """
     if len(periods) == 1:
         period = periods[0]
         df = _get_quasi_factor_scores_data_for_single_period(
-            data,
-            update_info_by_period,
-            period,
-            latent_factors,
-            observed_factors,
+            data=data,
+            update_info_by_period=update_info_by_period,
+            period=period,
+            latent_factors=latent_factors,
+            observed_factors=observed_factors,
         )
     else:
         df = _get_quasi_factor_scores_data_for_multiple_periods(
-            data,
-            update_info_by_period,
-            periods,
-            latent_factors,
-            observed_factors,
+            data=data,
+            update_info_by_period=update_info_by_period,
+            periods=periods,
+            latent_factors=latent_factors,
+            observed_factors=observed_factors,
         )
 
     return df
 
 
 def _get_quasi_factor_scores_data_for_single_period(
-    data,
-    update_info_by_period,
-    period,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    period: int,
+    latent_factors: list[str] | tuple[str, ...],
+    observed_factors: list[str] | tuple[str, ...],
+) -> pd.DataFrame:
     """Get frame with summary scores on factor measurements in a given period.
 
     Args:
-        data (pd.DataFrame): Data with observable variables.
-        update_info_by_period (pd.DataFrame): DataFrame with information on measurements
+        data: Data with observable variables.
+        update_info_by_period: DataFrame with information on measurements
             for each factor in each user-provided period.
-        periods (list): The list of periods that correlations are
-            calculated for.
-        latent_factors (list): List of latent factors the scores of which
+        period: The period that correlations are calculated for.
+        latent_factors: List of latent factors the scores of which
             correlations are calculated for.
-        observed_factors (list): List of observed factors the scores of which
+        observed_factors: List of observed factors the scores of which
             correlations are calculated for.
 
     Returns:
-        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
+        df: Processed DataFrame to calculate correlations over.
 
     """
     period_info = update_info_by_period.loc[period].reset_index()
@@ -502,59 +537,57 @@ def _get_quasi_factor_scores_data_for_single_period(
     for factor in observed_factors:
         df = data.query(f"{update_info_by_period.index.names[0]}=={period}")[factor]
         to_concat.append(df)
-    df = pd.concat(to_concat, axis=1)
-    return df
+    return pd.concat(to_concat, axis=1)
 
 
 def _get_quasi_factor_scores_data_for_multiple_periods(
-    data,
-    update_info_by_period,
-    periods,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    update_info_by_period: pd.DataFrame,
+    periods: list[int],
+    latent_factors: list[str] | tuple[str, ...],
+    observed_factors: list[str] | tuple[str, ...],
+) -> pd.DataFrame:
     """Get frame with summary scores of factor measurements in a given period.
 
     Args:
-        data (pd.DataFrame): Data with observable variables.
-        update_info_by_period (pd.DataFrame): DataFrame with information on measurements
+        data: Data with observable variables.
+        update_info_by_period: DataFrame with information on measurements
             for each factor in each user-provided period.
-        periods (list): The list of periods that correlations are
+        periods: The list of periods that correlations are
             calculated for.
-        latent_factors (list): List of latent factors the scores of which
+        latent_factors: List of latent factors the scores of which
             correlations are calculated for.
-        observed_factors (list): List of observed factors the scores of which
+        observed_factors: List of observed factors the scores of which
             correlations are calculated for.
 
     Returns:
-        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
+        df: Processed DataFrame to calculate correlations over.
 
     """
     to_concat = []
     for period in periods:
         to_concat.append(
             _get_quasi_factor_scores_data_for_single_period(
-                data,
-                update_info_by_period,
-                period,
-                latent_factors,
-                observed_factors,
+                data=data,
+                update_info_by_period=update_info_by_period,
+                period=period,
+                latent_factors=latent_factors,
+                observed_factors=observed_factors,
             )
             .add_suffix(f", {period}")
             .reset_index(drop=True),
         )
-    df = pd.concat(to_concat, axis=1)
-    return df
+    return pd.concat(to_concat, axis=1)
 
 
 def _get_factor_scores_data(
-    data,
-    params,
-    model,
-    periods,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    model: ProcessedModel,
+    periods: list[int],
+    latent_factors: list[str] | tuple[str, ...],
+    observed_factors: list[str] | tuple[str, ...],
+) -> pd.DataFrame:
     """Get data frame with factor scores in each period.
 
     In each period, standardize factor measurements to with estimated intercepts and
@@ -562,52 +595,52 @@ def _get_factor_scores_data(
     a summary statistics.
 
     Args:
-        data (pd.DataFrame): Data with observable variables.
-        params (pd.DataFrame): Data frame with estimated measurement relevant
+        data: Data with observable variables.
+        params: Data frame with estimated measurement relevant
             model parameters.
-        model (dict): Processed model dict.
-        periods (list): The list of periods that correlations are
+        model: The processed model.
+        periods: The list of periods that correlations are
             calculated for.
-        latent_factors (list): List of latent factors the scores of which
+        latent_factors: List of latent factors the scores of which
             correlations are calculated for.
-        observed_factors (list): List of observed factors the scores of which
+        observed_factors: List of observed factors the scores of which
             correlations are calculated for.
 
     Returns:
-        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
+        df: Processed DataFrame to calculate correlations over.
 
     """
     if len(periods) == 1:
         period = periods[0]
         df = _get_factor_scores_data_for_single_period(
-            data,
-            params,
-            model,
-            period,
-            latent_factors,
-            observed_factors,
+            data=data,
+            params=params,
+            model=model,
+            period=period,
+            latent_factors=latent_factors,
+            observed_factors=observed_factors,
         )
     else:
         df = _get_factor_scores_data_for_multiple_periods(
-            data,
-            params,
-            model,
-            periods,
-            latent_factors,
-            observed_factors,
+            data=data,
+            params=params,
+            model=model,
+            periods=periods,
+            latent_factors=latent_factors,
+            observed_factors=observed_factors,
         )
 
     return df
 
 
 def _get_factor_scores_data_for_single_period(
-    data,
-    params,
-    model,
-    period,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    model: ProcessedModel,
+    period: int,
+    latent_factors: list[str] | tuple[str, ...],
+    observed_factors: list[str] | tuple[str, ...],
+) -> pd.DataFrame:
     """Get frame with factor scores in a given period.
 
     Careful: When we have endogenous factors, *period* refers to the raw period, but the
@@ -615,27 +648,26 @@ def _get_factor_scores_data_for_single_period(
     augmented periods.
 
     Args:
-        data (pd.DataFrame): Data with observable variables.
-        params (pd.DataFrame): Data frame with estimated measurement relevant
-            model parameters.
-        model (dict): Processed model dict.
-        period (int): The period that correlations are calculated for.
-        latent_factors (list): List of latent factors the scores of which
+        data: Data with observable variables.
+        params: Estimated measurement-relevant model parameters.
+        model: The processed model.
+        period: The period that correlations are calculated for.
+        latent_factors: List of latent factors the scores of which
             correlations are calculated for.
-        observed_factors (list): List of observed factors the scores of which
+        observed_factors: List of observed factors the scores of which
             correlations are calculated for.
 
     Returns:
-        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
+        df: Processed DataFrame to calculate correlations over.
 
     """
-    aug_periods = model["endogenous_factors_info"]["aug_periods_from_period"](period)
+    aug_periods = model.endogenous_factors_info.aug_periods_from_period(period)
     df = pd.concat(
         [
             _get_factor_scores_data_for_single_model_period(
                 data=data,
                 params=params,
-                update_info=model["update_info"],
+                update_info=model.update_info,
                 aug_period=ap,
                 period=period,
                 latent_factors=latent_factors,
@@ -654,32 +686,32 @@ def _get_factor_scores_data_for_single_period(
 
 
 def _get_factor_scores_data_for_single_model_period(
-    data,
-    params,
-    update_info,
-    aug_period,
-    period,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    update_info: pd.DataFrame,
+    aug_period: int,
+    period: int,
+    latent_factors: list[str] | tuple[str, ...],
+    observed_factors: list[str] | tuple[str, ...],
+) -> pd.DataFrame:
     """Get frame with factor scores in a given model period.
 
     In this function, all calculations are at the augmented period level.
 
     Args:
-        data (pd.DataFrame): Data with observable variables.
-        params (pd.DataFrame): Data frame with estimated measurement relevant
-        update_info (pd.DataFrame): DataFrame with information on measurements
+        data: Data with observable variables.
+        params: Data frame with estimated measurement relevant
+        update_info: DataFrame with information on measurements
             for each factor in each model period.
-        aug_period (int): The (augmented) period that correlations are calculated for.
-        period (int): The (raw) period that correlations are calculated for.
-        latent_factors (list): List of latent factors the scores of which
+        aug_period: The (augmented) period that correlations are calculated for.
+        period: The (raw) period that correlations are calculated for.
+        latent_factors: List of latent factors the scores of which
             correlations are calculated for.
-        observed_factors (list): List of observed factors the scores of which
+        observed_factors: List of observed factors the scores of which
             correlations are calculated for.
 
     Returns:
-        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
+        df: Processed DataFrame to calculate correlations over.
     """
     if aug_period not in update_info.index:
         return pd.DataFrame()
@@ -690,7 +722,7 @@ def _get_factor_scores_data_for_single_model_period(
         params.loc["controls"].query("name2 == 'constant'").droplevel("name2")["value"]
     )
     loadings_count = loadings.astype(bool).groupby("name1").sum()
-    leave_out_meas = loadings_count[loadings_count > 1].index.to_list()
+    leave_out_meas = loadings_count[loadings_count > 1].index.to_list()  # ty: ignore[unsupported-operator]
     to_concat = []
     for factor in latent_factors:
         period_factor_measurements = period_info.query(
@@ -712,108 +744,113 @@ def _get_factor_scores_data_for_single_model_period(
 
 
 def _get_factor_scores_data_for_multiple_periods(
-    data,
-    params,
-    model,
-    periods,
-    latent_factors,
-    observed_factors,
-):
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    model: ProcessedModel,
+    periods: list[int],
+    latent_factors: list[str] | tuple[str, ...],
+    observed_factors: list[str] | tuple[str, ...],
+) -> pd.DataFrame:
     """Get frame with factor scores in a given period.
 
     Args:
-        data (pd.DataFrame): Data with observable variables.
-        params (pd.DataFrame): Data frame with estimated model parameters.
-        model (dict): Processed model dict.
-        periods (list): The list of periods that correlations are
+        data: Data with observable variables.
+        params: Estimated model parameters.
+        model: The processed model.
+        periods: The list of periods that correlations are
             calculated for.
-        latent_factors (list): List of latent factors the scores of which
+        latent_factors: List of latent factors the scores of which
             correlations are calculated for.
-        observed_factors (list): List of observed factors the scores of which
+        observed_factors: List of observed factors the scores of which
             correlations are calculated for.
 
     Returns:
-        df (pd.DataFrame): Processed DataFrame to calculate correlations over.
+        df: Processed DataFrame to calculate correlations over.
 
     """
     to_concat = []
     for period in periods:
         to_concat.append(
             _get_factor_scores_data_for_single_period(
-                data,
-                params,
-                model,
-                period,
-                latent_factors,
-                observed_factors,
+                data=data,
+                params=params,
+                model=model,
+                period=period,
+                latent_factors=latent_factors,
+                observed_factors=observed_factors,
             )
             .add_suffix(f", {period}")
             .reset_index(drop=True),
         )
-    df = pd.concat(to_concat, axis=1)
-    return df
+    return pd.concat(to_concat, axis=1)
 
 
-def _process_factors(model, factors):
-    """Process factors to get a tuple of lists."""
+def _process_factors(
+    model: ProcessedModel,
+    factors: list[str] | tuple[str, ...] | str | None,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Process factors to get a tuple of tuples."""
     if not factors:
-        latent_factors = model["labels"]["latent_factors"]
-        observed_factors = model["labels"]["observed_factors"]
+        latent_factors = model.labels.latent_factors
+        observed_factors = model.labels.observed_factors
     elif isinstance(factors, str):
-        if factors in model["labels"]["latent_factors"]:
-            latent_factors = [factors]
-            observed_factors = []
-        elif factors in model["labels"]["observed_factors"]:
-            observed_factors = [factors]
-            latent_factors = []
+        if factors in model.labels.latent_factors:
+            latent_factors = (factors,)
+            observed_factors = ()
+        elif factors in model.labels.observed_factors:
+            observed_factors = (factors,)
+            latent_factors = ()
     else:
-        observed_factors = []
-        latent_factors = []
-        for factor in factors:
-            if factor in model["labels"]["latent_factors"]:
-                latent_factors.append(factor)
-            elif factor in model["labels"]["observed_factors"]:
-                observed_factors.append(factor)
+        latent_factors = tuple(
+            fac for fac in factors if fac in model.labels.latent_factors
+        )
+        observed_factors = tuple(
+            fac for fac in factors if fac in model.labels.observed_factors
+        )
     return latent_factors, observed_factors  # ty: ignore[possibly-unresolved-reference]
 
 
-def _process_periods(periods, model):
+def _process_periods(
+    periods: float | list[int] | None,
+    model: ProcessedModel,
+) -> list[int]:
     """Process periods to get a list."""
     if periods is None:
-        periods = list(range(model["dimensions"]["n_periods"]))
-    elif isinstance(periods, int | float):
-        periods = [periods]
+        return list(range(model.dimensions.n_periods))
+    if isinstance(periods, int | float):
+        return [int(periods)]
     return periods
 
 
 def _get_layout_kwargs(
-    corr,
-    layout_kwargs,
-    annotate,
-    annotation_fontsize,
-    annotation_text_color,
-    annotation_text_angle,
-    axes_tick_fontsize,
-    axes_tick_label_angle,
-    axes_tick_label_color,
-):
+    corr: pd.DataFrame,
+    layout_kwargs: dict[str, Any] | None,
+    *,
+    annotate: bool,
+    annotation_fontsize: int,
+    annotation_text_color: str,
+    annotation_text_angle: float,
+    axes_tick_fontsize: tuple[int, int],
+    axes_tick_label_angle: tuple[float, float],
+    axes_tick_label_color: tuple[str, str],
+) -> dict[str, Any]:
     """Get kwargs to update figure layout.
 
     Args:
-        corr (DataFrame): The processed data frame with correlation coefficients.
-        layout_kwargs (dct): Dictionary of keyword arguments used to update layout of
+        corr: The processed data frame with correlation coefficients.
+        layout_kwargs: Dictionary of keyword arguments used to update layout of
             go.Figure object.
-        annotate (bool): Add annotations to the figure if True.
-        annotation_font_size (int): Fontsize of the annotation text.
-        annotation_font_color (str): Color of the annotation text.
-        annotation_text_angle (float): The angle at which to rotate annotation text.
+        annotate: Add annotations to the figure if True.
+        annotation_fontsize: Fontsize of the annotation text.
+        annotation_text_color: Color of the annotation text.
+        annotation_text_angle: The angle at which to rotate annotation text.
         axes_tick_fontsize(tuple,list or dict): Fontsizes of axes tick labels.
         axes_tick_label_angle(tuple,list or dict): The angle at which to rotate axes
             tick labels.
-        axes_tick_label_color(tuple,list or dict): Collor of axes labels.
+        axes_tick_label_color(tuple,list or dict): Color of axes labels.
 
     Returns:
-        default_layout_kwargs (dict): Dictionary to update figure layout.
+        default_layout_kwargs: Dictionary to update figure layout.
 
     """
     default_layout_kwargs = {
@@ -825,17 +862,17 @@ def _get_layout_kwargs(
     default_layout_kwargs.update(
         _get_annotations(
             corr,
-            annotate,
-            annotation_fontsize,
-            annotation_text_color,
-            annotation_text_angle,
+            annotate=annotate,
+            annotation_fontsize=annotation_fontsize,
+            annotation_text_color=annotation_text_color,
+            annotation_text_angle=annotation_text_angle,
         ),
     )
     default_layout_kwargs.update(
         _get_axes_ticks_kwargs(
-            axes_tick_fontsize,
-            axes_tick_label_angle,
-            axes_tick_label_color,
+            axes_tick_fontsize=axes_tick_fontsize,
+            axes_tick_label_angle=axes_tick_label_angle,
+            axes_tick_label_color=axes_tick_label_color,
         ),
     )
     if layout_kwargs:
@@ -844,10 +881,10 @@ def _get_layout_kwargs(
 
 
 def _get_axes_ticks_kwargs(
-    axes_tick_fontsize,
-    axes_tick_label_angle,
-    axes_tick_label_color,
-):
+    axes_tick_fontsize: tuple[int, int] | dict[str, int],
+    axes_tick_label_angle: tuple[float, float] | dict[str, float],
+    axes_tick_label_color: tuple[str, str] | dict[str, str],
+) -> dict[str, Any]:
     """Get kwargs for axes ticks label formating."""
     axes_tick_fontsize = _process_axes_tick_args(axes_tick_fontsize)
     axes_tick_label_angle = _process_axes_tick_args(axes_tick_label_angle)
@@ -865,12 +902,13 @@ def _get_axes_ticks_kwargs(
 
 
 def _get_annotations(
-    df,
-    annotate,
-    annotation_fontsize,
-    annotation_text_color,
-    annotation_text_angle,
-):
+    df: pd.DataFrame,
+    *,
+    annotate: bool,
+    annotation_fontsize: int,
+    annotation_text_color: str,
+    annotation_text_angle: float,
+) -> dict[str, Any]:
     """Get annotations and formatting kwargs."""
     annotation_kwargs = {}
     if annotate:
@@ -897,31 +935,34 @@ def _get_annotations(
 
 
 def _get_heatmap_kwargs(
-    corr,
-    heatmap_kwargs,
-    colorscale,
-    show_color_bar,
-    zmax,
-    zmin,
-    zmid,
-):
+    corr: pd.DataFrame,
+    heatmap_kwargs: dict[str, Any] | None,
+    colorscale: str,
+    *,
+    show_color_bar: bool,
+    zmax: float | None,
+    zmin: float | None,
+    zmid: float | None,
+) -> dict[str, Any]:
     """Get kwargs to instantiate Heatmap object.
 
     Args:
-        heatmap_kwargs (dct): Dictionary of key word arguments to pass to go.Heatmap().
-        colorscale (str): Name of the color palette to use in the heatmap.
+        corr: Data frame with correlation coefficients.
+        heatmap_kwargs: Dictionary of key word arguments to pass to go.Heatmap().
+        colorscale: Name of the color palette to use in the heatmap.
             Default 'RdBu_r'.
-        show_color_bar (bool): A boolean variable for displayin heatmap colorbar.
-        zmax (float or None): Upper bound to set on correlation color map.
-        zmin (float or None): Lower bound to set on correlation color map.
-        zmid (float or None): Midpoint to set on correlation color map.
+        show_color_bar: A boolean variable for displaying heatmap colorbar.
+        zmax: Upper bound to set on correlation color map.
+        zmin: Lower bound to set on correlation color map.
+        zmid: Midpoint to set on correlation color map.
 
     Returns:
-        default_heatmap_kwargs (dict): Dictionary of kwargs to instantiate go.Heatmap.
+        default_heatmap_kwargs: Dictionary of kwargs to instantiate go.Heatmap.
 
     """
     if zmax is None:
-        zmax = np.abs(corr.to_numpy())[np.tril_indices_from(corr, k=-1)].max()
+        corr_arr = corr.to_numpy()
+        zmax = np.abs(corr_arr)[np.tril_indices_from(corr_arr, k=-1)].max()
     if zmin is None:
         zmin = -zmax
     if zmid is None:
@@ -938,7 +979,9 @@ def _get_heatmap_kwargs(
     return default_heatmap_kwargs
 
 
-def _process_axes_tick_args(args):
+def _process_axes_tick_args(
+    args: tuple[Any, Any] | list[Any] | dict[str, Any],
+) -> dict[str, Any]:
     if isinstance(args, tuple | list):
         args = {"x": args[0], "y": args[1]}
     return args

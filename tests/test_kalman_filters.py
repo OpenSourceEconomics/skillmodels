@@ -28,9 +28,9 @@ UPDATE_FUNCS = [kalman_update, kalman_update_debug]
 
 
 @pytest.mark.parametrize(("seed", "update_func"), product(SEEDS, UPDATE_FUNCS))
-def test_kalman_update(seed, update_func):
-    np.random.seed(seed)
-    dim = np.random.randint(low=1, high=10)
+def test_kalman_update(seed, update_func) -> None:
+    rng = np.random.default_rng(seed)
+    dim = int(rng.integers(low=1, high=10))
     n_obs = 5
     n_mix = 2
 
@@ -38,9 +38,11 @@ def test_kalman_update(seed, update_func):
     covs = np.zeros((n_obs, n_mix, dim, dim))
     for i in range(n_obs):
         for j in range(n_mix):
-            states[i, j], covs[i, j] = _random_state_and_covariance(dim=dim)
+            states[i, j], covs[i, j] = _random_state_and_covariance(rng, dim=dim)
 
-    loadings, measurements, meas_sd = _random_loadings_measurements_and_meas_sd(states)
+    loadings, measurements, meas_sd = _random_loadings_measurements_and_meas_sd(
+        rng, states
+    )
 
     expected_states = np.zeros_like(states)
     expected_covs = np.zeros_like(covs)
@@ -86,7 +88,7 @@ def test_kalman_update(seed, update_func):
 
 
 @pytest.mark.parametrize("update_func", UPDATE_FUNCS)
-def test_kalman_update_with_missing(update_func):
+def test_kalman_update_with_missing(update_func) -> None:
     """State, cov and weights should not change, log likelihood should be zero."""
     n_mixtures = 2
     n_obs = 3
@@ -133,10 +135,10 @@ def test_kalman_update_with_missing(update_func):
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-def test_sigma_points(seed):
-    np.random.seed(seed)
-    state, cov = _random_state_and_covariance()
-    observed_factors = np.arange(2).reshape(1, 2)
+def test_sigma_points(seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    state, cov = _random_state_and_covariance(rng)
+    observed_factors = jnp.arange(2).reshape(1, 2)
     expected = JulierSigmaPoints(n=len(state), kappa=2).sigma_points(state, cov)
     observed_part = np.tile(observed_factors, len(expected)).reshape(-1, 2)
     expected = np.hstack([expected, observed_part])
@@ -157,10 +159,10 @@ def test_sigma_points(seed):
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-def test_sigma_scaling_factor_and_weights(seed):
-    np.random.seed(seed)
-    dim = np.random.randint(low=1, high=15)
-    kappa = np.random.uniform(low=0.5, high=5)
+def test_sigma_scaling_factor_and_weights(seed) -> None:
+    rng = np.random.default_rng(seed)
+    dim = int(rng.integers(low=1, high=15))
+    kappa = float(rng.uniform(low=0.5, high=5))
     # Test my assumption that weights for mean and cov are equal in the Julier algorithm
     expected_weights = JulierSigmaPoints(n=dim, kappa=kappa).Wm
     expected_weights2 = JulierSigmaPoints(n=dim, kappa=kappa).Wc
@@ -176,20 +178,19 @@ def test_sigma_scaling_factor_and_weights(seed):
 # ======================================================================================
 
 
-def test_transformation_of_sigma_points():
+def test_transformation_of_sigma_points() -> None:
     sp = jnp.arange(10).reshape(1, 1, 5, 2) + 1
 
     def f(params, states):
-        out = jnp.column_stack(
+        return jnp.column_stack(
             [(states * params["fac1"][0]).sum(axis=1), states[..., 1]],
         )
-        return out
 
     trans_coeffs = {"fac1": jnp.array([2]), "fac2": jnp.array([])}
 
     anch_scaling = jnp.array([[1, 1], [2, 1]])
 
-    anch_constants = np.array([[0, 0], [0, 0]])
+    anch_constants = jnp.array([[0, 0], [0, 0]])
 
     expected = jnp.array([[[[3, 2], [7, 4], [11, 6], [15, 8], [19, 10]]]])
 
@@ -213,11 +214,11 @@ def test_transformation_of_sigma_points():
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-def test_predict_against_linear_filterpy(seed):
-    np.random.seed(seed)
-    state, cov = _random_state_and_covariance()
+def test_predict_against_linear_filterpy(seed) -> None:
+    rng = np.random.default_rng(seed)
+    state, cov = _random_state_and_covariance(rng)
     dim = len(state)
-    trans_mat = np.random.uniform(low=-1, high=1, size=(dim, dim))
+    trans_mat = rng.uniform(low=-1, high=1, size=(dim, dim))
 
     shock_sds = 0.5 * np.arange(dim) / dim
 
@@ -235,8 +236,7 @@ def test_predict_against_linear_filterpy(seed):
         return jnp.dot(states, params)
 
     def transition_function(params, states):
-        out = jnp.column_stack([linear(params[f"fac{i}"], states) for i in range(dim)])
-        return out
+        return jnp.column_stack([linear(params[f"fac{i}"], states) for i in range(dim)])
 
     sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
     scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)
@@ -249,13 +249,13 @@ def test_predict_against_linear_filterpy(seed):
         transition_function,
         sm_state,
         sm_chol,
-        scaling_factor,
+        float(scaling_factor),
         weights,
         trans_coeffs,
         jnp.array(shock_sds),
         anch_scaling,
         anch_constants,
-        observed_factors,
+        jnp.asarray(observed_factors),
     )
 
     aaae(calc_states.flatten(), expected_state.flatten())
@@ -267,20 +267,20 @@ def test_predict_against_linear_filterpy(seed):
 # ======================================================================================
 
 
-def _random_state_and_covariance(dim=None):
+def _random_state_and_covariance(rng, dim=None):
     if dim is None:
-        dim = np.random.randint(low=1, high=10)
-    factorized = np.random.uniform(low=-1, high=3, size=(dim, dim))
+        dim = rng.integers(low=1, high=10)
+    factorized = rng.uniform(low=-1, high=3, size=(dim, dim))
     cov = factorized @ factorized.T * 0.5 + np.eye(dim)
-    state = np.random.uniform(low=-5, high=5, size=dim)
+    state = rng.uniform(low=-5, high=5, size=dim)
     return state, cov
 
 
-def _random_loadings_measurements_and_meas_sd(state):
+def _random_loadings_measurements_and_meas_sd(rng, state):
     n_obs, _n_mix, dim = state.shape
-    loadings = np.random.uniform(size=dim)
-    meas_sd = np.random.uniform()
-    epsilon = np.random.normal(loc=0, scale=meas_sd, size=(n_obs))
+    loadings = rng.uniform(size=dim)
+    meas_sd = rng.uniform()
+    epsilon = rng.normal(loc=0, scale=meas_sd, size=(n_obs))
     measurement = (state @ loadings).sum(axis=1) + epsilon
     return loadings, measurement, meas_sd
 

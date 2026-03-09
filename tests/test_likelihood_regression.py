@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from itertools import product
 from pathlib import Path
 
@@ -6,11 +7,13 @@ import jax
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
 from numpy.testing import assert_array_almost_equal as aaae
 
+from skillmodels.config import TEST_DATA_DIR
 from skillmodels.decorators import register_params
 from skillmodels.maximization_inputs import get_maximization_inputs
+from skillmodels.model_spec import ModelSpec, Normalizations
+from skillmodels.test_data.model2 import MODEL2
 from skillmodels.utilities import reduce_n_periods
 
 jax.config.update("jax_enable_x64", True)
@@ -23,35 +26,30 @@ MODEL_NAMES = [
     "one_stage_anchoring_custom_functions",
 ]
 
-# importing the TEST_DIR from config does not work for test run in conda build
-TEST_DIR = Path(__file__).parent.resolve()
+REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 
 @pytest.fixture
 def model2():
-    with open(TEST_DIR / "model2.yaml") as y:
-        model_dict = yaml.load(y, Loader=yaml.FullLoader)
-    return model_dict
+    return MODEL2
 
 
 @pytest.fixture
 def model2_data():
-    data = pd.read_stata(TEST_DIR / "model2_simulated_data.dta")
-    data = data.set_index(["caseid", "period"])
-    return data
+    data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
+    return data.set_index(["caseid", "period"])
 
 
 def _convert_model(base_model, model_name):
-    model = base_model.copy()
     if model_name == "no_stages_anchoring":
-        model.pop("stagemap")
-    elif model_name == "one_stage":
-        model.pop("anchoring")
-    elif model_name == "one_stage_anchoring":
-        pass
-    elif model_name == "two_stages_anchoring":
-        model["stagemap"] = [0, 0, 0, 0, 1, 1, 1]
-    elif model_name == "one_stage_anchoring_custom_functions":
+        return base_model._replace(stagemap=None)
+    if model_name == "one_stage":
+        return base_model._replace(anchoring=None)
+    if model_name == "one_stage_anchoring":
+        return base_model
+    if model_name == "two_stages_anchoring":
+        return base_model.with_stagemap((0, 0, 0, 0, 1, 1, 1))
+    if model_name == "one_stage_anchoring_custom_functions":
 
         @register_params(params=[])
         def constant(fac3, params):
@@ -60,21 +58,27 @@ def _convert_model(base_model, model_name):
         @register_params(params=["fac1", "fac2", "fac3", "constant"])
         def linear(fac1, fac2, fac3, params):
             p = params
-            out = p["constant"] + fac1 * p["fac1"] + fac2 * p["fac2"] + fac3 * p["fac3"]
-            return out
+            return (
+                p["constant"] + fac1 * p["fac1"] + fac2 * p["fac2"] + fac3 * p["fac3"]
+            )
 
-        model["factors"]["fac2"]["transition_function"] = linear
-        model["factors"]["fac3"]["transition_function"] = constant
-    else:
-        raise ValueError("Invalid model name.")
-    return model
+        return base_model.with_transition_functions(
+            {
+                "fac1": "log_ces",
+                "fac2": linear,
+                "fac3": constant,
+            }
+        )
+    raise ValueError("Invalid model name.")
 
 
 @pytest.mark.parametrize(
     ("model_name", "fun_key"), product(MODEL_NAMES, ["loglike", "debug_loglike"])
 )
-def test_likelihood_values_have_not_changed(model2, model2_data, model_name, fun_key):
-    regvault = TEST_DIR / "regression_vault"
+def test_likelihood_values_have_not_changed(
+    model2, model2_data, model_name, fun_key
+) -> None:
+    regvault = REGRESSION_VAULT
     model = _convert_model(model2, model_name)
     params = pd.read_csv(regvault / f"{model_name}.csv").set_index(
         ["category", "period", "name1", "name2"],
@@ -87,12 +91,12 @@ def test_likelihood_values_have_not_changed(model2, model2_data, model_name, fun
     fun = inputs[fun_key]
     new_loglike = fun(params)["value"] if "debug" in fun_key else fun(params)
 
-    with open(regvault / f"{model_name}_result.json") as j:
+    with (regvault / f"{model_name}_result.json").open() as j:
         old_loglike = np.array(json.load(j)).sum()
     aaae(new_loglike, old_loglike)
 
 
-def test_splitting_does_not_change_gradient(model2, model2_data):
+def test_splitting_does_not_change_gradient(model2, model2_data) -> None:
     inputs = get_maximization_inputs(model2, model2_data)
     inputs_split = get_maximization_inputs(model2, model2_data, 13)
 
@@ -110,8 +114,8 @@ def test_splitting_does_not_change_gradient(model2, model2_data):
 )
 def test_likelihood_contributions_have_not_changed(
     model2, model2_data, model_name, fun_key
-):
-    regvault = TEST_DIR / "regression_vault"
+) -> None:
+    regvault = REGRESSION_VAULT
     model = _convert_model(model2, model_name)
     params = pd.read_csv(regvault / f"{model_name}.csv").set_index(
         ["category", "period", "name1", "name2"],
@@ -124,7 +128,7 @@ def test_likelihood_contributions_have_not_changed(
     fun = inputs[fun_key]
     new_loglikes = fun(params)["contributions"] if "debug" in fun_key else fun(params)
 
-    with open(regvault / f"{model_name}_result.json") as j:
+    with (regvault / f"{model_name}_result.json").open() as j:
         old_loglikes = np.array(json.load(j))
     aaae(new_loglikes, old_loglikes)
 
@@ -133,8 +137,11 @@ def test_likelihood_contributions_have_not_changed(
     ("model_type", "fun_key"),
     product(["no_stages_anchoring", "with_missings"], ["loglike_and_gradient"]),
 )
-def test_likelihood_contributions_large_nobs(model2, model2_data, model_type, fun_key):
-    regvault = TEST_DIR / "regression_vault"
+def test_likelihood_contributions_large_nobs(
+    model2, model2_data, model_type, fun_key
+) -> None:
+    rng = np.random.default_rng(42)
+    regvault = REGRESSION_VAULT
     model = _convert_model(model2, "no_stages_anchoring")
     params = pd.read_csv(regvault / "no_stages_anchoring.csv").set_index(
         ["category", "period", "name1", "name2"],
@@ -168,12 +175,12 @@ def test_likelihood_contributions_large_nobs(model2, model2_data, model_type, fu
         ]
         if model_type == "no_stages_anchoring":
             for col in cols:
-                this_round[col] += np.random.normal(0, 0.1, (len(model2_data),))
+                this_round[col] += rng.normal(0, 0.1, (len(model2_data),))
         elif model_type == "with_missings":
             fraction_to_set_missing = 0.9
             n_rows = len(this_round)
             n_missing = int(n_rows * fraction_to_set_missing)
-            rows_to_set_missing = this_round.sample(n=n_missing).index
+            rows_to_set_missing = this_round.sample(n=n_missing, random_state=rng).index
             this_round.loc[rows_to_set_missing, cols] = np.nan
         else:
             raise ValueError(f"Invalid model type: {model_type}")
@@ -191,23 +198,29 @@ def test_likelihood_contributions_large_nobs(model2, model2_data, model_type, fu
     assert np.isfinite(loglike[1]).all()
 
 
-def test_likelihood_runs_with_empty_periods(model2, model2_data):
-    del model2["anchoring"]
-    for factor in ["fac1", "fac2"]:
-        model2["factors"][factor]["measurements"][-1] = []
-        model2["factors"][factor]["normalizations"]["loadings"][-1] = {}
+def test_likelihood_runs_with_empty_periods(model2, model2_data) -> None:
+    # Remove anchoring and clear last-period measurements for fac1 and fac2
+    new_factors = {}
+    for name, spec in model2.factors.items():
+        if name in ("fac1", "fac2"):
+            new_meas = (*spec.measurements[:-1], ())
+            old_norms = spec.normalizations
+            assert old_norms is not None
+            new_loadings = (*old_norms.loadings[:-1], {})
+            new_norms = Normalizations(
+                loadings=new_loadings,
+                intercepts=old_norms.intercepts,
+            )
+            new_factors[name] = replace(
+                spec, measurements=new_meas, normalizations=new_norms
+            )
+        else:
+            new_factors[name] = spec
+    model = model2._replace(
+        factors=new_factors,
+        anchoring=None,
+    )
 
-    func_dict = get_maximization_inputs(model2, model2_data)
-
-    params = func_dict["params_template"]
-    params["value"] = 0.1
-
-    debug_loglike = func_dict["debug_loglike"]
-    debug_loglike(params)
-
-
-def test_likelihood_runs_with_too_long_data(model2, model2_data):
-    model = reduce_n_periods(model2, 2)
     func_dict = get_maximization_inputs(model, model2_data)
 
     params = func_dict["params_template"]
@@ -217,11 +230,23 @@ def test_likelihood_runs_with_too_long_data(model2, model2_data):
     debug_loglike(params)
 
 
-def test_likelihood_runs_with_observed_factors(model2, model2_data):
-    model2["observed_factors"] = ["ob1", "ob2"]
+def test_likelihood_runs_with_too_long_data(model2, model2_data) -> None:
+    reduced = reduce_n_periods(model2, 2)
+    assert isinstance(reduced, ModelSpec)
+    func_dict = get_maximization_inputs(reduced, model2_data)
+
+    params = func_dict["params_template"]
+    params["value"] = 0.1
+
+    debug_loglike = func_dict["debug_loglike"]
+    debug_loglike(params)
+
+
+def test_likelihood_runs_with_observed_factors(model2, model2_data) -> None:
+    model = model2.with_added_observed_factors("ob1", "ob2")
     model2_data["ob1"] = np.arange(len(model2_data))
     model2_data["ob2"] = np.ones(len(model2_data))
-    func_dict = get_maximization_inputs(model2, model2_data)
+    func_dict = get_maximization_inputs(model, model2_data)
 
     params = func_dict["params_template"]
     params["value"] = 0.1

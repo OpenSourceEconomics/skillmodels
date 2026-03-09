@@ -1,5 +1,10 @@
+"""Kalman filter operations for state estimation using the square-root form."""
+
+from collections.abc import Callable
+
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 from skillmodels.qr import qr_gpu
 
@@ -9,44 +14,43 @@ array_qr_jax = (
     else jax.vmap(jax.vmap(jnp.linalg.qr))
 )
 
+
 # ======================================================================================
 # Update Step
 # ======================================================================================
-
-
 def kalman_update(
-    states,
-    upper_chols,
-    loadings,
-    control_params,
-    meas_sd,
-    measurements,
-    controls,
-    log_mixture_weights,
-):
+    states: Array,
+    upper_chols: Array,
+    loadings: Array,
+    control_params: Array,
+    meas_sd: Array,
+    measurements: Array,
+    controls: Array,
+    log_mixture_weights: Array,
+) -> tuple[Array, Array, Array, Array]:
     """Perform a Kalman update with likelihood evaluation.
 
     Args:
-        states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states) with
+        states: Array of shape (n_obs, n_mixtures, n_states) with
             pre-update states estimates.
-        upper_chols (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states,
+        upper_chols: Array of shape (n_obs, n_mixtures, n_states,
             n_states) with the transpose of the lower triangular cholesky factor
             of the pre-update covariance matrix of the state estimates.
-        loadings (jax.numpy.array): 1d array of length n_states with factor loadings.
-        control_params (jax.numpy.array): 1d array of length n_controls.
-        meas_sd (float): Standard deviation of the measurement error.
-        measurements (jax.numpy.array): 1d array of length n_obs with measurements.
+        loadings: 1d array of length n_states with factor loadings.
+        control_params: 1d array of length n_controls.
+        meas_sd: Standard deviation of the measurement error.
+        measurements: 1d array of length n_obs with measurements.
             May contain NaNs if no measurement was observed.
-        controls (jax.numpy.array): Array of shape (n_obs, n_controls) with data on the
+        controls: Array of shape (n_obs, n_controls) with data on the
             control variables.
-        log_mixture_weights (jax.numpy.array): Array of shape (n_obs, n_mixtures) with
+        log_mixture_weights: Array of shape (n_obs, n_mixtures) with
             the natural logarithm of the weights of each element of the mixture of
             normals distribution.
 
     Returns:
-        states (jax.numpy.array): Same format as states.
-        new_states (jax.numpy.array): Same format as states.
-        new_upper_chols (jax.numpy.array): Same format as upper_chols
+        states: Same format as states.
+        new_states: Same format as states.
+        new_upper_chols: Same format as upper_chols
         new_log_mixture_weights: (jax.numpy.array): Same format as log_mixture_weights
         new_loglikes: (jax.numpy.array): 1d array of length n_obs
 
@@ -133,17 +137,18 @@ def kalman_update(
 # ======================================================================================
 # Predict Step
 # ======================================================================================
-
-
-def calculate_sigma_scaling_factor_and_weights(n_states, kappa=2):
+def calculate_sigma_scaling_factor_and_weights(
+    n_states: int,
+    kappa: float = 2,
+) -> tuple[Array, Array]:
     """Calculate the scaling factor and weights for sigma points according to Julier.
 
     There are other sigma point algorithms, but many of them possibly have negative
     weights which makes the unscented predict step more complicated.
 
     Args:
-        n_states (int): Number of states.
-        kappa (float): Spreading factor of the sigma points.
+        n_states: Number of states.
+        kappa: Spreading factor of the sigma points.
 
     Returns:
         float: Scaling factor
@@ -158,39 +163,41 @@ def calculate_sigma_scaling_factor_and_weights(n_states, kappa=2):
 
 
 def kalman_predict(
-    transition_func,
-    states,
-    upper_chols,
-    sigma_scaling_factor,
-    sigma_weights,
-    trans_coeffs,
-    shock_sds,
-    anchoring_scaling_factors,
-    anchoring_constants,
-    observed_factors,
-):
+    transition_func: Callable,
+    states: Array,
+    upper_chols: Array,
+    sigma_scaling_factor: float,
+    sigma_weights: Array,
+    trans_coeffs: dict[str, Array],
+    shock_sds: Array,
+    anchoring_scaling_factors: Array,
+    anchoring_constants: Array,
+    observed_factors: Array,
+) -> tuple[Array, Array]:
     """Make a unscented Kalman predict.
 
     Args:
-        transition_func (Callable): The transition function.
-        states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states) with
+        transition_func: The transition function.
+        states: Array of shape (n_obs, n_mixtures, n_states) with
             pre-update states estimates.
-        upper_chols (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states,
+        upper_chols: Array of shape (n_obs, n_mixtures, n_states,
             n_states) with the transpose of the lower triangular cholesky factor
             of the pre-update covariance matrix of the state estimates.
-        sigma_scaling_factor (float): A scaling factor that controls the spread of the
+        sigma_scaling_factor: A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
-        sigma_weights (jax.numpy.array): 1d array of length n_sigma with non-negative
+        sigma_weights: 1d array of length n_sigma with non-negative
             sigma weights.
-        trans_coeffs (tuple): Tuple of 1d jax.numpy.arrays with transition parameters.
-        anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_fac) with
+        trans_coeffs: Tuple of 1d jax.numpy.arrays with transition parameters.
+        shock_sds: 1d array of length n_fac with shock standard
+            deviations.
+        anchoring_scaling_factors: Array of shape (2, n_fac) with
             the scaling factors for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
-        anchoring_constants (jax.numpy.array): Array of shape (2, n_states) with the
+        anchoring_constants: Array of shape (2, n_states) with the
             constants for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
-        observed_factors (jax.numpy.array): Array of shape (n_obs, n_observed_factors)
+        observed_factors: Array of shape (n_obs, n_observed_factors)
             with data on the observed factors in period t.
 
     Returns:
@@ -199,17 +206,17 @@ def kalman_predict(
 
     """
     sigma_points = _calculate_sigma_points(
-        states,
-        upper_chols,
-        sigma_scaling_factor,
-        observed_factors,
+        states=states,
+        upper_chols=upper_chols,
+        scaling_factor=sigma_scaling_factor,
+        observed_factors=observed_factors,
     )
     transformed = transform_sigma_points(
-        sigma_points,
-        transition_func,
-        trans_coeffs,
-        anchoring_scaling_factors,
-        anchoring_constants,
+        sigma_points=sigma_points,
+        transition_func=transition_func,
+        trans_coeffs=trans_coeffs,
+        anchoring_scaling_factors=anchoring_scaling_factors,
+        anchoring_constants=anchoring_constants,
     )
 
     # do not use sigma_points.shape because sigma_points contain observed factors
@@ -228,19 +235,24 @@ def kalman_predict(
     return predicted_states, predicted_covs
 
 
-def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factors):
+def _calculate_sigma_points(
+    states: Array,
+    upper_chols: Array,
+    scaling_factor: float,
+    observed_factors: Array,
+) -> Array:
     """Calculate the array of sigma_points for the unscented transform.
 
     Args:
-        states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states) with
+        states: Array of shape (n_obs, n_mixtures, n_states) with
             pre-update states estimates.
-        upper_chols (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states,
+        upper_chols: Array of shape (n_obs, n_mixtures, n_states,
             n_states) with the transpose of the lower triangular cholesky factor
             of the pre-update covariance matrix of the state estimates.
-        scaling_factor (float): A scaling factor that controls the spread of the
+        scaling_factor: A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
-        observed_factors (jax.numpy.array): Array of shape (n_obs, n_observed_factors)
+        observed_factors: Array of shape (n_obs, n_observed_factors)
             with data on the observed factors in period t.
 
     Returns:
@@ -269,27 +281,26 @@ def _calculate_sigma_points(states, upper_chols, scaling_factor, observed_factor
         n_observed,
     )
 
-    sigma_points = jnp.concatenate([sigma_points, observed_part], axis=-1)
-    return sigma_points
+    return jnp.concatenate([sigma_points, observed_part], axis=-1)
 
 
 def transform_sigma_points(
-    sigma_points,
-    transition_func,
-    trans_coeffs,
-    anchoring_scaling_factors,
-    anchoring_constants,
-):
+    sigma_points: Array,
+    transition_func: Callable,
+    trans_coeffs: dict[str, Array],
+    anchoring_scaling_factors: Array,
+    anchoring_constants: Array,
+) -> Array:
     """Anchor sigma points, transform them and unanchor the transformed sigma points.
 
     Args:
-        sigma_points (jax.numpy.array) of shape n_obs, n_mixtures, n_sigma, n_fac.
-        transition_func (Callable): The transition function.
-        trans_coeffs (tuple): Tuple of 1d jax.numpy.arrays with transition parameters.
-        anchoring_scaling_factors (jax.numpy.array): Array of shape (2, n_states) with
+        sigma_points: Array of shape n_obs, n_mixtures, n_sigma, n_fac.
+        transition_func: The transition function.
+        trans_coeffs: Tuple of 1d jax.numpy.arrays with transition parameters.
+        anchoring_scaling_factors: Array of shape (2, n_states) with
             the scaling factors for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
-        anchoring_constants (jax.numpy.array): Array of shape (2, n_states) with the
+        anchoring_constants: Array of shape (2, n_states) with the
             constants for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
 
@@ -313,6 +324,4 @@ def transform_sigma_points(
     ) / anchoring_scaling_factors[1][:n_observed]
 
     out_shape = (n_obs, n_mixtures, n_sigma, -1)
-    out = transformed_unanchored.reshape(out_shape)
-
-    return out
+    return transformed_unanchored.reshape(out_shape)

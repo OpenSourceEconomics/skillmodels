@@ -1,3 +1,5 @@
+from types import MappingProxyType, SimpleNamespace
+
 import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal as afe
@@ -10,9 +12,10 @@ from skillmodels.correlation_heatmap import (
     _get_quasi_factor_scores_data_for_single_period,
     _process_factors,
 )
+from skillmodels.types import Labels
 
 
-def test_get_measurement_data_with_single_period():
+def test_get_measurement_data_with_single_period() -> None:
     period = 1
     factors = ["f3", "f1"]
     update_info = pd.DataFrame(
@@ -60,7 +63,7 @@ def test_get_measurement_data_with_single_period():
     afe(result, expected)
 
 
-def test_get_factor_scores_data_with_single_period():
+def test_get_factor_scores_data_with_single_period() -> None:
     period = 1
     factors = ["f1", "f2"]
     update_info = pd.DataFrame(
@@ -113,7 +116,7 @@ def test_get_factor_scores_data_with_single_period():
     afe(expected, result, check_dtype=False)
 
 
-def test_get_measurement_data_with_multiple_periods():
+def test_get_measurement_data_with_multiple_periods() -> None:
     period = [1, 2]
     factors = ["f3", "f1"]
     update_info = pd.DataFrame(
@@ -172,7 +175,7 @@ def test_get_measurement_data_with_multiple_periods():
     afe(result, expected)
 
 
-def test_get_factor_scores_data_with_multiple_period():
+def test_get_factor_scores_data_with_multiple_period() -> None:
     periods = [0, 1]
     factors = ["f1", "f2"]
     update_info = pd.DataFrame(
@@ -241,24 +244,36 @@ def test_get_factor_scores_data_with_multiple_period():
     afe(expected, result)
 
 
-def test_process_factors():
-    model = {
-        "labels": {"latent_factors": list("abcd"), "observed_factors": list("efg")},
-    }
+def test_process_factors() -> None:
+    model = SimpleNamespace(
+        labels=Labels(
+            latent_factors=tuple("abcd"),
+            observed_factors=tuple("efg"),
+            controls=("constant",),
+            periods=(0,),
+            stagemap=(0,),
+            stages=(0,),
+            aug_periods=(0,),
+            aug_periods_to_periods=MappingProxyType({0: 0}),
+            aug_stagemap=(0,),
+            aug_stages=(0,),
+            aug_stages_to_stages=MappingProxyType({0: 0}),
+        ),
+    )
     latent_factor = "c"
     observed_factor = "g"
     factors = ["b", "d", "g"]
     all_factors = None
-    assert list("abcd") == _process_factors(model, all_factors)[0]
-    assert list("efg") == _process_factors(model, all_factors)[1]
-    assert [latent_factor] == _process_factors(model, latent_factor)[0]
-    assert [observed_factor] == _process_factors(model, observed_factor)[1]
-    assert factors[:-1] == _process_factors(model, factors)[0]
-    assert [factors[-1] == _process_factors(model, factors)[1]]
+    assert tuple("abcd") == _process_factors(model, all_factors)[0]  # ty: ignore[invalid-argument-type]
+    assert tuple("efg") == _process_factors(model, all_factors)[1]  # ty: ignore[invalid-argument-type]
+    assert (latent_factor,) == _process_factors(model, latent_factor)[0]  # ty: ignore[invalid-argument-type]
+    assert (observed_factor,) == _process_factors(model, observed_factor)[1]  # ty: ignore[invalid-argument-type]
+    assert tuple(factors[:-1]) == _process_factors(model, factors)[0]  # ty: ignore[invalid-argument-type]
+    assert (factors[-1],) == _process_factors(model, factors)[1]  # ty: ignore[invalid-argument-type]
 
 
-def test_get_mask_lower_triangle_only():
-    corr = np.ones((4, 4))
+def test_get_mask_lower_triangle_only() -> None:
+    corr = pd.DataFrame(np.ones((4, 4)))
     show_upper = False
     show_diag = False
     expected = np.array(
@@ -269,12 +284,12 @@ def test_get_mask_lower_triangle_only():
             [True] * 3 + [False],
         ],
     )
-    result = _get_mask(corr, show_upper, show_diag)
+    result = _get_mask(corr, show_upper_triangle=show_upper, show_diagonal=show_diag)
     np.testing.assert_array_equal(result, expected)
 
 
-def test_get_mask_lower_triangle_and_diag():
-    corr = np.ones((4, 4))
+def test_get_mask_lower_triangle_and_diag() -> None:
+    corr = pd.DataFrame(np.ones((4, 4)))
     show_upper = False
     show_diag = True
     expected = np.array(
@@ -285,12 +300,12 @@ def test_get_mask_lower_triangle_and_diag():
             [True] * 4,
         ],
     )
-    result = _get_mask(corr, show_upper, show_diag)
+    result = _get_mask(corr, show_upper_triangle=show_upper, show_diagonal=show_diag)
     np.testing.assert_array_equal(result, expected)
 
 
-def test_get_mask_lower_and_upper_triangle_no_diag():
-    corr = np.ones((4, 4))
+def test_get_mask_lower_and_upper_triangle_no_diag() -> None:
+    corr = pd.DataFrame(np.ones((4, 4)))
     show_upper = True
     show_diag = False
     expected = np.array(
@@ -301,14 +316,14 @@ def test_get_mask_lower_and_upper_triangle_no_diag():
             [True] * 3 + [False],
         ],
     )
-    result = _get_mask(corr, show_upper, show_diag)
+    result = _get_mask(corr, show_upper_triangle=show_upper, show_diagonal=show_diag)
     np.testing.assert_array_equal(result, expected)
 
 
-def test_get_mask_full_square_matrix():
-    corr = np.ones((4, 4))
+def test_get_mask_full_square_matrix() -> None:
+    corr = pd.DataFrame(np.ones((4, 4)))
     show_upper = True
     show_diag = True
-    expected = corr.astype(bool)
-    result = _get_mask(corr, show_upper, show_diag)
+    expected = corr.to_numpy().astype(bool)
+    result = _get_mask(corr, show_upper_triangle=show_upper, show_diagonal=show_diag)
     np.testing.assert_array_equal(result, expected)

@@ -3,7 +3,7 @@ import jax.numpy as jnp
 from skillmodels.decorators import extract_params, jax_array_output, register_params
 
 
-def test_extract_params_decorator_only_key():
+def test_extract_params_decorator_only_key() -> None:
     @extract_params(key="a")
     def f(x, params):
         return x * params
@@ -11,7 +11,7 @@ def test_extract_params_decorator_only_key():
     assert f(x=3, params={"a": 4, "b": 5}) == 12
 
 
-def test_extract_params_direct_call_only_key():
+def test_extract_params_direct_call_only_key() -> None:
     def f(x, params):
         return x * params
 
@@ -20,7 +20,7 @@ def test_extract_params_direct_call_only_key():
     assert g(x=3, params={"a": 4, "b": 5}) == 12
 
 
-def test_extract_params_decorator_only_names():
+def test_extract_params_decorator_only_names() -> None:
     @extract_params(names=["c", "d"])
     def f(x, params):
         return x * params["c"]
@@ -28,7 +28,7 @@ def test_extract_params_decorator_only_names():
     assert f(x=3, params=[4, 5]) == 12
 
 
-def test_extract_params_direct_call_only_names():
+def test_extract_params_direct_call_only_names() -> None:
     def f(x, params):
         return x * params["c"]
 
@@ -36,7 +36,7 @@ def test_extract_params_direct_call_only_names():
     assert g(x=3, params=[4, 5]) == 12
 
 
-def test_extract_params_decorator_key_and_names():
+def test_extract_params_decorator_key_and_names() -> None:
     @extract_params(key="a", names=["c", "d"])
     def f(x, params):
         return x * params["c"]
@@ -44,7 +44,7 @@ def test_extract_params_decorator_key_and_names():
     assert f(x=3, params={"a": [4, 5], "b": [5, 6]}) == 12
 
 
-def test_extract_params_direct_call_key_and_names():
+def test_extract_params_direct_call_key_and_names() -> None:
     def f(x, params):
         return x * params["c"]
 
@@ -52,7 +52,7 @@ def test_extract_params_direct_call_key_and_names():
     assert g(x=3, params={"a": [4, 5], "b": [5, 6]}) == 12
 
 
-def test_jax_array_output_decorator():
+def test_jax_array_output_decorator() -> None:
     @jax_array_output
     def f():
         return (1, 2, 3)
@@ -60,7 +60,7 @@ def test_jax_array_output_decorator():
     assert isinstance(f(), jnp.ndarray)
 
 
-def test_jax_array_output_direct_call():
+def test_jax_array_output_direct_call() -> None:
     def f():
         return (1, 2, 3)
 
@@ -69,19 +69,19 @@ def test_jax_array_output_direct_call():
     assert isinstance(g(), jnp.ndarray)
 
 
-def test_register_params_decorator():
+def test_register_params_decorator() -> None:
     @register_params(params=["a", "b", "c"])
-    def f():
+    def f() -> str:
         return "bla"
 
     assert f.__registered_params__ == ["a", "b", "c"]
     assert f() == "bla"
 
 
-def test_register_params_direct_call():
-    def f():
+def test_register_params_direct_call() -> None:
+    def f() -> str:
         return "bla"
 
     g = register_params(f, params=["a", "b", "c"])
-    assert g.__registered_params__ == ["a", "b", "c"]
+    assert g.__registered_params__ == ["a", "b", "c"]  # ty: ignore[unresolved-attribute]
     assert g() == "bla"

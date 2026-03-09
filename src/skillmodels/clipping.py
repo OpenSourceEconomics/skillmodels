@@ -1,8 +1,17 @@
+"""Soft clipping utilities for constraining values to bounded ranges."""
+
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 
-def soft_clipping(arr, lower=None, upper=None, lower_hardness=1, upper_hardness=1):
+def soft_clipping(
+    arr: Array,
+    lower: float | None = None,
+    upper: float | None = None,
+    lower_hardness: float = 1,
+    upper_hardness: float = 1,
+) -> Array:
     """Clip values in an array elementwise using a soft maximum to avoid kinks.
 
     Clipping from below is taking a maximum between two values. Clipping
@@ -19,14 +28,13 @@ def soft_clipping(arr, lower=None, upper=None, lower_hardness=1, upper_hardness=
     ``scipy.special.logsumexp``. ``scipy.special.softmax`` is the gradient of
     ``scipy.special.logsumexp``.
 
-
     Args:
-        arr (jax.numpy.array): Array that is clipped elementwise.
-        lower (float): The value at which the array is clipped from below.
-        upper (float): The value at which the array is clipped from above.
-        lower_hardness (float): Scaling factor that is applied inside the soft maximum.
+        arr: Array that is clipped elementwise.
+        lower: The value at which the array is clipped from below.
+        upper: The value at which the array is clipped from above.
+        lower_hardness: Scaling factor that is applied inside the soft maximum.
             High values imply a closer approximation of the real maximum.
-        upper_hardness (float): Scaling factor that is applied inside the soft maximum.
+        upper_hardness: Scaling factor that is applied inside the soft maximum.
             High values imply a closer approximation of the real maximum.
 
     """

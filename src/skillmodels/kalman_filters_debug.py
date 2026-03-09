@@ -1,5 +1,10 @@
+"""Debug versions of Kalman filter operations that return intermediate results."""
+
+from typing import Any
+
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
 
@@ -7,44 +12,42 @@ array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
 # ======================================================================================
 # Update Step
 # ======================================================================================
-
-
 def kalman_update(
-    states,
-    upper_chols,
-    loadings,
-    control_params,
-    meas_sd,
-    measurements,
-    controls,
-    log_mixture_weights,
-):
+    states: Array,
+    upper_chols: Array,
+    loadings: Array,
+    control_params: Array,
+    meas_sd: float,
+    measurements: Array,
+    controls: Array,
+    log_mixture_weights: Array,
+) -> tuple[Array, Array, Array, Array, dict[str, Any]]:
     """Perform a Kalman update with likelihood evaluation, returning debug info on top.
 
     Args:
-        states (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states) with
+        states: Array of shape (n_obs, n_mixtures, n_states) with
             pre-update states estimates.
-        upper_chols (jax.numpy.array): Array of shape (n_obs, n_mixtures, n_states,
+        upper_chols: Array of shape (n_obs, n_mixtures, n_states,
             n_states) with the transpose of the lower triangular cholesky factor
             of the pre-update covariance matrix of the state estimates.
-        loadings (jax.numpy.array): 1d array of length n_states with factor loadings.
-        control_params (jax.numpy.array): 1d array of length n_controls.
-        meas_sd (float): Standard deviation of the measurement error.
-        measurements (jax.numpy.array): 1d array of length n_obs with measurements.
+        loadings: 1d array of length n_states with factor loadings.
+        control_params: 1d array of length n_controls.
+        meas_sd: Standard deviation of the measurement error.
+        measurements: 1d array of length n_obs with measurements.
             May contain NaNs if no measurement was observed.
-        controls (jax.numpy.array): Array of shape (n_obs, n_controls) with data on the
+        controls: Array of shape (n_obs, n_controls) with data on the
             control variables.
-        log_mixture_weights (jax.numpy.array): Array of shape (n_obs, n_mixtures) with
+        log_mixture_weights: Array of shape (n_obs, n_mixtures) with
             the natural logarithm of the weights of each element of the mixture of
             normals distribution.
 
     Returns:
-        states (jax.numpy.array): Same format as states.
-        new_states (jax.numpy.array): Same format as states.
-        new_upper_chols (jax.numpy.array): Same format as upper_chols
+        states: Same format as states.
+        new_states: Same format as states.
+        new_upper_chols: Same format as upper_chols
         new_log_mixture_weights: (jax.numpy.array): Same format as log_mixture_weights
         new_loglikes: (jax.numpy.array): 1d array of length n_obs
-        debug_info (dict): Empty or containing residuals and residual_sds
+        debug_info: Empty or containing residuals and residual_sds
 
     """
     n_obs, n_mixtures, n_states = states.shape

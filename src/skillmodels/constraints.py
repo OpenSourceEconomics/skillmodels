@@ -2,6 +2,7 @@
 
 import functools
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,31 +11,39 @@ import optimagic as om
 import pandas as pd
 
 import skillmodels.transition_functions as t_f_module
+from skillmodels.types import (
+    Anchoring,
+    Dimensions,
+    EndogenousFactorsInfo,
+    Labels,
+    MeasurementType,
+    Normalizations,
+)
 
 
 def get_constraints_dicts(
-    dimensions,
-    labels,
-    anchoring_info,
-    update_info,
-    normalizations,
-    endogenous_factors_info,
+    dimensions: Dimensions,
+    labels: Labels,
+    anchoring_info: Anchoring,
+    update_info: pd.DataFrame,
+    normalizations: Mapping[str, Normalizations],
+    endogenous_factors_info: EndogenousFactorsInfo,
 ) -> list[dict]:
     """Generate constraints implied by the model specification.
 
     The result can easily be converted to optimagic-style constraints.
 
     Args:
-        model_dict (dict): The model specification. See: :ref:`model_specs`
-        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
+        dimensions: Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
-        labels (dict): Dict of lists with labels for the model quantities like
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
-        anchoring (dict): Information about anchoring. See :ref:`anchoring`
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
+        anchoring_info: Information about anchoring. See :ref:`anchoring`
+        update_info: DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
-        normalizations (dict): Nested dictionary with information on normalized factor
+        normalizations: Nested dictionary with information on normalized factor
             loadings and intercepts for each factor. See :ref:`normalizations`.
+        endogenous_factors_info: Information about endogenous factors in the model.
 
     Returns:
         A list of constraints dictionaries with entries:
@@ -49,26 +58,26 @@ def get_constraints_dicts(
     constraints_dicts = []
 
     constraints_dicts += _get_normalization_constraints(
-        normalizations, labels["latent_factors"]
+        normalizations=normalizations, factors=labels.latent_factors
     )
-    constraints_dicts += _get_mixture_weights_constraints(dimensions["n_mixtures"])
+    constraints_dicts += _get_mixture_weights_constraints(dimensions.n_mixtures)
     constraints_dicts += _get_stage_constraints(
-        stagemap=labels["aug_stagemap"],
-        stages=labels["aug_stages"],
+        stagemap=labels.aug_stagemap,
+        stages=labels.aug_stages,
     )
     constraints_dicts += _get_constant_factors_constraints(labels=labels)
     constraints_dicts += _get_initial_states_constraints(
-        n_mixtures=dimensions["n_mixtures"],
-        factors=labels["latent_factors"],
+        n_mixtures=dimensions.n_mixtures,
+        factors=labels.latent_factors,
     )
     constraints_dicts += _get_transition_constraints(labels=labels)
     constraints_dicts += _get_anchoring_constraints(
         update_info=update_info,
-        controls=labels["controls"],
+        controls=labels.controls,
         anchoring_info=anchoring_info,
-        periods=labels["aug_periods"],
+        periods=labels.aug_periods,
     )
-    if endogenous_factors_info["has_endogenous_factors"]:
+    if endogenous_factors_info.has_endogenous_factors:
         constraints_dicts += _get_constraints_for_augmented_periods(
             labels=labels,
             endogenous_factors_info=endogenous_factors_info,
@@ -116,7 +125,7 @@ def add_bounds(params: pd.DataFrame, bounds_distance: float) -> pd.DataFrame:
     return df
 
 
-def _is_diagonal_entry(ind_tup):
+def _is_diagonal_entry(ind_tup: tuple[str, ...]) -> bool:
     name2 = ind_tup[-1]
     middle_pos = int(len(name2) // 2)
     if (
@@ -130,26 +139,27 @@ def _is_diagonal_entry(ind_tup):
     return is_diag
 
 
-def _get_normalization_constraints(normalizations, factors) -> list[dict]:
+def _get_normalization_constraints(
+    normalizations: Mapping[str, Normalizations],
+    factors: tuple[str, ...],
+) -> list[dict]:
     """List of constraints to enforce normalizations.
 
     Args:
-        normalizations (dict): Nested dictionary with information on normalized factor
-        loadings and intercepts for each factor. See :ref:`normalizations`.
+        normalizations: Mapping from factor name to Normalizations instance.
+        factors: Tuple of factor names to process.
 
     Returns:
         constraints_dicts
 
     """
     msg = "This constraint was generated because of an explicit normalization."
-    periods = range(len(normalizations[factors[0]]["loadings"]))
+    periods = range(len(normalizations[factors[0]].loadings))
 
     constraints_dicts = []
     for factor in factors:
-        if "variances" in normalizations[factor]:
-            raise ValueError("normalization for variances cannot be provided")
         for period in periods:
-            for meas, normval in normalizations[factor]["loadings"][period].items():
+            for meas, normval in normalizations[factor].loadings[period].items():
                 constraints_dicts.append(
                     {
                         "loc": ("loadings", period, meas, factor),
@@ -158,7 +168,7 @@ def _get_normalization_constraints(normalizations, factors) -> list[dict]:
                         "description": msg,
                     }
                 )
-            for meas, normval in normalizations[factor]["intercepts"][period].items():
+            for meas, normval in normalizations[factor].intercepts[period].items():
                 constraints_dicts.append(
                     {
                         "loc": ("controls", period, meas, "constant"),
@@ -171,7 +181,7 @@ def _get_normalization_constraints(normalizations, factors) -> list[dict]:
     return constraints_dicts
 
 
-def _get_mixture_weights_constraints(n_mixtures) -> list[dict]:
+def _get_mixture_weights_constraints(n_mixtures: int) -> list[dict]:
     """Constrain mixture weights to be between 0 and 1 and sum to 1."""
     if n_mixtures == 1:
         msg = "Set the mixture weight to 1 if there is only one mixture element."
@@ -191,12 +201,15 @@ def _get_mixture_weights_constraints(n_mixtures) -> list[dict]:
     return constraints_dicts
 
 
-def _get_stage_constraints(stagemap, stages) -> list[dict]:
+def _get_stage_constraints(
+    stagemap: tuple[int, ...],
+    stages: tuple[int, ...],
+) -> list[dict]:
     """Equality constraints for transition and shock parameters within stages.
 
     Args:
-        stagemap (list): map aug_periods to aug_stages
-        stages (list): aug_stages
+        stagemap: map aug_periods to aug_stages
+        stages: aug_stages
     Returns:
         constraints_dicts
 
@@ -232,11 +245,11 @@ def _get_stage_constraints(stagemap, stages) -> list[dict]:
     return constraints_dicts
 
 
-def _get_constant_factors_constraints(labels) -> list[dict]:
+def _get_constant_factors_constraints(labels: Labels) -> list[dict]:
     """Fix shock variances of constant factors to `bounds_distance`.
 
     Args:
-        labels (dict): Dict of lists with labels for the model quantities like
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
 
     Returns:
@@ -244,10 +257,10 @@ def _get_constant_factors_constraints(labels) -> list[dict]:
 
     """
     constraints_dicts = []
-    for f, factor in enumerate(labels["latent_factors"]):
-        if labels["transition_names"][f] == "constant":
+    for f, factor in enumerate(labels.latent_factors):
+        if labels.transition_names[f] == "constant":
             msg = f"This constraint was generated because {factor} is constant."
-            for aug_period in labels["aug_periods"][:-1]:
+            for aug_period in labels.aug_periods[:-1]:
                 constraints_dicts.append(
                     {
                         "loc": ("shock_sds", aug_period, factor, "-"),
@@ -259,14 +272,17 @@ def _get_constant_factors_constraints(labels) -> list[dict]:
     return constraints_dicts
 
 
-def _get_initial_states_constraints(n_mixtures, factors) -> list[dict]:
+def _get_initial_states_constraints(
+    n_mixtures: int,
+    factors: tuple[str, ...],
+) -> list[dict]:
     """Enforce that the x values of the first factor are increasing.
 
     Otherwise the model would only be identified up to the order of the start factors.
 
     Args:
-        n_mixtures (int): number of elements in the mixture of normal of the factors.
-        factors (list): the latent factors of the model
+        n_mixtures: number of elements in the mixture of normal of the factors.
+        factors: the latent factors of the model
 
     Returns:
         constraints_dicts
@@ -290,11 +306,11 @@ def _get_initial_states_constraints(n_mixtures, factors) -> list[dict]:
     return constraints_dicts
 
 
-def _get_transition_constraints(labels) -> list[dict]:
+def _get_transition_constraints(labels: Labels) -> list[dict]:
     """Collect possible constraints on transition parameters.
 
     Args:
-        labels (dict): Dict of lists with labels for the model quantities like
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
 
     Returns:
@@ -302,14 +318,14 @@ def _get_transition_constraints(labels) -> list[dict]:
 
     """
     constraints_dicts = []
-    for f, factor in enumerate(labels["latent_factors"]):
-        tname = labels["transition_names"][f]
+    for f, factor in enumerate(labels.latent_factors):
+        tname = labels.transition_names[f]
         msg = f"This constraint is inherent to the {tname} production function."
-        for aug_period in labels["aug_periods"][:-1]:
+        for aug_period in labels.aug_periods[:-1]:
             funcname = f"constraints_{tname}"
             if func := getattr(t_f_module, funcname, False):
                 c = func(  # ty: ignore[call-non-callable]
-                    factor=factor, factors=labels["all_factors"], aug_period=aug_period
+                    factor=factor, factors=labels.all_factors, aug_period=aug_period
                 )
                 if "description" not in c:
                     c["description"] = msg
@@ -318,16 +334,19 @@ def _get_transition_constraints(labels) -> list[dict]:
 
 
 def _get_anchoring_constraints(
-    update_info, controls, anchoring_info, periods
+    update_info: pd.DataFrame,
+    controls: tuple[str, ...],
+    anchoring_info: Anchoring,
+    periods: tuple[int, ...],
 ) -> list[dict]:
     """Constraints on anchoring parameters.
 
     Args:
-        update_info (pandas.DataFrame): DataFrame with one row per Kalman update needed
+        update_info: DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
-        controls (list): List of control variables
-        anchoring_info (dict): Information about anchoring. See :ref:`anchoring`
-        periods (list): Period of the model
+        controls: List of control variables
+        anchoring_info: Information about anchoring. See :ref:`anchoring`
+        periods: Period of the model
 
     Returns:
         constraints_dicts
@@ -336,7 +355,7 @@ def _get_anchoring_constraints(
     anchoring_updates = update_info[update_info["purpose"] == "anchoring"].index
 
     constraints_dicts = []
-    if not anchoring_info["free_constant"]:
+    if not anchoring_info.free_constant:
         msg = (
             "This constraint was generated because free_constant in the anchoring "
             "section of the model specification is set to False."
@@ -348,7 +367,7 @@ def _get_anchoring_constraints(
             {"loc": locs, "type": "fixed", "value": 0, "description": msg},
         )
 
-    if not anchoring_info["free_controls"]:
+    if not anchoring_info.free_controls:
         msg = (
             "This constraint was generated because free_controls in the anchoring "
             "section of the model specification is set to False."
@@ -361,15 +380,15 @@ def _get_anchoring_constraints(
             {"loc": ind_tups, "type": "fixed", "value": 0, "description": msg},
         )
 
-    if not anchoring_info["free_loadings"]:
+    if not anchoring_info.free_loadings:
         msg = (
             "This constraint was generated because free_loadings in the anchoring "
             "section of the model specification is set to False."
         )
         ind_tups = []
         for period in periods:
-            for factor in anchoring_info["factors"]:
-                outcome = anchoring_info["outcomes"][factor]
+            for factor in anchoring_info.factors:
+                outcome = anchoring_info.outcomes[factor]
                 meas = f"{outcome}_{factor}"
                 ind_tups.append(("loadings", period, meas, factor))
 
@@ -377,13 +396,12 @@ def _get_anchoring_constraints(
             {"loc": ind_tups, "type": "fixed", "value": 1, "description": msg},
         )
 
-    constraints_dicts = [c for c in constraints_dicts if c["loc"] != []]
-
-    return constraints_dicts
+    return [c for c in constraints_dicts if c["loc"] != []]
 
 
 def _get_constraints_for_augmented_periods(
-    labels, endogenous_factors_info
+    labels: Labels,
+    endogenous_factors_info: EndogenousFactorsInfo,
 ) -> list[dict]:
     """Constraints for augmented periods.
 
@@ -394,30 +412,33 @@ def _get_constraints_for_augmented_periods(
     Both depend on the transition function.
 
     Args:
-        labels (dict): Dict of lists with labels for the model quantities like
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
+        endogenous_factors_info: Information about endogenous factors and their
+            relationship to augmented periods.
 
     Returns:
         constraints_dicts
 
     """
     constraints_dicts = []
-    for f, factor in enumerate(labels["latent_factors"]):
-        tname = labels["transition_names"][f]
+    for f, factor in enumerate(labels.latent_factors):
+        tname = labels.transition_names[f]
         if tname == "constant":
             continue
         # We are restricting transitions and shocks, not measurements. So this might
         # look counterintuitive...
         aug_period_meas_type_to_constrain = (
-            "states"
-            if endogenous_factors_info[factor]["is_state"]
-            else "endogenous_factors"
+            MeasurementType.STATES
+            if endogenous_factors_info.factor_info[factor].is_state
+            else MeasurementType.ENDOGENOUS_FACTORS
+        )
+        aug_period_meas_types = (
+            endogenous_factors_info.aug_periods_to_aug_period_meas_types
         )
         aug_periods_to_constrain = [
             k
-            for k, v in endogenous_factors_info[
-                "aug_periods_to_aug_period_meas_types"
-            ].items()
+            for k, v in aug_period_meas_types.items()
             if v == aug_period_meas_type_to_constrain
         ]
         for aug_period in aug_periods_to_constrain:
@@ -425,14 +446,14 @@ def _get_constraints_for_augmented_periods(
                 constraints_dicts += func(  # ty: ignore[call-non-callable]
                     factor=factor,
                     aug_period=aug_period,
-                    all_factors=labels["all_factors"],
+                    all_factors=labels.all_factors,
                 )
         for aug_period in aug_periods_to_constrain[:-1]:
             constraints_dicts.append(
                 {
                     "loc": ("shock_sds", aug_period, factor, "-"),
                     "type": "fixed",
-                    "value": endogenous_factors_info["bounds_distance"],
+                    "value": endogenous_factors_info.bounds_distance,
                     "description": "Identity constraint.",
                 }
             )
@@ -440,7 +461,7 @@ def _get_constraints_for_augmented_periods(
     return constraints_dicts
 
 
-def _sel(params, loc):
+def _sel(params: pd.DataFrame, loc: Any) -> pd.DataFrame:
     return params.loc[loc]
 
 
@@ -516,7 +537,7 @@ def constraints_dicts_to_om(
     """Convert constraints provided in dictionary form to optimagic constraints.
 
     Args:
-        constraints_dicts (list): see :ref:`get_constraints_dicts`.
+        constraints_dicts: see :ref:`get_constraints_dicts`.
 
     Returns:
         List of optimagic constraints.
@@ -555,8 +576,8 @@ def enforce_fixed_constraints(
     This means that any robust bounds will be overridden for fixed parameters.
 
     Args:
-        params_template (pd.DataFrame): see :ref:`params_df`.
-        constraints_dicts (list): see :ref:`get_constraints_dicts`.
+        params_template: see :ref:`params_df`.
+        constraints_dicts: see :ref:`get_constraints_dicts`.
 
     Returns:
         pd.DataFrame: modified copy of params_template

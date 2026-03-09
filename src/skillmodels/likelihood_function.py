@@ -1,7 +1,12 @@
+"""Log-likelihood function for latent factor models."""
+
 import functools
+from collections.abc import Callable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 from skillmodels.clipping import soft_clipping
 from skillmodels.kalman_filters import (
@@ -9,24 +14,63 @@ from skillmodels.kalman_filters import (
     kalman_update,
 )
 from skillmodels.parse_params import parse_params
+from skillmodels.types import (
+    Dimensions,
+    EstimationOptions,
+    Labels,
+    ParsedParams,
+    ParsingInfo,
+)
 
 
 def log_likelihood(
-    params,
-    parsing_info,
-    measurements,
-    controls,
-    transition_func,
-    sigma_scaling_factor,
-    sigma_weights,
-    dimensions,
-    labels,
-    estimation_options,
-    is_measurement_iteration,
-    is_predict_iteration,
-    iteration_to_period,
-    observed_factors,
-):
+    params: Array,
+    parsing_info: ParsingInfo,
+    measurements: Array,
+    controls: Array,
+    transition_func: Callable,
+    sigma_scaling_factor: float,
+    sigma_weights: Array,
+    dimensions: Dimensions,
+    labels: Labels,
+    estimation_options: EstimationOptions,
+    is_measurement_iteration: Array,
+    is_predict_iteration: Array,
+    iteration_to_period: Array,
+    observed_factors: Array,
+) -> Array:
+    """Aggregated log likelihood of a skill formation model.
+
+    Wrapper around log_likelihood_obs that sums contributions across observations.
+
+    Args:
+        params: 1d array with model parameters.
+        parsing_info: Contains information how to parse parameter vector.
+        measurements: Array of shape (n_updates, n_obs) with data on
+            observed measurements. NaN if the measurement was not observed.
+        controls: Array of shape (n_periods, n_obs, n_controls)
+            with observed control variables for the measurement equations.
+        transition_func: The transition function.
+        sigma_scaling_factor: A scaling factor that controls the spread of the
+            sigma points.
+        sigma_weights: 1d array of length n_sigma with non-negative sigma weights.
+        dimensions: Dimensional information like n_states, n_periods, n_controls,
+            n_mixtures.
+        labels: Labels for the model quantities like factors, periods, controls,
+            stagemap and stages.
+        estimation_options: Options for estimation including clipping bounds.
+        is_measurement_iteration: Boolean array indicating which iterations are
+            measurement updates.
+        is_predict_iteration: Boolean array indicating which iterations are predict
+            steps.
+        iteration_to_period: Array mapping iteration index to period.
+        observed_factors: Array of shape (n_periods, n_obs, n_observed_factors) with
+            data on the observed factors.
+
+    Returns:
+        Scalar aggregated log likelihood.
+
+    """
     return log_likelihood_obs(
         params=params,
         parsing_info=parsing_info,
@@ -46,21 +90,21 @@ def log_likelihood(
 
 
 def log_likelihood_obs(
-    params,
-    parsing_info,
-    measurements,
-    controls,
-    transition_func,
-    sigma_scaling_factor,
-    sigma_weights,
-    dimensions,
-    labels,
-    estimation_options,
-    is_measurement_iteration,
-    is_predict_iteration,
-    iteration_to_period,
-    observed_factors,
-):
+    params: Array,
+    parsing_info: ParsingInfo,
+    measurements: Array,
+    controls: Array,
+    transition_func: Callable,
+    sigma_scaling_factor: float,
+    sigma_weights: Array,
+    dimensions: Dimensions,
+    labels: Labels,
+    estimation_options: EstimationOptions,
+    is_measurement_iteration: Array,
+    is_predict_iteration: Array,
+    iteration_to_period: Array,
+    observed_factors: Array,
+) -> Array:
     """Log likelihood of a skill formation model.
 
     This function is jax-differentiable and jax-jittable as long as all but the first
@@ -73,25 +117,29 @@ def log_likelihood_obs(
     with Jax.
 
     Args:
-        params (jax.numpy.array): 1d array with model parameters.
-        parsing_info (dict): Contains information how to parse parameter vector.
-        update_info (pandas.DataFrame): Contains information about number of updates in
-            each period and purpose of each update.
-        measurements (jax.numpy.array): Array of shape (n_updates, n_obs) with data on
+        params: 1d array with model parameters.
+        parsing_info: Contains information how to parse parameter vector.
+        measurements: Array of shape (n_updates, n_obs) with data on
             observed measurements. NaN if the measurement was not observed.
-        controls (jax.numpy.array): Array of shape (n_periods, n_obs, n_controls)
+        controls: Array of shape (n_periods, n_obs, n_controls)
             with observed control variables for the measurement equations.
-        transition_func (Callable): The transition function.
-        sigma_scaling_factor (float): A scaling factor that controls the spread of the
+        transition_func: The transition function.
+        sigma_scaling_factor: A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart. Depends on
             the sigma_point algorithm chosen.
-        sigma_weights (jax.numpy.array): 1d array of length n_sigma with non-negative
+        sigma_weights: 1d array of length n_sigma with non-negative
             sigma weights.
-        dimensions (dict): Dimensional information like n_states, n_periods, n_controls,
+        dimensions: Dimensional information like n_states, n_periods, n_controls,
             n_mixtures. See :ref:`dimensions`.
-        labels (dict): Dict of lists with labels for the model quantities like
+        labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
-        observed_factors (jax.numpy.array): Array of shape (n_periods, n_obs,
+        estimation_options: Options for estimation including clipping bounds.
+        is_measurement_iteration: Boolean array indicating which
+            iterations are measurement updates.
+        is_predict_iteration: Boolean array indicating which
+            iterations are predict steps.
+        iteration_to_period: Array mapping iteration index to period.
+        observed_factors: Array of shape (n_periods, n_obs,
             n_observed_factors) with data on the observed factors.
 
     Returns:
@@ -99,12 +147,12 @@ def log_likelihood_obs(
 
     """
     n_obs = measurements.shape[1]
-    states, upper_chols, log_mixture_weights, pardict = parse_params(
-        params,
-        parsing_info,
-        dimensions,
-        labels,
-        n_obs,
+    states, upper_chols, log_mixture_weights, parsed_params = parse_params(
+        params=params,
+        parsing_info=parsing_info,
+        dimensions=dimensions,
+        labels=labels,
+        n_obs=n_obs,
     )
 
     carry = {
@@ -115,9 +163,9 @@ def log_likelihood_obs(
 
     loop_args = {
         "period": iteration_to_period,
-        "loadings": pardict["loadings"],
-        "control_params": pardict["controls"],
-        "meas_sds": pardict["meas_sds"],
+        "loadings": parsed_params.loadings,
+        "control_params": parsed_params.controls,
+        "meas_sds": parsed_params.meas_sds,
         "measurements": measurements,
         "is_measurement_iteration": is_measurement_iteration,
         "is_predict_iteration": is_predict_iteration,
@@ -126,7 +174,7 @@ def log_likelihood_obs(
     _body = functools.partial(
         _scan_body,
         controls=controls,
-        pardict=pardict,
+        parsed_params=parsed_params,
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
         transition_func=transition_func,
@@ -139,23 +187,23 @@ def log_likelihood_obs(
     # possible.
     return soft_clipping(
         arr=static_out["loglikes"],
-        lower=estimation_options["clipping_lower_bound"],
-        upper=estimation_options["clipping_upper_bound"],
-        lower_hardness=estimation_options["clipping_lower_hardness"],
-        upper_hardness=estimation_options["clipping_upper_hardness"],
+        lower=estimation_options.clipping_lower_bound,
+        upper=estimation_options.clipping_upper_bound,
+        lower_hardness=estimation_options.clipping_lower_hardness,
+        upper_hardness=estimation_options.clipping_upper_hardness,
     ).sum(axis=0)
 
 
 def _scan_body(
-    carry,
-    loop_args,
-    controls,
-    pardict,
-    sigma_scaling_factor,
-    sigma_weights,
-    transition_func,
-    observed_factors,
-):
+    carry: dict[str, Array],
+    loop_args: dict[str, Array],
+    controls: Array,
+    parsed_params: ParsedParams,
+    sigma_scaling_factor: float,
+    sigma_weights: Array,
+    transition_func: Callable,
+    observed_factors: Array,
+) -> tuple[dict[str, Array], dict[str, Array]]:
     # ==================================================================================
     # create arguments needed for update
     # ==================================================================================
@@ -193,12 +241,12 @@ def _scan_body(
         "upper_chols": upper_chols,
         "sigma_scaling_factor": sigma_scaling_factor,
         "sigma_weights": sigma_weights,
-        "trans_coeffs": {k: arr[t] for k, arr in pardict["transition"].items()},
-        "shock_sds": pardict["shock_sds"][t],
-        "anchoring_scaling_factors": pardict["anchoring_scaling_factors"][
+        "trans_coeffs": {k: arr[t] for k, arr in parsed_params.transition.items()},
+        "shock_sds": parsed_params.shock_sds[t],
+        "anchoring_scaling_factors": parsed_params.anchoring_scaling_factors[
             jnp.array([t, t + 1])
         ],
-        "anchoring_constants": pardict["anchoring_constants"][jnp.array([t, t + 1])],
+        "anchoring_constants": parsed_params.anchoring_constants[jnp.array([t, t + 1])],
         "observed_factors": observed_factors[t],
     }
 
@@ -224,28 +272,36 @@ def _scan_body(
     return new_state, static_out
 
 
-def _one_arg_measurement_update(kwargs):
-    out = kalman_update(**kwargs)
-    return out
+def _one_arg_measurement_update(
+    kwargs: dict[str, Array],
+) -> tuple[Array, Array, Array, Array]:
+    return kalman_update(**kwargs)
 
 
-def _one_arg_anchoring_update(kwargs):
+def _one_arg_anchoring_update(
+    kwargs: dict[str, Array],
+) -> tuple[Array, Array, Array, Array]:
     _, _, new_log_mixture_weights, new_loglikes = kalman_update(**kwargs)
-    out = (
+    return (
         kwargs["states"],
         kwargs["upper_chols"],
         new_log_mixture_weights,
         new_loglikes,
     )
-    return out
 
 
-def _one_arg_no_predict(kwargs, transition_func):  # noqa: ARG001
+def _one_arg_no_predict(
+    kwargs: dict[str, Any],
+    transition_func: Callable,  # noqa: ARG001
+) -> tuple[Array, Array, Array]:
     """Just return the states cond chols without any changes."""
     return kwargs["states"], kwargs["upper_chols"], kwargs["states"]
 
 
-def _one_arg_predict(kwargs, transition_func):
+def _one_arg_predict(
+    kwargs: dict[str, Any],
+    transition_func: Callable,
+) -> tuple[Array, Array, Array]:
     """Do a predict step but also return the input states as filtered states."""
     new_states, new_upper_chols = kalman_predict(
         transition_func,
