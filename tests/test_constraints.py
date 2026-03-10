@@ -15,6 +15,8 @@ from skillmodels.constraints import (
     _get_stage_constraints,
     _get_transition_constraints,
     add_bounds,
+    constraints_dicts_to_om,
+    get_constraints_dicts,
 )
 from skillmodels.process_model import process_model
 from skillmodels.test_data.simplest_augmented_model import SIMPLEST_AUGMENTED_MODEL
@@ -417,6 +419,89 @@ def assert_list_equal_except_for_order(list1, list2) -> None:
 @pytest.fixture
 def simplest_augmented_model():
     return process_model(SIMPLEST_AUGMENTED_MODEL)
+
+
+def test_get_constraints_dicts_with_endogenous_factors(
+    simplest_augmented_model,
+) -> None:
+    constraints = get_constraints_dicts(
+        update_info=simplest_augmented_model.update_info,
+        labels=simplest_augmented_model.labels,
+        dimensions=simplest_augmented_model.dimensions,
+        anchoring_info=simplest_augmented_model.anchoring,
+        normalizations=simplest_augmented_model.normalizations,
+        endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
+    )
+    # Should contain augmented-period constraints
+    assert any(c.get("value") == 1e-08 for c in constraints)
+
+
+def test_constraints_dicts_to_om_type_dispatch(simplest_augmented_model) -> None:
+    constraints = get_constraints_dicts(
+        update_info=simplest_augmented_model.update_info,
+        labels=simplest_augmented_model.labels,
+        dimensions=simplest_augmented_model.dimensions,
+        anchoring_info=simplest_augmented_model.anchoring,
+        normalizations=simplest_augmented_model.normalizations,
+        endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
+    )
+    om_constraints = constraints_dicts_to_om(constraints)
+    assert len(om_constraints) > 0
+
+
+def test_constraints_dicts_to_om_equality_type() -> None:
+    dicts = [
+        {
+            "loc": ("loadings", 0, "y1", "f1"),
+            "type": "equality",
+            "id": 0,
+            "description": "test",
+        },
+    ]
+    result = constraints_dicts_to_om(dicts)
+    assert len(result) == 1
+
+
+def test_constraints_dicts_to_om_probability_type() -> None:
+    dicts = [
+        {
+            "loc": "mixture_weights",
+            "type": "probability",
+            "id": 0,
+            "description": "test",
+        },
+    ]
+    result = constraints_dicts_to_om(dicts)
+    assert len(result) == 1
+
+
+def test_constraints_dicts_to_om_increasing_type() -> None:
+    dicts = [
+        {
+            "loc": [
+                ("initial_states", 0, "m0", "f1"),
+                ("initial_states", 0, "m1", "f1"),
+            ],
+            "type": "increasing",
+            "id": 0,
+            "description": "test",
+        },
+    ]
+    result = constraints_dicts_to_om(dicts)
+    assert len(result) == 1
+
+
+def test_constraints_dicts_to_om_unknown_type_raises() -> None:
+    dicts = [
+        {
+            "loc": ("loadings", 0, "y1", "f1"),
+            "type": "unknown_type",
+            "id": 0,
+            "description": "test",
+        },
+    ]
+    with pytest.raises(TypeError):
+        constraints_dicts_to_om(dicts)
 
 
 def test_get_constraints_for_augmented_periods(simplest_augmented_model) -> None:
