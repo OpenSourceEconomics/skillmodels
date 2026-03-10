@@ -9,6 +9,9 @@ skillmodels is a Python implementation of estimators for nonlinear dynamic laten
 models, primarily used for skill formation research in economics. It implements Kalman
 filter-based maximum likelihood estimation following Cunha, Heckman, Schennach (2010).
 
+Used as the core estimation engine by sibling application projects (`skane-struct-bw`,
+`health-cognition`) in the parent workspace.
+
 ## Development Commands
 
 ```bash
@@ -59,32 +62,87 @@ ModelSpec + Data
        ↓
 process_model() → Validates/extends model specification → ProcessedModel
        ↓
-process_data() → Transforms data to estimation format
+get_maximization_inputs() → Creates optimization problem (likelihood, gradients,
+                            constraints, params_template)
        ↓
-get_maximization_inputs() → Creates optimization problem (likelihood, gradients, constraints)
-       ↓
-[optimagic optimization]
+[optimagic maximize / estimagic estimate_ml with fides algorithm]
        ↓
 get_filtered_states() → Extract estimated latent factors
+simulate_dataset() → Simulate states (with optional policy effects)
 ```
 
 ### Key Modules
 
-- **model_spec.py**: User-facing frozen dataclasses for model specification
-  (`ModelSpec`, `FactorSpec`, `AnchoringSpec`, `EstimationOptions`, `Normalizations`).
+- **model_spec.py**: User-facing frozen dataclasses (`ModelSpec`, `FactorSpec`,
+  `AnchoringSpec`). Re-exports `EstimationOptions` and `Normalizations` from `types.py`.
+  `ModelSpec` supports construction via `__init__` or `ModelSpec.from_dict()`, and
+  fluent builder methods: `with_transition_functions()`, `with_added_factor()`,
+  `with_added_observed_factors()`, `with_estimation_options()`, `with_anchoring()`,
+  `with_controls()`, `with_stagemap()`.
 - **types.py**: Internal frozen dataclasses (`ProcessedModel`, `Labels`, `Dimensions`,
-  `Anchoring`, `ParsingInfo`, `ParsedParams`, etc.) and immutability utilities.
+  `Anchoring`, `ParsingInfo`, `ParsedParams`, `EndogenousFactorsInfo`, etc.),
+  `EstimationOptions`, `Normalizations`, and immutability utilities.
 - **process_model.py**: Model specification validation and preprocessing. Converts
   `ModelSpec` into `ProcessedModel`.
 - **kalman_filters.py**: Core Kalman filter implementation (predict/update steps). Uses
   square-root form for numerical stability.
-- **likelihood_function.py**: Log-likelihood computation using Kalman filtering.
-  Includes soft clipping for numerical stability.
+- **likelihood_function.py** / **likelihood_function_debug.py**: Log-likelihood
+  computation using Kalman filtering. The debug variant is not jitted and returns
+  intermediate results (residuals, contributions, filtered states).
 - **constraints.py**: Generates parameter constraints (bounds, equalities from stagemap,
-  fixed values) for optimization.
+  fixed values) for optimization. Exports `get_constraints_dicts()`,
+  `constraints_dicts_to_om()`, `enforce_fixed_constraints()`, `add_bounds()`.
 - **parse_params.py**: Converts flat parameter vectors to structured model parameters.
-- **transition_functions.py**: Pre-built transition equations (`linear`, `log_ces`,
-  `constant`). Custom functions can be added.
+  Exports `create_parsing_info()` and `parse_params()`.
+- **params_index.py**: Builds the `pd.MultiIndex` for the params DataFrame via
+  `get_params_index()`.
+- **transition_functions.py**: Pre-built transition equations: `linear`, `translog`,
+  `robust_translog`, `linear_and_squares`, `log_ces`, `log_ces_general`, `constant`.
+- **decorators.py**: `register_params` decorator for custom transition functions. Tags a
+  callable with `__registered_params__` so skillmodels knows its parameter names.
+- **process_data.py**: `process_data()` for internal estimation format,
+  `pre_process_data()` for reshaping data to long format with period indexing.
+- **simulate_data.py**: `simulate_dataset()` and `simulate_policy_effect()`.
+- **diagnostic_plots.py**: `plot_likelihood_contributions()` and
+  `plot_residual_boxplots()` (Plotly-based).
+- **variance_decomposition.py**: `decompose_measurement_variance()` and
+  `summarize_measurement_reliability()`.
+- **process_debug_data.py**: `create_state_ranges()` and `process_debug_data()` for
+  converting raw debug output into DataFrames.
+- **utilities.py**: Model manipulation helpers (`extract_factors`, `remove_factors`,
+  `update_parameter_values`, `switch_translog_to_linear`, etc.).
+- **Visualization modules** (not in `__all__`, imported by module path):
+  `correlation_heatmap.py`, `visualize_factor_distributions.py`,
+  `visualize_transition_equations.py`, `utils_plotting.py`.
+
+### `get_maximization_inputs()` Return Dict
+
+Returns a dict with 6 keys:
+
+- `"loglike"`: `(params: pd.DataFrame) -> float` — jitted scalar log-likelihood
+- `"loglikeobs"`: `(params: pd.DataFrame) -> NDArray` — jitted per-observation
+  log-likelihood
+- `"debug_loglike"`: `(params: pd.DataFrame) -> dict` — non-jitted, returns dict with
+  keys `value`, `contributions`, `residuals`, `residual_sds`, `filtered_states`,
+  `state_ranges`, etc.
+- `"loglike_and_gradient"`: `(params: pd.DataFrame) -> tuple[float, NDArray]`
+- `"constraints"`: list of optimagic constraint objects
+- `"params_template"`: `pd.DataFrame` with correct MultiIndex and bounds; fixed
+  constraints pre-applied
+
+### ProcessedModel Key Attributes
+
+Applications frequently access these after calling `process_model(model_spec)`:
+
+- `processed.labels` — `.latent_factors`, `.observed_factors`, `.all_factors`,
+  `.controls`, `.stagemap`, `.stages`, `.aug_periods_to_periods`
+- `processed.dimensions` — `.n_periods`, `.n_latent_factors`
+- `processed.update_info` — DataFrame indexed by `(aug_period, variable)` with factor
+  columns and a `purpose` column
+- `processed.endogenous_factors_info` — `.has_endogenous_factors`,
+  `.aug_periods_from_period(period)`, `.factor_info`
+- `processed.normalizations` — dict of factor name to `Normalizations`
+- `processed.transition_info` — `.func` (vectorized), `.individual_functions[factor]`
 
 ### JAX Usage
 
@@ -94,18 +152,57 @@ The codebase uses:
 - `jax.vmap` for vectorization across observations
 - `jax.jit` for compilation
 - JAX arrays throughout the estimation pipeline
-- Optional GPU support via CUDA
+- Optional GPU support via CUDA or Metal
 
-### Public API
+### Public API (`__init__.py`)
 
-The main package exports model specification classes and core functions:
+**Model specification classes:**
 
-- `ModelSpec`, `FactorSpec`, `AnchoringSpec`, `EstimationOptions`, `Normalizations`:
-  Frozen dataclasses for defining models
-- `get_maximization_inputs()`: Prepare optimization problem for parameter estimation
-- `get_filtered_states()`: Extract filtered latent factor estimates
-- `simulate_dataset()`: Generate synthetic data from model specification (accepts
-  optional `seed` parameter for reproducibility)
+- `ModelSpec`, `FactorSpec`, `AnchoringSpec`, `EstimationOptions`, `Normalizations`
+
+**Core estimation:**
+
+- `get_maximization_inputs(model_spec, data, split_dataset=1)` — prepare optimization
+  problem
+- `get_filtered_states(model_spec, data, params)` — returns nested dict with
+  `"anchored_states"` and `"unanchored_states"`, each containing `"states"` (DataFrame)
+  and `"state_ranges"`
+
+**Simulation:**
+
+- `simulate_dataset(model_spec, params, n_obs=None, data=None, policies=None, seed=None)`
+  — returns dict with `"unanchored_states"`, `"anchored_states"`,
+  `"aug_unanchored_states"`, `"aug_measurements"`
+- `simulate_policy_effect(model_spec, params, data, policies, seed=None)` — returns
+  DataFrame of factor mean differences between policy and baseline
+
+**Diagnostics and visualization:**
+
+- `plot_likelihood_contributions(model_spec, data, params, period=None)`
+- `plot_residual_boxplots(model_spec, data, params, period=None)`
+- `decompose_measurement_variance(model_spec, params, data)` — returns DataFrame indexed
+  by `(aug_period, measurement, factor)` with signal/noise columns
+- `summarize_measurement_reliability(variance_decomposition)`
+- `create_state_ranges(filtered_states, factors, quantile_cutoff=None)`
+
+### Frequently Used Internal APIs
+
+These are not in `__all__` but are imported directly by application projects:
+
+- `skillmodels.process_model.process_model` — central to all application code
+- `skillmodels.types.ProcessedModel`, `EndogenousFactorsInfo`
+- `skillmodels.decorators.register_params` — essential for custom transition functions
+- `skillmodels.constraints.constraints_dicts_to_om`, `enforce_fixed_constraints`
+- `skillmodels.utilities.extract_factors`, `update_parameter_values`
+- `skillmodels.process_data.pre_process_data`
+- `skillmodels.correlation_heatmap.get_measurements_corr`, `get_quasi_scores_corr`,
+  `get_scores_corr`, `plot_correlation_heatmap`
+- `skillmodels.visualize_factor_distributions.univariate_densities`,
+  `bivariate_density_contours`, `combine_distribution_plots`
+- `skillmodels.visualize_transition_equations.get_transition_plots`,
+  `combine_transition_plots`
+- `skillmodels.parse_params.create_parsing_info`, `parse_params`
+- `skillmodels.params_index.get_params_index`
 
 ## Code Style
 
