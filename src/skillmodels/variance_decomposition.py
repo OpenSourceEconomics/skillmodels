@@ -116,6 +116,14 @@ def _compute_variance_decomposition(
     # Merge with measurement SDs
     merged = pd.merge(merged, meas_sds_df, on=["aug_period", "measurement"])
 
+    # Validate measurement standard deviations
+    if (merged["meas_sd"] <= 0).any():
+        bad = merged.loc[merged["meas_sd"] <= 0, "meas_sd"]
+        raise ValueError(
+            f"meas_sd must be positive for variance decomposition, "
+            f"got non-positive values:\n{bad}",
+        )
+
     # Compute variance decomposition
     # Total variance of measurement: Var(y) = L^2 * Var(F) + sd^2
     signal_var = merged["loading"] ** 2 * merged["factor_variance"]

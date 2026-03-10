@@ -93,9 +93,9 @@ def simulate_dataset(
         n_obs = data_n_obs
 
     else:
-        control_data = jnp.ones((n_obs, 1))
-        n_periods = processed_model.dimensions.n_periods
-        observed_factors = jnp.zeros((n_periods, n_obs, 0))
+        n_aug_periods = processed_model.dimensions.n_aug_periods
+        control_data = jnp.ones((n_aug_periods, n_obs, 1))
+        observed_factors = jnp.zeros((n_aug_periods, n_obs, 0))
 
     params_index = get_params_index(
         update_info=processed_model.update_info,

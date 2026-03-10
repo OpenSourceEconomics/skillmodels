@@ -7,6 +7,13 @@ import pandas as pd
 import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
+from skillmodels.model_spec import (
+    EstimationOptions,
+    FactorSpec,
+    ModelSpec,
+    Normalizations,
+)
+from skillmodels.params_index import get_params_index
 from skillmodels.process_model import process_model
 from skillmodels.simulate_data import (
     _collapse_aug_periods_to_periods,
@@ -207,3 +214,56 @@ def test_get_shock_negative_sd_raises() -> None:
     rng = np.random.default_rng(42)
     with pytest.raises(ValueError, match="negative standard deviation"):
         _get_shock(rng, mean=0.0, sd=-1.0, size=10)
+
+
+def test_simulate_dataset_no_data_with_nobs() -> None:
+    """Simulate with data=None and n_obs should work for controls-free model."""
+    model_no_controls = ModelSpec(
+        factors={
+            "fac1": FactorSpec(
+                measurements=(("y1", "y2", "y3"),) * 3,
+                normalizations=Normalizations(
+                    loadings=({"y1": 1},) * 3,
+                    intercepts=({},) * 3,
+                ),
+                transition_function="linear",
+            ),
+            "fac2": FactorSpec(
+                measurements=(("y4", "y5", "y6"),) * 3,
+                normalizations=Normalizations(
+                    loadings=({"y4": 1},) * 3,
+                    intercepts=({},) * 3,
+                ),
+                transition_function="linear",
+            ),
+        },
+        estimation_options=EstimationOptions(
+            robust_bounds=True,
+            bounds_distance=0.001,
+            n_mixtures=1,
+        ),
+    )
+
+    processed = process_model(model_no_controls)
+    p_index = get_params_index(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        transition_info=processed.transition_info,
+        endogenous_factors_info=processed.endogenous_factors_info,
+    )
+    params = pd.DataFrame({"value": np.ones(len(p_index)) * 0.5}, index=p_index)
+
+    result = simulate_dataset(
+        model_spec=model_no_controls,
+        params=params,
+        n_obs=50,
+        data=None,
+        seed=42,
+    )
+
+    assert "unanchored_states" in result
+    states = result["unanchored_states"]["states"]
+    assert len(states) > 0
+    assert "fac1" in states.columns
+    assert "fac2" in states.columns

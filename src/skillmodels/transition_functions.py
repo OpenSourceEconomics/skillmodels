@@ -12,7 +12,7 @@ Args:
         * states: 1d numpy array of length n_all_factors
         * params: 1d numpy array with coefficients specific to this transition function
 
-Returns:
+Return:
         * float
 **names_example_func(** *factors* **)**:
 

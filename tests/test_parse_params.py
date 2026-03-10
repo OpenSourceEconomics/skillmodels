@@ -25,7 +25,7 @@ from skillmodels.types import Anchoring
 def parsed_parameters():
     p_index = pd.read_csv(
         TEST_DATA_DIR / "model2_correct_params_index.csv",
-        index_col=["category", "period", "name1", "name2"],
+        index_col=["category", "aug_period", "name1", "name2"],
     ).index
 
     processed = process_model(MODEL2)

@@ -117,9 +117,10 @@ def _create_post_update_states(
     for (aug_period, meas), data in zip(
         update_info.index, filtered_states, strict=False
     ):
+        n_obs, n_mixtures_local, _ = data.shape
         df = _convert_state_array_to_df(arr=data, factor_names=factors)
         df["aug_period"] = aug_period
-        df["id"] = np.arange(len(df))
+        df["id"] = np.repeat(np.arange(n_obs), n_mixtures_local)
         df["measurement"] = meas
         to_concat.append(df)
 
@@ -224,7 +225,7 @@ def _process_residuals(
         df = pd.DataFrame(data.reshape(-1, 1), columns=["residual"])
         df["mixture"] = np.full((n_obs, n_mixtures), np.arange(n_mixtures)).flatten()
         df["aug_period"] = aug_period
-        df["id"] = np.arange(len(df))
+        df["id"] = np.repeat(np.arange(n_obs), n_mixtures)
         df["measurement"] = meas
         to_concat.append(df)
     return pd.concat(to_concat)
