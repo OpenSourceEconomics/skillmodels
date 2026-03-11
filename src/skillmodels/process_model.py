@@ -29,8 +29,6 @@ from skillmodels.types import (
     TransitionInfo,
 )
 
-pd.set_option("future.no_silent_downcasting", True)  # noqa:  FBT003
-
 
 def process_model(model_spec: ModelSpec) -> ProcessedModel:
     """Check, clean, extend and transform the model specs.
