@@ -115,7 +115,7 @@ expand_tables = [
   "tool.pixi.environments.docs",
   "tool.pixi.environments.test-cpu",
   "tool.pixi.environments.test-gpu",
-  "tool.pixi.environments.ty",
+  "tool.pixi.environments.type-checking",
   "tool.pixi.feature",
   "tool.pixi.feature.cuda",
   "tool.pixi.feature.cuda.dependencies",
@@ -129,9 +129,9 @@ expand_tables = [
   "tool.pixi.feature.test.dependencies",
   "tool.pixi.feature.test.target",
   "tool.pixi.feature.test.tasks",
-  "tool.pixi.feature.ty",
-  "tool.pixi.feature.ty.pypi-dependencies",
-  "tool.pixi.feature.ty.tasks",
+  "tool.pixi.feature.type-checking",
+  "tool.pixi.feature.type-checking.pypi-dependencies",
+  "tool.pixi.feature.type-checking.tasks",
   "tool.pixi.pypi-dependencies",
   "tool.pixi.pypi-dependencies.optimagic",
   "tool.pixi.pypi-dependencies.skillmodels",
@@ -183,7 +183,7 @@ cuda = { features = [ "cuda" ], solve-group = "cuda" }
 docs = { features = [ "docs" ], solve-group = "default" }
 test-cpu = { features = [ "test" ], solve-group = "default" }
 test-gpu = { features = [ "test", "cuda" ], solve-group = "cuda" }
-ty = { features = [ "ty" ], solve-group = "default" }
+type-checking = { features = [ "type-checking" ], solve-group = "default" }
 
 # ======================================================================================
 # Ruff configuration
@@ -226,12 +226,12 @@ mem-on-clean-repo = """\
   pytest -x -s --pdb --memray --fail-on-increase \
   tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs\
   """
-[tool.pixi.feature.ty.pypi-dependencies]
+[tool.pixi.feature.type-checking.pypi-dependencies]
 matplotlib = "*"  # required because of pandas
 pandas-stubs = "*"
 ty = "*"
 types-pytz = "*"
-[tool.pixi.feature.ty.tasks]
+[tool.pixi.feature.type-checking.tasks]
 ty = "ty check src tests docs"
 [tool.pixi.pypi-dependencies]
 # optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main" }
