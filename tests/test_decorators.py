@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+import pytest
 
 from skillmodels.decorators import extract_params, jax_array_output, register_params
 
@@ -85,3 +86,8 @@ def test_register_params_direct_call() -> None:
     g = register_params(f, params=["a", "b", "c"])
     assert g.__registered_params__ == ["a", "b", "c"]  # ty: ignore[unresolved-attribute]
     assert g() == "bla"
+
+
+def test_extract_params_no_key_no_names_raises() -> None:
+    with pytest.raises(ValueError, match="cannot both be None"):
+        extract_params(key=None, names=None)(lambda **kw: kw)

@@ -301,3 +301,45 @@ def _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov):
     sm_state = jnp.array(state).reshape(1, 1, n_fac)
     sm_chol = jnp.array(scipy.linalg.cholesky(cov)).reshape(1, 1, n_fac, n_fac)
     return sm_state, sm_chol
+
+
+# ======================================================================================
+# Test sigma points with multiple mixtures
+# ======================================================================================
+
+
+def test_sigma_points_multiple_mixtures() -> None:
+    """Sigma points should work with n_mixtures >= 2."""
+    n_obs = 2
+    n_mixtures = 2
+    n_states = 3
+    n_observed = 2
+    n_sigma = 2 * n_states + 1
+
+    rng = np.random.default_rng(42)
+    states = jnp.array(rng.standard_normal((n_obs, n_mixtures, n_states)))
+    upper_chols = jnp.array(
+        np.tile(np.eye(n_states), (n_obs, n_mixtures, 1, 1)),
+    )
+    observed_factors = jnp.array(rng.standard_normal((n_obs, n_observed)))
+    scaling_factor = float(jnp.sqrt(n_states + 2))
+
+    result = _calculate_sigma_points(
+        states=states,
+        upper_chols=upper_chols,
+        scaling_factor=scaling_factor,
+        observed_factors=observed_factors,
+    )
+
+    # Check output shape
+    assert result.shape == (n_obs, n_mixtures, n_sigma, n_states + n_observed)
+
+    # Observed columns should be constant across the sigma dimension
+    for obs in range(n_obs):
+        for mix in range(n_mixtures):
+            observed_slice = result[obs, mix, :, n_states:]
+            expected = jnp.broadcast_to(
+                observed_factors[obs],
+                (n_sigma, n_observed),
+            )
+            aaae(observed_slice, expected)

@@ -103,17 +103,22 @@ def anchor_states_df(
     _scaling_factors = np.array(parsed_params.anchoring_scaling_factors[:, :n_latent])
     _constants = np.array(parsed_params.anchoring_constants[:, :n_latent])
     if use_aug_period:
+        # _scaling_factors is already indexed by aug_period, use directly
         period_arr = states_df["aug_period"].to_numpy()
-        ap_to_p = processed_model.labels.aug_periods_to_periods
-        scaling_factors = np.empty(shape=(len(ap_to_p), n_latent))
-        constants = np.empty(shape=(len(ap_to_p), n_latent))
-        for ap, p in ap_to_p.items():
-            scaling_factors[ap] = _scaling_factors[p]
-            constants[ap] = _constants[p]
-    else:
-        period_arr = states_df["period"].to_numpy()
         scaling_factors = _scaling_factors
         constants = _constants
+    else:
+        period_arr = states_df["period"].to_numpy()
+        ap_to_p = processed_model.labels.aug_periods_to_periods
+        n_periods = processed_model.dimensions.n_periods
+        scaling_factors = np.empty(shape=(n_periods, n_latent))
+        constants = np.empty(shape=(n_periods, n_latent))
+        for ap, p in ap_to_p.items():
+            # For endogenous models, multiple aug_periods map to the same
+            # period; constraints ensure they have identical anchoring params,
+            # so the last write per period is correct.
+            scaling_factors[p] = _scaling_factors[ap]
+            constants[p] = _constants[ap]
 
     scaling_arr = scaling_factors[period_arr]
     constants_arr = constants[period_arr]

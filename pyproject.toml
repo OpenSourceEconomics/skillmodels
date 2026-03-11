@@ -35,11 +35,14 @@ classifiers = [
 ]
 dynamic = [ "version" ]
 dependencies = [
-  "dags",
-  "jax>=0.8",
+  # "dags>=0.5.0",
+  "jax>=0.9",
+  "jupyter-book>=2",
   "numpy",
   "optimagic>=0.5.3",
   "pandas",
+  "pytask>=0.5.8",
+  "pytask-parallel>=0.5.2",
 ]
 [[project.authors]]
 name = "Janoś Gabler"
@@ -141,6 +144,7 @@ expand_tables = [
 [tool.pytest]
 ini_options.addopts = [ "--pdbcls=pdbp:Pdb" ]
 ini_options.filterwarnings = []
+ini_options.markers = [ "integration: integration tests requiring MODEL2 + data" ]
 ini_options.norecursedirs = [ "docs" ]
 
 [tool.ty]
@@ -202,8 +206,6 @@ mem-cuda = """\
   pytest -x -s --pdb --memray --fail-on-increase \
   tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs\
   """
-[tool.pixi.feature.docs.dependencies]
-jupyter-book = ">=2.0"
 [tool.pixi.feature.docs.tasks]
 build-docs = { cmd = "jupyter book build --html", cwd = "docs" }
 view-docs = { cmd = "jupyter book start", cwd = "docs" }
@@ -235,6 +237,7 @@ types-pytz = "*"
 ty = "ty check src tests docs"
 [tool.pixi.pypi-dependencies]
 # optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main" }
+dags = { git = "https://github.com/OpenSourceEconomics/dags", branch = "streamline-api" }
 pdbp = "*"
 skillmodels = { path = ".", editable = true }
 

@@ -112,9 +112,7 @@ def process_model(model_spec: ModelSpec) -> ProcessedModel:
     )
 
 
-def get_has_endogenous_factors(
-    factors: Mapping[str, FactorSpec],
-) -> bool:
+def get_has_endogenous_factors(factors: Mapping[str, FactorSpec]) -> bool:
     """Return True if any endogenous factors are present."""
     endogenous_factors = pd.DataFrame(
         [

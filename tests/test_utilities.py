@@ -14,6 +14,7 @@ from skillmodels.model_spec import ModelSpec
 from skillmodels.process_model import process_model
 from skillmodels.test_data.model2 import MODEL2
 from skillmodels.utilities import (
+    _extend_params,
     _get_params_index,
     extract_factors,
     reduce_n_periods,
@@ -185,3 +186,107 @@ def test_extend_params_via_switch_to_translog(model2) -> None:
     assert_index_equal(added_index, expected_added_index)
 
     assert extended_params.loc[added_index, "value"].unique()[0] == 0.05
+
+
+def test_update_parameter_values_single_df() -> None:
+    """Pass a single DataFrame instead of a list."""
+    params = pd.DataFrame()
+    params["value"] = np.arange(5, dtype=np.int64)
+
+    other = pd.DataFrame([[7], [8]], columns=["value"], index=[1, 4])
+
+    expected = pd.DataFrame()
+    expected["value"] = [0, 7, 2, 3, 8]
+
+    calculated = update_parameter_values(params, other)
+    assert_frame_equal(calculated, expected)
+
+
+def test_remove_measurements_with_params(model2) -> None:
+    """Remove measurements with params and verify tuple return."""
+    model = reduce_n_periods(model2, 2)
+    assert isinstance(model, ModelSpec)
+    full_index = _get_params_index(model)
+    params = pd.DataFrame(columns=["value"], index=full_index)
+    params["value"] = 0.1
+
+    result = remove_measurements("y5", model, params)
+    assert not isinstance(result, ModelSpec)
+    reduced_model, reduced_params = result
+    # y5 should not appear in any factor's measurements
+    for fspec in reduced_model.factors.values():
+        for period_meas in fspec.measurements:
+            assert "y5" not in period_meas
+    assert isinstance(reduced_params, pd.DataFrame)
+
+
+def test_remove_controls_with_params(model2) -> None:
+    """Remove controls with params and verify tuple return."""
+    model = reduce_n_periods(model2, 2)
+    assert isinstance(model, ModelSpec)
+    full_index = _get_params_index(model)
+    params = pd.DataFrame(columns=["value"], index=full_index)
+    params["value"] = 0.1
+
+    result = remove_controls("x1", model, params)
+    assert not isinstance(result, ModelSpec)
+    reduced_model, reduced_params = result
+    assert reduced_model.controls == ()
+    assert isinstance(reduced_params, pd.DataFrame)
+
+
+def test_remove_measurements_warns_on_normalized(model2) -> None:
+    with pytest.warns(UserWarning, match="normalized"):
+        remove_measurements("y1", model2)
+
+
+def test_reduce_n_periods_with_params(model2) -> None:
+    model = reduce_n_periods(model2, 2)
+    assert isinstance(model, ModelSpec)
+    full_index = _get_params_index(model)
+    params = pd.DataFrame(columns=["value"], index=full_index)
+    params["value"] = 0.1
+
+    result = reduce_n_periods(model, 1, params)
+    assert not isinstance(result, ModelSpec)
+    _, reduced_params = result
+    assert len(reduced_params) < len(params)
+
+
+def test_extend_params_with_bounds(model2) -> None:
+    model = reduce_n_periods(model2, 2)
+    assert isinstance(model, ModelSpec)
+    full_index = _get_params_index(model)
+    params = pd.DataFrame(columns=["value"], index=full_index)
+    params["value"] = 0.1
+    params["lower_bound"] = -1.0
+    params["upper_bound"] = 1.0
+
+    translog = switch_linear_to_translog(model)
+    assert isinstance(translog, ModelSpec)
+    result = _extend_params(params=params, model_spec=translog, fill_value=0.05)
+    assert "lower_bound" in result.columns
+    assert "upper_bound" in result.columns
+    # New entries should have default bounds
+    new_rows = result.index.difference(full_index)
+    assert (result.loc[new_rows, "lower_bound"] == -np.inf).all()
+    assert (result.loc[new_rows, "upper_bound"] == np.inf).all()
+
+
+def test_switch_translog_to_linear_with_params(model2) -> None:
+    """Switch translog to linear with params."""
+    # First switch to translog, then back to linear with params
+    with_translog = switch_linear_to_translog(model2)
+    assert isinstance(with_translog, ModelSpec)
+
+    model = reduce_n_periods(with_translog, 2)
+    assert isinstance(model, ModelSpec)
+    full_index = _get_params_index(model)
+    params = pd.DataFrame(columns=["value"], index=full_index)
+    params["value"] = 0.1
+
+    result = switch_translog_to_linear(model, params)
+    assert not isinstance(result, ModelSpec)
+    reduced_model, reduced_params = result
+    assert reduced_model.factors["fac2"].transition_function == "linear"
+    assert isinstance(reduced_params, pd.DataFrame)
