@@ -1670,7 +1670,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/65/44/bb509c3d2c0b5a87e7a5af1d5917a402a32ff026f777a6d7cb6990746cbb/tabcompleter-1.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/dd/1a/5d9a402b39ec892d856bbdd9db502ff73ce28cdf4aff72eb1ce1d6843506/universal_pathlib-0.3.10-py3-none-any.whl
       - pypi: ./
-  test-cpu:
+  tests-cpu:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
     indexes:
@@ -2413,7 +2413,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/65/44/bb509c3d2c0b5a87e7a5af1d5917a402a32ff026f777a6d7cb6990746cbb/tabcompleter-1.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/dd/1a/5d9a402b39ec892d856bbdd9db502ff73ce28cdf4aff72eb1ce1d6843506/universal_pathlib-0.3.10-py3-none-any.whl
       - pypi: ./
-  test-gpu:
+  tests-cuda:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
     indexes:
@@ -9498,8 +9498,8 @@ packages:
   timestamp: 1753199211006
 - pypi: ./
   name: skillmodels
-  version: 0.0.24.dev287+gb2b68d607.d20260311
-  sha256: 822189e19241eb0756788e05a2dbcb94dacb162a1321f2a6b544238d0ddba6c8
+  version: 0.0.24.dev288+gfc3dbdd31.d20260311
+  sha256: b5f16e3376749880747be824b9bedd626eba534f09979fdc287e9eec7b2c9c88
   requires_dist:
   - dags>=0.5
   - jax>=0.9
@@ -9752,6 +9752,7 @@ packages:
   - tree_sitter >=0.25.0
   - tree_sitter_languages 1.10.2.*
   license: MIT
+  license_family: MIT
   purls:
   - pkg:pypi/textual?source=hash-mapping
   size: 528806

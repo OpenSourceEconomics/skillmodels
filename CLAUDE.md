@@ -1,3 +1,6 @@
+@.ai-instructions/profiles/tier-a.md @.ai-instructions/modules/jax.md
+@.ai-instructions/modules/optimagic.md
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in
@@ -16,16 +19,16 @@ Used as the core estimation engine by sibling application projects (`skane-struc
 
 ```bash
 # Run tests
-pixi run -e test-cpu tests
+pixi run -e tests-cpu tests
 
 # Run tests with coverage
-pixi run -e test-cpu tests-with-cov
+pixi run -e tests-cpu tests-with-cov
 
 # Run a single test file
-pixi run -e test-cpu pytest tests/test_kalman_filters.py
+pixi run -e tests-cpu pytest tests/test_kalman_filters.py
 
 # Run a single test
-pixi run -e test-cpu pytest tests/test_kalman_filters.py::test_function_name
+pixi run -e tests-cpu pytest tests/test_kalman_filters.py::test_function_name
 
 # Type checking
 pixi run ty
@@ -43,14 +46,14 @@ Always use these command mappings:
 
 - **Python**: Use `pixi run python` instead of `python` or `python3`
 - **Type checker**: Use `pixi run ty` instead of running ty/mypy/pyright directly
-- **Tests**: Use `pixi run -e test-cpu tests` instead of `pytest` directly
+- **Tests**: Use `pixi run -e tests-cpu tests` instead of `pytest` directly
 - **Linting/formatting**: Use `prek run --all-files` instead of `ruff` directly
 - **All quality checks**: Use `prek run --all-files`
 
 Before finishing any task that modifies code, always run:
 
 1. `pixi run ty` (type checker)
-1. `pixi run -e test-cpu tests` (tests)
+1. `pixi run -e tests-cpu tests` (tests)
 1. `prek run --all-files` (quality checks)
 
 ## Architecture

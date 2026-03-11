@@ -19,7 +19,7 @@ keywords = [
   "Skill formation",
   "Statistics",
 ]
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 requires-python = ">=3.14,<3.15"
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -113,8 +113,8 @@ expand_tables = [
   "tool.pixi.environments",
   "tool.pixi.environments.cuda",
   "tool.pixi.environments.docs",
-  "tool.pixi.environments.test-cpu",
-  "tool.pixi.environments.test-gpu",
+  "tool.pixi.environments.tests-cpu",
+  "tool.pixi.environments.tests-cuda",
   "tool.pixi.environments.type-checking",
   "tool.pixi.feature",
   "tool.pixi.feature.cuda",
@@ -125,10 +125,10 @@ expand_tables = [
   "tool.pixi.feature.docs",
   "tool.pixi.feature.docs.dependencies",
   "tool.pixi.feature.docs.tasks",
-  "tool.pixi.feature.test",
-  "tool.pixi.feature.test.dependencies",
-  "tool.pixi.feature.test.target",
-  "tool.pixi.feature.test.tasks",
+  "tool.pixi.feature.tests",
+  "tool.pixi.feature.tests.dependencies",
+  "tool.pixi.feature.tests.target",
+  "tool.pixi.feature.tests.tasks",
   "tool.pixi.feature.type-checking",
   "tool.pixi.feature.type-checking.pypi-dependencies",
   "tool.pixi.feature.type-checking.tasks",
@@ -179,8 +179,8 @@ scipy = "*"
 [tool.pixi.environments]
 cuda = { features = [ "cuda" ], solve-group = "cuda" }
 docs = { features = [ "docs" ], solve-group = "default" }
-test-cpu = { features = [ "test" ], solve-group = "default" }
-test-gpu = { features = [ "test", "cuda" ], solve-group = "cuda" }
+tests-cpu = { features = [ "tests" ], solve-group = "default" }
+tests-cuda = { features = [ "tests", "cuda" ], solve-group = "cuda" }
 type-checking = { features = [ "type-checking" ], solve-group = "default" }
 
 # ======================================================================================
@@ -203,14 +203,14 @@ mem-cuda = """\
 [tool.pixi.feature.docs.tasks]
 build-docs = { cmd = "jupyter book build --html", cwd = "docs" }
 view-docs = { cmd = "jupyter book start", cwd = "docs" }
-[tool.pixi.feature.test.dependencies]
+[tool.pixi.feature.tests.dependencies]
 pytest = "*"
 pytest-cov = "*"
 pytest-xdist = "*"
 snakeviz = "*"
-[tool.pixi.feature.test.target.unix.dependencies]
+[tool.pixi.feature.tests.target.unix.dependencies]
 pytest-memray = "*"
-[tool.pixi.feature.test.tasks]
+[tool.pixi.feature.tests.tasks]
 tests = "pytest tests"
 tests-with-cov = "pytest tests --cov-report=xml --cov=./"
 mem = """\
