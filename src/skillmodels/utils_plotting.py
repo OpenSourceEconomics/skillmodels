@@ -20,7 +20,7 @@ def get_layout_kwargs(
     title and legend.
 
     """
-    default_kwargs = {
+    default_kwargs: dict[str, Any] = {
         "template": "simple_white",
         "xaxis_showgrid": False,
         "yaxis_showgrid": False,
@@ -35,7 +35,7 @@ def get_layout_kwargs(
     if title_kwargs:
         default_kwargs["title"] = title_kwargs
     if legend_kwargs:
-        default_kwargs["legend"].update(legend_kwargs)  # ty: ignore[possibly-missing-attribute]
+        default_kwargs["legend"].update(legend_kwargs)
     if layout_kwargs:
         default_kwargs.update(layout_kwargs)
     return default_kwargs

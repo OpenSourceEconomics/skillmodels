@@ -35,12 +35,13 @@ classifiers = [
 ]
 dynamic = [ "version" ]
 dependencies = [
-  # "dags>=0.5.0",
+  "dags>=0.5",
   "jax>=0.9",
   "jupyter-book>=2",
-  "numpy",
+  "numpy>=2.4",
   "optimagic>=0.5.3",
-  "pandas",
+  "pandas>=3",
+  "plotly[kaleido]",
   "pytask>=0.5.8",
   "pytask-parallel>=0.5.2",
 ]
@@ -73,36 +74,41 @@ unsafe-fixes = false
 [tool.ruff.lint]
 select = [ "ALL" ]
 extend-ignore = [
+  "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed
   "COM812",  # Conflicts with ruff-format
   "EM101",   # Exception must not use a string literal
   "EM102",   # Exception must not use an f-string literal
+  "FBT002",  # Boolean default positional argument in function definition
   "FIX002",  # Line contains TODO
   "ISC001",  # Conflicts with ruff-format
+  "PD015",   # Use .merge() method instead of pd.merge()
+  "PERF401", # Use a list comprehension to create a transformed list
+  "PLR0913", # Too many arguments in function definition
+  "PLR2004", # Magic value used in comparison
+  "S301",    # pickle and modules that wrap it can be unsafe
   "TC001",   # Move application import into a type-checking block
   "TC002",   # Move third-party import into a type-checking block
   "TC003",   # Move standard library import into a type-checking block
   "TRY003",  # Long messages outside exception class
-  "ANN401",
-  "FBT002",
-  "PD015",
-  "PERF401",
-  "PLR0913",
-  "PLR2004",
-  "S301",
 ]
-per-file-ignores."**/*.ipynb" = [ "B018", "INP001", "T201" ]
-per-file-ignores."src/skillmodels/types.py" = [ "TC" ]
-per-file-ignores."src/skillmodels/visualize_*.py" = [ "BLE001" ]
+per-file-ignores."**/*.ipynb" = [
+  "B018",   # Found useless expression
+  "INP001", # File is part of an implicit namespace package
+  "T201",   # print found
+]
+per-file-ignores."src/skillmodels/visualize_*.py" = [
+  "BLE001", # Do not catch blind exception: Exception
+]
 per-file-ignores."tests/*" = [
-  "ANN",
-  "ARG001",
-  "D100",
-  "D103",
-  "E712",
-  "FBT003",
-  "INP001",
-  "PT011",
-  "S101",
+  "ANN",    # Missing type annotations
+  "ARG001", # Unused function argument
+  "D100",   # Missing docstring in public module
+  "D103",   # Missing docstring in public function
+  "E712",   # Avoid equality comparisons to True/False
+  "FBT003", # Boolean positional value in function call
+  "INP001", # File is part of an implicit namespace package
+  "PT011",  # pytest.raises() is too broad
+  "S101",   # Use of assert detected
 ]
 pydocstyle.convention = "google"
 
@@ -172,12 +178,9 @@ ipykernel = "*"
 jupyterlab = "*"
 nbformat = "*"
 networkx = "*"
-numpy = ">=2.3,<2.4"
-plotly = ">=6.2"
 prek = "*"
 pybaum = "*"
 python = "~=3.14.0"
-python-kaleido = ">=1.0"
 scipy = "*"
 
 # Environments
@@ -237,7 +240,6 @@ types-pytz = "*"
 ty = "ty check src tests docs"
 [tool.pixi.pypi-dependencies]
 # optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main" }
-dags = { git = "https://github.com/OpenSourceEconomics/dags", branch = "streamline-api" }
 pdbp = "*"
 skillmodels = { path = ".", editable = true }
 

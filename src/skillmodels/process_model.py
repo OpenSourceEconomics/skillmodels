@@ -497,6 +497,7 @@ def _get_update_info(
 
     for col in [c for c in uinfo.columns if c != "purpose"]:
         uinfo[col] = uinfo[col].fillna(value=False).astype(bool)
+    uinfo["purpose"] = uinfo["purpose"].astype(pd.StringDtype(na_value=np.nan))
     return uinfo
 
 

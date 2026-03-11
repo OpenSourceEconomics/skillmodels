@@ -80,7 +80,7 @@ def test_collapse_aug_periods_to_periods_with_endogenous_factors(
     records = []
     for aug_p in range(n_aug_periods):
         for obs_id in range(n_obs):
-            record = {"id": obs_id, "aug_period": aug_p}
+            record: dict[str, int | float] = {"id": obs_id, "aug_period": aug_p}
             for fac in factors:
                 record[fac] = rng.standard_normal()
             records.append(record)

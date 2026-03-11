@@ -559,10 +559,12 @@ def _process_data(
         data = pd.concat(to_concat, axis=1)
         data["scenario"] = "none"
     else:
-        if not isinstance(states, dict):
-            states = dict(enumerate(states))
+        if isinstance(states, dict):
+            states_dict = states
+        else:
+            states_dict = {str(i): df for i, df in enumerate(states)}
         to_concat = []
-        for name, df in states.items():
+        for name, df in states_dict.items():
             one_state_per_period = _get_one_state_per_period(states=df, ap_to_p=ap_to_p)
             to_keep = one_state_per_period.query(f"period == {period}")[factors].copy()
             to_keep["scenario"] = name
