@@ -18,7 +18,7 @@ def test_make_immutable_set_to_frozenset() -> None:
 
 def test_mapping_proxy_pickle_roundtrip() -> None:
     mp = MappingProxyType({"a": 1, "b": [2, 3]})
-    result = pickle.loads(pickle.dumps(mp))
+    result = pickle.loads(pickle.dumps(mp))  # noqa: S301
     assert dict(result) == {"a": 1, "b": (2, 3)}
 
 

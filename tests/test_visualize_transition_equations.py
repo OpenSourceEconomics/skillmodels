@@ -1,3 +1,5 @@
+"""Tests for visualize transition equations."""
+
 from pathlib import Path
 
 import pandas as pd

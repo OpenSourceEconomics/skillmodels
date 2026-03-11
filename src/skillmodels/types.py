@@ -11,7 +11,7 @@ import pandas as pd
 from jax import Array
 
 
-def _make_immutable(value: Any) -> Any:
+def _make_immutable(value: Any) -> Any:  # noqa: ANN401
     """Recursively convert a value to its immutable equivalent."""
     if isinstance(value, (MappingProxyType, tuple, frozenset)):
         return value

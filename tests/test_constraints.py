@@ -1,3 +1,5 @@
+"""Tests for constraints."""
+
 from types import MappingProxyType
 
 import numpy as np
@@ -500,7 +502,7 @@ def test_constraints_dicts_to_om_unknown_type_raises() -> None:
             "description": "test",
         },
     ]
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="unknown_type"):
         constraints_dicts_to_om(dicts)
 
 

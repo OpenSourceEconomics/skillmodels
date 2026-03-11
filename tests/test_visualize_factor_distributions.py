@@ -1,3 +1,5 @@
+"""Tests for visualize factor distributions."""
+
 from pathlib import Path
 
 import pandas as pd

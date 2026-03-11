@@ -1,3 +1,5 @@
+"""Tests for Kalman filters."""
+
 from itertools import product
 
 import jax

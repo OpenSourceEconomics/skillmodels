@@ -251,7 +251,7 @@ def univariate_densities(
         hist_data = [df[fac][df["scenario"] == s] for s in scenarios]
         try:
             fig = ff.create_distplot(hist_data, **distplot_kwargs)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             warnings.warn(
                 f"""Plotting univariate density failed for {fac} in
                 period {period} with error:\n\n{e}""",
@@ -376,7 +376,7 @@ def bivariate_density_contours(
                 )
                 fig.add_trace(contour)
                 fig.update_traces(**contour_kwargs)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 warnings.warn(
                     f"""
                     Contour plot failed for {pair} in period {period}
@@ -494,7 +494,7 @@ def bivariate_density_surfaces(
                     opacity=opacity,
                 ),
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             warnings.warn(
                 f"""Plotting bivariate density surfaces for {pair} in
                 period {period} with error:\n\n{e}""",

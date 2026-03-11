@@ -1,3 +1,5 @@
+"""Tests for transition functions."""
+
 import jax
 import jax.numpy as jnp
 import pytest
@@ -264,12 +266,12 @@ def test_identity_constraints_linear_and_squares() -> None:
 
 
 def test_identity_constraints_log_ces_raises() -> None:
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(NotImplementedError, match=r"^$"):
         identity_constraints_log_ces(("a", "b"), 0, ("a", "b"))
 
 
 def test_identity_constraints_log_ces_general_raises() -> None:
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(NotImplementedError, match=r"^$"):
         identity_constraints_log_ces_general(("a", "b"), 0, ("a", "b"))
 
 

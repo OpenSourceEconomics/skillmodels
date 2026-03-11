@@ -389,8 +389,7 @@ def _collapse_aug_periods_to_periods(
     is_states = df["_aug_period_meas_type"] == MeasurementType.STATES
 
     out = df.loc[is_endogenous, ["id", "period", *endogenous_cols]]
-    return pd.merge(
-        out,
+    return out.merge(
         df.loc[is_states, ["id", "period", *state_cols]],
         on=["id", "period"],
         how="outer",

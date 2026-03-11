@@ -74,18 +74,15 @@ unsafe-fixes = false
 [tool.ruff.lint]
 select = [ "ALL" ]
 extend-ignore = [
-  "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed
   "COM812",  # Conflicts with ruff-format
   "EM101",   # Exception must not use a string literal
   "EM102",   # Exception must not use an f-string literal
   "FBT002",  # Boolean default positional argument in function definition
   "FIX002",  # Line contains TODO
   "ISC001",  # Conflicts with ruff-format
-  "PD015",   # Use .merge() method instead of pd.merge()
   "PERF401", # Use a list comprehension to create a transformed list
   "PLR0913", # Too many arguments in function definition
   "PLR2004", # Magic value used in comparison
-  "S301",    # pickle and modules that wrap it can be unsafe
   "TC001",   # Move application import into a type-checking block
   "TC002",   # Move third-party import into a type-checking block
   "TC003",   # Move standard library import into a type-checking block
@@ -96,18 +93,12 @@ per-file-ignores."**/*.ipynb" = [
   "INP001", # File is part of an implicit namespace package
   "T201",   # print found
 ]
-per-file-ignores."src/skillmodels/visualize_*.py" = [
-  "BLE001", # Do not catch blind exception: Exception
-]
 per-file-ignores."tests/*" = [
   "ANN",    # Missing type annotations
   "ARG001", # Unused function argument
-  "D100",   # Missing docstring in public module
   "D103",   # Missing docstring in public function
-  "E712",   # Avoid equality comparisons to True/False
   "FBT003", # Boolean positional value in function call
   "INP001", # File is part of an implicit namespace package
-  "PT011",  # pytest.raises() is too broad
   "S101",   # Use of assert detected
 ]
 pydocstyle.convention = "google"

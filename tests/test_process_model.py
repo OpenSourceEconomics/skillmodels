@@ -1,3 +1,5 @@
+"""Tests for process model."""
+
 import inspect
 from dataclasses import replace
 
@@ -22,7 +24,7 @@ def model2():
 
 
 def test_has_endogenous_factors(model2) -> None:
-    assert process_model(model2).endogenous_factors_info.has_endogenous_factors == False
+    assert not process_model(model2).endogenous_factors_info.has_endogenous_factors
 
 
 def test_dimensions(model2) -> None:
@@ -180,9 +182,7 @@ def model2_inv():
 
 
 def test_with_endog_has_endogenous_factors(model2_inv) -> None:
-    assert (
-        process_model(model2_inv).endogenous_factors_info.has_endogenous_factors == True
-    )
+    assert process_model(model2_inv).endogenous_factors_info.has_endogenous_factors
 
 
 def test_with_endog_dimensions(model2_inv) -> None:
@@ -327,12 +327,12 @@ def _fspec(**kwargs) -> FactorSpec:
 
 def test_model_has_endogenous_factors_not_specified() -> None:
     factors = {"a": _fspec()}
-    assert get_has_endogenous_factors(factors) == False
+    assert not get_has_endogenous_factors(factors)
 
 
 def test_get_has_endogenous_factors_wrong_constellation() -> None:
     factors = {"a": _fspec(is_endogenous=False, is_correction=True)}
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="is_endogenous"):
         get_has_endogenous_factors(factors)
 
 
@@ -341,7 +341,7 @@ def test_get_has_endogenous_factors_indeed() -> None:
         "a": _fspec(is_endogenous=True, is_correction=False),
         "b": _fspec(is_endogenous=False, is_correction=False),
     }
-    assert get_has_endogenous_factors(factors) == True
+    assert get_has_endogenous_factors(factors)
 
 
 def test_get_has_endogenous_factors_and_correction() -> None:
@@ -350,4 +350,4 @@ def test_get_has_endogenous_factors_and_correction() -> None:
         "b": _fspec(is_endogenous=False, is_correction=False),
         "c": _fspec(is_endogenous=True, is_correction=True),
     }
-    assert get_has_endogenous_factors(factors) == True
+    assert get_has_endogenous_factors(factors)

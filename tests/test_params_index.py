@@ -1,3 +1,5 @@
+"""Tests for params index."""
+
 from types import MappingProxyType
 
 import pandas as pd

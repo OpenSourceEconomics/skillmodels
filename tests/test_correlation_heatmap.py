@@ -1,3 +1,5 @@
+"""Tests for correlation heatmap."""
+
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 

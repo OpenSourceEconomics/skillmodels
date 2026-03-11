@@ -100,8 +100,7 @@ def _compute_variance_decomposition(
     )
 
     # Merge loadings with factor variances
-    merged = pd.merge(
-        loadings_df,
+    merged = loadings_df.merge(
         variance_df,
         on=["aug_period", "factor"],
     )
@@ -114,7 +113,7 @@ def _compute_variance_decomposition(
     meas_sds_df = meas_sds_df[["aug_period", "measurement", "meas_sd"]]
 
     # Merge with measurement SDs
-    merged = pd.merge(merged, meas_sds_df, on=["aug_period", "measurement"])
+    merged = merged.merge(meas_sds_df, on=["aug_period", "measurement"])
 
     # Validate measurement standard deviations
     if (merged["meas_sd"] <= 0).any():

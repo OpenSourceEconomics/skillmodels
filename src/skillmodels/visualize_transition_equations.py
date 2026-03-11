@@ -626,9 +626,8 @@ def _get_states_data(
             observed_data["id"] = observed_data.index
             observed_data["aug_period"] = period
         # Do a left merge because we need all periods for the ranges
-        states_data = pd.merge(
-            left=states,
-            right=observed_data,
+        states_data = states.merge(
+            observed_data,
             left_on=["id", "aug_period"],
             right_on=["id", "aug_period"],
             how="left",

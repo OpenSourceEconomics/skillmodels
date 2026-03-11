@@ -461,7 +461,7 @@ def _get_constraints_for_augmented_periods(
     return constraints_dicts
 
 
-def _sel(params: pd.DataFrame, loc: Any) -> pd.DataFrame:
+def _sel(params: pd.DataFrame, loc: Any) -> pd.DataFrame:  # noqa: ANN401
     return params.loc[loc]
 
 

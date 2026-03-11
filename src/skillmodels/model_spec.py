@@ -155,7 +155,7 @@ class ModelSpec:
         """Immutable mapping of factor names to specifications."""
         return self._factors
 
-    def _replace(self, **changes: Any) -> Self:
+    def _replace(self, **changes: Any) -> Self:  # noqa: ANN401
         """Return a new ModelSpec with the specified fields replaced."""
         return type(self)(
             factors=changes.get("factors", self.factors),
