@@ -40,6 +40,15 @@ class FixedConstraintWithValue(om.FixedConstraint):
     value: float | None = None
     """Value to enforce on the parameter."""
 
+    def __post_init__(self) -> None:
+        """Validate that `loc` and `value` are not None."""
+        if self.loc is None:
+            msg = "loc must not be None"
+            raise TypeError(msg)
+        if self.value is None:
+            msg = "value must not be None"
+            raise TypeError(msg)
+
 
 def get_constraints(
     dimensions: Dimensions,
@@ -490,10 +499,7 @@ def enforce_fixed_constraints(
             message="indexing past lexsort depth may impact performance.",
         )
         for constraint in constraints:
-            if (
-                isinstance(constraint, FixedConstraintWithValue)
-                and constraint.value is not None
-            ):
+            if isinstance(constraint, FixedConstraintWithValue):
                 params.loc[constraint.loc, "value"] = constraint.value
 
     # Setting via loc may expand the index, so reduce to the original index
