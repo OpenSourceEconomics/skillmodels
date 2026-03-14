@@ -246,7 +246,7 @@ def _get_stage_constraints(
 
 
 def _get_constant_factors_constraints(labels: Labels) -> list[dict]:
-    """Fix shock variances of constant factors to `bounds_distance`.
+    """Fix shock variances of constant factors to zero.
 
     Args:
         labels: Dict of lists with labels for the model quantities like
@@ -461,7 +461,8 @@ def _get_constraints_for_augmented_periods(
     return constraints_dicts
 
 
-def _sel(params: pd.DataFrame, loc: Any) -> pd.DataFrame:  # noqa: ANN401
+def select_by_loc(params: pd.DataFrame, loc: Any) -> pd.DataFrame:  # noqa: ANN401
+    """Select parameters by location."""
     return params.loc[loc]
 
 
@@ -547,12 +548,14 @@ def constraints_dicts_to_om(
         if c_d["type"] == "pairwise_equality":
             om_style.append(
                 SkillmodelsPairwiseEqualityConstraint(
-                    selectors=[functools.partial(_sel, loc=loc) for loc in c_d["loc"]],
+                    selectors=[
+                        functools.partial(select_by_loc, loc=loc) for loc in c_d["loc"]
+                    ],
                     **c_d,
                 )
             )
         else:
-            sel = functools.partial(_sel, loc=c_d["loc"])
+            sel = functools.partial(select_by_loc, loc=c_d["loc"])
             if c_d["type"] == "fixed":
                 om_style.append(SkillmodelsFixedConstraint(selector=sel, **c_d))
             elif c_d["type"] == "equality":
