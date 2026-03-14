@@ -2,6 +2,7 @@
 
 import jax
 import jax.numpy as jnp
+import optimagic as om
 import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
@@ -230,11 +231,11 @@ def test_identity_constraints_linear() -> None:
     result = identity_constraints_linear("a", 0, all_factors)
     assert len(result) == 4  # 3 factors + constant
     # "a" regressor should be fixed at 1.0
-    assert result[0]["value"] == 1.0
-    assert result[0]["loc"] == ("transition", 0, "a", "a")
+    assert result[0].value == 1.0  # ty: ignore[unresolved-attribute]
+    assert result[0].loc == ("transition", 0, "a", "a")  # ty: ignore[unresolved-attribute]
     # others should be 0.0
-    assert result[1]["value"] == 0.0
-    assert result[3]["value"] == 0.0  # constant
+    assert result[1].value == 0.0  # ty: ignore[unresolved-attribute]
+    assert result[3].value == 0.0  # constant  # ty: ignore[unresolved-attribute]
 
 
 def test_identity_constraints_translog() -> None:
@@ -243,26 +244,29 @@ def test_identity_constraints_translog() -> None:
     # Should have one constraint per translog param
     assert len(result) == len(params_translog(all_factors))
     # First constraint for "a" linear should be 1.0
-    assert result[0]["value"] == 1.0
+    assert result[0].value == 1.0  # ty: ignore[unresolved-attribute]
     # All others should be 0.0
     for c in result[1:]:
-        assert c["value"] == 0.0
+        assert c.value == 0.0  # ty: ignore[unresolved-attribute]
 
 
 def test_identity_constraints_robust_translog() -> None:
     all_factors = ("a", "b")
     result_robust = identity_constraints_robust_translog("a", 0, all_factors)
     result_translog = identity_constraints_translog("a", 0, all_factors)
-    assert result_robust == result_translog
+    assert len(result_robust) == len(result_translog)
+    for r, t in zip(result_robust, result_translog, strict=True):
+        assert r.loc == t.loc
+        assert r.value == t.value
 
 
 def test_identity_constraints_linear_and_squares() -> None:
     all_factors = ("a", "b", "c")
     result = identity_constraints_linear_and_squares("a", 0, all_factors)
     assert len(result) == len(params_linear_and_squares(all_factors))
-    assert result[0]["value"] == 1.0  # "a" linear
+    assert result[0].value == 1.0  # "a" linear  # ty: ignore[unresolved-attribute]
     for c in result[1:]:
-        assert c["value"] == 0.0
+        assert c.value == 0.0  # ty: ignore[unresolved-attribute]
 
 
 def test_identity_constraints_log_ces_raises() -> None:
@@ -277,9 +281,10 @@ def test_identity_constraints_log_ces_general_raises() -> None:
 
 def test_constraints_log_ces() -> None:
     result = constraints_log_ces("fac1", ("a", "b", "c"), 0)
-    assert result["type"] == "probability"
-    assert len(result["loc"]) == 3  # gamma constraints for a, b, c (not phi)
-    for loc in result["loc"]:
-        assert loc[0] == "transition"
-        assert loc[1] == 0
-        assert loc[2] == "fac1"
+    assert isinstance(result, om.ProbabilityConstraint)
+    loc = result.selector.keywords["loc"]  # ty: ignore[unresolved-attribute]
+    assert len(loc) == 3  # gamma constraints for a, b, c (not phi)
+    for entry in loc:
+        assert entry[0] == "transition"
+        assert entry[1] == 0
+        assert entry[2] == "fac1"

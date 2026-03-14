@@ -1,13 +1,16 @@
 """Tests for constraints."""
 
 from types import MappingProxyType
+from typing import Any
 
 import numpy as np
+import optimagic as om
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
 from skillmodels.constraints import (
+    FixedConstraintWithValue,
     _get_anchoring_constraints,
     _get_constant_factors_constraints,
     _get_constraints_for_augmented_periods,
@@ -17,12 +20,27 @@ from skillmodels.constraints import (
     _get_stage_constraints,
     _get_transition_constraints,
     add_bounds,
-    constraints_dicts_to_om,
-    get_constraints_dicts,
+    get_constraints,
 )
 from skillmodels.process_model import process_model
 from skillmodels.test_data.simplest_augmented_model import SIMPLEST_AUGMENTED_MODEL
 from skillmodels.types import Anchoring, Labels, Normalizations
+
+
+def _to_dict(c: om.constraints.Constraint) -> dict[str, Any]:
+    """Convert a constraint object to a comparable dict for testing."""
+    if isinstance(c, FixedConstraintWithValue):
+        return {"loc": c.loc, "type": "fixed", "value": c.value}
+    if isinstance(c, om.PairwiseEqualityConstraint):
+        locs = [s.keywords["loc"] for s in c.selectors]  # ty: ignore[unresolved-attribute]
+        return {"loc": locs, "type": "pairwise_equality"}
+    if isinstance(c, om.ProbabilityConstraint):
+        return {"loc": c.selector.keywords["loc"], "type": "probability"}  # ty: ignore[unresolved-attribute]
+    if isinstance(c, om.IncreasingConstraint):
+        return {"loc": c.selector.keywords["loc"], "type": "increasing"}  # ty: ignore[unresolved-attribute]
+    if isinstance(c, om.EqualityConstraint):
+        return {"loc": c.selector.keywords["loc"], "type": "equality"}  # ty: ignore[unresolved-attribute]
+    raise TypeError(type(c))
 
 
 def test_add_bounds() -> None:
@@ -90,10 +108,8 @@ def test_normalization_constraints() -> None:
     ]
 
     calculated = _get_normalization_constraints(norm, factors=("fac1", "fac2"))
-    for c in calculated:
-        del c["description"]
-
-    assert_list_equal_except_for_order(calculated, expected)
+    as_dicts = [_to_dict(c) for c in calculated]
+    assert_list_equal_except_for_order(as_dicts, expected)
 
 
 # ======================================================================================
@@ -103,18 +119,16 @@ def test_normalization_constraints() -> None:
 
 def test_mixture_weight_constraints_mixture() -> None:
     calculated = _get_mixture_weights_constraints(n_mixtures=2)
-    for c in calculated:
-        del c["description"]
+    as_dicts = [_to_dict(c) for c in calculated]
     expected = [{"loc": "mixture_weights", "type": "probability"}]
-    assert_list_equal_except_for_order(calculated, expected)
+    assert_list_equal_except_for_order(as_dicts, expected)
 
 
 def test_mixture_weight_constraints_normal() -> None:
     calculated = _get_mixture_weights_constraints(n_mixtures=1)
-    for c in calculated:
-        del c["description"]
+    as_dicts = [_to_dict(c) for c in calculated]
     expected = [{"loc": "mixture_weights", "type": "fixed", "value": 1.0}]
-    assert_list_equal_except_for_order(calculated, expected)
+    assert_list_equal_except_for_order(as_dicts, expected)
 
 
 # ======================================================================================
@@ -138,9 +152,8 @@ def test_stage_constraints() -> None:
     ]
 
     calculated = _get_stage_constraints(stagemap=stagemap, stages=stages)
-    for c in calculated:
-        del c["description"]
-    assert_list_equal_except_for_order(calculated, expected)
+    as_dicts = [_to_dict(c) for c in calculated]
+    assert_list_equal_except_for_order(as_dicts, expected)
 
 
 def test_stage_constraints_with_endogenous_factors() -> None:
@@ -166,9 +179,8 @@ def test_stage_constraints_with_endogenous_factors() -> None:
     ]
 
     calculated = _get_stage_constraints(stagemap=stagemap, stages=stages)
-    for c in calculated:
-        del c["description"]
-    assert_list_equal_except_for_order(calculated, expected)
+    as_dicts = [_to_dict(c) for c in calculated]
+    assert_list_equal_except_for_order(as_dicts, expected)
 
 
 # ======================================================================================
@@ -198,9 +210,8 @@ def test_constant_factor_constraints() -> None:
     ]
 
     calculated = _get_constant_factors_constraints(labels)
-    for c in calculated:
-        del c["description"]
-    assert_list_equal_except_for_order(calculated, expected)
+    as_dicts = [_to_dict(c) for c in calculated]
+    assert_list_equal_except_for_order(as_dicts, expected)
 
 
 # ======================================================================================
@@ -220,9 +231,8 @@ def test_initial_mean_constraints() -> None:
     expected = [{"loc": ind_tups, "type": "increasing"}]
 
     calculated = _get_initial_states_constraints(nmixtures, factors)
-    for c in calculated:
-        del c["description"]
-    assert_list_equal_except_for_order(calculated, expected)
+    as_dicts = [_to_dict(c) for c in calculated]
+    assert_list_equal_except_for_order(as_dicts, expected)
 
 
 # ======================================================================================
@@ -265,10 +275,8 @@ def test_trans_coeff_constraints() -> None:
         },
     ]
     calculated = _get_transition_constraints(labels)
-
-    for c in calculated:
-        del c["description"]
-    assert_list_equal_except_for_order(calculated, expected)
+    as_dicts = [_to_dict(c) for c in calculated]
+    assert_list_equal_except_for_order(as_dicts, expected)
 
 
 # ======================================================================================
@@ -322,8 +330,8 @@ def test_anchoring_constraints_for_constants(anch_uinfo) -> None:
         ignore_constant_when_anchoring=False,
     )
     calculated = _get_anchoring_constraints(anch_uinfo, (), anchoring_info, (0, 1))
+    as_dicts = [_to_dict(c) for c in calculated]
 
-    del calculated[0]["description"]
     expected = [
         {
             "loc": [
@@ -337,7 +345,7 @@ def test_anchoring_constraints_for_constants(anch_uinfo) -> None:
         },
     ]
 
-    assert calculated == expected
+    assert as_dicts == expected
 
 
 def test_anchoring_constraints_for_controls(anch_uinfo) -> None:
@@ -356,9 +364,7 @@ def test_anchoring_constraints_for_controls(anch_uinfo) -> None:
         anchoring_info,
         (0, 1),
     )
-
-    for c_t in calculated:
-        del c_t["description"]
+    as_dicts = [_to_dict(c) for c in calculated]
 
     expected = [
         {
@@ -377,7 +383,7 @@ def test_anchoring_constraints_for_controls(anch_uinfo) -> None:
         },
     ]
 
-    assert calculated == expected
+    assert as_dicts == expected
 
 
 def test_anchoring_constraints_for_loadings(anch_uinfo) -> None:
@@ -391,6 +397,7 @@ def test_anchoring_constraints_for_loadings(anch_uinfo) -> None:
         ignore_constant_when_anchoring=False,
     )
     calculated = _get_anchoring_constraints(anch_uinfo, (), anchoring_info, (0, 1))
+    as_dicts = [_to_dict(c) for c in calculated]
 
     expected = [
         {
@@ -405,10 +412,7 @@ def test_anchoring_constraints_for_loadings(anch_uinfo) -> None:
         },
     ]
 
-    for c_t in calculated:
-        del c_t["description"]
-
-    assert calculated == expected
+    assert as_dicts == expected
 
 
 def assert_list_equal_except_for_order(list1, list2) -> None:
@@ -423,10 +427,10 @@ def simplest_augmented_model():
     return process_model(SIMPLEST_AUGMENTED_MODEL)
 
 
-def test_get_constraints_dicts_with_endogenous_factors(
+def test_get_constraints_with_endogenous_factors(
     simplest_augmented_model,
 ) -> None:
-    constraints = get_constraints_dicts(
+    constraints = get_constraints(
         update_info=simplest_augmented_model.update_info,
         labels=simplest_augmented_model.labels,
         dimensions=simplest_augmented_model.dimensions,
@@ -435,11 +439,14 @@ def test_get_constraints_dicts_with_endogenous_factors(
         endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
     )
     # Should contain augmented-period constraints
-    assert any(c.get("value") == 1e-08 for c in constraints)
+    assert any(
+        isinstance(c, FixedConstraintWithValue) and c.value == 1e-08
+        for c in constraints
+    )
 
 
-def test_constraints_dicts_to_om_type_dispatch(simplest_augmented_model) -> None:
-    constraints = get_constraints_dicts(
+def test_get_constraints_returns_om_objects(simplest_augmented_model) -> None:
+    constraints = get_constraints(
         update_info=simplest_augmented_model.update_info,
         labels=simplest_augmented_model.labels,
         dimensions=simplest_augmented_model.dimensions,
@@ -447,63 +454,9 @@ def test_constraints_dicts_to_om_type_dispatch(simplest_augmented_model) -> None
         normalizations=simplest_augmented_model.normalizations,
         endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
     )
-    om_constraints = constraints_dicts_to_om(constraints)
-    assert len(om_constraints) > 0
-
-
-def test_constraints_dicts_to_om_equality_type() -> None:
-    dicts = [
-        {
-            "loc": ("loadings", 0, "y1", "f1"),
-            "type": "equality",
-            "id": 0,
-            "description": "test",
-        },
-    ]
-    result = constraints_dicts_to_om(dicts)
-    assert len(result) == 1
-
-
-def test_constraints_dicts_to_om_probability_type() -> None:
-    dicts = [
-        {
-            "loc": "mixture_weights",
-            "type": "probability",
-            "id": 0,
-            "description": "test",
-        },
-    ]
-    result = constraints_dicts_to_om(dicts)
-    assert len(result) == 1
-
-
-def test_constraints_dicts_to_om_increasing_type() -> None:
-    dicts = [
-        {
-            "loc": [
-                ("initial_states", 0, "m0", "f1"),
-                ("initial_states", 0, "m1", "f1"),
-            ],
-            "type": "increasing",
-            "id": 0,
-            "description": "test",
-        },
-    ]
-    result = constraints_dicts_to_om(dicts)
-    assert len(result) == 1
-
-
-def test_constraints_dicts_to_om_unknown_type_raises() -> None:
-    dicts = [
-        {
-            "loc": ("loadings", 0, "y1", "f1"),
-            "type": "unknown_type",
-            "id": 0,
-            "description": "test",
-        },
-    ]
-    with pytest.raises(TypeError, match="unknown_type"):
-        constraints_dicts_to_om(dicts)
+    assert len(constraints) > 0
+    for c in constraints:
+        assert isinstance(c, om.constraints.Constraint)
 
 
 def test_get_constraints_for_augmented_periods(simplest_augmented_model) -> None:
@@ -511,8 +464,7 @@ def test_get_constraints_for_augmented_periods(simplest_augmented_model) -> None
         labels=simplest_augmented_model.labels,
         endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
     )
-    for c in calculated:
-        del c["description"]
+    as_dicts = [_to_dict(c) for c in calculated]
     expected = [
         {"loc": ("transition", 0, "fac1", "fac1"), "type": "fixed", "value": 1.0},
         {"loc": ("transition", 0, "fac1", "fac2"), "type": "fixed", "value": 0.0},
@@ -533,4 +485,4 @@ def test_get_constraints_for_augmented_periods(simplest_augmented_model) -> None
         {"loc": ("transition", 3, "fac2", "of"), "type": "fixed", "value": 0.0},
         {"loc": ("transition", 3, "fac2", "constant"), "type": "fixed", "value": 0.0},
     ]
-    assert_list_equal_except_for_order(calculated, expected)
+    assert_list_equal_except_for_order(as_dicts, expected)

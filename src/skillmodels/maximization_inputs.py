@@ -15,9 +15,8 @@ import skillmodels.likelihood_function as lf
 import skillmodels.likelihood_function_debug as lfd
 from skillmodels.constraints import (
     add_bounds,
-    constraints_dicts_to_om,
     enforce_fixed_constraints,
-    get_constraints_dicts,
+    get_constraints,
 )
 from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
 from skillmodels.model_spec import ModelSpec
@@ -165,7 +164,7 @@ def get_maximization_inputs(
         tmp["value"] = float(tmp["value"])
         return process_debug_data(debug_data=tmp, model=processed_model)
 
-    _constraints_dicts = get_constraints_dicts(
+    constraints = get_constraints(
         dimensions=processed_model.dimensions,
         labels=processed_model.labels,
         anchoring_info=processed_model.anchoring,
@@ -174,8 +173,6 @@ def get_maximization_inputs(
         endogenous_factors_info=processed_model.endogenous_factors_info,
     )
 
-    constraints = constraints_dicts_to_om(_constraints_dicts)
-
     params_template = pd.DataFrame(columns=["value"], index=p_index)
     params_template = add_bounds(
         params=params_template,
@@ -183,7 +180,7 @@ def get_maximization_inputs(
     )
     params_template = enforce_fixed_constraints(
         params_template=params_template,
-        constraints_dicts=_constraints_dicts,
+        constraints=constraints,
     )
     if not params_template.index.equals(p_index):
         raise ValueError("params_template index is not equal to p_index")

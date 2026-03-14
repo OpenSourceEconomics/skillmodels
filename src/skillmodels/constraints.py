@@ -1,4 +1,4 @@
-"""List of constraints for a model, which can be converted to optimagic constraints."""
+"""Constraint objects for a model specification."""
 
 import functools
 import warnings
@@ -21,17 +21,35 @@ from skillmodels.types import (
 )
 
 
-def get_constraints_dicts(
+def select_by_loc(params: pd.DataFrame, loc: Any) -> pd.DataFrame:  # noqa: ANN401
+    """Select parameters by location."""
+    return params.loc[loc]
+
+
+@dataclass(frozen=True)
+class FixedConstraintWithValue(om.FixedConstraint):
+    """Fixed constraint that carries the target value and parameter location.
+
+    `om.FixedConstraint` fixes parameters at their start values but does not carry a
+    target value. This wrapper adds `loc` (the parameter location in the params
+    DataFrame) and `value` (the value to set before optimization).
+    """
+
+    loc: pd.MultiIndex | list | tuple | str | None = None
+    """Parameter location in the params DataFrame."""
+    value: float | None = None
+    """Value to enforce on the parameter."""
+
+
+def get_constraints(
     dimensions: Dimensions,
     labels: Labels,
     anchoring_info: Anchoring,
     update_info: pd.DataFrame,
     normalizations: Mapping[str, Normalizations],
     endogenous_factors_info: EndogenousFactorsInfo,
-) -> list[dict]:
+) -> list[om.constraints.Constraint]:
     """Generate constraints implied by the model specification.
-
-    The result can easily be converted to optimagic-style constraints.
 
     Args:
         dimensions: Dimensional information like n_states, n_periods, n_controls,
@@ -46,47 +64,38 @@ def get_constraints_dicts(
         endogenous_factors_info: Information about endogenous factors in the model.
 
     Returns:
-        A list of constraints dictionaries with entries:
-        - "type": str, one of "fixed", "equality", "probability", "increasing",
-            "pairwise_equality". Must map to an optimagic constraint, see
-            :func:`constraints_dicts_to_om`.
-        - "loc": The location of the affected row(s) in the params DataFrame
-        - "value": float, only present if type is "fixed"
-        - "description": str, optional description of the constraint
+        List of optimagic constraint objects.
 
     """
-    constraints_dicts = []
+    constraints: list[om.constraints.Constraint] = []
 
-    constraints_dicts += _get_normalization_constraints(
+    constraints += _get_normalization_constraints(
         normalizations=normalizations, factors=labels.latent_factors
     )
-    constraints_dicts += _get_mixture_weights_constraints(dimensions.n_mixtures)
-    constraints_dicts += _get_stage_constraints(
+    constraints += _get_mixture_weights_constraints(dimensions.n_mixtures)
+    constraints += _get_stage_constraints(
         stagemap=labels.aug_stagemap,
         stages=labels.aug_stages,
     )
-    constraints_dicts += _get_constant_factors_constraints(labels=labels)
-    constraints_dicts += _get_initial_states_constraints(
+    constraints += _get_constant_factors_constraints(labels=labels)
+    constraints += _get_initial_states_constraints(
         n_mixtures=dimensions.n_mixtures,
         factors=labels.latent_factors,
     )
-    constraints_dicts += _get_transition_constraints(labels=labels)
-    constraints_dicts += _get_anchoring_constraints(
+    constraints += _get_transition_constraints(labels=labels)
+    constraints += _get_anchoring_constraints(
         update_info=update_info,
         controls=labels.controls,
         anchoring_info=anchoring_info,
         periods=labels.aug_periods,
     )
     if endogenous_factors_info.has_endogenous_factors:
-        constraints_dicts += _get_constraints_for_augmented_periods(
+        constraints += _get_constraints_for_augmented_periods(
             labels=labels,
             endogenous_factors_info=endogenous_factors_info,
         )
 
-    for i, c in enumerate(constraints_dicts):
-        c["id"] = i
-
-    return constraints_dicts
+    return constraints
 
 
 def add_bounds(params: pd.DataFrame, bounds_distance: float) -> pd.DataFrame:
@@ -142,7 +151,7 @@ def _is_diagonal_entry(ind_tup: tuple[str, ...]) -> bool:
 def _get_normalization_constraints(
     normalizations: Mapping[str, Normalizations],
     factors: tuple[str, ...],
-) -> list[dict]:
+) -> list[om.constraints.Constraint]:
     """List of constraints to enforce normalizations.
 
     Args:
@@ -150,102 +159,93 @@ def _get_normalization_constraints(
         factors: Tuple of factor names to process.
 
     Returns:
-        constraints_dicts
+        List of constraint objects.
 
     """
-    msg = "This constraint was generated because of an explicit normalization."
     periods = range(len(normalizations[factors[0]].loadings))
 
-    constraints_dicts = []
+    constraints: list[om.constraints.Constraint] = []
     for factor in factors:
         for period in periods:
             for meas, normval in normalizations[factor].loadings[period].items():
-                constraints_dicts.append(
-                    {
-                        "loc": ("loadings", period, meas, factor),
-                        "type": "fixed",
-                        "value": normval,
-                        "description": msg,
-                    }
+                loc = ("loadings", period, meas, factor)
+                constraints.append(
+                    FixedConstraintWithValue(
+                        selector=functools.partial(select_by_loc, loc=loc),
+                        loc=loc,
+                        value=normval,
+                    )
                 )
             for meas, normval in normalizations[factor].intercepts[period].items():
-                constraints_dicts.append(
-                    {
-                        "loc": ("controls", period, meas, "constant"),
-                        "type": "fixed",
-                        "value": normval,
-                        "description": msg,
-                    }
+                loc = ("controls", period, meas, "constant")
+                constraints.append(
+                    FixedConstraintWithValue(
+                        selector=functools.partial(select_by_loc, loc=loc),
+                        loc=loc,
+                        value=normval,
+                    )
                 )
 
-    return constraints_dicts
+    return constraints
 
 
-def _get_mixture_weights_constraints(n_mixtures: int) -> list[dict]:
+def _get_mixture_weights_constraints(
+    n_mixtures: int,
+) -> list[om.constraints.Constraint]:
     """Constrain mixture weights to be between 0 and 1 and sum to 1."""
+    loc = "mixture_weights"
     if n_mixtures == 1:
-        msg = "Set the mixture weight to 1 if there is only one mixture element."
-        constraints_dicts = [
-            {
-                "loc": "mixture_weights",
-                "type": "fixed",
-                "value": 1.0,
-                "description": msg,
-            },
+        return [
+            FixedConstraintWithValue(
+                selector=functools.partial(select_by_loc, loc=loc),
+                loc=loc,
+                value=1.0,
+            ),
         ]
-    else:
-        msg = "Ensure that weights are between 0 and 1 and sum to 1."
-        constraints_dicts = [
-            {"loc": "mixture_weights", "type": "probability", "description": msg}
-        ]
-    return constraints_dicts
+    return [om.ProbabilityConstraint(selector=functools.partial(select_by_loc, loc=loc))]
 
 
 def _get_stage_constraints(
     stagemap: tuple[int, ...],
     stages: tuple[int, ...],
-) -> list[dict]:
+) -> list[om.constraints.Constraint]:
     """Equality constraints for transition and shock parameters within stages.
 
     Args:
         stagemap: map aug_periods to aug_stages
         stages: aug_stages
+
     Returns:
-        constraints_dicts
+        List of constraint objects.
 
     """
-    msg = (
-        "This constraint was generated because all involved periods belong to stage {}."
-    )
-    constraints_dicts = []
+    constraints: list[om.constraints.Constraint] = []
 
-    stages_to_periods = {stage: [] for stage in stages}
+    stages_to_periods: dict[int, list[int]] = {stage: [] for stage in stages}
     for aug_period, stage in enumerate(stagemap):
         stages_to_periods[stage].append(aug_period)
 
-    for stage, stage_periods in stages_to_periods.items():
+    for stage_periods in stages_to_periods.values():
         if len(stage_periods) > 1:
             loc_trans = [("transition", p) for p in stage_periods]
             loc_q = [("shock_sds", p) for p in stage_periods]
-            constraints_dicts.append(
-                {
-                    "loc": loc_trans,
-                    "type": "pairwise_equality",
-                    "description": msg.format(stage),
-                },
+            constraints.append(
+                om.PairwiseEqualityConstraint(
+                    selectors=[functools.partial(select_by_loc, loc=loc) for loc in loc_trans],
+                ),
             )
-            constraints_dicts.append(
-                {
-                    "loc": loc_q,
-                    "type": "pairwise_equality",
-                    "description": msg.format(stage),
-                },
+            constraints.append(
+                om.PairwiseEqualityConstraint(
+                    selectors=[functools.partial(select_by_loc, loc=loc) for loc in loc_q],
+                ),
             )
 
-    return constraints_dicts
+    return constraints
 
 
-def _get_constant_factors_constraints(labels: Labels) -> list[dict]:
+def _get_constant_factors_constraints(
+    labels: Labels,
+) -> list[om.constraints.Constraint]:
     """Fix shock variances of constant factors to zero.
 
     Args:
@@ -253,29 +253,28 @@ def _get_constant_factors_constraints(labels: Labels) -> list[dict]:
             factors, periods, controls, stagemap and stages. See :ref:`labels`
 
     Returns:
-        constraints_dicts
+        List of constraint objects.
 
     """
-    constraints_dicts = []
+    constraints: list[om.constraints.Constraint] = []
     for f, factor in enumerate(labels.latent_factors):
         if labels.transition_names[f] == "constant":
-            msg = f"This constraint was generated because {factor} is constant."
             for aug_period in labels.aug_periods[:-1]:
-                constraints_dicts.append(
-                    {
-                        "loc": ("shock_sds", aug_period, factor, "-"),
-                        "type": "fixed",
-                        "value": 0.0,
-                        "description": msg,
-                    },
+                loc = ("shock_sds", aug_period, factor, "-")
+                constraints.append(
+                    FixedConstraintWithValue(
+                        selector=functools.partial(select_by_loc, loc=loc),
+                        loc=loc,
+                        value=0.0,
+                    ),
                 )
-    return constraints_dicts
+    return constraints
 
 
 def _get_initial_states_constraints(
     n_mixtures: int,
     factors: tuple[str, ...],
-) -> list[dict]:
+) -> list[om.constraints.Constraint]:
     """Enforce that the x values of the first factor are increasing.
 
     Otherwise the model would only be identified up to the order of the start factors.
@@ -285,28 +284,21 @@ def _get_initial_states_constraints(
         factors: the latent factors of the model
 
     Returns:
-        constraints_dicts
+        List of constraint objects.
 
     """
-    msg = (
-        "This constraint enforces an ordering on the initial means of the states "
-        "across the components of the factor distribution. This is necessary to ensure "
-        "uniqueness of the maximum likelihood estimator."
-    )
-
     if n_mixtures > 1:
         locs = [
             ("initial_states", 0, f"mixture_{emf}", factors[0])
             for emf in range(n_mixtures)
         ]
-        constraints_dicts = [{"loc": locs, "type": "increasing", "description": msg}]
-    else:
-        constraints_dicts = []
-
-    return constraints_dicts
+        return [om.IncreasingConstraint(selector=functools.partial(select_by_loc, loc=locs))]
+    return []
 
 
-def _get_transition_constraints(labels: Labels) -> list[dict]:
+def _get_transition_constraints(
+    labels: Labels,
+) -> list[om.constraints.Constraint]:
     """Collect possible constraints on transition parameters.
 
     Args:
@@ -314,31 +306,31 @@ def _get_transition_constraints(labels: Labels) -> list[dict]:
             factors, periods, controls, stagemap and stages. See :ref:`labels`
 
     Returns:
-        constraints_dicts
+        List of constraint objects.
 
     """
-    constraints_dicts = []
+    constraints: list[om.constraints.Constraint] = []
     for f, factor in enumerate(labels.latent_factors):
         tname = labels.transition_names[f]
-        msg = f"This constraint is inherent to the {tname} production function."
         for aug_period in labels.aug_periods[:-1]:
             funcname = f"constraints_{tname}"
             if func := getattr(t_f_module, funcname, False):
-                c = func(  # ty: ignore[call-non-callable]
-                    factor=factor, factors=labels.all_factors, aug_period=aug_period
+                constraints.append(
+                    func(  # ty: ignore[call-non-callable]
+                        factor=factor,
+                        factors=labels.all_factors,
+                        aug_period=aug_period,
+                    )
                 )
-                if "description" not in c:
-                    c["description"] = msg
-                constraints_dicts.append(c)
-    return constraints_dicts
+    return constraints
 
 
-def _get_anchoring_constraints(
+def _get_anchoring_constraints(  # noqa: C901
     update_info: pd.DataFrame,
     controls: tuple[str, ...],
     anchoring_info: Anchoring,
     periods: tuple[int, ...],
-) -> list[dict]:
+) -> list[om.constraints.Constraint]:
     """Constraints on anchoring parameters.
 
     Args:
@@ -349,42 +341,40 @@ def _get_anchoring_constraints(
         periods: Period of the model
 
     Returns:
-        constraints_dicts
+        List of constraint objects.
 
     """
     anchoring_updates = update_info[update_info["purpose"] == "anchoring"].index
 
-    constraints_dicts = []
+    constraints: list[om.constraints.Constraint] = []
     if not anchoring_info.free_constant:
-        msg = (
-            "This constraint was generated because free_constant in the anchoring "
-            "section of the model specification is set to False."
-        )
         locs = []
         for period, meas in anchoring_updates:
             locs.append(("controls", period, meas, "constant"))
-        constraints_dicts.append(
-            {"loc": locs, "type": "fixed", "value": 0, "description": msg},
-        )
+        if locs:
+            constraints.append(
+                FixedConstraintWithValue(
+                    selector=functools.partial(select_by_loc, loc=locs),
+                    loc=locs,
+                    value=0,
+                ),
+            )
 
     if not anchoring_info.free_controls:
-        msg = (
-            "This constraint was generated because free_controls in the anchoring "
-            "section of the model specification is set to False."
-        )
         ind_tups = []
         for period, meas in anchoring_updates:
             for cont in [c for c in controls if c != "constant"]:
                 ind_tups.append(("controls", period, meas, cont))
-        constraints_dicts.append(
-            {"loc": ind_tups, "type": "fixed", "value": 0, "description": msg},
-        )
+        if ind_tups:
+            constraints.append(
+                FixedConstraintWithValue(
+                    selector=functools.partial(select_by_loc, loc=ind_tups),
+                    loc=ind_tups,
+                    value=0,
+                ),
+            )
 
     if not anchoring_info.free_loadings:
-        msg = (
-            "This constraint was generated because free_loadings in the anchoring "
-            "section of the model specification is set to False."
-        )
         ind_tups = []
         for period in periods:
             for factor in anchoring_info.factors:
@@ -392,17 +382,22 @@ def _get_anchoring_constraints(
                 meas = f"{outcome}_{factor}"
                 ind_tups.append(("loadings", period, meas, factor))
 
-        constraints_dicts.append(
-            {"loc": ind_tups, "type": "fixed", "value": 1, "description": msg},
-        )
+        if ind_tups:
+            constraints.append(
+                FixedConstraintWithValue(
+                    selector=functools.partial(select_by_loc, loc=ind_tups),
+                    loc=ind_tups,
+                    value=1,
+                ),
+            )
 
-    return [c for c in constraints_dicts if c["loc"] != []]
+    return constraints
 
 
 def _get_constraints_for_augmented_periods(
     labels: Labels,
     endogenous_factors_info: EndogenousFactorsInfo,
-) -> list[dict]:
+) -> list[om.constraints.Constraint]:
     """Constraints for augmented periods.
 
     - Carry forward states from uneven periods to even periods
@@ -418,10 +413,10 @@ def _get_constraints_for_augmented_periods(
             relationship to augmented periods.
 
     Returns:
-        constraints_dicts
+        List of constraint objects.
 
     """
-    constraints_dicts = []
+    constraints: list[om.constraints.Constraint] = []
     for f, factor in enumerate(labels.latent_factors):
         tname = labels.transition_names[f]
         if tname == "constant":
@@ -443,135 +438,27 @@ def _get_constraints_for_augmented_periods(
         ]
         for aug_period in aug_periods_to_constrain:
             if func := getattr(t_f_module, f"identity_constraints_{tname}", False):
-                constraints_dicts += func(  # ty: ignore[call-non-callable]
+                constraints += func(  # ty: ignore[call-non-callable]
                     factor=factor,
                     aug_period=aug_period,
                     all_factors=labels.all_factors,
                 )
         for aug_period in aug_periods_to_constrain[:-1]:
-            constraints_dicts.append(
-                {
-                    "loc": ("shock_sds", aug_period, factor, "-"),
-                    "type": "fixed",
-                    "value": endogenous_factors_info.bounds_distance,
-                    "description": "Identity constraint.",
-                }
-            )
-
-    return constraints_dicts
-
-
-def select_by_loc(params: pd.DataFrame, loc: Any) -> pd.DataFrame:  # noqa: ANN401
-    """Select parameters by location."""
-    return params.loc[loc]
-
-
-@dataclass(frozen=True)
-class SkillmodelsPairwiseEqualityConstraint(om.PairwiseEqualityConstraint):
-    """Thin wrapper around om.PairwiseEqualityConstraint.
-
-    Adds fields to preserve information from the internal constraints dictionary.
-    """
-
-    loc: pd.MultiIndex | tuple | str | None = None
-    description: str | None = None
-    type: str = "Just to be able to use **constraints_dict"
-    id: int | None = None
-
-
-@dataclass(frozen=True)
-class SkillmodelsFixedConstraint(om.FixedConstraint):
-    """Thin wrapper around om.FixedConstraint.
-
-    Adds fields to preserve information from the internal constraints dictionary.
-    """
-
-    loc: pd.MultiIndex | tuple | str | None = None
-    description: str | None = None
-    type: str = "Just to be able to use **constraints_dict"
-    id: int | None = None
-    value: float | None = None
-
-
-@dataclass(frozen=True)
-class SkillmodelsEqualityConstraint(om.EqualityConstraint):
-    """Thin wrapper around om.EqualityConstraint.
-
-    Adds fields to preserve information from the internal constraints dictionary.
-    """
-
-    loc: pd.MultiIndex | tuple | str | None = None
-    description: str | None = None
-    type: str = "Just to be able to use **constraints_dict"
-    id: int | None = None
-
-
-@dataclass(frozen=True)
-class SkillmodelsProbabilityConstraint(om.ProbabilityConstraint):
-    """Thin wrapper around om.ProbabilityConstraint.
-
-    Adds fields to preserve information from the internal constraints dictionary.
-    """
-
-    loc: pd.MultiIndex | tuple | str | None = None
-    description: str | None = None
-    type: str = "Just to be able to use **constraints_dict"
-    id: int | None = None
-
-
-@dataclass(frozen=True)
-class SkillmodelsIncreasingConstraint(om.IncreasingConstraint):
-    """Thin wrapper around om.IncreasingConstraint.
-
-    Adds fields to preserve information from the internal constraints dictionary.
-    """
-
-    loc: pd.MultiIndex | tuple | str | None = None
-    description: str | None = None
-    type: str = "Just to be able to use **constraints_dict"
-    id: int | None = None
-
-
-def constraints_dicts_to_om(
-    constraints_dicts: list[dict],
-) -> list[om.constraints.Constraint]:
-    """Convert constraints provided in dictionary form to optimagic constraints.
-
-    Args:
-        constraints_dicts: see :ref:`get_constraints_dicts`.
-
-    Returns:
-        List of optimagic constraints.
-    """
-    om_style = []
-    for c_d in constraints_dicts:
-        if c_d["type"] == "pairwise_equality":
-            om_style.append(
-                SkillmodelsPairwiseEqualityConstraint(
-                    selectors=[
-                        functools.partial(select_by_loc, loc=loc) for loc in c_d["loc"]
-                    ],
-                    **c_d,
+            loc = ("shock_sds", aug_period, factor, "-")
+            constraints.append(
+                FixedConstraintWithValue(
+                    selector=functools.partial(select_by_loc, loc=loc),
+                    loc=loc,
+                    value=endogenous_factors_info.bounds_distance,
                 )
             )
-        else:
-            sel = functools.partial(select_by_loc, loc=c_d["loc"])
-            if c_d["type"] == "fixed":
-                om_style.append(SkillmodelsFixedConstraint(selector=sel, **c_d))
-            elif c_d["type"] == "equality":
-                om_style.append(SkillmodelsEqualityConstraint(selector=sel, **c_d))
-            elif c_d["type"] == "probability":
-                om_style.append(SkillmodelsProbabilityConstraint(selector=sel, **c_d))
-            elif c_d["type"] == "increasing":
-                om_style.append(SkillmodelsIncreasingConstraint(selector=sel, **c_d))
-            else:
-                raise TypeError(c_d["type"])
-    return om_style
+
+    return constraints
 
 
 def enforce_fixed_constraints(
     params_template: pd.DataFrame,
-    constraints_dicts: list[dict[str, Any]],
+    constraints: list[om.constraints.Constraint],
 ) -> pd.DataFrame:
     """Enforce fixed constraints on params_template.
 
@@ -580,7 +467,7 @@ def enforce_fixed_constraints(
 
     Args:
         params_template: see :ref:`params_df`.
-        constraints_dicts: see :ref:`get_constraints_dicts`.
+        constraints: list of optimagic constraint objects.
 
     Returns:
         pd.DataFrame: modified copy of params_template
@@ -591,9 +478,12 @@ def enforce_fixed_constraints(
             "ignore",
             message="indexing past lexsort depth may impact performance.",
         )
-        for constraint in constraints_dicts:
-            if constraint["type"] == "fixed":
-                params.loc[constraint["loc"], "value"] = constraint["value"]
+        for constraint in constraints:
+            if (
+                isinstance(constraint, FixedConstraintWithValue)
+                and constraint.value is not None
+            ):
+                params.loc[constraint.loc, "value"] = constraint.value
 
     # Setting via loc may expand the index, so reduce to the original index
     return params.loc[params_template.index].astype(float)
