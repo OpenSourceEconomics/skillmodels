@@ -38,10 +38,11 @@ dependencies = [
   "dags>=0.5",
   "jax>=0.9",
   "jupyter-book>=2",
+  "kaleido>=1.2",
   "numpy>=2.4",
   "optimagic>=0.5.3",
   "pandas>=3",
-  "plotly[kaleido]",
+  "plotly>=6.6",
   "pytask>=0.5.8",
   "pytask-parallel>=0.5.2",
 ]
@@ -149,19 +150,14 @@ rules.ambiguous-protocol-member = "error"
 rules.deprecated = "error"
 rules.division-by-zero = "error"
 rules.ignore-comment-unknown-rule = "error"
-rules.invalid-argument-type = "error"
+rules.ineffective-final = "error"
+rules.invalid-enum-member-annotation = "error"
 rules.invalid-ignore-comment = "error"
-rules.invalid-return-type = "error"
-rules.possibly-missing-attribute = "error"
-rules.possibly-missing-implicit-call = "error"
-rules.possibly-missing-import = "error"
-rules.possibly-unresolved-reference = "error"
+rules.invalid-legacy-positional-parameter = "error"
+rules.possibly-missing-submodule = "error"
 rules.redundant-cast = "error"
-rules.undefined-reveal = "error"
-rules.unresolved-global = "error"
-rules.unsupported-base = "error"
+rules.unused-awaitable = "error"
 rules.unused-ignore-comment = "error"
-rules.useless-overload-body = "error"
 
 [tool.pixi.dependencies]
 filterpy = "*"

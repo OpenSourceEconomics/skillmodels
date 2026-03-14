@@ -807,7 +807,7 @@ def _process_factors(
         observed_factors = tuple(
             fac for fac in factors if fac in model.labels.observed_factors
         )
-    return latent_factors, observed_factors  # ty: ignore[possibly-unresolved-reference]
+    return latent_factors, observed_factors
 
 
 def _process_periods(
