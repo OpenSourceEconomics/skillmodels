@@ -334,12 +334,12 @@ def test_anchoring_constraints_for_constants(anch_uinfo) -> None:
 
     expected = [
         {
-            "loc": [
+            "loc": (
                 ("controls", 0, "outcome_f1", "constant"),
                 ("controls", 0, "outcome_f2", "constant"),
                 ("controls", 1, "outcome_f1", "constant"),
                 ("controls", 1, "outcome_f2", "constant"),
-            ],
+            ),
             "type": "fixed",
             "value": 0,
         },
@@ -368,7 +368,7 @@ def test_anchoring_constraints_for_controls(anch_uinfo) -> None:
 
     expected = [
         {
-            "loc": [
+            "loc": (
                 ("controls", 0, "outcome_f1", "c1"),
                 ("controls", 0, "outcome_f1", "c2"),
                 ("controls", 0, "outcome_f2", "c1"),
@@ -377,7 +377,7 @@ def test_anchoring_constraints_for_controls(anch_uinfo) -> None:
                 ("controls", 1, "outcome_f1", "c2"),
                 ("controls", 1, "outcome_f2", "c1"),
                 ("controls", 1, "outcome_f2", "c2"),
-            ],
+            ),
             "type": "fixed",
             "value": 0,
         },
@@ -401,12 +401,12 @@ def test_anchoring_constraints_for_loadings(anch_uinfo) -> None:
 
     expected = [
         {
-            "loc": [
+            "loc": (
                 ("loadings", 0, "outcome_f1", "f1"),
                 ("loadings", 0, "outcome_f2", "f2"),
                 ("loadings", 1, "outcome_f1", "f1"),
                 ("loadings", 1, "outcome_f2", "f2"),
-            ],
+            ),
             "type": "fixed",
             "value": 1,
         },

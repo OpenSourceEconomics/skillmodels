@@ -35,7 +35,7 @@ class FixedConstraintWithValue(om.FixedConstraint):
     DataFrame) and `value` (the value to set before optimization).
     """
 
-    loc: pd.MultiIndex | list | tuple | str | None = None
+    loc: pd.MultiIndex | tuple | str | None = None
     """Parameter location in the params DataFrame."""
     value: float | None = None
     """Value to enforce on the parameter."""
@@ -202,7 +202,9 @@ def _get_mixture_weights_constraints(
                 value=1.0,
             ),
         ]
-    return [om.ProbabilityConstraint(selector=functools.partial(select_by_loc, loc=loc))]
+    return [
+        om.ProbabilityConstraint(selector=functools.partial(select_by_loc, loc=loc))
+    ]
 
 
 def _get_stage_constraints(
@@ -231,12 +233,16 @@ def _get_stage_constraints(
             loc_q = [("shock_sds", p) for p in stage_periods]
             constraints.append(
                 om.PairwiseEqualityConstraint(
-                    selectors=[functools.partial(select_by_loc, loc=loc) for loc in loc_trans],
+                    selectors=[
+                        functools.partial(select_by_loc, loc=loc) for loc in loc_trans
+                    ],
                 ),
             )
             constraints.append(
                 om.PairwiseEqualityConstraint(
-                    selectors=[functools.partial(select_by_loc, loc=loc) for loc in loc_q],
+                    selectors=[
+                        functools.partial(select_by_loc, loc=loc) for loc in loc_q
+                    ],
                 ),
             )
 
@@ -292,7 +298,9 @@ def _get_initial_states_constraints(
             ("initial_states", 0, f"mixture_{emf}", factors[0])
             for emf in range(n_mixtures)
         ]
-        return [om.IncreasingConstraint(selector=functools.partial(select_by_loc, loc=locs))]
+        return [
+            om.IncreasingConstraint(selector=functools.partial(select_by_loc, loc=locs))
+        ]
     return []
 
 
@@ -352,10 +360,11 @@ def _get_anchoring_constraints(  # noqa: C901
         for period, meas in anchoring_updates:
             locs.append(("controls", period, meas, "constant"))
         if locs:
+            loc = tuple(locs)
             constraints.append(
                 FixedConstraintWithValue(
-                    selector=functools.partial(select_by_loc, loc=locs),
-                    loc=locs,
+                    selector=functools.partial(select_by_loc, loc=loc),
+                    loc=loc,
                     value=0,
                 ),
             )
@@ -366,10 +375,11 @@ def _get_anchoring_constraints(  # noqa: C901
             for cont in [c for c in controls if c != "constant"]:
                 ind_tups.append(("controls", period, meas, cont))
         if ind_tups:
+            loc = tuple(ind_tups)
             constraints.append(
                 FixedConstraintWithValue(
-                    selector=functools.partial(select_by_loc, loc=ind_tups),
-                    loc=ind_tups,
+                    selector=functools.partial(select_by_loc, loc=loc),
+                    loc=loc,
                     value=0,
                 ),
             )
@@ -383,10 +393,11 @@ def _get_anchoring_constraints(  # noqa: C901
                 ind_tups.append(("loadings", period, meas, factor))
 
         if ind_tups:
+            loc = tuple(ind_tups)
             constraints.append(
                 FixedConstraintWithValue(
-                    selector=functools.partial(select_by_loc, loc=ind_tups),
-                    loc=ind_tups,
+                    selector=functools.partial(select_by_loc, loc=loc),
+                    loc=loc,
                     value=1,
                 ),
             )

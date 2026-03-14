@@ -37,7 +37,7 @@ import optimagic as om
 from jax import Array
 
 
-def _sel(params: Any, loc: Any) -> Any:  # noqa: ANN401
+def select_by_loc(params: Any, loc: Any) -> Any:  # noqa: ANN401
     """Select parameters by location."""
     return params.loc[loc]
 
@@ -68,7 +68,7 @@ def identity_constraints_linear(
         loc = ("transition", aug_period, factor, regressor)
         constraints.append(
             FixedConstraintWithValue(
-                selector=functools.partial(_sel, loc=loc),
+                selector=functools.partial(select_by_loc, loc=loc),
                 loc=loc,
                 value=val,
             )
@@ -122,7 +122,7 @@ def identity_constraints_translog(
         loc = ("transition", aug_period, factor, regressor)
         constraints.append(
             FixedConstraintWithValue(
-                selector=functools.partial(_sel, loc=loc),
+                selector=functools.partial(select_by_loc, loc=loc),
                 loc=loc,
                 value=val,
             )
@@ -158,7 +158,7 @@ def constraints_log_ces(
     """Constraints for log_ces production function."""
     names = params_log_ces(factors)
     loc = [("transition", aug_period, factor, name) for name in names[:-1]]
-    return om.ProbabilityConstraint(selector=functools.partial(_sel, loc=loc))
+    return om.ProbabilityConstraint(selector=functools.partial(select_by_loc, loc=loc))
 
 
 def identity_constraints_log_ces(
@@ -244,7 +244,7 @@ def identity_constraints_linear_and_squares(
         loc = ("transition", aug_period, factor, regressor)
         constraints.append(
             FixedConstraintWithValue(
-                selector=functools.partial(_sel, loc=loc),
+                selector=functools.partial(select_by_loc, loc=loc),
                 loc=loc,
                 value=val,
             )

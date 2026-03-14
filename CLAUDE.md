@@ -93,7 +93,7 @@ simulate_dataset() → Simulate states (with optional policy effects)
   computation using Kalman filtering. The debug variant is not jitted and returns
   intermediate results (residuals, contributions, filtered states).
 - **constraints.py**: Generates parameter constraints (bounds, equalities from stagemap,
-  fixed values) for optimization. Exports `get_constraints()`, `get_constraints()`,
+  fixed values) for optimization. Exports `get_constraints()`,
   `enforce_fixed_constraints()`, `add_bounds()`, `FixedConstraintWithValue`.
 - **parse_params.py**: Converts flat parameter vectors to structured model parameters.
   Exports `create_parsing_info()` and `parse_params()`.
@@ -196,7 +196,7 @@ These are not in `__all__` but are imported directly by application projects:
 - `skillmodels.types.ProcessedModel`, `EndogenousFactorsInfo`
 - `skillmodels.decorators.register_params` — essential for custom transition functions
 - `skillmodels.constraints.get_constraints`, `enforce_fixed_constraints`,
-  `FixedConstraintWithValue`, `_sel`
+  `FixedConstraintWithValue`, `select_by_loc`
 - `skillmodels.utilities.extract_factors`, `update_parameter_values`
 - `skillmodels.process_data.pre_process_data`
 - `skillmodels.correlation_heatmap.get_measurements_corr`, `get_quasi_scores_corr`,
