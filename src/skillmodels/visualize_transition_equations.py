@@ -140,10 +140,10 @@ def combine_transition_plots(
     return fig
 
 
-def get_transition_plots(
+def get_transition_plots(  # noqa: C901, PLR0912
     model_spec: ModelSpec,
     params: pd.DataFrame,
-    data: pd.DataFrame,
+    data: pd.DataFrame | None = None,
     period: int | None = None,
     periods: Sequence[int] | None = None,
     state_ranges: dict[str, pd.DataFrame] | None = None,
@@ -159,6 +159,7 @@ def get_transition_plots(
     state_range_quantile_cutoff: float | None = None,
     layout_kwargs: dict[str, Any] | None = None,
     *,
+    states: pd.DataFrame | None = None,
     include_correction_factors: bool = False,
 ) -> dict[tuple[str, str], go.Figure]:
     """Get dictionary with individual plots of transition equations for each factor.
@@ -166,7 +167,8 @@ def get_transition_plots(
     Args:
         model_spec: The model specification. See: :ref:`model_specs`
         params: Model parameters.
-        data: Empirical dataset used to estimate the model.
+        data: Empirical dataset used to estimate the model. Required when `states`
+            is not provided or when the model has observed factors.
         period: The start period of the transition equations that are plotted.
             Deprecated in favor of `periods`. If both are provided, `periods` is used.
         periods: List of periods to overlay on each plot. Each period gets a different
@@ -194,6 +196,8 @@ def get_transition_plots(
         layout_kwargs: Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs
             defined in the function will be used.
+        states: Pre-computed filtered states DataFrame (with an `aug_period`
+            column). If provided, skip the internal `get_filtered_states` call.
         include_correction_factors: Whether to include correction factors in the
             plots. Default False.
 
@@ -247,9 +251,13 @@ def get_transition_plots(
             if not processed_model.endogenous_factors_info.factor_info[lf].is_correction
         ]
     all_factors = processed_model.labels.all_factors
-    states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
-        "anchored_states"
-    ]["states"]
+    if states is None:
+        if data is None:
+            msg = "Either 'data' or 'states' must be provided."
+            raise TypeError(msg)
+        states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
+            "anchored_states"
+        ]["states"]
     return _get_dictionary_with_plots(
         model=processed_model,
         data=data,
@@ -270,7 +278,7 @@ def get_transition_plots(
 
 def _get_dictionary_with_plots(
     model: ProcessedModel,
-    data: pd.DataFrame,
+    data: pd.DataFrame | None,
     params: pd.DataFrame,
     states: pd.DataFrame,
     state_ranges: dict[str, pd.DataFrame] | None,
@@ -582,17 +590,17 @@ def _set_index_params(
 def _get_states_data(
     model: ProcessedModel,
     period: int,
-    data: pd.DataFrame,
+    data: pd.DataFrame | None,
     states: pd.DataFrame,
     observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
-    if observed_factors and data is None:
-        raise ValueError(
-            "The model has observed factors. You must pass the empirical data to "
-            "'visualize_transition_equations' via the keyword *data*.",
-        )
-
     if observed_factors:
+        if data is None:
+            msg = (
+                "The model has observed factors. You must pass the empirical data to "
+                "'get_transition_plots' via the keyword 'data'."
+            )
+            raise TypeError(msg)
         _observed_arr = process_data(
             df=data,
             has_endogenous_factors=model.endogenous_factors_info.has_endogenous_factors,
