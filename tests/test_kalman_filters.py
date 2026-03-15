@@ -458,8 +458,8 @@ def test_linear_predict_with_observed_factors() -> None:
         "fac0": jnp.array([0.5, 0.3, 0.2, 0.1]),  # 2 latent + 1 observed + constant
         "fac1": jnp.array([0.1, 0.9, 0.0, 0.0]),
     }
-    anch_scaling = jnp.ones((2, n_latent))
-    anch_constants = jnp.zeros((2, n_latent))
+    anch_scaling = jnp.ones((2, n_latent + n_observed))
+    anch_constants = jnp.zeros((2, n_latent + n_observed))
     latent_factors = ("fac0", "fac1")
 
     calc_states, _calc_chols = linear_kalman_predict(
@@ -476,6 +476,58 @@ def test_linear_predict_with_observed_factors() -> None:
         latent_factors=latent_factors,
         constant_factor_indices=frozenset(),
         n_all_factors=n_latent + n_observed,
+    )
+
+    expected_fac0 = 0.5 * state[0] + 0.3 * state[1] + 0.2 * observed_val + 0.1
+    expected_fac1 = 0.1 * state[0] + 0.9 * state[1] + 0.0 * observed_val + 0.0
+    aaae(calc_states[0, 0, 0], expected_fac0)
+    aaae(calc_states[0, 0, 1], expected_fac1)
+
+
+def test_linear_predict_with_wide_anchoring_arrays() -> None:
+    """Regression: anchoring arrays have n_all columns, not just n_latent.
+
+    At runtime, `parse_params` produces anchoring arrays of shape
+    `(n_aug_periods, n_all_factors)` — latent columns followed by observed-factor
+    columns (scaling=1, constant=0). This test uses that shape to verify
+    `linear_kalman_predict` slices correctly.
+    """
+    rng = np.random.default_rng(42)
+    n_latent = 2
+    n_observed = 1
+    n_all = n_latent + n_observed
+    state, cov = _random_state_and_covariance(rng, dim=n_latent)
+    shock_sds = np.array([0.1, 0.2])
+
+    sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
+    scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(n_latent, 2)
+
+    observed_val = 3.0
+    observed_factors = jnp.array([[observed_val]])
+
+    trans_coeffs = {
+        "fac0": jnp.array([0.5, 0.3, 0.2, 0.1]),
+        "fac1": jnp.array([0.1, 0.9, 0.0, 0.0]),
+    }
+    # Shape (2, n_all) — matches what parse_params returns at runtime
+    anch_scaling = jnp.ones((2, n_all))
+    anch_constants = jnp.zeros((2, n_all))
+    latent_factors = ("fac0", "fac1")
+
+    calc_states, _calc_chols = linear_kalman_predict(
+        None,
+        sm_state,
+        sm_chol,
+        float(scaling_factor),
+        weights,
+        trans_coeffs,
+        jnp.array(shock_sds),
+        anch_scaling,
+        anch_constants,
+        observed_factors,
+        latent_factors=latent_factors,
+        constant_factor_indices=frozenset(),
+        n_all_factors=n_all,
     )
 
     expected_fac0 = 0.5 * state[0] + 0.3 * state[1] + 0.2 * observed_val + 0.1

@@ -308,9 +308,9 @@ def linear_kalman_predict(
     f_mat = jnp.stack(f_rows)  # (n_latent, n_all)
     c_vec = jnp.array(c_vals)  # (n_latent,)
 
-    s_in = anchoring_scaling_factors[0]  # (n_latent,) for input period
+    s_in = anchoring_scaling_factors[0][:n_latent]  # (n_latent,) for input period
     s_out = anchoring_scaling_factors[1][:n_latent]  # (n_latent,) for output period
-    c_in = anchoring_constants[0]  # (n_latent,)
+    c_in = anchoring_constants[0][:n_latent]  # (n_latent,)
     c_out = anchoring_constants[1][:n_latent]  # (n_latent,)
 
     # Mean prediction
