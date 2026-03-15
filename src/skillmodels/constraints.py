@@ -41,13 +41,18 @@ class FixedConstraintWithValue(om.FixedConstraint):
     """Value to enforce on the parameter."""
 
     def __post_init__(self) -> None:
-        """Validate that `loc` and `value` are not None."""
+        """Validate that `loc` and `value` are not None and derive `selector`."""
         if self.loc is None:
             msg = "loc must not be None"
             raise TypeError(msg)
         if self.value is None:
             msg = "value must not be None"
             raise TypeError(msg)
+        object.__setattr__(
+            self,
+            "selector",
+            functools.partial(select_by_loc, loc=self.loc),
+        )
 
 
 def get_constraints(
@@ -178,22 +183,10 @@ def _get_normalization_constraints(
         for period in periods:
             for meas, normval in normalizations[factor].loadings[period].items():
                 loc = ("loadings", period, meas, factor)
-                constraints.append(
-                    FixedConstraintWithValue(
-                        selector=functools.partial(select_by_loc, loc=loc),
-                        loc=loc,
-                        value=normval,
-                    )
-                )
+                constraints.append(FixedConstraintWithValue(loc=loc, value=normval))
             for meas, normval in normalizations[factor].intercepts[period].items():
                 loc = ("controls", period, meas, "constant")
-                constraints.append(
-                    FixedConstraintWithValue(
-                        selector=functools.partial(select_by_loc, loc=loc),
-                        loc=loc,
-                        value=normval,
-                    )
-                )
+                constraints.append(FixedConstraintWithValue(loc=loc, value=normval))
 
     return constraints
 
@@ -205,11 +198,7 @@ def _get_mixture_weights_constraints(
     loc = "mixture_weights"
     if n_mixtures == 1:
         return [
-            FixedConstraintWithValue(
-                selector=functools.partial(select_by_loc, loc=loc),
-                loc=loc,
-                value=1.0,
-            ),
+            FixedConstraintWithValue(loc=loc, value=1.0),
         ]
     return [
         om.ProbabilityConstraint(selector=functools.partial(select_by_loc, loc=loc))
@@ -277,11 +266,7 @@ def _get_constant_factors_constraints(
             for aug_period in labels.aug_periods[:-1]:
                 loc = ("shock_sds", aug_period, factor, "-")
                 constraints.append(
-                    FixedConstraintWithValue(
-                        selector=functools.partial(select_by_loc, loc=loc),
-                        loc=loc,
-                        value=0.0,
-                    ),
+                    FixedConstraintWithValue(loc=loc, value=0.0),
                 )
     return constraints
 
@@ -371,11 +356,7 @@ def _get_anchoring_constraints(  # noqa: C901
         if locs:
             loc = tuple(locs)
             constraints.append(
-                FixedConstraintWithValue(
-                    selector=functools.partial(select_by_loc, loc=loc),
-                    loc=loc,
-                    value=0,
-                ),
+                FixedConstraintWithValue(loc=loc, value=0),
             )
 
     if not anchoring_info.free_controls:
@@ -386,11 +367,7 @@ def _get_anchoring_constraints(  # noqa: C901
         if ind_tups:
             loc = tuple(ind_tups)
             constraints.append(
-                FixedConstraintWithValue(
-                    selector=functools.partial(select_by_loc, loc=loc),
-                    loc=loc,
-                    value=0,
-                ),
+                FixedConstraintWithValue(loc=loc, value=0),
             )
 
     if not anchoring_info.free_loadings:
@@ -404,11 +381,7 @@ def _get_anchoring_constraints(  # noqa: C901
         if ind_tups:
             loc = tuple(ind_tups)
             constraints.append(
-                FixedConstraintWithValue(
-                    selector=functools.partial(select_by_loc, loc=loc),
-                    loc=loc,
-                    value=1,
-                ),
+                FixedConstraintWithValue(loc=loc, value=1),
             )
 
     return constraints
@@ -467,7 +440,6 @@ def _get_constraints_for_augmented_periods(
             loc = ("shock_sds", aug_period, factor, "-")
             constraints.append(
                 FixedConstraintWithValue(
-                    selector=functools.partial(select_by_loc, loc=loc),
                     loc=loc,
                     value=endogenous_factors_info.bounds_distance,
                 )

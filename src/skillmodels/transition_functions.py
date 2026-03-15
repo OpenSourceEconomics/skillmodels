@@ -66,13 +66,7 @@ def identity_constraints_linear(
     for regressor in params_linear(all_factors):
         val = 1.0 if factor == regressor else 0.0
         loc = ("transition", aug_period, factor, regressor)
-        constraints.append(
-            FixedConstraintWithValue(
-                selector=functools.partial(select_by_loc, loc=loc),
-                loc=loc,
-                value=val,
-            )
-        )
+        constraints.append(FixedConstraintWithValue(loc=loc, value=val))
     return constraints
 
 
@@ -120,13 +114,7 @@ def identity_constraints_translog(
     for regressor in params_translog(all_factors):
         val = 1.0 if factor == regressor else 0.0
         loc = ("transition", aug_period, factor, regressor)
-        constraints.append(
-            FixedConstraintWithValue(
-                selector=functools.partial(select_by_loc, loc=loc),
-                loc=loc,
-                value=val,
-            )
-        )
+        constraints.append(FixedConstraintWithValue(loc=loc, value=val))
     return constraints
 
 
@@ -242,13 +230,7 @@ def identity_constraints_linear_and_squares(
     for regressor in params_linear_and_squares(all_factors):
         val = 1.0 if factor == regressor else 0.0
         loc = ("transition", aug_period, factor, regressor)
-        constraints.append(
-            FixedConstraintWithValue(
-                selector=functools.partial(select_by_loc, loc=loc),
-                loc=loc,
-                value=val,
-            )
-        )
+        constraints.append(FixedConstraintWithValue(loc=loc, value=val))
     return constraints
 
 
