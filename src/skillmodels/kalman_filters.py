@@ -1,12 +1,20 @@
 """Kalman filter operations for state estimation using the square-root form."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 import jax
 import jax.numpy as jnp
 from jax import Array
 
 from skillmodels.qr import qr_gpu
+
+LINEAR_FUNCTION_NAMES = frozenset({"linear", "constant"})
+
+
+def is_all_linear(function_names: Mapping[str, str]) -> bool:
+    """Return True if every factor uses a linear or constant transition function."""
+    return all(name in LINEAR_FUNCTION_NAMES for name in function_names.values())
+
 
 array_qr_jax = (
     jax.vmap(jax.vmap(qr_gpu))
@@ -230,6 +238,108 @@ def kalman_predict(
     qr_points = qr_points.at[:, :, 0:n_sigma].set(devs * qr_weights)
     qr_points = qr_points.at[:, :, n_sigma:].set(jnp.diag(shock_sds))
     predicted_covs = array_qr_jax(qr_points)[1][:, :, :n_fac]
+
+    return predicted_states, predicted_covs
+
+
+def linear_kalman_predict(
+    transition_func: Callable,  # noqa: ARG001
+    states: Array,
+    upper_chols: Array,
+    sigma_scaling_factor: float,  # noqa: ARG001
+    sigma_weights: Array,  # noqa: ARG001
+    trans_coeffs: dict[str, Array],
+    shock_sds: Array,
+    anchoring_scaling_factors: Array,
+    anchoring_constants: Array,
+    observed_factors: Array,
+    *,
+    latent_factors: tuple[str, ...],
+    constant_factor_indices: frozenset[int],
+    n_all_factors: int,
+) -> tuple[Array, Array]:
+    """Make a linear Kalman predict (square-root form).
+
+    Much cheaper than the unscented predict because it avoids sigma point
+    generation and transformation. Only valid when every factor uses a `linear`
+    or `constant` transition function.
+
+    The positional parameters `transition_func`, `sigma_scaling_factor` and
+    `sigma_weights` are accepted for signature compatibility with
+    `kalman_predict` but are ignored.
+
+    Args:
+        transition_func: Ignored (kept for signature compatibility).
+        states: Array of shape (n_obs, n_mixtures, n_states).
+        upper_chols: Array of shape (n_obs, n_mixtures, n_states, n_states).
+        sigma_scaling_factor: Ignored.
+        sigma_weights: Ignored.
+        trans_coeffs: Dict mapping factor name to 1d coefficient array.
+        shock_sds: 1d array of length n_states.
+        anchoring_scaling_factors: Array of shape (2, n_states).
+        anchoring_constants: Array of shape (2, n_states).
+        observed_factors: Array of shape (n_obs, n_observed_factors).
+        latent_factors: Tuple of latent factor names.
+        constant_factor_indices: Indices of factors with `constant` transition.
+        n_all_factors: Total number of factors (latent + observed).
+
+    Returns:
+        Predicted states, same shape as states.
+        Predicted upper_chols, same shape as upper_chols.
+
+    """
+    n_latent = len(latent_factors)
+
+    # Build F (n_latent x n_all) and c (n_latent,) from trans_coeffs.
+    # linear factor i: F[i] = trans_coeffs[factor_i][:-1], c[i] = last element
+    # constant factor i: F[i] = e_i (unit vector), c[i] = 0
+    f_rows = []
+    c_vals = []
+    for i, factor in enumerate(latent_factors):
+        if i in constant_factor_indices:
+            row = jnp.zeros(n_all_factors).at[i].set(1.0)
+            f_rows.append(row)
+            c_vals.append(0.0)
+        else:
+            coeffs = trans_coeffs[factor]
+            f_rows.append(coeffs[:-1])
+            c_vals.append(coeffs[-1])
+
+    f_mat = jnp.stack(f_rows)  # (n_latent, n_all)
+    c_vec = jnp.array(c_vals)  # (n_latent,)
+
+    s_in = anchoring_scaling_factors[0]  # (n_latent,) for input period
+    s_out = anchoring_scaling_factors[1][:n_latent]  # (n_latent,) for output period
+    c_in = anchoring_constants[0]  # (n_latent,)
+    c_out = anchoring_constants[1][:n_latent]  # (n_latent,)
+
+    # Mean prediction
+    anchored_states = states * s_in + c_in  # (n_obs, n_mix, n_latent)
+    # Concatenate with observed factors to get full state vector
+    n_obs, n_mix, _ = states.shape
+    obs_expanded = jnp.broadcast_to(
+        observed_factors[:, jnp.newaxis, :], (n_obs, n_mix, observed_factors.shape[1])
+    )
+    full_states = jnp.concatenate([anchored_states, obs_expanded], axis=-1)
+
+    predicted_anchored = full_states @ f_mat.T + c_vec  # (n_obs, n_mix, n_latent)
+    predicted_states = (predicted_anchored - c_out) / s_out
+
+    # Covariance prediction (square-root form)
+    # G = diag(1/s_out) @ F_latent @ diag(s_in) where F_latent is the first
+    # n_latent columns of F
+    f_latent = f_mat[:, :n_latent]  # (n_latent, n_latent)
+    g_mat = (f_latent * s_in) / s_out[:, jnp.newaxis]  # (n_latent, n_latent)
+
+    # Stack: [upper_chol @ G.T ; diag(shock_sds / s_out)]
+    chol_g = upper_chols @ g_mat.T  # (n_obs, n_mix, n_latent, n_latent)
+    shock_diag = jnp.diag(shock_sds / s_out)  # (n_latent, n_latent)
+
+    stack = jnp.concatenate(
+        [chol_g, jnp.broadcast_to(shock_diag, chol_g.shape)], axis=-2
+    )  # (n_obs, n_mix, 2*n_latent, n_latent)
+
+    predicted_covs = array_qr_jax(stack)[1][:, :, :n_latent]
 
     return predicted_states, predicted_covs
 

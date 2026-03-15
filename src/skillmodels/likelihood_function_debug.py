@@ -9,7 +9,6 @@ import jax.numpy as jnp
 from jax import Array
 
 from skillmodels.clipping import soft_clipping
-from skillmodels.kalman_filters import kalman_predict
 from skillmodels.kalman_filters_debug import kalman_update
 from skillmodels.parse_params import parse_params
 from skillmodels.types import (
@@ -26,7 +25,7 @@ def log_likelihood(
     parsing_info: ParsingInfo,
     measurements: Array,
     controls: Array,
-    transition_func: Callable[..., Array],
+    predict_func: Callable[..., tuple[Array, Array]],
     sigma_scaling_factor: float,
     sigma_weights: Array,
     dimensions: Dimensions,
@@ -49,7 +48,7 @@ def log_likelihood(
             measurements. NaN if the measurement was not observed.
         controls: Array of shape (n_periods, n_obs, n_controls) with observed
             control variables for the measurement equations.
-        transition_func: The transition function.
+        predict_func: Callable that performs the predict step.
         sigma_scaling_factor: A scaling factor that controls the spread of the
             sigma points. Bigger means that sigma points are further apart.
         sigma_weights: 1d array of length n_sigma with non-negative sigma weights.
@@ -102,7 +101,7 @@ def log_likelihood(
         parsed_params=parsed_params,
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
-        transition_func=transition_func,
+        predict_func=predict_func,
         observed_factors=observed_factors,
     )
 
@@ -154,7 +153,7 @@ def _scan_body(
     parsed_params: ParsedParams,
     sigma_scaling_factor: float,
     sigma_weights: Array,
-    transition_func: Callable[..., Array],
+    predict_func: Callable[..., tuple[Array, Array]],
     observed_factors: Array,
 ) -> tuple[dict[str, Array], dict[str, Any]]:
     # ==================================================================================
@@ -203,7 +202,7 @@ def _scan_body(
         "observed_factors": observed_factors[t],
     }
 
-    fixed_kwargs = {"transition_func": transition_func}
+    fixed_kwargs = {"predict_func": predict_func}
 
     # ==================================================================================
     # Do a predict step or a do-nothing fake predict step
@@ -246,7 +245,7 @@ def _one_arg_anchoring_update(
 
 def _one_arg_no_predict(
     kwargs: dict[str, Any],
-    transition_func: Callable[..., Array],  # noqa: ARG001
+    predict_func: Callable[..., tuple[Array, Array]],  # noqa: ARG001
 ) -> tuple[Array, Array, Array]:
     """Just return the states cond chols without any changes."""
     return kwargs["states"], kwargs["upper_chols"], kwargs["states"]
@@ -254,11 +253,8 @@ def _one_arg_no_predict(
 
 def _one_arg_predict(
     kwargs: dict[str, Any],
-    transition_func: Callable[..., Array],
+    predict_func: Callable[..., tuple[Array, Array]],
 ) -> tuple[Array, Array, Array]:
     """Do a predict step but also return the input states as filtered states."""
-    new_states, new_upper_chols = kalman_predict(
-        transition_func,
-        **kwargs,
-    )
+    new_states, new_upper_chols = predict_func(**kwargs)
     return new_states, new_upper_chols, kwargs["states"]

@@ -18,7 +18,12 @@ from skillmodels.constraints import (
     enforce_fixed_constraints,
     get_constraints,
 )
-from skillmodels.kalman_filters import calculate_sigma_scaling_factor_and_weights
+from skillmodels.kalman_filters import (
+    calculate_sigma_scaling_factor_and_weights,
+    is_all_linear,
+    kalman_predict,
+    linear_kalman_predict,
+)
 from skillmodels.model_spec import ModelSpec
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
@@ -225,12 +230,28 @@ def _partial_some_log_likelihood(
     if max(iteration_to_period) != last_aug_period - 1:
         raise ValueError("Unexpected iteration_to_period configuration")
 
+    if is_all_linear(model.transition_info.function_names):
+        constant_factor_indices = frozenset(
+            i
+            for i, f in enumerate(model.labels.latent_factors)
+            if model.transition_info.function_names[f] == "constant"
+        )
+        predict_func = functools.partial(
+            linear_kalman_predict,
+            model.transition_info.func,
+            latent_factors=model.labels.latent_factors,
+            constant_factor_indices=constant_factor_indices,
+            n_all_factors=model.dimensions.n_all_factors,
+        )
+    else:
+        predict_func = functools.partial(kalman_predict, model.transition_info.func)
+
     return functools.partial(
         fun,
         parsing_info=parsing_info,
         measurements=measurements,
         controls=controls,
-        transition_func=model.transition_info.func,
+        predict_func=predict_func,
         sigma_scaling_factor=sigma_scaling_factor,
         sigma_weights=sigma_weights,
         dimensions=model.dimensions,
