@@ -236,6 +236,27 @@ These are not in `__all__` but are imported directly by application projects:
 - `ensure_containers_are_immutable()` recursively converts dict→MappingProxyType,
   list→tuple, set→frozenset
 
+### Period vs Aug_period
+
+Models with endogenous factors split each calendar period into multiple **augmented
+periods** (`aug_period`). The public API should use `period` (user-facing); `aug_period`
+is an internal concept. Current status:
+
+- `ModelSpec` — clean, no `aug_period` exposure.
+- `get_transition_plots()` — clean, accepts `period`/`periods`.
+- `get_filtered_states()` — **leaks `aug_period`**: returned states DataFrames have an
+  `aug_period` column, not `period`.
+- `simulate_dataset()` — mixed: `"anchored_states"` / `"unanchored_states"` use
+  `period`, but `"aug_unanchored_states"` / `"aug_measurements"` use `aug_period`.
+- `plot_residual_boxplots()` / `plot_likelihood_contributions()` — accept `period` but
+  return figures keyed by `aug_period`.
+- `decompose_measurement_variance()` — returns DataFrame indexed by `aug_period`.
+- `ProcessedModel.labels` — exposes `aug_periods_to_periods` mapping (acceptable for
+  internal/advanced use).
+
+When writing new public-facing code, always accept and return `period`. Convert to
+`aug_period` internally using `ProcessedModel.labels.aug_periods_to_periods`.
+
 ## Testing
 
 - pytest with markers: `wip`, `unit`, `integration`, `end_to_end`
