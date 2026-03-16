@@ -40,6 +40,7 @@ project:
       children:
         - file: explanations/names_and_concepts.md
         - file: explanations/notes_on_factor_scales.md
+        - file: explanations/linear_predict.md
     - title: Reference Guides
       children:
         - file: reference_guides/transition_functions.md

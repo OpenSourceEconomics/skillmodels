@@ -243,7 +243,7 @@ def kalman_predict(
 
 
 def linear_kalman_predict(
-    transition_func: Callable,  # noqa: ARG001
+    transition_func: Callable | None,  # noqa: ARG001
     states: Array,
     upper_chols: Array,
     sigma_scaling_factor: float,  # noqa: ARG001
