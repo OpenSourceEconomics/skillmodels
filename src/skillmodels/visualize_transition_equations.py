@@ -1,7 +1,7 @@
 """Functions to visualize transition equations and production functions."""
 
 import itertools
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from typing import Any, Literal
 
@@ -259,7 +259,10 @@ def get_transition_plots(  # noqa: C901, PLR0912
             "anchored_states"
         ]["states"]
 
-    states = _normalize_states_columns(states)
+    states = _normalize_states_columns(
+        states,
+        aug_periods_to_periods=processed_model.labels.aug_periods_to_periods,
+    )
 
     return _get_dictionary_with_plots(
         model=processed_model,
@@ -644,14 +647,25 @@ def _get_states_data(
     return states_data
 
 
-def _normalize_states_columns(states: pd.DataFrame) -> pd.DataFrame:
+def _normalize_states_columns(
+    states: pd.DataFrame,
+    aug_periods_to_periods: Mapping[int, int] | None = None,
+) -> pd.DataFrame:
     """Ensure `aug_period` and `id` are columns, not index levels.
 
     Pre-computed states DataFrames may carry period information as `period`
     (in the index or a column) instead of `aug_period`.  Downstream code
     uniformly expects `aug_period` as a column, so this helper promotes
-    index levels to columns and renames `period` → `aug_period` when the
-    latter is absent.
+    index levels to columns and, when a mapping is provided, expands each
+    period row into one row per corresponding aug_period.
+
+    Args:
+        states: DataFrame with latent factor columns and either `period` or
+            `aug_period` identifying the time dimension.
+        aug_periods_to_periods: Mapping from aug_period to period.  When
+            provided and the DataFrame has `period` but not `aug_period`,
+            rows are expanded so that each period produces one row per
+            aug_period that maps to it.
     """
     # Promote relevant index levels to columns.
     names_to_reset = [
@@ -660,8 +674,21 @@ def _normalize_states_columns(states: pd.DataFrame) -> pd.DataFrame:
     if names_to_reset:
         states = states.reset_index(level=names_to_reset)
 
-    # Rename period → aug_period when aug_period is missing.
-    if "aug_period" not in states.columns and "period" in states.columns:
+    if "aug_period" in states.columns:
+        return states
+
+    if "period" not in states.columns:
+        return states
+
+    # Expand period rows into aug_period rows using the mapping.
+    if aug_periods_to_periods is not None:
+        mapping_df = pd.DataFrame(
+            list(aug_periods_to_periods.items()),
+            columns=["aug_period", "period"],
+        )
+        states = states.merge(mapping_df, on="period", how="left")
+        states = states.drop(columns=["period"])
+    else:
         states = states.rename(columns={"period": "aug_period"})
 
     return states

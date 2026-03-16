@@ -68,7 +68,7 @@ def test_visualize_factor_distributions_runs_with_simulated_states() -> None:
     params = params.loc[max_inputs["params_template"].index]
 
     latent_data = simulate_dataset(model, params, data=data, policies=None)[
-        "unanchored_states"
+        "aug_unanchored_states"
     ]["states"]
 
     kde = univariate_densities(
