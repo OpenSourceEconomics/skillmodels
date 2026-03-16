@@ -196,7 +196,7 @@ def get_transition_plots(  # noqa: C901, PLR0912
         layout_kwargs: Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs
             defined in the function will be used.
-        states: Pre-computed filtered states DataFrame (with an `aug_period`
+        states: Pre-computed filtered states DataFrame (with a `period`
             column). If provided, skip the internal `get_filtered_states` call.
         include_correction_factors: Whether to include correction factors in the
             plots. Default False.

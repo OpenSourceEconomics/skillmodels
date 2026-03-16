@@ -22,7 +22,7 @@ def setup_variance_decomposition():
             "fac1": [0.1, 0.1, 0.1, 0.2],
             "fac2": [0.1, 0.1, 0.1, 0.1],
             "fac3": [0.2, 0.2, 0.2, 0.4],
-            "aug_period": [0, 0, 0, 0],
+            "period": [0, 0, 0, 0],
             "id": [0, 1, 2, 3],
         }
     )
@@ -60,7 +60,11 @@ def setup_variance_decomposition():
 
     params = pd.concat([loadings_df, meas_sds_df], keys=["loadings", "meas_sds"])
 
-    return {"filtered_states": filtered_states, "params": params}
+    return {
+        "filtered_states": filtered_states,
+        "params": params,
+        "aug_periods_to_periods": {0: 0},
+    }
 
 
 @pytest.fixture
@@ -74,7 +78,7 @@ def expected_variance_decomposition():
     """
     index = pd.MultiIndex.from_tuples(
         [(0, "y1", "fac1"), (0, "y2", "fac2"), (0, "y3", "fac3")],
-        names=["aug_period", "measurement", "factor"],
+        names=["period", "measurement", "factor"],
     )
     return pd.DataFrame(
         {

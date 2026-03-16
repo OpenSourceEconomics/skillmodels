@@ -35,8 +35,18 @@ def get_filtered_states(
         use_aug_period=True,
     )
 
+    # Map aug_period → period for the public API
+    ap_to_p = processed_model.labels.aug_periods_to_periods
+    for df in (anchored_states_df, unanchored_states_df):
+        df["period"] = df["aug_period"].map(ap_to_p)
+        df.drop(columns="aug_period", inplace=True)  # noqa: PD002
+
     anchored_ranges = create_state_ranges(
         filtered_states=anchored_states_df,
+        factors=processed_model.labels.latent_factors,
+    )
+    unanchored_ranges = create_state_ranges(
+        filtered_states=unanchored_states_df,
         factors=processed_model.labels.latent_factors,
     )
 
