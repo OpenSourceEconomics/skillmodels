@@ -61,19 +61,25 @@ def plot_residual_boxplots(
         how="left",
     )
 
+    # Map aug_period → period for the public API
+    ap_to_p = processed_model.labels.aug_periods_to_periods
+
     available_periods = sorted(residuals_df[period_col].unique())
 
     if period is not None:
+        # Find aug_period(s) matching the requested period
+        aug_periods_for_period = [ap for ap, p in ap_to_p.items() if p == period]
+        aug_period = aug_periods_for_period[0] if aug_periods_for_period else period
         return _create_residual_boxplot_for_period(
             residuals_df=residuals_df,
-            period=period,
+            period=aug_period,
             period_col=period_col,
             show_reference_line=show_reference_line,
             layout_kwargs=layout_kwargs,
         )
 
     return {
-        p: _create_residual_boxplot_for_period(
+        ap_to_p.get(p, p): _create_residual_boxplot_for_period(
             residuals_df=residuals_df,
             period=p,
             period_col=period_col,
@@ -173,18 +179,24 @@ def plot_likelihood_contributions(
         how="left",
     )
 
+    # Map aug_period → period for the public API
+    ap_to_p = processed_model.labels.aug_periods_to_periods
+
     available_periods = sorted(contributions_df[period_col].unique())
 
     if period is not None:
+        # Find aug_period(s) matching the requested period
+        aug_periods_for_period = [ap for ap, p in ap_to_p.items() if p == period]
+        aug_period = aug_periods_for_period[0] if aug_periods_for_period else period
         return _create_likelihood_boxplot_for_period(
             contributions_df=contributions_df,
-            period=period,
+            period=aug_period,
             period_col=period_col,
             layout_kwargs=layout_kwargs,
         )
 
     return {
-        p: _create_likelihood_boxplot_for_period(
+        ap_to_p.get(p, p): _create_likelihood_boxplot_for_period(
             contributions_df=contributions_df,
             period=p,
             period_col=period_col,

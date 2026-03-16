@@ -182,8 +182,8 @@ def create_state_ranges(
     """Compute minimum and maximum state values for each factor by period.
 
     Args:
-        filtered_states: DataFrame with filtered states. Must have a "period" or
-            "aug_period" column.
+        filtered_states: DataFrame with filtered states. Must have a "period"
+            column.
         factors: List of factor names to compute ranges for.
         quantile_cutoff: If provided, use quantiles instead of min/max. The cutoff
             is applied symmetrically: the minimum is the `quantile_cutoff` quantile

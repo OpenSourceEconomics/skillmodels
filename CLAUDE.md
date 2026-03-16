@@ -174,8 +174,7 @@ The codebase uses:
 **Simulation:**
 
 - `simulate_dataset(model_spec, params, n_obs=None, data=None, policies=None, seed=None)`
-  — returns dict with `"unanchored_states"`, `"anchored_states"`,
-  `"aug_unanchored_states"`, `"aug_measurements"`
+  — returns dict with `"unanchored_states"`, `"anchored_states"`
 - `simulate_policy_effect(model_spec, params, data, policies, seed=None)` — returns
   DataFrame of factor mean differences between policy and baseline
 
@@ -184,7 +183,7 @@ The codebase uses:
 - `plot_likelihood_contributions(model_spec, data, params, period=None)`
 - `plot_residual_boxplots(model_spec, data, params, period=None)`
 - `decompose_measurement_variance(model_spec, params, data)` — returns DataFrame indexed
-  by `(aug_period, measurement, factor)` with signal/noise columns
+  by `(period, measurement, factor)` with signal/noise columns
 - `summarize_measurement_reliability(variance_decomposition)`
 - `create_state_ranges(filtered_states, factors, quantile_cutoff=None)`
 
@@ -236,6 +235,27 @@ These are not in `__all__` but are imported directly by application projects:
 - List fields use `tuple`, set fields use `frozenset`
 - `ensure_containers_are_immutable()` recursively converts dict→MappingProxyType,
   list→tuple, set→frozenset
+
+### Period vs Aug_period
+
+Models with endogenous factors split each calendar period into multiple **augmented
+periods** (`aug_period`). The public API uses `period` (user-facing); `aug_period` is
+strictly internal. All public functions now return `period`:
+
+- `ModelSpec` — clean, no `aug_period` exposure.
+- `get_transition_plots()` — clean, accepts `period`/`periods`.
+- `get_filtered_states()` — clean, returns `period` column.
+- `simulate_dataset()` — clean, returns `period` in states DataFrames.
+- `plot_residual_boxplots()` / `plot_likelihood_contributions()` — clean, accept and
+  return `period`.
+- `decompose_measurement_variance()` — clean, indexed by
+  `(period, measurement, factor)`.
+- `simulate_policy_effect()` / `simulate_dataset()` policies — accept `"period"` key.
+- `ProcessedModel.labels` — exposes `aug_periods_to_periods` mapping (acceptable for
+  internal/advanced use).
+
+When writing new public-facing code, always accept and return `period`. Convert to
+`aug_period` internally using `ProcessedModel.labels.aug_periods_to_periods`.
 
 ## Testing
 

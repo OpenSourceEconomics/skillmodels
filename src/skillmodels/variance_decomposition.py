@@ -5,10 +5,13 @@ noise (measurement error) components following Cunha, Heckman, Schennach (2010),
 Section 4.2.2.
 """
 
+from collections.abc import Mapping
+
 import pandas as pd
 
 from skillmodels.filtered_states import get_filtered_states
 from skillmodels.model_spec import ModelSpec
+from skillmodels.process_model import process_model
 
 
 def decompose_measurement_variance(
@@ -34,7 +37,7 @@ def decompose_measurement_variance(
         data: Empirical dataset used to estimate the model.
 
     Returns:
-        DataFrame indexed by (aug_period, measurement, factor) with columns:
+        DataFrame indexed by (period, measurement, factor) with columns:
         - loading: The factor loading (L)
         - factor_variance: Var(F) for that period
         - meas_sd: The measurement error standard deviation
@@ -54,32 +57,50 @@ def decompose_measurement_variance(
     )
     filtered_states = filtered_result["anchored_states"]["states"]
 
+    processed_model = process_model(model_spec)
     return _compute_variance_decomposition(
         filtered_states=filtered_states,
         params=params,
+        aug_periods_to_periods=processed_model.labels.aug_periods_to_periods,
     )
 
 
 def _compute_variance_decomposition(
     filtered_states: pd.DataFrame,
     params: pd.DataFrame,
+    aug_periods_to_periods: Mapping[int, int],
 ) -> pd.DataFrame:
     """Compute variance decomposition from filtered states and parameters.
 
     Args:
         filtered_states: DataFrame with filtered states, must have columns for
-            each factor plus "aug_period" and "id".
+            each factor plus "period" and "id".
         params: DataFrame with model parameters indexed by
             (category, aug_period, name1, name2).
+        aug_periods_to_periods: Mapping from aug_period to period.
 
     Returns:
         DataFrame with variance decomposition results.
 
     """
+    # Build reverse mapping: period → aug_period (pick first aug_period per period)
+    periods_to_aug_periods = {}
+    for ap, p in aug_periods_to_periods.items():
+        if p not in periods_to_aug_periods:
+            periods_to_aug_periods[p] = ap
+
+    # Add aug_period column for internal merges with params
+    filtered_states = filtered_states.copy()
+    filtered_states["aug_period"] = filtered_states["period"].map(
+        periods_to_aug_periods
+    )
+
     # Compute factor variances by period
     periods = filtered_states["aug_period"].unique()
     factor_cols = [
-        c for c in filtered_states.columns if c not in ("aug_period", "id", "mixture")
+        c
+        for c in filtered_states.columns
+        if c not in ("aug_period", "period", "id", "mixture")
     ]
 
     factor_variances = {}
@@ -133,8 +154,11 @@ def _compute_variance_decomposition(
     merged["fraction_noise"] = noise_var / total_var
     merged["signal_to_noise_ratio"] = signal_var / noise_var
 
+    # Map aug_period → period for the public API
+    merged["period"] = merged["aug_period"].map(aug_periods_to_periods)
+
     # Set index and select columns
-    return merged.set_index(["aug_period", "measurement", "factor"])[
+    return merged.set_index(["period", "measurement", "factor"])[
         [
             "loading",
             "factor_variance",

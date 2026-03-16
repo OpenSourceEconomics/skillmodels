@@ -196,7 +196,7 @@ def get_transition_plots(  # noqa: C901, PLR0912
         layout_kwargs: Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs
             defined in the function will be used.
-        states: Pre-computed filtered states DataFrame (with an `aug_period`
+        states: Pre-computed filtered states DataFrame (with a `period`
             column). If provided, skip the internal `get_filtered_states` call.
         include_correction_factors: Whether to include correction factors in the
             plots. Default False.
@@ -258,6 +258,9 @@ def get_transition_plots(  # noqa: C901, PLR0912
         states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
             "anchored_states"
         ]["states"]
+
+    states = _normalize_states_columns(states)
+
     return _get_dictionary_with_plots(
         model=processed_model,
         data=data,
@@ -371,8 +374,6 @@ def _get_dictionary_with_plots(
     else:
         colors = colorscale
 
-    period_col = "aug_period" if "aug_period" in states_data.columns else "period"
-
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
         combined_data = _prepare_plot_data_for_factor_pair(
@@ -381,7 +382,6 @@ def _get_dictionary_with_plots(
             state_ranges=state_ranges,
             parsed_params=parsed_params,
             periods=periods,
-            period_col=period_col,
             input_factor=input_factor,
             output_factor=output_factor,
             all_factors=all_factors,
@@ -414,7 +414,6 @@ def _prepare_plot_data_for_factor_pair(
     state_ranges: dict[str, pd.DataFrame],
     parsed_params: ParsedParams,
     periods: list[int],
-    period_col: str,
     input_factor: str,
     output_factor: str,
     all_factors: tuple[str, ...],
@@ -438,7 +437,7 @@ def _prepare_plot_data_for_factor_pair(
         transition_params = {
             output_factor: parsed_params.transition[output_factor][aug_period]
         }
-        period_states = states_data[states_data[period_col] == aug_period]
+        period_states = states_data[states_data["aug_period"] == aug_period]
 
         plot_data = _prepare_single_period_plot_data(
             states_data=period_states,
@@ -643,6 +642,29 @@ def _get_states_data(
     else:
         states_data = states.copy(deep=True)
     return states_data
+
+
+def _normalize_states_columns(states: pd.DataFrame) -> pd.DataFrame:
+    """Ensure `aug_period` and `id` are columns, not index levels.
+
+    Pre-computed states DataFrames may carry period information as `period`
+    (in the index or a column) instead of `aug_period`.  Downstream code
+    uniformly expects `aug_period` as a column, so this helper promotes
+    index levels to columns and renames `period` → `aug_period` when the
+    latter is absent.
+    """
+    # Promote relevant index levels to columns.
+    names_to_reset = [
+        n for n in states.index.names if n in ("period", "aug_period", "id")
+    ]
+    if names_to_reset:
+        states = states.reset_index(level=names_to_reset)
+
+    # Rename period → aug_period when aug_period is missing.
+    if "aug_period" not in states.columns and "period" in states.columns:
+        states = states.rename(columns={"period": "aug_period"})
+
+    return states
 
 
 def _prepare_data_for_one_plot_fixed_quantile_2d(
