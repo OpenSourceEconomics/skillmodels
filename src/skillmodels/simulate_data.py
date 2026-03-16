@@ -180,6 +180,13 @@ def simulate_dataset(
                 factors=processed_model.labels.latent_factors,
             ),
         },
+        "aug_unanchored_states": {
+            "states": aug_latent_data,
+            "state_ranges": create_state_ranges(
+                filtered_states=aug_latent_data,
+                factors=processed_model.labels.latent_factors,
+            ),
+        },
     }
 
 
