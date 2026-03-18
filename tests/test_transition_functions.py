@@ -2,6 +2,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
@@ -230,11 +231,11 @@ def test_identity_constraints_linear() -> None:
     result = identity_constraints_linear("a", 0, all_factors)
     assert len(result) == 4  # 3 factors + constant
     # "a" regressor should be fixed at 1.0
-    assert result[0]["value"] == 1.0
+    assert np.isclose(result[0]["value"], 1.0)
     assert result[0]["loc"] == ("transition", 0, "a", "a")
     # others should be 0.0
-    assert result[1]["value"] == 0.0
-    assert result[3]["value"] == 0.0  # constant
+    assert np.isclose(result[1]["value"], 0.0)
+    assert np.isclose(result[3]["value"], 0.0)  # constant
 
 
 def test_identity_constraints_translog() -> None:
@@ -243,10 +244,10 @@ def test_identity_constraints_translog() -> None:
     # Should have one constraint per translog param
     assert len(result) == len(params_translog(all_factors))
     # First constraint for "a" linear should be 1.0
-    assert result[0]["value"] == 1.0
+    assert np.isclose(result[0]["value"], 1.0)
     # All others should be 0.0
     for c in result[1:]:
-        assert c["value"] == 0.0
+        assert np.isclose(c["value"], 0.0)
 
 
 def test_identity_constraints_robust_translog() -> None:
@@ -260,9 +261,9 @@ def test_identity_constraints_linear_and_squares() -> None:
     all_factors = ("a", "b", "c")
     result = identity_constraints_linear_and_squares("a", 0, all_factors)
     assert len(result) == len(params_linear_and_squares(all_factors))
-    assert result[0]["value"] == 1.0  # "a" linear
+    assert np.isclose(result[0]["value"], 1.0)  # "a" linear
     for c in result[1:]:
-        assert c["value"] == 0.0
+        assert np.isclose(c["value"], 0.0)
 
 
 def test_identity_constraints_log_ces_raises() -> None:

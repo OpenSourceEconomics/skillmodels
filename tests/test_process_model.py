@@ -3,6 +3,7 @@
 import inspect
 from dataclasses import replace
 
+import numpy as np
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
@@ -52,7 +53,7 @@ def test_estimation_options(model2) -> None:
     res = process_model(model2).estimation_options
     assert res.sigma_points_scale == 2
     assert res.robust_bounds
-    assert res.bounds_distance == 0.001
+    assert np.isclose(res.bounds_distance, 0.001)
 
 
 def test_anchoring(model2) -> None:
@@ -213,7 +214,7 @@ def test_with_endog_estimation_options(model2_inv) -> None:
     res = process_model(model2_inv).estimation_options
     assert res.sigma_points_scale == 2
     assert res.robust_bounds
-    assert res.bounds_distance == 0.001
+    assert np.isclose(res.bounds_distance, 0.001)
 
 
 def test_with_endog_anchoring_is_empty(model2_inv) -> None:
