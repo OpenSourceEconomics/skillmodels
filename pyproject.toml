@@ -139,12 +139,6 @@ expand_tables = [
   "tool.pixi.workspace",
 ]
 
-[tool.pytest]
-ini_options.addopts = [ "--pdbcls=pdbp:Pdb" ]
-ini_options.filterwarnings = []
-ini_options.markers = [ "integration: integration tests requiring MODEL2 + data" ]
-ini_options.norecursedirs = [ "docs" ]
-
 [tool.ty]
 rules.ambiguous-protocol-member = "error"
 rules.deprecated = "error"
@@ -158,6 +152,12 @@ rules.possibly-missing-submodule = "error"
 rules.redundant-cast = "error"
 rules.unused-awaitable = "error"
 rules.unused-ignore-comment = "error"
+
+[tool.pytest]
+ini_options.addopts = [ "--pdbcls=pdbp:Pdb" ]
+ini_options.filterwarnings = []
+ini_options.markers = [ "integration: integration tests requiring MODEL2 + data" ]
+ini_options.norecursedirs = [ "docs" ]
 
 [tool.pixi.dependencies]
 filterpy = "*"
@@ -239,7 +239,6 @@ platforms = [ "linux-64", "osx-arm64", "win-64" ]
 
 # Development Dependencies (conda)
 # --------------------------------------------------------------------------------------
-
 [tool.yamlfix]
 line_length = 88
 none_representation = "null"
