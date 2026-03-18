@@ -107,6 +107,6 @@ def test_summarize_measurement_reliability(expected_variance_decomposition):
 
     assert "y3" in summary.index  # Highest signal
     assert "y2" in summary.index  # Lowest signal
-    assert summary.loc["y3", "mean_signal"] == 0.8
-    assert summary.loc["y2", "mean_signal"] == 0.0
-    assert summary.loc["y1", "mean_signal"] == 0.5
+    assert summary.loc["y3", "mean_signal"] == pytest.approx(0.8)
+    assert summary.loc["y2", "mean_signal"] == pytest.approx(0.0)
+    assert summary.loc["y1", "mean_signal"] == pytest.approx(0.5)

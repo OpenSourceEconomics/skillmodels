@@ -758,21 +758,32 @@ def _prepare_data_for_one_plot_average_2d(
     input_min = state_ranges[input_factor].loc[aug_period]["minimum"]
     input_max = state_ranges[input_factor].loc[aug_period]["maximum"]
 
-    to_concat = []
-    for _, draw in draws.iterrows():
-        input_data = pd.DataFrame()
-        input_data[input_factor] = np.linspace(input_min, input_max, n_points)
-        for col, val in draw.items():
-            input_data[col] = val
-        input_arr = jnp.array(input_data[list(all_factors)].to_numpy())
-        # convert from jax to numpy array
-        output_arr = np.array(transition_function(transition_params, input_arr))
-        draw_data = pd.DataFrame()
-        draw_data[f"input_{input_factor}"] = input_data[input_factor]
-        draw_data[f"output_{output_factor}"] = np.array(output_arr)
-        to_concat.append(draw_data)
+    input_grid = np.linspace(input_min, input_max, n_points)
+    draws_arr = draws.to_numpy()  # (n_draws, n_sampled_factors)
 
-    return pd.concat(to_concat).groupby(f"input_{input_factor}").mean().reset_index()
+    # Build (n_draws * n_points, n_factors) array with broadcasting
+    tiled_input = np.tile(input_grid, n_draws)
+    repeated_draws = np.repeat(draws_arr, n_points, axis=0)
+
+    full_arr = np.empty((n_draws * n_points, len(all_factors)))
+    for i, factor in enumerate(all_factors):
+        if factor == input_factor:
+            full_arr[:, i] = tiled_input
+        else:
+            col_idx = sampled_factors.index(factor)
+            full_arr[:, i] = repeated_draws[:, col_idx]
+
+    output_arr = np.array(
+        transition_function(transition_params, jnp.array(full_arr)),
+    )
+    output_mean = output_arr.reshape(n_draws, n_points).mean(axis=0)
+
+    return pd.DataFrame(
+        {
+            f"input_{input_factor}": input_grid,
+            f"output_{output_factor}": output_mean,
+        }
+    )
 
 
 def _process_factor_mapping_trans(

@@ -39,7 +39,8 @@ def get_filtered_states(
     ap_to_p = processed_model.labels.aug_periods_to_periods
     for df in (anchored_states_df, unanchored_states_df):
         df["period"] = df["aug_period"].map(ap_to_p)
-        df.drop(columns="aug_period", inplace=True)  # noqa: PD002
+    anchored_states_df = anchored_states_df.drop(columns="aug_period")
+    unanchored_states_df = unanchored_states_df.drop(columns="aug_period")
 
     anchored_ranges = create_state_ranges(
         filtered_states=anchored_states_df,

@@ -29,12 +29,15 @@ should not be jitted yet.
 
 import functools
 from itertools import combinations
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
 import optimagic as om
 from jax import Array
+
+if TYPE_CHECKING:
+    from skillmodels.constraints import FixedConstraintWithValue
 
 
 def select_by_loc(params: Any, loc: Any) -> Any:  # noqa: ANN401
@@ -58,11 +61,11 @@ def identity_constraints_linear(
     factor: str,
     aug_period: int,
     all_factors: tuple[str, ...],
-) -> list[om.constraints.Constraint]:
+) -> list[FixedConstraintWithValue]:
     """Identity constraints for linear transition function."""
     from skillmodels.constraints import FixedConstraintWithValue  # noqa: PLC0415
 
-    constraints: list[om.constraints.Constraint] = []
+    constraints: list[FixedConstraintWithValue] = []
     for regressor in params_linear(all_factors):
         val = 1.0 if factor == regressor else 0.0
         loc = ("transition", aug_period, factor, regressor)
@@ -106,11 +109,11 @@ def identity_constraints_translog(
     factor: str,
     aug_period: int,
     all_factors: tuple[str, ...],
-) -> list[om.constraints.Constraint]:
+) -> list[FixedConstraintWithValue]:
     """Identity constraints for translog transition function."""
     from skillmodels.constraints import FixedConstraintWithValue  # noqa: PLC0415
 
-    constraints: list[om.constraints.Constraint] = []
+    constraints: list[FixedConstraintWithValue] = []
     for regressor in params_translog(all_factors):
         val = 1.0 if factor == regressor else 0.0
         loc = ("transition", aug_period, factor, regressor)
@@ -193,7 +196,7 @@ def identity_constraints_robust_translog(
     factor: str,
     aug_period: int,
     all_factors: tuple[str, ...],
-) -> list[om.constraints.Constraint]:
+) -> list[FixedConstraintWithValue]:
     """Identity constraints for robust_translog."""
     return identity_constraints_translog(
         factor=factor, aug_period=aug_period, all_factors=all_factors
@@ -222,11 +225,11 @@ def identity_constraints_linear_and_squares(
     factor: str,
     aug_period: int,
     all_factors: tuple[str, ...],
-) -> list[om.constraints.Constraint]:
+) -> list[FixedConstraintWithValue]:
     """Identity constraints for linear_and_squares transition function."""
     from skillmodels.constraints import FixedConstraintWithValue  # noqa: PLC0415
 
-    constraints: list[om.constraints.Constraint] = []
+    constraints: list[FixedConstraintWithValue] = []
     for regressor in params_linear_and_squares(all_factors):
         val = 1.0 if factor == regressor else 0.0
         loc = ("transition", aug_period, factor, regressor)
