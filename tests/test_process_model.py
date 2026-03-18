@@ -14,10 +14,6 @@ from skillmodels.process_model import get_has_endogenous_factors, process_model
 from skillmodels.test_data.model2 import MODEL2
 from skillmodels.types import Normalizations, TransitionInfo
 
-# ======================================================================================
-# Integration test with model2 from the replication files of CHS2010
-# ======================================================================================
-
 
 @pytest.fixture
 def model2():
@@ -119,11 +115,6 @@ def test_normalizations(model2) -> None:
     res = process_model(model2).normalizations
 
     assert res == expected
-
-
-# ======================================================================================
-# Augment model2 with endogenous factors
-# ======================================================================================
 
 
 def _make_fac3_endogenous(model):
@@ -314,11 +305,6 @@ def test_with_endog_normalizations(model2_inv) -> None:
     res = process_model(model2_inv).normalizations
 
     assert res == expected
-
-
-# ======================================================================================
-# Unit tests
-# ======================================================================================
 
 
 def _fspec(**kwargs) -> FactorSpec:

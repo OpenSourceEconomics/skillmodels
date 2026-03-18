@@ -340,9 +340,6 @@ def test_get_mask_full_square_matrix() -> None:
     np.testing.assert_array_equal(result, expected)
 
 
-# --- Tests for plot_correlation_heatmap ---
-
-
 def _synthetic_corr():
     """Return a synthetic 3x3 correlation DataFrame."""
     data = np.array([[1.0, 0.5, 0.3], [0.5, 1.0, 0.7], [0.3, 0.7, 1.0]])
@@ -392,9 +389,6 @@ def test_plot_correlation_heatmap_trim() -> None:
         corr, trim_heatmap=True, show_upper_triangle=False, show_diagonal=False
     )
     assert isinstance(fig, go.Figure)
-
-
-# --- Integration tests for correlation data functions ---
 
 
 @pytest.mark.integration

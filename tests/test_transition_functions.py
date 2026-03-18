@@ -167,9 +167,6 @@ def test_param_names_log_ces_general() -> None:
     assert calculated == expected
 
 
-# --- Tests for params_* functions ---
-
-
 def test_params_linear() -> None:
     factors = ("a", "b", "c")
     result = params_linear(factors)
@@ -212,18 +209,12 @@ def test_params_log_ces() -> None:
     assert result == ["a", "b", "c", "phi"]
 
 
-# --- Tests for linear_and_squares function ---
-
-
 def test_linear_and_squares() -> None:
     states = jnp.array([1.0, 2.0, 3.0])
     # 3 linear + 3 square + 1 constant = 7
     params = jnp.array([0.1, 0.2, 0.3, 0.01, 0.02, 0.03, 0.5])
     expected = 1.4 + 0.36 + 0.5
     aaae(linear_and_squares(states, params), expected)
-
-
-# --- Tests for identity_constraints_* functions ---
 
 
 def test_identity_constraints_linear() -> None:
