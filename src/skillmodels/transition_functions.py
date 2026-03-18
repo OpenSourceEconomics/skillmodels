@@ -27,11 +27,22 @@ should not be jitted yet.
 
 """
 
+import functools
 from itertools import combinations
+from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
+import optimagic as om
 from jax import Array
+
+if TYPE_CHECKING:
+    from skillmodels.constraints import FixedConstraintWithValue
+
+
+def select_by_loc(params: Any, loc: Any) -> Any:  # noqa: ANN401
+    """Select parameters by location."""
+    return params.loc[loc]
 
 
 def linear(states: Array, params: Array) -> Array:
@@ -50,20 +61,16 @@ def identity_constraints_linear(
     factor: str,
     aug_period: int,
     all_factors: tuple[str, ...],
-) -> list[dict]:
+) -> list[FixedConstraintWithValue]:
     """Identity constraints for linear transition function."""
-    constraints_dicts = []
+    from skillmodels.constraints import FixedConstraintWithValue  # noqa: PLC0415
+
+    constraints: list[FixedConstraintWithValue] = []
     for regressor in params_linear(all_factors):
         val = 1.0 if factor == regressor else 0.0
-        constraints_dicts.append(
-            {
-                "loc": ("transition", aug_period, factor, regressor),
-                "type": "fixed",
-                "value": val,
-                "description": "Identity constraint.",
-            }
-        )
-    return constraints_dicts
+        loc = ("transition", aug_period, factor, regressor)
+        constraints.append(FixedConstraintWithValue(loc=loc, value=val))
+    return constraints
 
 
 def translog(states: Array, params: Array) -> Array:
@@ -102,20 +109,16 @@ def identity_constraints_translog(
     factor: str,
     aug_period: int,
     all_factors: tuple[str, ...],
-) -> list[dict]:
+) -> list[FixedConstraintWithValue]:
     """Identity constraints for translog transition function."""
-    constraints_dicts = []
+    from skillmodels.constraints import FixedConstraintWithValue  # noqa: PLC0415
+
+    constraints: list[FixedConstraintWithValue] = []
     for regressor in params_translog(all_factors):
         val = 1.0 if factor == regressor else 0.0
-        constraints_dicts.append(
-            {
-                "loc": ("transition", aug_period, factor, regressor),
-                "type": "fixed",
-                "value": val,
-                "description": "Identity constraint.",
-            }
-        )
-    return constraints_dicts
+        loc = ("transition", aug_period, factor, regressor)
+        constraints.append(FixedConstraintWithValue(loc=loc, value=val))
+    return constraints
 
 
 def log_ces(states: Array, params: Array) -> Array:
@@ -142,18 +145,18 @@ def constraints_log_ces(
     factor: str,
     factors: tuple[str, ...],
     aug_period: int,
-) -> dict:
+) -> om.constraints.Constraint:
     """Constraints for log_ces production function."""
     names = params_log_ces(factors)
     loc = [("transition", aug_period, factor, name) for name in names[:-1]]
-    return {"loc": loc, "type": "probability"}
+    return om.ProbabilityConstraint(selector=functools.partial(select_by_loc, loc=loc))
 
 
 def identity_constraints_log_ces(
     factors: tuple[str, ...],
     aug_period: int,
     all_factors: tuple[str, ...],
-) -> list[dict]:
+) -> list[om.constraints.Constraint]:
     """Identity constraints for log_ces."""
     raise NotImplementedError
 
@@ -193,7 +196,7 @@ def identity_constraints_robust_translog(
     factor: str,
     aug_period: int,
     all_factors: tuple[str, ...],
-) -> list[dict]:
+) -> list[FixedConstraintWithValue]:
     """Identity constraints for robust_translog."""
     return identity_constraints_translog(
         factor=factor, aug_period=aug_period, all_factors=all_factors
@@ -222,20 +225,16 @@ def identity_constraints_linear_and_squares(
     factor: str,
     aug_period: int,
     all_factors: tuple[str, ...],
-) -> list[dict]:
+) -> list[FixedConstraintWithValue]:
     """Identity constraints for linear_and_squares transition function."""
-    constraints_dicts = []
+    from skillmodels.constraints import FixedConstraintWithValue  # noqa: PLC0415
+
+    constraints: list[FixedConstraintWithValue] = []
     for regressor in params_linear_and_squares(all_factors):
         val = 1.0 if factor == regressor else 0.0
-        constraints_dicts.append(
-            {
-                "loc": ("transition", aug_period, factor, regressor),
-                "type": "fixed",
-                "value": val,
-                "description": "Identity constraint.",
-            }
-        )
-    return constraints_dicts
+        loc = ("transition", aug_period, factor, regressor)
+        constraints.append(FixedConstraintWithValue(loc=loc, value=val))
+    return constraints
 
 
 def log_ces_general(states: Array, params: Array) -> Array:
@@ -263,6 +262,6 @@ def identity_constraints_log_ces_general(
     factors: tuple[str, ...],
     aug_period: int,
     all_factors: tuple[str, ...],
-) -> list[dict]:
+) -> list[om.constraints.Constraint]:
     """Identity constraints for log_ces_general."""
     raise NotImplementedError

@@ -29,7 +29,7 @@ classifiers = [
 ]
 dynamic = [ "version" ]
 dependencies = [
-  "dags>=0.5",
+  "dags>=0.5.1",
   "jax>=0.9",
   "jupyter-book>=2",
   "kaleido>=1.2",
