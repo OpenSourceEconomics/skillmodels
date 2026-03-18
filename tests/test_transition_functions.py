@@ -167,9 +167,6 @@ def test_param_names_log_ces_general() -> None:
     assert calculated == expected
 
 
-# --- Tests for params_* functions ---
-
-
 def test_params_linear() -> None:
     factors = ("a", "b", "c")
     result = params_linear(factors)
@@ -212,9 +209,6 @@ def test_params_log_ces() -> None:
     assert result == ["a", "b", "c", "phi"]
 
 
-# --- Tests for linear_and_squares function ---
-
-
 def test_linear_and_squares() -> None:
     states = jnp.array([1.0, 2.0, 3.0])
     # 3 linear + 3 square + 1 constant = 7
@@ -223,19 +217,16 @@ def test_linear_and_squares() -> None:
     aaae(linear_and_squares(states, params), expected)
 
 
-# --- Tests for identity_constraints_* functions ---
-
-
 def test_identity_constraints_linear() -> None:
     all_factors = ("a", "b", "c")
     result = identity_constraints_linear("a", 0, all_factors)
     assert len(result) == 4  # 3 factors + constant
     # "a" regressor should be fixed at 1.0
-    assert result[0].value == 1.0  # ty: ignore[unresolved-attribute]
-    assert result[0].loc == ("transition", 0, "a", "a")  # ty: ignore[unresolved-attribute]
+    assert result[0].value == pytest.approx(1.0)
+    assert result[0].loc == ("transition", 0, "a", "a")
     # others should be 0.0
-    assert result[1].value == 0.0  # ty: ignore[unresolved-attribute]
-    assert result[3].value == 0.0  # constant  # ty: ignore[unresolved-attribute]
+    assert result[1].value == pytest.approx(0.0)
+    assert result[3].value == pytest.approx(0.0)  # constant
 
 
 def test_identity_constraints_translog() -> None:
@@ -244,10 +235,10 @@ def test_identity_constraints_translog() -> None:
     # Should have one constraint per translog param
     assert len(result) == len(params_translog(all_factors))
     # First constraint for "a" linear should be 1.0
-    assert result[0].value == 1.0  # ty: ignore[unresolved-attribute]
+    assert result[0].value == pytest.approx(1.0)
     # All others should be 0.0
     for c in result[1:]:
-        assert c.value == 0.0  # ty: ignore[unresolved-attribute]
+        assert c.value == pytest.approx(0.0)
 
 
 def test_identity_constraints_robust_translog() -> None:
@@ -264,9 +255,9 @@ def test_identity_constraints_linear_and_squares() -> None:
     all_factors = ("a", "b", "c")
     result = identity_constraints_linear_and_squares("a", 0, all_factors)
     assert len(result) == len(params_linear_and_squares(all_factors))
-    assert result[0].value == 1.0  # "a" linear  # ty: ignore[unresolved-attribute]
+    assert result[0].value == pytest.approx(1.0)  # "a" linear
     for c in result[1:]:
-        assert c.value == 0.0  # ty: ignore[unresolved-attribute]
+        assert c.value == pytest.approx(0.0)
 
 
 def test_identity_constraints_log_ces_raises() -> None:

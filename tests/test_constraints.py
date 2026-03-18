@@ -62,11 +62,6 @@ def test_add_bounds() -> None:
     assert_frame_equal(calculated, expected)
 
 
-# ======================================================================================
-# constraints due to normalizations of loadings and variances
-# ======================================================================================
-
-
 def test_normalization_constraints() -> None:
     norm = {
         "fac1": Normalizations(
@@ -112,11 +107,6 @@ def test_normalization_constraints() -> None:
     assert_list_equal_except_for_order(as_dicts, expected)
 
 
-# ======================================================================================
-# constraints for mixture weights
-# ======================================================================================
-
-
 def test_mixture_weight_constraints_mixture() -> None:
     calculated = _get_mixture_weights_constraints(n_mixtures=2)
     as_dicts = [_to_dict(c) for c in calculated]
@@ -129,11 +119,6 @@ def test_mixture_weight_constraints_normal() -> None:
     as_dicts = [_to_dict(c) for c in calculated]
     expected = [{"loc": "mixture_weights", "type": "fixed", "value": 1.0}]
     assert_list_equal_except_for_order(as_dicts, expected)
-
-
-# ======================================================================================
-# constraints for development stages
-# ======================================================================================
 
 
 def test_stage_constraints() -> None:
@@ -183,11 +168,6 @@ def test_stage_constraints_with_endogenous_factors() -> None:
     assert_list_equal_except_for_order(as_dicts, expected)
 
 
-# ======================================================================================
-# constraints for constant factors
-# ======================================================================================
-
-
 def test_constant_factor_constraints() -> None:
     labels = Labels(
         latent_factors=("fac1", "fac2"),
@@ -214,11 +194,6 @@ def test_constant_factor_constraints() -> None:
     assert_list_equal_except_for_order(as_dicts, expected)
 
 
-# ======================================================================================
-# constraints that ensure the ordering of initial states (needed for identification)
-# ======================================================================================
-
-
 def test_initial_mean_constraints() -> None:
     nmixtures = 3
     factors = ("fac1", "fac2", "fac3")
@@ -233,11 +208,6 @@ def test_initial_mean_constraints() -> None:
     calculated = _get_initial_states_constraints(nmixtures, factors)
     as_dicts = [_to_dict(c) for c in calculated]
     assert_list_equal_except_for_order(as_dicts, expected)
-
-
-# ======================================================================================
-# constraints on transition parameters
-# ======================================================================================
 
 
 def test_trans_coeff_constraints() -> None:
@@ -277,11 +247,6 @@ def test_trans_coeff_constraints() -> None:
     calculated = _get_transition_constraints(labels)
     as_dicts = [_to_dict(c) for c in calculated]
     assert_list_equal_except_for_order(as_dicts, expected)
-
-
-# ======================================================================================
-# constraints on anchoring parameters
-# ======================================================================================
 
 
 @pytest.fixture

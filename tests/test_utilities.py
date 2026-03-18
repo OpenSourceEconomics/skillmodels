@@ -185,7 +185,7 @@ def test_extend_params_via_switch_to_translog(model2) -> None:
 
     assert_index_equal(added_index, expected_added_index)
 
-    assert extended_params.loc[added_index, "value"].unique()[0] == 0.05
+    assert np.isclose(extended_params.loc[added_index, "value"].unique()[0], 0.05)
 
 
 def test_update_parameter_values_single_df() -> None:

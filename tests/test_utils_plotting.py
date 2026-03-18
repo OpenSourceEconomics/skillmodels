@@ -1,5 +1,7 @@
 """Tests for utils_plotting module."""
 
+import numpy as np
+
 from skillmodels.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
 
 
@@ -16,7 +18,7 @@ def test_get_layout_kwargs_override() -> None:
 
 def test_get_layout_kwargs_with_legend_kwargs() -> None:
     result = get_layout_kwargs(legend_kwargs={"x": 0.5})
-    assert result["legend"]["x"] == 0.5
+    assert np.isclose(result["legend"]["x"], 0.5)
 
 
 def test_get_layout_kwargs_with_title_kwargs() -> None:
