@@ -50,6 +50,19 @@ For each latent factor $i$:
 - **Constant factor**: row $i$ of $F$ is the unit vector $e_i$ (identity row) and
   $c_i = 0$, so the factor value is simply carried forward.
 
+The implementation uses a stack-then-mask approach: all coefficient arrays are stacked
+into a single matrix (with zero-padded rows for constant factors), an identity matrix
+provides the constant-factor rows, and `jnp.where` selects between them using a boolean
+mask. This avoids per-element `.at[i].set()` calls and conditional branching, producing
+a cleaner trace for JAX's compiler.
+
+Three construction strategies were benchmarked (loop with conditional `.at[i].set()`,
+stack-then-mask with `jnp.where`, and index-scatter with pre-separated sub-matrices).
+All three produced identical XLA graphs and showed no meaningful runtime difference
+(~6.3--6.7 ms per call on CPU, 4-factor model, 5000 observations), confirming that the
+construction is fully resolved at trace time. The stack-then-mask variant was kept for
+its cleaner, more idiomatic JAX style.
+
 ## Mean prediction
 
 The mean prediction incorporates anchoring, which rescales factors to a common metric

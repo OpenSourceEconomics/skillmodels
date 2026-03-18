@@ -284,23 +284,9 @@ def linear_kalman_predict(
     """
     n_latent = len(latent_factors)
 
-    # Build F (n_latent x n_all) and c (n_latent,) from trans_coeffs.
-    # linear factor i: F[i] = trans_coeffs[factor_i][:-1], c[i] = last element
-    # constant factor i: F[i] = e_i (unit vector), c[i] = 0
-    f_rows = []
-    c_vals = []
-    for i, factor in enumerate(latent_factors):
-        if i in constant_factor_indices:
-            row = jnp.zeros(n_all_factors).at[i].set(1.0)
-            f_rows.append(row)
-            c_vals.append(0.0)
-        else:
-            coeffs = trans_coeffs[factor]
-            f_rows.append(coeffs[:-1])
-            c_vals.append(coeffs[-1])
-
-    f_mat = jnp.stack(f_rows)  # (n_latent, n_all)
-    c_vec = jnp.array(c_vals)  # (n_latent,)
+    f_mat, c_vec = _build_f_and_c(
+        latent_factors, constant_factor_indices, n_all_factors, trans_coeffs
+    )
 
     s_in = anchoring_scaling_factors[0][:n_latent]  # (n_latent,) for input period
     s_out = anchoring_scaling_factors[1][:n_latent]  # (n_latent,) for output period
@@ -336,6 +322,53 @@ def linear_kalman_predict(
     predicted_covs = array_qr_jax(stack)[1][:, :, :n_latent]
 
     return predicted_states, predicted_covs
+
+
+def _build_f_and_c(
+    latent_factors: tuple[str, ...],
+    constant_factor_indices: frozenset[int],
+    n_all_factors: int,
+    trans_coeffs: dict[str, Array],
+) -> tuple[Array, Array]:
+    """Build F matrix and c vector from transition coefficients.
+
+    Stack all coefficient arrays, build identity rows for constant factors,
+    and select via a boolean mask.
+
+    Args:
+        latent_factors: Tuple of latent factor names.
+        constant_factor_indices: Indices of factors with `constant` transition.
+        n_all_factors: Total number of factors (latent + observed).
+        trans_coeffs: Dict mapping factor name to 1d coefficient array.
+
+    Returns:
+        f_mat: Array of shape (n_latent, n_all_factors).
+        c_vec: Array of shape (n_latent,).
+
+    """
+    n_latent = len(latent_factors)
+    identity = jnp.eye(n_latent, n_all_factors)
+
+    # Will be of shape (n_latent, n_all+1)
+    all_coeffs = jnp.stack(
+        [
+            trans_coeffs[f]
+            if i not in constant_factor_indices
+            else jnp.zeros(n_all_factors + 1)
+            for i, f in enumerate(latent_factors)
+        ]
+    )
+
+    f_from_coeffs = all_coeffs[:, :-1]
+    c_from_coeffs = all_coeffs[:, -1]
+
+    is_constant = jnp.array([i in constant_factor_indices for i in range(n_latent)])
+    mask = is_constant[:, None]  # (n_latent, 1)
+
+    f_mat = jnp.where(mask, identity, f_from_coeffs)
+    c_vec = jnp.where(is_constant, 0.0, c_from_coeffs)
+
+    return f_mat, c_vec
 
 
 def _calculate_sigma_points(
