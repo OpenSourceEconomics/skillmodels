@@ -15,6 +15,7 @@ from skillmodels.kalman_filters import (
     calculate_sigma_scaling_factor_and_weights,
     kalman_predict,
     kalman_update,
+    linear_kalman_predict,
     transform_sigma_points,
 )
 from skillmodels.kalman_filters_debug import kalman_update as kalman_update_debug
@@ -230,6 +231,272 @@ def test_predict_against_linear_filterpy(seed) -> None:
 
     aaae(calc_states.flatten(), expected_state.flatten())
     aaae(calc_chols[0, 0].T @ calc_chols[0, 0], expected_cov)
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_linear_kalman_predict_against_filterpy(seed) -> None:
+    """Test linear_kalman_predict gives same result as filterpy's linear predict."""
+    rng = np.random.default_rng(seed)
+    state, cov = _random_state_and_covariance(rng)
+    dim = len(state)
+    trans_mat = rng.uniform(low=-1, high=1, size=(dim, dim + 1))
+    # last column is the constant
+    f_mat = trans_mat[:, :-1]
+    c_vec = trans_mat[:, -1]
+
+    shock_sds = 0.5 * np.arange(dim) / max(dim, 1)
+
+    fp_filter = KalmanFilter(dim_x=dim, dim_z=1)
+    fp_filter.x = state.reshape(dim, 1)
+    fp_filter.F = f_mat
+    fp_filter.B = np.eye(dim)
+    fp_filter.P = cov
+    fp_filter.Q = np.diag(shock_sds**2)
+
+    fp_filter.predict(u=c_vec.reshape(dim, 1))
+    expected_state = fp_filter.x
+    expected_cov = fp_filter.P
+
+    sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
+    scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)
+
+    latent_factors = tuple(f"fac{i}" for i in range(dim))
+    trans_coeffs = {
+        f"fac{i}": jnp.array(np.append(trans_mat[i, :-1], trans_mat[i, -1]))
+        for i in range(dim)
+    }
+    anch_scaling = jnp.ones((2, dim))
+    anch_constants = jnp.zeros((2, dim))
+    observed_factors = jnp.zeros((1, 0))
+
+    calc_states, calc_chols = linear_kalman_predict(
+        None,  # transition_func (ignored)
+        sm_state,
+        sm_chol,
+        float(scaling_factor),
+        weights,
+        trans_coeffs,
+        jnp.array(shock_sds),
+        anch_scaling,
+        anch_constants,
+        observed_factors,
+        latent_factors=latent_factors,
+        constant_factor_indices=frozenset(),
+        n_all_factors=dim,
+    )
+
+    aaae(calc_states.flatten(), expected_state.flatten())
+    aaae(calc_chols[0, 0].T @ calc_chols[0, 0], expected_cov)
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_linear_predict_matches_unscented_for_linear_model(seed) -> None:
+    """Linear predict should give identical results to unscented for linear models."""
+    rng = np.random.default_rng(seed)
+    state, cov = _random_state_and_covariance(rng)
+    dim = len(state)
+    trans_mat = rng.uniform(low=-1, high=1, size=(dim, dim))
+
+    shock_sds = 0.5 * np.arange(dim) / max(dim, 1)
+
+    def linear_func(params, states):
+        return jnp.dot(states, params)
+
+    def transition_function(params, states):
+        return jnp.column_stack(
+            [linear_func(params[f"fac{i}"], states) for i in range(dim)]
+        )
+
+    sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
+    scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)
+    # For unscented: trans_coeffs values are just the row of the transition matrix
+    trans_coeffs_unscented = {f"fac{i}": jnp.array(trans_mat[i]) for i in range(dim)}
+    # For linear: trans_coeffs values have constant appended (0 for pure linear)
+    trans_coeffs_linear = {
+        f"fac{i}": jnp.array(np.append(trans_mat[i], 0.0)) for i in range(dim)
+    }
+    anch_scaling = jnp.ones((2, dim))
+    anch_constants = jnp.zeros((2, dim))
+    observed_factors = jnp.zeros((1, 0))
+    latent_factors = tuple(f"fac{i}" for i in range(dim))
+
+    unscented_states, unscented_chols = kalman_predict(
+        transition_function,
+        sm_state,
+        sm_chol,
+        float(scaling_factor),
+        weights,
+        trans_coeffs_unscented,
+        jnp.array(shock_sds),
+        anch_scaling,
+        anch_constants,
+        observed_factors,
+    )
+
+    linear_states, linear_chols = linear_kalman_predict(
+        None,
+        sm_state,
+        sm_chol,
+        float(scaling_factor),
+        weights,
+        trans_coeffs_linear,
+        jnp.array(shock_sds),
+        anch_scaling,
+        anch_constants,
+        observed_factors,
+        latent_factors=latent_factors,
+        constant_factor_indices=frozenset(),
+        n_all_factors=dim,
+    )
+
+    aaae(linear_states, unscented_states, decimal=5)
+    aaae(
+        linear_chols[0, 0].T @ linear_chols[0, 0],
+        unscented_chols[0, 0].T @ unscented_chols[0, 0],
+        decimal=5,
+    )
+
+
+def test_linear_predict_with_constant_factors() -> None:
+    """Test that constant factors produce identity rows in F."""
+    rng = np.random.default_rng(42)
+    dim = 3
+    state, cov = _random_state_and_covariance(rng, dim=dim)
+    shock_sds = np.array([0.1, 0.0, 0.2])
+
+    sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
+    scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(dim, 2)
+
+    # fac0: linear, fac1: constant, fac2: linear
+    trans_coeffs = {
+        "fac0": jnp.array([0.5, 0.3, 0.1, 0.2]),  # 3 coeffs + constant
+        "fac1": jnp.array([]),  # constant factor has no params
+        "fac2": jnp.array([0.1, 0.2, 0.8, -0.1]),
+    }
+    anch_scaling = jnp.ones((2, dim))
+    anch_constants = jnp.zeros((2, dim))
+    observed_factors = jnp.zeros((1, 0))
+    latent_factors = ("fac0", "fac1", "fac2")
+
+    calc_states, _calc_chols = linear_kalman_predict(
+        None,
+        sm_state,
+        sm_chol,
+        float(scaling_factor),
+        weights,
+        trans_coeffs,
+        jnp.array(shock_sds),
+        anch_scaling,
+        anch_constants,
+        observed_factors,
+        latent_factors=latent_factors,
+        constant_factor_indices=frozenset({1}),
+        n_all_factors=dim,
+    )
+
+    # fac1 (constant) should remain unchanged
+    aaae(calc_states[0, 0, 1], state[1])
+
+    # fac0 should be linear combination + constant
+    expected_fac0 = 0.5 * state[0] + 0.3 * state[1] + 0.1 * state[2] + 0.2
+    aaae(calc_states[0, 0, 0], expected_fac0)
+
+
+def test_linear_predict_with_observed_factors() -> None:
+    """Test that observed factors are used correctly as extra columns in F."""
+    rng = np.random.default_rng(42)
+    n_latent = 2
+    n_observed = 1
+    state, cov = _random_state_and_covariance(rng, dim=n_latent)
+    shock_sds = np.array([0.1, 0.2])
+
+    sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
+    scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(n_latent, 2)
+
+    observed_val = 3.0
+    observed_factors = jnp.array([[observed_val]])
+
+    # fac0 depends on both latent + observed, fac1 depends only on latent
+    trans_coeffs = {
+        "fac0": jnp.array([0.5, 0.3, 0.2, 0.1]),  # 2 latent + 1 observed + constant
+        "fac1": jnp.array([0.1, 0.9, 0.0, 0.0]),
+    }
+    anch_scaling = jnp.ones((2, n_latent + n_observed))
+    anch_constants = jnp.zeros((2, n_latent + n_observed))
+    latent_factors = ("fac0", "fac1")
+
+    calc_states, _calc_chols = linear_kalman_predict(
+        None,
+        sm_state,
+        sm_chol,
+        float(scaling_factor),
+        weights,
+        trans_coeffs,
+        jnp.array(shock_sds),
+        anch_scaling,
+        anch_constants,
+        observed_factors,
+        latent_factors=latent_factors,
+        constant_factor_indices=frozenset(),
+        n_all_factors=n_latent + n_observed,
+    )
+
+    expected_fac0 = 0.5 * state[0] + 0.3 * state[1] + 0.2 * observed_val + 0.1
+    expected_fac1 = 0.1 * state[0] + 0.9 * state[1] + 0.0 * observed_val + 0.0
+    aaae(calc_states[0, 0, 0], expected_fac0)
+    aaae(calc_states[0, 0, 1], expected_fac1)
+
+
+def test_linear_predict_with_wide_anchoring_arrays() -> None:
+    """Regression: anchoring arrays have n_all columns, not just n_latent.
+
+    At runtime, `parse_params` produces anchoring arrays of shape
+    `(n_aug_periods, n_all_factors)` — latent columns followed by observed-factor
+    columns (scaling=1, constant=0). This test uses that shape to verify
+    `linear_kalman_predict` slices correctly.
+    """
+    rng = np.random.default_rng(42)
+    n_latent = 2
+    n_observed = 1
+    n_all = n_latent + n_observed
+    state, cov = _random_state_and_covariance(rng, dim=n_latent)
+    shock_sds = np.array([0.1, 0.2])
+
+    sm_state, sm_chol = _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov)
+    scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(n_latent, 2)
+
+    observed_val = 3.0
+    observed_factors = jnp.array([[observed_val]])
+
+    trans_coeffs = {
+        "fac0": jnp.array([0.5, 0.3, 0.2, 0.1]),
+        "fac1": jnp.array([0.1, 0.9, 0.0, 0.0]),
+    }
+    # Shape (2, n_all) — matches what parse_params returns at runtime
+    anch_scaling = jnp.ones((2, n_all))
+    anch_constants = jnp.zeros((2, n_all))
+    latent_factors = ("fac0", "fac1")
+
+    calc_states, _calc_chols = linear_kalman_predict(
+        None,
+        sm_state,
+        sm_chol,
+        float(scaling_factor),
+        weights,
+        trans_coeffs,
+        jnp.array(shock_sds),
+        anch_scaling,
+        anch_constants,
+        observed_factors,
+        latent_factors=latent_factors,
+        constant_factor_indices=frozenset(),
+        n_all_factors=n_all,
+    )
+
+    expected_fac0 = 0.5 * state[0] + 0.3 * state[1] + 0.2 * observed_val + 0.1
+    expected_fac1 = 0.1 * state[0] + 0.9 * state[1] + 0.0 * observed_val + 0.0
+    aaae(calc_states[0, 0, 0], expected_fac0)
+    aaae(calc_states[0, 0, 1], expected_fac1)
 
 
 def _random_state_and_covariance(rng, dim=None):

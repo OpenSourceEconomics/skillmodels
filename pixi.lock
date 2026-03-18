@@ -9497,7 +9497,7 @@ packages:
   timestamp: 1753199211006
 - pypi: ./
   name: skillmodels
-  version: 0.0.24.dev302+g350c3b9e5.d20260318
+  version: 0.0.24.dev308+g220a9b077.d20260318
   sha256: c3e259ba2e68a9ccf4593eecfac180a8d2db8d26b757a19d3784ca917060e6f6
   requires_dist:
   - dags>=0.5.1
