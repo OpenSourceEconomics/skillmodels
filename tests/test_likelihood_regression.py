@@ -1,3 +1,5 @@
+"""Tests for likelihood regression."""
+
 import json
 from dataclasses import replace
 from itertools import product

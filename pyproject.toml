@@ -1,11 +1,20 @@
-# ======================================================================================
-# Project metadata
-# ======================================================================================
+[build-system]
+build-backend = "hatchling.build"
+requires = [ "hatch-vcs", "hatchling" ]
 
 [project]
-authors = [
-  { name = "Janoś Gabler", email = "janos.gabler@gmail.com" },
+name = "skillmodels"
+description = "Estimators for skill formation models"
+readme = { file = "README.md", content-type = "text/markdown" }
+keywords = [
+  "Econometrics",
+  "Economics",
+  "Estimation",
+  "Skill formation",
+  "Statistics",
 ]
+license = { file = "LICENSE" }
+requires-python = ">=3.14,<3.15"
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
@@ -14,74 +23,135 @@ classifiers = [
   "Operating System :: Microsoft :: Windows",
   "Operating System :: POSIX",
   "Operating System :: Unix",
-  "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Scientific/Engineering",
 ]
-dependencies = [
-  "dags",
-  "jax>=0.8",
-  "numpy",
-  "pandas",
-]
-description = "Estimators for skill formation models"
 dynamic = [ "version" ]
-keywords = [
-  "Skill formation",
-  "Econometrics",
-  "Economics",
-  "Estimation",
-  "Statistics",
+dependencies = [
+  "dags>=0.5",
+  "jax>=0.9",
+  "jupyter-book>=2",
+  "kaleido>=1.2",
+  "numpy>=2.4",
+  "optimagic>=0.5.3",
+  "pandas>=3",
+  "plotly>=6.6",
+  "pytask>=0.5.8",
+  "pytask-parallel>=0.5.2",
 ]
-license = { text = "MIT" }
-maintainers = [
-  { name = "Janoś Gabler", email = "janos.gabler@gmail.com" },
-  { name = "Hans-Martin von Gaudecker", email = "hmgaudecker@uni-bonn.de" },
-]
-name = "skillmodels"
-readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.14,<3.15"
-
+[[project.authors]]
+name = "Janoś Gabler"
+email = "janos.gabler@gmail.com"
+[[project.maintainers]]
+name = "Janoś Gabler"
+email = "janos.gabler@gmail.com"
+[[project.maintainers]]
+name = "Hans-Martin von Gaudecker"
+email = "hmgaudecker@uni-bonn.de"
 [project.urls]
 Github = "https://github.com/OpenSourceEconomics/skillmodels"
 Repository = "https://github.com/OpenSourceEconomics/skillmodels"
 Tracker = "https://github.com/OpenSourceEconomics/skillmodels/issues"
 
-# ======================================================================================
-# Build system configuration
-# ======================================================================================
+[tool.hatch]
+build.hooks.vcs.version-file = "src/skillmodels/_version.py"
+build.targets.sdist.exclude = [ "tests" ]
+build.targets.sdist.only-packages = true
+build.targets.wheel.only-include = [ "src" ]
+build.targets.wheel.sources = [ "src" ]
+metadata.allow-direct-references = true
+version.source = "vcs"
 
-[build-system]
-build-backend = "hatchling.build"
-requires = [ "hatchling", "hatch-vcs" ]
+[tool.ruff]
+fix = true
+unsafe-fixes = false
+[tool.ruff.lint]
+select = [ "ALL" ]
+extend-ignore = [
+  "COM812",  # Conflicts with ruff-format
+  "EM101",   # Exception must not use a string literal
+  "EM102",   # Exception must not use an f-string literal
+  "FBT002",  # Boolean default positional argument in function definition
+  "FIX002",  # Line contains TODO
+  "ISC001",  # Conflicts with ruff-format
+  "PERF401", # Use a list comprehension to create a transformed list
+  "PLR0913", # Too many arguments in function definition
+  "PLR2004", # Magic value used in comparison
+  "TC001",   # Move application import into a type-checking block
+  "TC002",   # Move third-party import into a type-checking block
+  "TC003",   # Move standard library import into a type-checking block
+  "TRY003",  # Long messages outside exception class
+]
+per-file-ignores."**/*.ipynb" = [
+  "B018",   # Found useless expression
+  "INP001", # File is part of an implicit namespace package
+  "T201",   # print found
+]
+per-file-ignores."tests/*" = [
+  "ANN",    # Missing type annotations
+  "ARG001", # Unused function argument
+  "D103",   # Missing docstring in public function
+  "FBT003", # Boolean positional value in function call
+  "INP001", # File is part of an implicit namespace package
+  "S101",   # Use of assert detected
+]
+pydocstyle.convention = "google"
 
-[tool.hatch.build.hooks.vcs]
-version-file = "src/skillmodels/_version.py"
+[tool.pyproject-fmt]
+column_width = 88
+max_supported_python = "3.14"
+table_format = "long"
+collapse_tables = [ "tool.hatch", "tool.pytest", "tool.pytask", "tool.ty" ]
+expand_tables = [
+  "tool.pixi.dependencies",
+  "tool.pixi.environments",
+  "tool.pixi.environments.cuda",
+  "tool.pixi.environments.docs",
+  "tool.pixi.environments.tests-cpu",
+  "tool.pixi.environments.tests-cuda",
+  "tool.pixi.environments.type-checking",
+  "tool.pixi.feature",
+  "tool.pixi.feature.cuda",
+  "tool.pixi.feature.cuda.dependencies",
+  "tool.pixi.feature.cuda.pypi-dependencies",
+  "tool.pixi.feature.cuda.system-requirements",
+  "tool.pixi.feature.cuda.tasks",
+  "tool.pixi.feature.docs",
+  "tool.pixi.feature.docs.dependencies",
+  "tool.pixi.feature.docs.tasks",
+  "tool.pixi.feature.tests",
+  "tool.pixi.feature.tests.dependencies",
+  "tool.pixi.feature.tests.target",
+  "tool.pixi.feature.tests.tasks",
+  "tool.pixi.feature.type-checking",
+  "tool.pixi.feature.type-checking.pypi-dependencies",
+  "tool.pixi.feature.type-checking.tasks",
+  "tool.pixi.pypi-dependencies",
+  "tool.pixi.pypi-dependencies.optimagic",
+  "tool.pixi.pypi-dependencies.skillmodels",
+  "tool.pixi.workspace",
+]
 
-[tool.hatch.build.targets.sdist]
-exclude = [ "tests" ]
-only-packages = true
+[tool.ty]
+rules.ambiguous-protocol-member = "error"
+rules.deprecated = "error"
+rules.division-by-zero = "error"
+rules.ignore-comment-unknown-rule = "error"
+rules.ineffective-final = "error"
+rules.invalid-enum-member-annotation = "error"
+rules.invalid-ignore-comment = "error"
+rules.invalid-legacy-positional-parameter = "error"
+rules.possibly-missing-submodule = "error"
+rules.redundant-cast = "error"
+rules.unused-awaitable = "error"
+rules.unused-ignore-comment = "error"
 
-[tool.hatch.build.targets.wheel]
-only-include = [ "src" ]
-sources = [ "src" ]
-
-[tool.hatch.metadata]
-allow-direct-references = true
-
-[tool.hatch.version]
-source = "vcs"
-
-# ======================================================================================
-# Pixi configuration
-# ======================================================================================
-
-[tool.pixi.workspace]
-channels = [ "conda-forge" ]
-platforms = [ "linux-64", "osx-arm64", "win-64" ]
-
-# Development Dependencies (conda)
-# --------------------------------------------------------------------------------------
+[tool.pytest]
+ini_options.addopts = [ "--pdbcls=pdbp:Pdb" ]
+ini_options.filterwarnings = []
+ini_options.markers = [ "integration: integration tests requiring MODEL2 + data" ]
+ini_options.norecursedirs = [ "docs" ]
 
 [tool.pixi.dependencies]
 filterpy = "*"
@@ -89,172 +159,64 @@ ipykernel = "*"
 jupyterlab = "*"
 nbformat = "*"
 networkx = "*"
-numpy = ">=2.3,<2.4"
-# optimagic = "*"
-plotly = ">=6.2"
 prek = "*"
 pybaum = "*"
 python = "~=3.14.0"
-python-kaleido = ">=1.0"
 scipy = "*"
-
-[tool.pixi.pypi-dependencies]
-optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main" }
-pdbp = "*"
-skillmodels = { path = ".", editable = true }
-
-# Features and Tasks
-# --------------------------------------------------------------------------------------
-
+[tool.pixi.environments]
+cuda = { features = [ "cuda" ], solve-group = "cuda" }
+docs = { features = [ "docs" ], solve-group = "default" }
+tests-cpu = { features = [ "tests" ], solve-group = "default" }
+tests-cuda = { features = [ "tests", "cuda" ], solve-group = "cuda" }
+type-checking = { features = [ "type-checking" ], solve-group = "default" }
 [tool.pixi.feature.cuda]
 platforms = [ "linux-64" ]
 system-requirements = { cuda = "12" }
-
 [tool.pixi.feature.cuda.dependencies]
 cuda-nvcc = ">=12"
-
 [tool.pixi.feature.cuda.pypi-dependencies]
 jax = { version = ">=0.7", extras = [ "cuda12" ] }
-
-[tool.pixi.feature.test.dependencies]
+[tool.pixi.feature.cuda.tasks]
+mem-cuda = """\
+  pytest -x -s --pdb --memray --fail-on-increase \
+  tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs\
+  """
+[tool.pixi.feature.docs.tasks]
+build-docs = { cmd = "jupyter book build --html", cwd = "docs" }
+view-docs = { cmd = "jupyter book start", cwd = "docs" }
+[tool.pixi.feature.tests.dependencies]
 pytest = "*"
 pytest-cov = "*"
 pytest-xdist = "*"
 snakeviz = "*"
-
-[tool.pixi.feature.test.target.unix.dependencies]
+[tool.pixi.feature.tests.target.unix.dependencies]
 pytest-memray = "*"
-
-[tool.pixi.feature.test.tasks]
+[tool.pixi.feature.tests.tasks]
 tests = "pytest tests"
 tests-with-cov = "pytest tests --cov-report=xml --cov=./"
-mem = "pytest -x -s --pdb --memray --fail-on-increase tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs"
-mem-on-clean-repo = "git status --porcelain && git diff-index --quiet HEAD -- && git rev-parse HEAD && pytest -x -s --pdb --memray --fail-on-increase tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs"
-
-[tool.pixi.feature.cuda.tasks]
-mem-cuda = "pytest -x -s --pdb --memray --fail-on-increase tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs"
-
-[tool.pixi.feature.ty.pypi-dependencies]
-matplotlib = "*"   # required because of pandas
+mem = """\
+  pytest -x -s --pdb --memray --fail-on-increase \
+  tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs\
+  """
+mem-on-clean-repo = """\
+  git status --porcelain && git diff-index --quiet HEAD -- && git rev-parse HEAD && \
+  pytest -x -s --pdb --memray --fail-on-increase \
+  tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs\
+  """
+[tool.pixi.feature.type-checking.pypi-dependencies]
+matplotlib = "*"  # required because of pandas
 pandas-stubs = "*"
 ty = "*"
 types-pytz = "*"
-
-[tool.pixi.feature.ty.tasks]
+[tool.pixi.feature.type-checking.tasks]
 ty = "ty check src tests docs"
-
-[tool.pixi.feature.docs.dependencies]
-jupyter-book = ">=2.0"
-
-[tool.pixi.feature.docs.tasks]
-docs = { cmd = "jupyter book build --html", cwd = "docs" }
-view-docs = { cmd = "jupyter book start", cwd = "docs" }
-
-# Environments
-# --------------------------------------------------------------------------------------
-
-[tool.pixi.environments]
-cuda = { features = [ "cuda" ], solve-group = "cuda" }
-docs = { features = [ "docs" ], solve-group = "default" }
-test-cpu = { features = [ "test" ], solve-group = "default" }
-test-gpu = { features = [ "test", "cuda" ], solve-group = "cuda" }
-ty = { features = [ "test", "ty" ], solve-group = "default" }
-
-# ======================================================================================
-# Ruff configuration
-# ======================================================================================
-
-[tool.ruff]
-fix = true
-line-length = 88
-target-version = "py314"
-unsafe-fixes = false
-
-[tool.ruff.lint]
-extend-ignore = [
-  "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed - too strict
-  "COM812",  # Conflicts with ruff-format
-  "EM101",   # Exception must not use a string literal
-  "EM102",   # Exception must not use an f-string literal
-  "FBT002",  # Boolean default positional argument in function definition
-  "FIX002",  # Line contains TODO
-  "ISC001",  # Conflicts with ruff-format
-  "PD015",   # pd.merge is fine
-  "PERF401", # Many suggestions to use list comprehension are not helpful
-  "PLR0913", # Too many arguments to function call
-  "PLR2004", # Magic values are fine
-  "S301",    # `pickle` module is unsafe
-  "TC001",   # Move application import into a type-checking block
-  "TC002",   # Move third-party import into a type-checking block
-  "TC003",   # Move standard library import into a type-checking block
-  "TRY003",  # Long messages outside exception class
-]
-select = [ "ALL" ]
-
-[tool.ruff.lint.per-file-ignores]
-"src/skillmodels/types.py" = [ "TC" ] # Dataclasses need types at runtime
-"src/skillmodels/visualize_*.py" = [ "BLE001" ]
-"**/*.ipynb" = [
-  "B018",   # Seemingly useless expression for printing.
-  "INP001", # No need for a namespace.
-  "T201",   # Printing is fine here.
-]
-"tests/*" = [
-  "ANN",    # No type annotations needed for tests
-  "ARG001", # Unused arguments are common in fixture-heavy tests
-  "D100",   # No module docstrings needed for tests
-  "D103",   # No function docstrings needed for tests
-  "E712",   # Comparison to True/False using == might be necessary for arrays.
-  "FBT003", # Boolean positional values are common in test setup
-  "INP001", # No need for a namespace.
-  "PT011",  # Broad pytest.raises() blocks are okay
-  "S101",   # use of `assert` detected
-]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-# ======================================================================================
-# ty configuration
-# ======================================================================================
-
-[tool.ty.rules]
-ambiguous-protocol-member = "error"
-deprecated = "error"
-division-by-zero = "error"
-ignore-comment-unknown-rule = "error"
-invalid-argument-type = "error"
-invalid-ignore-comment = "error"
-invalid-return-type = "error"
-possibly-missing-attribute = "error"
-possibly-missing-implicit-call = "error"
-possibly-missing-import = "error"
-possibly-unresolved-reference = "error"
-redundant-cast = "error"
-undefined-reveal = "error"
-unresolved-global = "error"
-unsupported-base = "error"
-unused-ignore-comment = "error"
-useless-overload-body = "error"
-
-# ======================================================================================
-# pytest configuration
-# ======================================================================================
-
-[tool.pytest.ini_options]
-addopts = [ "--pdbcls=pdbp:Pdb" ]
-filterwarnings = [  ]
-markers = [
-  "end_to_end: Flag for tests that cover the whole program.",
-  "integration: Flag for integration tests which may comprise of multiple unit tests.",
-  "unit: Flag for unit tests which target mainly a single function.",
-  "wip: Tests that are work-in-progress.",
-]
-norecursedirs = [ "docs", ".envs" ]
-
-# ======================================================================================
-# yamlfix configuration
-# ======================================================================================
+[tool.pixi.pypi-dependencies]
+# optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "main" }
+pdbp = "*"
+skillmodels = { path = ".", editable = true }
+[tool.pixi.workspace]
+channels = [ "conda-forge" ]
+platforms = [ "linux-64", "osx-arm64", "win-64" ]
 
 [tool.yamlfix]
 line_length = 88

@@ -29,8 +29,6 @@ from skillmodels.types import (
     TransitionInfo,
 )
 
-pd.set_option("future.no_silent_downcasting", True)  # noqa:  FBT003
-
 
 def process_model(model_spec: ModelSpec) -> ProcessedModel:
     """Check, clean, extend and transform the model specs.
@@ -112,9 +110,7 @@ def process_model(model_spec: ModelSpec) -> ProcessedModel:
     )
 
 
-def get_has_endogenous_factors(
-    factors: Mapping[str, FactorSpec],
-) -> bool:
+def get_has_endogenous_factors(factors: Mapping[str, FactorSpec]) -> bool:
     """Return True if any endogenous factors are present."""
     endogenous_factors = pd.DataFrame(
         [
@@ -499,6 +495,7 @@ def _get_update_info(
 
     for col in [c for c in uinfo.columns if c != "purpose"]:
         uinfo[col] = uinfo[col].fillna(value=False).astype(bool)
+    uinfo["purpose"] = uinfo["purpose"].astype(pd.StringDtype(na_value=np.nan))
     return uinfo
 
 

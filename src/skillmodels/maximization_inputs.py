@@ -246,7 +246,7 @@ def _partial_some_log_likelihood(
     )
 
 
-def _to_numpy(obj: Any) -> Any:
+def _to_numpy(obj: Any) -> Any:  # noqa: ANN401
     if isinstance(obj, dict):
         res = {}
         for key, value in obj.items():

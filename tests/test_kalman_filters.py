@@ -1,3 +1,5 @@
+"""Tests for Kalman filters."""
+
 from itertools import product
 
 import jax
@@ -18,10 +20,6 @@ from skillmodels.kalman_filters import (
 from skillmodels.kalman_filters_debug import kalman_update as kalman_update_debug
 
 jax.config.update("jax_enable_x64", True)
-
-# ======================================================================================
-# Test Kalman Update with random state and cov againts filterpy
-# ======================================================================================
 
 SEEDS = range(20)
 UPDATE_FUNCS = [kalman_update, kalman_update_debug]
@@ -82,11 +80,6 @@ def test_kalman_update(seed, update_func) -> None:
     aaae(calculated_covs, expected_covs)
 
 
-# ======================================================================================
-# Test Kalman Update with missings
-# ======================================================================================
-
-
 @pytest.mark.parametrize("update_func", UPDATE_FUNCS)
 def test_kalman_update_with_missing(update_func) -> None:
     """State, cov and weights should not change, log likelihood should be zero."""
@@ -129,11 +122,6 @@ def test_kalman_update_with_missing(update_func) -> None:
     assert calc_weights.shape == weights.shape
 
 
-# ======================================================================================
-# test generation of sigma points
-# ======================================================================================
-
-
 @pytest.mark.parametrize("seed", SEEDS)
 def test_sigma_points(seed: int) -> None:
     rng = np.random.default_rng(seed)
@@ -153,11 +141,6 @@ def test_sigma_points(seed: int) -> None:
     aaae(calculated.reshape(expected.shape), expected)
 
 
-# ======================================================================================
-# Test sigma weights and scaling factor
-# ======================================================================================
-
-
 @pytest.mark.parametrize("seed", SEEDS)
 def test_sigma_scaling_factor_and_weights(seed) -> None:
     rng = np.random.default_rng(seed)
@@ -171,11 +154,6 @@ def test_sigma_scaling_factor_and_weights(seed) -> None:
     calc_scaling, calc_weights = calculate_sigma_scaling_factor_and_weights(dim, kappa)
     aaae(calc_weights, expected_weights)
     assert calc_scaling == np.sqrt(dim + kappa)
-
-
-# ======================================================================================
-# test transformation of sigma points
-# ======================================================================================
 
 
 def test_transformation_of_sigma_points() -> None:
@@ -203,14 +181,6 @@ def test_transformation_of_sigma_points() -> None:
     )
 
     aaae(calculated, expected)
-
-
-# ======================================================================================
-# test special case against linear predict from filterpy
-# - anchoring scaling factors are 1
-# - anchoring constants are 0
-# - linear transition functions
-# ======================================================================================
 
 
 @pytest.mark.parametrize("seed", SEEDS)
@@ -262,11 +232,6 @@ def test_predict_against_linear_filterpy(seed) -> None:
     aaae(calc_chols[0, 0].T @ calc_chols[0, 0], expected_cov)
 
 
-# ======================================================================================
-# Helper function to generate inputs and convert them between filterpy and skillmodels
-# ======================================================================================
-
-
 def _random_state_and_covariance(rng, dim=None):
     if dim is None:
         dim = rng.integers(low=1, high=10)
@@ -301,3 +266,40 @@ def _convert_predict_inputs_from_filterpy_to_skillmodels(state, cov):
     sm_state = jnp.array(state).reshape(1, 1, n_fac)
     sm_chol = jnp.array(scipy.linalg.cholesky(cov)).reshape(1, 1, n_fac, n_fac)
     return sm_state, sm_chol
+
+
+def test_sigma_points_multiple_mixtures() -> None:
+    """Sigma points should work with n_mixtures >= 2."""
+    n_obs = 2
+    n_mixtures = 2
+    n_states = 3
+    n_observed = 2
+    n_sigma = 2 * n_states + 1
+
+    rng = np.random.default_rng(42)
+    states = jnp.array(rng.standard_normal((n_obs, n_mixtures, n_states)))
+    upper_chols = jnp.array(
+        np.tile(np.eye(n_states), (n_obs, n_mixtures, 1, 1)),
+    )
+    observed_factors = jnp.array(rng.standard_normal((n_obs, n_observed)))
+    scaling_factor = float(jnp.sqrt(n_states + 2))
+
+    result = _calculate_sigma_points(
+        states=states,
+        upper_chols=upper_chols,
+        scaling_factor=scaling_factor,
+        observed_factors=observed_factors,
+    )
+
+    # Check output shape
+    assert result.shape == (n_obs, n_mixtures, n_sigma, n_states + n_observed)
+
+    # Observed columns should be constant across the sigma dimension
+    for obs in range(n_obs):
+        for mix in range(n_mixtures):
+            observed_slice = result[obs, mix, :, n_states:]
+            expected = jnp.broadcast_to(
+                observed_factors[obs],
+                (n_sigma, n_observed),
+            )
+            aaae(observed_slice, expected)

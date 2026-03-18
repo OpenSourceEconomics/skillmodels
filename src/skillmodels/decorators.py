@@ -32,7 +32,7 @@ def extract_params(
         if key is not None and names is None:
 
             @functools.wraps(func)
-            def wrapper_extract_params(**kwargs: Any) -> Any:
+            def wrapper_extract_params(**kwargs: Any) -> Any:  # noqa: ANN401
                 internal_kwargs = kwargs.copy()
                 internal_kwargs["params"] = kwargs["params"][key]
                 return func(**internal_kwargs)
@@ -40,7 +40,7 @@ def extract_params(
         elif key is None and names is not None:
 
             @functools.wraps(func)
-            def wrapper_extract_params(**kwargs: Any) -> Any:
+            def wrapper_extract_params(**kwargs: Any) -> Any:  # noqa: ANN401
                 internal_kwargs = kwargs.copy()
                 internal_kwargs["params"] = dict(
                     zip(names, kwargs["params"], strict=False)
@@ -50,7 +50,7 @@ def extract_params(
         elif key is not None and names is not None:
 
             @functools.wraps(func)
-            def wrapper_extract_params(**kwargs: Any) -> Any:
+            def wrapper_extract_params(**kwargs: Any) -> Any:  # noqa: ANN401
                 internal_kwargs = kwargs.copy()
                 internal_kwargs["params"] = dict(
                     zip(names, kwargs["params"][key], strict=False)
@@ -71,7 +71,7 @@ def jax_array_output(func: Callable) -> Callable:
     """Convert tuple output to list output."""
 
     @functools.wraps(func)
-    def wrapper_jax_array_output(*args: Any, **kwargs: Any) -> Array:
+    def wrapper_jax_array_output(*args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         raw = func(*args, **kwargs)
         return jnp.array(raw)
 

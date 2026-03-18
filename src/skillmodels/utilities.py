@@ -55,7 +55,7 @@ def update_parameter_values(
         params: The params DataFrame for the full model.
         others: Another DataFrame with parameters or list
             of thereof. The values from other are used to update the value column
-            of ``params``. If other is a list, the updates will be in order, i.e.
+            of `params`. If other is a list, the updates will be in order, i.e.
             later elements overwrite earlier ones.
 
     Returns:
@@ -385,9 +385,8 @@ def _reduce_params(
     index = _get_params_index(model_spec)
     # If we have endogenous factors, we need to keep the periods from params.
     if has_endogenous_factors:
-        df = pd.merge(
-            left=params.reset_index(),
-            right=index.to_frame(index=False)[
+        df = params.reset_index().merge(
+            index.to_frame(index=False)[
                 ["category", "name1", "name2"]
             ].drop_duplicates(),
             on=["category", "name1", "name2"],

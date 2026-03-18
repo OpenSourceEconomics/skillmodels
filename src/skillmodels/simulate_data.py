@@ -44,8 +44,8 @@ def simulate_dataset(
         data: Dataset in the same format as for estimation, containing
             information about observed factors and control variables.
         policies: Each dictionary specifies a stochastic shock to a latent factor
-            AT THE END of "period" for "factor" with mean "effect_size" and
-            "standard deviation".
+            AT THE END of ``"period"`` for ``"factor"`` with mean
+            ``"effect_size"`` and ``"standard_deviation"``.
         seed: Random seed for reproducibility. If None, uses numpy's default random
             state.
 
@@ -93,9 +93,9 @@ def simulate_dataset(
         n_obs = data_n_obs
 
     else:
-        control_data = jnp.ones((n_obs, 1))
-        n_periods = processed_model.dimensions.n_periods
-        observed_factors = jnp.zeros((n_periods, n_obs, 0))
+        n_aug_periods = processed_model.dimensions.n_aug_periods
+        control_data = jnp.ones((n_aug_periods, n_obs, 1))
+        observed_factors = jnp.zeros((n_aug_periods, n_obs, 0))
 
     params_index = get_params_index(
         update_info=processed_model.update_info,
@@ -125,7 +125,14 @@ def simulate_dataset(
         n_obs=n_obs,
     )
 
-    aug_measurements, aug_latent_data = _simulate_dataset(
+    # Convert "period" keys in policies to "aug_period" for internal use
+    if policies is not None:
+        policies = _convert_policy_periods(
+            policies=policies,
+            endogenous_factors_info=processed_model.endogenous_factors_info,
+        )
+
+    _aug_measurements, aug_latent_data = _simulate_dataset(
         latent_states=states,
         covs=covs,
         log_weights=log_weights,
@@ -180,7 +187,6 @@ def simulate_dataset(
                 factors=processed_model.labels.latent_factors,
             ),
         },
-        "aug_measurements": aug_measurements,
     }
 
 
@@ -389,12 +395,36 @@ def _collapse_aug_periods_to_periods(
     is_states = df["_aug_period_meas_type"] == MeasurementType.STATES
 
     out = df.loc[is_endogenous, ["id", "period", *endogenous_cols]]
-    return pd.merge(
-        out,
+    return out.merge(
         df.loc[is_states, ["id", "period", *state_cols]],
         on=["id", "period"],
         how="outer",
     )
+
+
+def _convert_policy_periods(
+    policies: list[dict],
+    endogenous_factors_info: EndogenousFactorsInfo,
+) -> list[dict]:
+    """Convert ``"period"`` keys in policy dicts to ``"aug_period"``.
+
+    Policies may specify either ``"period"`` (public API) or ``"aug_period"``
+    (legacy/internal). This normalises to ``"aug_period"`` for the simulation loop.
+    """
+    converted = []
+    for policy in policies:
+        if "aug_period" in policy:
+            converted.append(policy)
+        elif "period" in policy:
+            p = dict(policy)
+            period = p.pop("period")
+            aug_periods = endogenous_factors_info.aug_periods_from_period(period)
+            # Use the first aug_period for the given period
+            p["aug_period"] = aug_periods[0]
+            converted.append(p)
+        else:
+            raise ValueError("Each policy dict must contain a 'period' key.")
+    return converted
 
 
 def _get_shock(
@@ -493,3 +523,78 @@ def measurements_from_states(
     states_part = np.dot(states, loadings.T)
     control_part = np.dot(controls, control_params.T)
     return states_part + control_part + epsilon
+
+
+def simulate_policy_effect(
+    model_spec: ModelSpec,
+    params: pd.DataFrame,
+    data: pd.DataFrame,
+    policies: list[dict],
+    seed: int | None = None,
+    *,
+    use_anchored_states: bool = True,
+) -> pd.DataFrame:
+    """Compute the effect of policies on factor means by period.
+
+    Simulates the model twice (with and without policies) and returns the
+    difference in factor means for each period.
+
+    Args:
+        model_spec: The model specification.
+        params: Model parameters.
+        data: Dataset with observed factors and control variables.
+        policies: List of policy dictionaries. Each dictionary specifies a
+            stochastic shock to a latent factor with keys:
+            - "period": When to apply the shock
+            - "factor": Which factor to shock
+            - "effect_size": Mean of the shock
+            - "standard_deviation": Standard deviation of the shock (use 0 for
+              deterministic effects)
+        seed: Random seed for reproducibility.
+        use_anchored_states: Whether to use anchored states for comparison.
+            Default True.
+
+    Returns:
+        DataFrame with the difference in factor means (policy - baseline) for
+        each period. Index is "period", columns are factor names.
+
+    Example:
+        >>> policies = [
+        ...     {"period": 1, "factor": "skill", "effect_size": 0.5,
+        ...      "standard_deviation": 0.0},
+        ... ]
+        >>> effect = simulate_policy_effect(model, params, data, policies)
+        >>> print(effect)  # Shows how much each factor changed due to policy
+
+    """
+    # Simulate baseline (no policy)
+    baseline = simulate_dataset(
+        model_spec=model_spec,
+        params=params,
+        data=data,
+        policies=None,
+        seed=seed,
+    )
+
+    # Simulate with policy
+    with_policy = simulate_dataset(
+        model_spec=model_spec,
+        params=params,
+        data=data,
+        policies=policies,
+        seed=seed,
+    )
+
+    state_key = "anchored_states" if use_anchored_states else "unanchored_states"
+
+    baseline_states = baseline[state_key]["states"]
+    policy_states = with_policy[state_key]["states"]
+
+    # Compute mean by period for each simulation
+    baseline_means = baseline_states.groupby("period").mean()
+    policy_means = policy_states.groupby("period").mean()
+
+    # Drop non-factor columns
+    factor_cols = [c for c in baseline_means.columns if c not in ("id", "period")]
+
+    return policy_means[factor_cols] - baseline_means[factor_cols]

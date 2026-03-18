@@ -29,11 +29,8 @@ rules:
   quoted-strings: disable
   trailing-spaces: enable
   truthy:
-    check-keys: false
     level: warning
 yaml-files:
   - '*.yaml'
   - '*.yml'
   - .yamllint
-ignore:
-  - src/skillmodels/test_data/simplest_augmented_model.yaml

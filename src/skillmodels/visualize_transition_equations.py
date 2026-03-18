@@ -1,9 +1,9 @@
 """Functions to visualize transition equations and production functions."""
 
 import itertools
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from typing import Any
+from typing import Any, Literal
 
 import jax.numpy as jnp
 import numpy as np
@@ -140,22 +140,26 @@ def combine_transition_plots(
     return fig
 
 
-def get_transition_plots(
+def get_transition_plots(  # noqa: C901, PLR0912
     model_spec: ModelSpec,
     params: pd.DataFrame,
-    data: pd.DataFrame,
-    period: int,
+    data: pd.DataFrame | None = None,
+    period: int | None = None,
+    periods: Sequence[int] | None = None,
     state_ranges: dict[str, pd.DataFrame] | None = None,
     quantiles_of_other_factors: tuple[float, ...] | list[float] | float | None = (
         0.25,
         0.5,
         0.75,
     ),
+    aggregation_method: Literal["quantiles", "median", "average"] = "quantiles",
     n_points: int = 50,
     n_draws: int = 50,
-    colorscale: str = "Magenta_r",
+    colorscale: str | list[str] = "Magenta_r",
+    state_range_quantile_cutoff: float | None = None,
     layout_kwargs: dict[str, Any] | None = None,
     *,
+    states: pd.DataFrame | None = None,
     include_correction_factors: bool = False,
 ) -> dict[tuple[str, str], go.Figure]:
     """Get dictionary with individual plots of transition equations for each factor.
@@ -163,22 +167,37 @@ def get_transition_plots(
     Args:
         model_spec: The model specification. See: :ref:`model_specs`
         params: Model parameters.
-        data: Empirical dataset used to estimate the model.
+        data: Empirical dataset used to estimate the model. Required when `states`
+            is not provided or when the model has observed factors.
         period: The start period of the transition equations that are plotted.
+            Deprecated in favor of `periods`. If both are provided, `periods` is used.
+        periods: List of periods to overlay on each plot. Each period gets a different
+            color. If None and period is None, uses the first valid period.
         state_ranges: The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
             The state_ranges are used to define the axis limits of the plots.
         quantiles_of_other_factors: Quantiles at which the factors
-            that are not varied in a given plot are fixed. If None, those factors are
-            not fixed but integrated out.
+            that are not varied in a given plot are fixed. Only used when
+            aggregation_method is "quantiles". If None, those factors are
+            not fixed but integrated out (equivalent to aggregation_method="average").
+        aggregation_method: How to handle factors not being varied in a plot.
+            - "quantiles": Fix other factors at specified quantiles (default).
+            - "median": Fix other factors at their median (0.5 quantile).
+            - "average": Average over random draws of other factors.
         n_points: Number of grid points per input. Default 50.
         n_draws: Number of randomly drawn values of the factors that are averaged
-            out. Only relevant if quantiles_of_other_factors is *None*. Default 50.
-        colorscale: The color scale to use for line legends. Must be a valid
-            plotly.express.colors.sequential attribute. Default 'Magenta_r'.
+            out. Only relevant if aggregation_method is "average". Default 50.
+        colorscale: The color scale to use for line legends. Can be a string
+            (plotly.express.colors.sequential attribute) or a list of colors.
+            Default 'Magenta_r'.
+        state_range_quantile_cutoff: If provided, compute state ranges by cutting
+            this quantile from both tails (e.g., 0.01 cuts 1st and 99th percentiles).
+            Only used if state_ranges is None.
         layout_kwargs: Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs
             defined in the function will be used.
+        states: Pre-computed filtered states DataFrame (with a `period`
+            column). If provided, skip the internal `get_filtered_states` call.
         include_correction_factors: Whether to include correction factors in the
             plots. Default False.
 
@@ -187,16 +206,38 @@ def get_transition_plots(
             for each combination of input and output factors.
 
     """
-    quantiles_of_other_factors = _process_quantiles_of_other_factors(
-        quantiles_of_other_factors,
-    )
+    # Handle period/periods arguments
+    if periods is not None:
+        periods_list = list(periods)
+    elif period is not None:
+        periods_list = [period]
+    else:
+        periods_list = None  # Will be set after processing model
+
+    # Convert aggregation_method to quantiles_of_other_factors format
+    if aggregation_method == "median":
+        quantiles_of_other_factors = [0.5]
+    elif aggregation_method == "average":
+        quantiles_of_other_factors = None
+    else:  # "quantiles"
+        quantiles_of_other_factors = _process_quantiles_of_other_factors(
+            quantiles_of_other_factors,
+        )
 
     processed_model = process_model(model_spec)
 
-    if period >= processed_model.labels.periods[-1]:
-        raise ValueError(
-            "*period* must be the penultimate period of the model or earlier.",
-        )
+    # Set default periods if not provided
+    if periods_list is None:
+        periods_list = [0]
+
+    # Validate periods
+    max_period = processed_model.labels.periods[-1]
+    for p in periods_list:
+        if p >= max_period:
+            raise ValueError(
+                f"Period {p} is invalid. Must be less than {max_period} "
+                "(the last period has no transition).",
+            )
 
     if (
         include_correction_factors
@@ -210,9 +251,19 @@ def get_transition_plots(
             if not processed_model.endogenous_factors_info.factor_info[lf].is_correction
         ]
     all_factors = processed_model.labels.all_factors
-    states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
-        "anchored_states"
-    ]["states"]
+    if states is None:
+        if data is None:
+            msg = "Either 'data' or 'states' must be provided."
+            raise TypeError(msg)
+        states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
+            "anchored_states"
+        ]["states"]
+
+    states = _normalize_states_columns(
+        states,
+        aug_periods_to_periods=processed_model.labels.aug_periods_to_periods,
+    )
+
     return _get_dictionary_with_plots(
         model=processed_model,
         data=data,
@@ -222,27 +273,29 @@ def get_transition_plots(
         latent_factors=latent_factors,  # ty: ignore[invalid-argument-type]
         all_factors=all_factors,
         quantiles_of_other_factors=quantiles_of_other_factors,
-        period=period,
+        periods=periods_list,
         n_points=n_points,
         n_draws=n_draws,
         colorscale=colorscale,
+        state_range_quantile_cutoff=state_range_quantile_cutoff,
         layout_kwargs=layout_kwargs,
     )
 
 
 def _get_dictionary_with_plots(
     model: ProcessedModel,
-    data: pd.DataFrame,
+    data: pd.DataFrame | None,
     params: pd.DataFrame,
     states: pd.DataFrame,
     state_ranges: dict[str, pd.DataFrame] | None,
     latent_factors: tuple[str, ...],
     all_factors: tuple[str, ...],
     quantiles_of_other_factors: list[float] | None,
-    period: int,
+    periods: list[int],
     n_points: int,
     n_draws: int,
-    colorscale: str,
+    colorscale: str | list[str],
+    state_range_quantile_cutoff: float | None,
     layout_kwargs: dict[str, Any] | None,
     *,
     showlegend: bool = True,
@@ -263,7 +316,6 @@ def _get_dictionary_with_plots(
         state_ranges: The keys are the names of the latent factors.
             The values are DataFrames with the columns "period", "minimum", "maximum".
             The state_ranges are used to define the axis limits of the plots.
-
         latent_factors: Latent factors of the model that are outputs of
             transition factors.
         all_factors: All factors of the model that are the inputs of transition
@@ -271,12 +323,14 @@ def _get_dictionary_with_plots(
         quantiles_of_other_factors: Quantiles at which the factors
             that are not varied in a given plot are fixed. If None, those factors are
             not fixed but integrated out.
-        period: The start period of the transition equations that are plotted.
+        periods: List of periods to plot. Each period gets a different line/color.
         n_points: Number of grid points per input. Default 50.
         n_draws: Number of randomly drawn values of the factors that are averaged
             out. Only relevant if quantiles_of_other_factors is *None*. Default 50.
-        colorscale: The color scale to use for line legends. Must be a valid
-            plotly.express.colors.sequential attribute. Default 'Magenta_r'.
+        colorscale: The color scale to use for line legends. Can be a string
+            (plotly.express.colors.sequential attribute) or a list of colors.
+        state_range_quantile_cutoff: If provided, compute state ranges by cutting
+            this quantile from both tails.
         layout_kwargs: Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs defined
             in the function will be used.
@@ -288,17 +342,27 @@ def _get_dictionary_with_plots(
 
     """
     observed_factors = model.labels.observed_factors
-    states_data = _get_states_data(
-        model=model,
-        period=period,
-        data=data,
-        states=states,
-        observed_factors=observed_factors,
-    )
+
+    # Collect states data for all periods
+    all_states_data = []
+    for period in periods:
+        period_states = _get_states_data(
+            model=model,
+            period=period,
+            data=data,
+            states=states,
+            observed_factors=observed_factors,
+        )
+        all_states_data.append(period_states)
+    states_data = pd.concat(all_states_data, ignore_index=True)
+
     params = _set_index_params(model=model, params=params)
     parsed_params = _get_parsed_params(model=model, params=params)
     state_ranges = _get_state_ranges(
-        state_ranges=state_ranges, states_data=states_data, all_factors=all_factors
+        state_ranges=state_ranges,
+        states_data=states_data,
+        all_factors=all_factors,
+        quantile_cutoff=state_range_quantile_cutoff,
     )
     layout_kwargs = get_layout_kwargs(
         layout_kwargs=layout_kwargs,
@@ -306,84 +370,182 @@ def _get_dictionary_with_plots(
         title_kwargs=None,
         showlegend=showlegend,
     )
-    has_endogenous_factors = model.endogenous_factors_info.has_endogenous_factors
-    if has_endogenous_factors:
-        _aug_periods = model.endogenous_factors_info.aug_periods_from_period(period)
+
+    # Get color sequence
+    if isinstance(colorscale, str):
+        colors = getattr(px.colors.sequential, colorscale)
     else:
-        _aug_periods = [period]
+        colors = colorscale
+
     plots_dict = {}
     for output_factor, input_factor in itertools.product(latent_factors, all_factors):
-        transition_function = model.transition_info.individual_functions[output_factor]
-        if (
-            has_endogenous_factors
-            and model.endogenous_factors_info.factor_info[output_factor].is_endogenous
-        ):
-            aug_period = min(_aug_periods)
-        else:
-            aug_period = max(_aug_periods)
-        transition_params = {
-            output_factor: parsed_params.transition[output_factor][aug_period]
-        }
+        combined_data = _prepare_plot_data_for_factor_pair(
+            model=model,
+            states_data=states_data,
+            state_ranges=state_ranges,
+            parsed_params=parsed_params,
+            periods=periods,
+            input_factor=input_factor,
+            output_factor=output_factor,
+            all_factors=all_factors,
+            quantiles_of_other_factors=quantiles_of_other_factors,
+            n_points=n_points,
+            n_draws=n_draws,
+        )
 
-        if quantiles_of_other_factors is not None:
-            plot_data = _prepare_data_for_one_plot_fixed_quantile_2d(
-                states_data=states_data,
-                state_ranges=state_ranges,
-                aug_period=aug_period,
-                input_factor=input_factor,
-                output_factor=output_factor,
-                n_points=n_points,
-                quantiles_of_other_factors=quantiles_of_other_factors,
-                transition_function=transition_function,
-                transition_params=transition_params,
-                all_factors=all_factors,
-            )
+        color = _determine_color_column(len(periods), quantiles_of_other_factors)
 
-        else:
-            plot_data = _prepare_data_for_one_plot_average_2d(
-                states_data=states_data,
-                state_ranges=state_ranges,
-                aug_period=aug_period,
-                input_factor=input_factor,
-                output_factor=output_factor,
-                n_points=n_points,
-                n_draws=n_draws,
-                transition_function=transition_function,
-                transition_params=transition_params,
-                all_factors=all_factors,
-            )
-
-        if (
-            isinstance(quantiles_of_other_factors, list)
-            and len(quantiles_of_other_factors) > 1
-        ):
-            color = "quantile"
-        else:
-            color = None
         subfig = px.line(
-            plot_data,
+            combined_data,
             y=f"output_{output_factor}",
             x=f"input_{input_factor}",
             color=color,
-            color_discrete_sequence=getattr(px.colors.sequential, colorscale),
+            color_discrete_sequence=colors,
         )
         subfig.update_xaxes(title={"text": input_factor})
         subfig.update_yaxes(title={"text": output_factor})
+        subfig.update_traces(line={"width": 2})
         subfig.update_layout(**layout_kwargs)
         plots_dict[(input_factor, output_factor)] = deepcopy(subfig)
 
     return plots_dict
 
 
+def _prepare_plot_data_for_factor_pair(
+    model: ProcessedModel,
+    states_data: pd.DataFrame,
+    state_ranges: dict[str, pd.DataFrame],
+    parsed_params: ParsedParams,
+    periods: list[int],
+    input_factor: str,
+    output_factor: str,
+    all_factors: tuple[str, ...],
+    quantiles_of_other_factors: list[float] | None,
+    n_points: int,
+    n_draws: int,
+) -> pd.DataFrame:
+    """Prepare plot data for one input/output factor pair across all periods."""
+    transition_function = model.transition_info.individual_functions[output_factor]
+    has_endogenous_factors = model.endogenous_factors_info.has_endogenous_factors
+
+    period_data_frames = []
+    for period in periods:
+        aug_period = _get_aug_period_for_output(
+            model=model,
+            period=period,
+            output_factor=output_factor,
+            has_endogenous_factors=has_endogenous_factors,
+        )
+
+        transition_params = {
+            output_factor: parsed_params.transition[output_factor][aug_period]
+        }
+        period_states = states_data[states_data["aug_period"] == aug_period]
+
+        plot_data = _prepare_single_period_plot_data(
+            states_data=period_states,
+            state_ranges=state_ranges,
+            aug_period=aug_period,
+            input_factor=input_factor,
+            output_factor=output_factor,
+            all_factors=all_factors,
+            quantiles_of_other_factors=quantiles_of_other_factors,
+            n_points=n_points,
+            n_draws=n_draws,
+            transition_function=transition_function,
+            transition_params=transition_params,
+        )
+        plot_data["period"] = period
+        period_data_frames.append(plot_data)
+
+    return pd.concat(period_data_frames, ignore_index=True)
+
+
+def _get_aug_period_for_output(
+    model: ProcessedModel,
+    period: int,
+    output_factor: str,
+    *,
+    has_endogenous_factors: bool,
+) -> int:
+    """Determine the augmented period for an output factor."""
+    if not has_endogenous_factors:
+        return period
+
+    _aug_periods = model.endogenous_factors_info.aug_periods_from_period(period)
+    if model.endogenous_factors_info.factor_info[output_factor].is_endogenous:
+        return min(_aug_periods)
+    return max(_aug_periods)
+
+
+def _prepare_single_period_plot_data(
+    states_data: pd.DataFrame,
+    state_ranges: dict[str, pd.DataFrame],
+    aug_period: int,
+    input_factor: str,
+    output_factor: str,
+    all_factors: tuple[str, ...],
+    quantiles_of_other_factors: list[float] | None,
+    n_points: int,
+    n_draws: int,
+    transition_function: Callable[..., Array],
+    transition_params: dict[str, Any],
+) -> pd.DataFrame:
+    """Prepare plot data for a single period."""
+    if quantiles_of_other_factors is not None:
+        return _prepare_data_for_one_plot_fixed_quantile_2d(
+            states_data=states_data,
+            state_ranges=state_ranges,
+            aug_period=aug_period,
+            input_factor=input_factor,
+            output_factor=output_factor,
+            n_points=n_points,
+            quantiles_of_other_factors=quantiles_of_other_factors,
+            transition_function=transition_function,
+            transition_params=transition_params,
+            all_factors=all_factors,
+        )
+    return _prepare_data_for_one_plot_average_2d(
+        states_data=states_data,
+        state_ranges=state_ranges,
+        aug_period=aug_period,
+        input_factor=input_factor,
+        output_factor=output_factor,
+        n_points=n_points,
+        n_draws=n_draws,
+        transition_function=transition_function,
+        transition_params=transition_params,
+        all_factors=all_factors,
+    )
+
+
+def _determine_color_column(
+    n_periods: int,
+    quantiles_of_other_factors: list[float] | None,
+) -> str | None:
+    """Determine which column to use for color encoding."""
+    if n_periods > 1:
+        return "period"
+    if (
+        isinstance(quantiles_of_other_factors, list)
+        and len(quantiles_of_other_factors) > 1
+    ):
+        return "quantile"
+    return None
+
+
 def _get_state_ranges(
     state_ranges: dict[str, pd.DataFrame] | None,
     states_data: pd.DataFrame,
     all_factors: tuple[str, ...],
+    quantile_cutoff: float | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Create state ranges if none is given."""
     if state_ranges is None:
         state_ranges = create_state_ranges(
-            filtered_states=states_data, factors=list(all_factors)
+            filtered_states=states_data,
+            factors=list(all_factors),
+            quantile_cutoff=quantile_cutoff,
         )
     return state_ranges
 
@@ -430,17 +592,17 @@ def _set_index_params(
 def _get_states_data(
     model: ProcessedModel,
     period: int,
-    data: pd.DataFrame,
+    data: pd.DataFrame | None,
     states: pd.DataFrame,
     observed_factors: tuple[str, ...],
 ) -> pd.DataFrame:
-    if observed_factors and data is None:
-        raise ValueError(
-            "The model has observed factors. You must pass the empirical data to "
-            "'visualize_transition_equations' via the keyword *data*.",
-        )
-
     if observed_factors:
+        if data is None:
+            msg = (
+                "The model has observed factors. You must pass the empirical data to "
+                "'get_transition_plots' via the keyword 'data'."
+            )
+            raise TypeError(msg)
         _observed_arr = process_data(
             df=data,
             has_endogenous_factors=model.endogenous_factors_info.has_endogenous_factors,
@@ -474,9 +636,8 @@ def _get_states_data(
             observed_data["id"] = observed_data.index
             observed_data["aug_period"] = period
         # Do a left merge because we need all periods for the ranges
-        states_data = pd.merge(
-            left=states,
-            right=observed_data,
+        states_data = states.merge(
+            observed_data,
             left_on=["id", "aug_period"],
             right_on=["id", "aug_period"],
             how="left",
@@ -484,6 +645,53 @@ def _get_states_data(
     else:
         states_data = states.copy(deep=True)
     return states_data
+
+
+def _normalize_states_columns(
+    states: pd.DataFrame,
+    aug_periods_to_periods: Mapping[int, int] | None = None,
+) -> pd.DataFrame:
+    """Ensure `aug_period` and `id` are columns, not index levels.
+
+    Pre-computed states DataFrames may carry period information as `period`
+    (in the index or a column) instead of `aug_period`.  Downstream code
+    uniformly expects `aug_period` as a column, so this helper promotes
+    index levels to columns and, when a mapping is provided, expands each
+    period row into one row per corresponding aug_period.
+
+    Args:
+        states: DataFrame with latent factor columns and either `period` or
+            `aug_period` identifying the time dimension.
+        aug_periods_to_periods: Mapping from aug_period to period.  When
+            provided and the DataFrame has `period` but not `aug_period`,
+            rows are expanded so that each period produces one row per
+            aug_period that maps to it.
+    """
+    # Promote relevant index levels to columns.
+    names_to_reset = [
+        n for n in states.index.names if n in ("period", "aug_period", "id")
+    ]
+    if names_to_reset:
+        states = states.reset_index(level=names_to_reset)
+
+    if "aug_period" in states.columns:
+        return states
+
+    if "period" not in states.columns:
+        return states
+
+    # Expand period rows into aug_period rows using the mapping.
+    if aug_periods_to_periods is not None:
+        mapping_df = pd.DataFrame(
+            list(aug_periods_to_periods.items()),
+            columns=["aug_period", "period"],
+        )
+        states = states.merge(mapping_df, on="period", how="left")
+        states = states.drop(columns=["period"])
+    else:
+        states = states.rename(columns={"period": "aug_period"})
+
+    return states
 
 
 def _prepare_data_for_one_plot_fixed_quantile_2d(
@@ -550,21 +758,32 @@ def _prepare_data_for_one_plot_average_2d(
     input_min = state_ranges[input_factor].loc[aug_period]["minimum"]
     input_max = state_ranges[input_factor].loc[aug_period]["maximum"]
 
-    to_concat = []
-    for _, draw in draws.iterrows():
-        input_data = pd.DataFrame()
-        input_data[input_factor] = np.linspace(input_min, input_max, n_points)
-        for col, val in draw.items():
-            input_data[col] = val
-        input_arr = jnp.array(input_data[list(all_factors)].to_numpy())
-        # convert from jax to numpy array
-        output_arr = np.array(transition_function(transition_params, input_arr))
-        draw_data = pd.DataFrame()
-        draw_data[f"input_{input_factor}"] = input_data[input_factor]
-        draw_data[f"output_{output_factor}"] = np.array(output_arr)
-        to_concat.append(draw_data)
+    input_grid = np.linspace(input_min, input_max, n_points)
+    draws_arr = draws.to_numpy()  # (n_draws, n_sampled_factors)
 
-    return pd.concat(to_concat).groupby(f"input_{input_factor}").mean().reset_index()
+    # Build (n_draws * n_points, n_factors) array with broadcasting
+    tiled_input = np.tile(input_grid, n_draws)
+    repeated_draws = np.repeat(draws_arr, n_points, axis=0)
+
+    full_arr = np.empty((n_draws * n_points, len(all_factors)))
+    for i, factor in enumerate(all_factors):
+        if factor == input_factor:
+            full_arr[:, i] = tiled_input
+        else:
+            col_idx = sampled_factors.index(factor)
+            full_arr[:, i] = repeated_draws[:, col_idx]
+
+    output_arr = np.array(
+        transition_function(transition_params, jnp.array(full_arr)),
+    )
+    output_mean = output_arr.reshape(n_draws, n_points).mean(axis=0)
+
+    return pd.DataFrame(
+        {
+            f"input_{input_factor}": input_grid,
+            f"output_{output_factor}": output_mean,
+        }
+    )
 
 
 def _process_factor_mapping_trans(

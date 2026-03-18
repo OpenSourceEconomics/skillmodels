@@ -1,6 +1,9 @@
+"""Tests for process model."""
+
 import inspect
 from dataclasses import replace
 
+import numpy as np
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
@@ -11,10 +14,6 @@ from skillmodels.process_model import get_has_endogenous_factors, process_model
 from skillmodels.test_data.model2 import MODEL2
 from skillmodels.types import Normalizations, TransitionInfo
 
-# ======================================================================================
-# Integration test with model2 from the replication files of CHS2010
-# ======================================================================================
-
 
 @pytest.fixture
 def model2():
@@ -22,7 +21,7 @@ def model2():
 
 
 def test_has_endogenous_factors(model2) -> None:
-    assert process_model(model2).endogenous_factors_info.has_endogenous_factors == False
+    assert not process_model(model2).endogenous_factors_info.has_endogenous_factors
 
 
 def test_dimensions(model2) -> None:
@@ -50,7 +49,7 @@ def test_estimation_options(model2) -> None:
     res = process_model(model2).estimation_options
     assert res.sigma_points_scale == 2
     assert res.robust_bounds
-    assert res.bounds_distance == 0.001
+    assert np.isclose(res.bounds_distance, 0.001)
 
 
 def test_anchoring(model2) -> None:
@@ -118,11 +117,6 @@ def test_normalizations(model2) -> None:
     assert res == expected
 
 
-# ======================================================================================
-# Augment model2 with endogenous factors
-# ======================================================================================
-
-
 def _make_fac3_endogenous(model):
     """Return a new model with fac3 set as endogenous."""
     fac3 = model.factors["fac3"]
@@ -180,9 +174,7 @@ def model2_inv():
 
 
 def test_with_endog_has_endogenous_factors(model2_inv) -> None:
-    assert (
-        process_model(model2_inv).endogenous_factors_info.has_endogenous_factors == True
-    )
+    assert process_model(model2_inv).endogenous_factors_info.has_endogenous_factors
 
 
 def test_with_endog_dimensions(model2_inv) -> None:
@@ -213,7 +205,7 @@ def test_with_endog_estimation_options(model2_inv) -> None:
     res = process_model(model2_inv).estimation_options
     assert res.sigma_points_scale == 2
     assert res.robust_bounds
-    assert res.bounds_distance == 0.001
+    assert np.isclose(res.bounds_distance, 0.001)
 
 
 def test_with_endog_anchoring_is_empty(model2_inv) -> None:
@@ -315,11 +307,6 @@ def test_with_endog_normalizations(model2_inv) -> None:
     assert res == expected
 
 
-# ======================================================================================
-# Unit tests
-# ======================================================================================
-
-
 def _fspec(**kwargs) -> FactorSpec:
     """Create a minimal FactorSpec for unit tests."""
     return FactorSpec(measurements=((),), **kwargs)
@@ -327,12 +314,12 @@ def _fspec(**kwargs) -> FactorSpec:
 
 def test_model_has_endogenous_factors_not_specified() -> None:
     factors = {"a": _fspec()}
-    assert get_has_endogenous_factors(factors) == False
+    assert not get_has_endogenous_factors(factors)
 
 
 def test_get_has_endogenous_factors_wrong_constellation() -> None:
     factors = {"a": _fspec(is_endogenous=False, is_correction=True)}
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="is_endogenous"):
         get_has_endogenous_factors(factors)
 
 
@@ -341,7 +328,7 @@ def test_get_has_endogenous_factors_indeed() -> None:
         "a": _fspec(is_endogenous=True, is_correction=False),
         "b": _fspec(is_endogenous=False, is_correction=False),
     }
-    assert get_has_endogenous_factors(factors) == True
+    assert get_has_endogenous_factors(factors)
 
 
 def test_get_has_endogenous_factors_and_correction() -> None:
@@ -350,4 +337,4 @@ def test_get_has_endogenous_factors_and_correction() -> None:
         "b": _fspec(is_endogenous=False, is_correction=False),
         "c": _fspec(is_endogenous=True, is_correction=True),
     }
-    assert get_has_endogenous_factors(factors) == True
+    assert get_has_endogenous_factors(factors)

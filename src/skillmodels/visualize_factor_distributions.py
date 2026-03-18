@@ -251,7 +251,7 @@ def univariate_densities(
         hist_data = [df[fac][df["scenario"] == s] for s in scenarios]
         try:
             fig = ff.create_distplot(hist_data, **distplot_kwargs)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             warnings.warn(
                 f"""Plotting univariate density failed for {fac} in
                 period {period} with error:\n\n{e}""",
@@ -376,7 +376,7 @@ def bivariate_density_contours(
                 )
                 fig.add_trace(contour)
                 fig.update_traces(**contour_kwargs)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 warnings.warn(
                     f"""
                     Contour plot failed for {pair} in period {period}
@@ -494,7 +494,7 @@ def bivariate_density_surfaces(
                     opacity=opacity,
                 ),
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             warnings.warn(
                 f"""Plotting bivariate density surfaces for {pair} in
                 period {period} with error:\n\n{e}""",
@@ -559,10 +559,12 @@ def _process_data(
         data = pd.concat(to_concat, axis=1)
         data["scenario"] = "none"
     else:
-        if not isinstance(states, dict):
-            states = dict(enumerate(states))
+        if isinstance(states, dict):
+            states_dict = states
+        else:
+            states_dict = {str(i): df for i, df in enumerate(states)}
         to_concat = []
-        for name, df in states.items():
+        for name, df in states_dict.items():
             one_state_per_period = _get_one_state_per_period(states=df, ap_to_p=ap_to_p)
             to_keep = one_state_per_period.query(f"period == {period}")[factors].copy()
             to_keep["scenario"] = name

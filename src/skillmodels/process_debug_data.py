@@ -117,9 +117,10 @@ def _create_post_update_states(
     for (aug_period, meas), data in zip(
         update_info.index, filtered_states, strict=False
     ):
+        n_obs, n_mixtures_local, _ = data.shape
         df = _convert_state_array_to_df(arr=data, factor_names=factors)
         df["aug_period"] = aug_period
-        df["id"] = np.arange(len(df))
+        df["id"] = np.repeat(np.arange(n_obs), n_mixtures_local)
         df["measurement"] = meas
         to_concat.append(df)
 
@@ -176,13 +177,37 @@ def _create_filtered_states(
 def create_state_ranges(
     filtered_states: pd.DataFrame,
     factors: tuple[str, ...] | list[str],
+    quantile_cutoff: float | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """Compute minimum and maximum state values for each factor by period."""
+    """Compute minimum and maximum state values for each factor by period.
+
+    Args:
+        filtered_states: DataFrame with filtered states. Must have a "period"
+            column.
+        factors: List of factor names to compute ranges for.
+        quantile_cutoff: If provided, use quantiles instead of min/max. The cutoff
+            is applied symmetrically: the minimum is the `quantile_cutoff` quantile
+            and the maximum is the `1 - quantile_cutoff` quantile. For example,
+            quantile_cutoff=0.01 uses the 1st and 99th percentiles.
+
+    Returns:
+        Dictionary mapping factor names to DataFrames with "minimum" and "maximum"
+        columns, indexed by period.
+
+    """
     ranges: dict[str, pd.DataFrame] = {}
     # Group by whichever period column is present
     period_col = "aug_period" if "aug_period" in filtered_states.columns else "period"
-    minima = filtered_states.groupby(period_col).min()
-    maxima = filtered_states.groupby(period_col).max()
+
+    if quantile_cutoff is not None:
+        if not 0 < quantile_cutoff < 0.5:
+            raise ValueError("quantile_cutoff must be between 0 and 0.5 (exclusive)")
+        minima = filtered_states.groupby(period_col).quantile(quantile_cutoff)
+        maxima = filtered_states.groupby(period_col).quantile(1 - quantile_cutoff)
+    else:
+        minima = filtered_states.groupby(period_col).min()
+        maxima = filtered_states.groupby(period_col).max()
+
     for factor in factors:
         df = pd.concat([minima[factor], maxima[factor]], axis=1)
         df.columns = pd.Index(["minimum", "maximum"])
@@ -200,7 +225,7 @@ def _process_residuals(
         df = pd.DataFrame(data.reshape(-1, 1), columns=["residual"])
         df["mixture"] = np.full((n_obs, n_mixtures), np.arange(n_mixtures)).flatten()
         df["aug_period"] = aug_period
-        df["id"] = np.arange(len(df))
+        df["id"] = np.repeat(np.arange(n_obs), n_mixtures)
         df["measurement"] = meas
         to_concat.append(df)
     return pd.concat(to_concat)

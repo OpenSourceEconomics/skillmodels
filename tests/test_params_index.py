@@ -1,3 +1,5 @@
+"""Tests for params index."""
+
 from types import MappingProxyType
 
 import pandas as pd
@@ -37,9 +39,10 @@ def test_params_index_with_model2(model2_inputs) -> None:
     calculated = get_params_index(**model2_inputs)
     expected = pd.read_csv(
         TEST_DATA_DIR / "model2_correct_params_index.csv",
-        index_col=["category", "period", "name1", "name2"],
+        index_col=["category", "aug_period", "name1", "name2"],
     ).index
 
+    assert calculated.names == list(expected.names)
     assert calculated.equals(expected)
 
 

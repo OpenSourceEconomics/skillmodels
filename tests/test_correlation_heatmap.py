@@ -1,7 +1,12 @@
+"""Tests for correlation heatmap."""
+
+from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
+import pytest
 from pandas.testing import assert_frame_equal as afe
 
 from skillmodels.correlation_heatmap import (
@@ -11,8 +16,14 @@ from skillmodels.correlation_heatmap import (
     _get_quasi_factor_scores_data_for_multiple_periods,
     _get_quasi_factor_scores_data_for_single_period,
     _process_factors,
+    get_measurements_corr,
+    get_quasi_scores_corr,
+    get_scores_corr,
+    plot_correlation_heatmap,
 )
 from skillmodels.types import Labels
+
+REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
 
 def test_get_measurement_data_with_single_period() -> None:
@@ -327,3 +338,123 @@ def test_get_mask_full_square_matrix() -> None:
     expected = corr.to_numpy().astype(bool)
     result = _get_mask(corr, show_upper_triangle=show_upper, show_diagonal=show_diag)
     np.testing.assert_array_equal(result, expected)
+
+
+def _synthetic_corr():
+    """Return a synthetic 3x3 correlation DataFrame."""
+    data = np.array([[1.0, 0.5, 0.3], [0.5, 1.0, 0.7], [0.3, 0.7, 1.0]])
+    return pd.DataFrame(data, columns=["a", "b", "c"], index=["a", "b", "c"])
+
+
+def test_plot_correlation_heatmap_basic() -> None:
+    corr = _synthetic_corr()
+    fig = plot_correlation_heatmap(corr)
+    assert isinstance(fig, go.Figure)
+    assert len(fig.data) > 0
+
+
+def test_plot_correlation_heatmap_no_diagonal() -> None:
+    corr = _synthetic_corr()
+    fig = plot_correlation_heatmap(corr, show_diagonal=False)
+    assert isinstance(fig, go.Figure)
+
+
+def test_plot_correlation_heatmap_no_upper_triangle() -> None:
+    corr = _synthetic_corr()
+    fig = plot_correlation_heatmap(corr, show_upper_triangle=False)
+    assert isinstance(fig, go.Figure)
+
+
+def test_plot_correlation_heatmap_annotations() -> None:
+    corr = _synthetic_corr()
+    fig = plot_correlation_heatmap(corr, annotate=True)
+    assert isinstance(fig, go.Figure)
+    assert fig.layout.annotations is not None
+    assert len(fig.layout.annotations) > 0
+
+
+def test_plot_correlation_heatmap_custom_kwargs() -> None:
+    corr = _synthetic_corr()
+    fig = plot_correlation_heatmap(
+        corr,
+        heatmap_kwargs={"colorscale": "Viridis"},
+        layout_kwargs={"title": "My Heatmap"},
+    )
+    assert fig.layout.title.text == "My Heatmap"
+
+
+def test_plot_correlation_heatmap_trim() -> None:
+    corr = _synthetic_corr()
+    fig = plot_correlation_heatmap(
+        corr, trim_heatmap=True, show_upper_triangle=False, show_diagonal=False
+    )
+    assert isinstance(fig, go.Figure)
+
+
+@pytest.mark.integration
+def test_get_measurements_corr(model2, model2_data) -> None:
+    result = get_measurements_corr(
+        data=model2_data, model_spec=model2, factors=None, periods=None
+    )
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape[0] == result.shape[1]  # square
+
+
+@pytest.mark.integration
+def test_get_measurements_corr_single_period(model2, model2_data) -> None:
+    result = get_measurements_corr(
+        data=model2_data, model_spec=model2, factors=None, periods=0
+    )
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape[0] == result.shape[1]
+
+
+@pytest.mark.integration
+def test_get_quasi_scores_corr(model2, model2_data) -> None:
+    result = get_quasi_scores_corr(
+        data=model2_data, model_spec=model2, factors=None, periods=None
+    )
+    assert isinstance(result, pd.DataFrame)
+
+
+@pytest.mark.integration
+def test_get_quasi_scores_corr_single_period(model2, model2_data) -> None:
+    result = get_quasi_scores_corr(
+        data=model2_data, model_spec=model2, factors=None, periods=0
+    )
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape[0] == result.shape[1]
+
+
+@pytest.fixture
+def vault_params_for_scores():
+    """Load vault params with aug_period index level for get_scores_corr."""
+    params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
+    params = params.rename(columns={"period": "aug_period"})
+    return params.set_index(["category", "aug_period", "name1", "name2"])
+
+
+@pytest.mark.integration
+def test_get_scores_corr(model2, model2_data, vault_params_for_scores) -> None:
+    result = get_scores_corr(
+        data=model2_data,
+        params=vault_params_for_scores,
+        model_spec=model2,
+        factors=None,
+        periods=None,
+    )
+    assert isinstance(result, pd.DataFrame)
+
+
+@pytest.mark.integration
+def test_get_scores_corr_single_period(
+    model2, model2_data, vault_params_for_scores
+) -> None:
+    result = get_scores_corr(
+        data=model2_data,
+        params=vault_params_for_scores,
+        model_spec=model2,
+        factors=None,
+        periods=0,
+    )
+    assert isinstance(result, pd.DataFrame)

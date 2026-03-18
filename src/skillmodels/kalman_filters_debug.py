@@ -9,9 +9,6 @@ from jax import Array
 array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
 
 
-# ======================================================================================
-# Update Step
-# ======================================================================================
 def kalman_update(
     states: Array,
     upper_chols: Array,

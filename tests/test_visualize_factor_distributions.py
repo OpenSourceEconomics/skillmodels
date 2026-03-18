@@ -1,3 +1,5 @@
+"""Tests for visualize factor distributions."""
+
 from pathlib import Path
 
 import pandas as pd
@@ -5,7 +7,6 @@ import pandas as pd
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.filtered_states import get_filtered_states
 from skillmodels.maximization_inputs import get_maximization_inputs
-from skillmodels.process_model import process_model
 from skillmodels.simulate_data import simulate_dataset
 from skillmodels.test_data.model2 import MODEL2
 from skillmodels.visualize_factor_distributions import (
@@ -108,20 +109,11 @@ def test_visualize_factor_distributions_with_period_indexed_states() -> None:
     max_inputs = get_maximization_inputs(model, data)
     params = params.loc[max_inputs["params_template"].index]
 
-    # Get filtered states and convert to (id, period) index without aug_period
+    # Get filtered states (already has period column) and set index
     filtered_states = get_filtered_states(model_spec=model, data=data, params=params)[
         "anchored_states"
     ]["states"]
-    processed = process_model(model)
-
-    # Add period column and drop aug_period
-    # (mimics task_filtered_states_and_measurements)
-    filtered_states["period"] = filtered_states["aug_period"].map(
-        processed.labels.aug_periods_to_periods
-    )
-    filtered_states = filtered_states.drop(columns=["aug_period"]).set_index(
-        ["id", "period"]
-    )
+    filtered_states = filtered_states.set_index(["id", "period"])
 
     kde = univariate_densities(
         data=data,
@@ -161,16 +153,10 @@ def test_visualize_factor_distributions_with_both_aug_period_and_period() -> Non
     max_inputs = get_maximization_inputs(model, data)
     params = params.loc[max_inputs["params_template"].index]
 
-    # Get filtered states and add period while keeping aug_period
+    # Get filtered states (already has period column) and set index
     filtered_states = get_filtered_states(model_spec=model, data=data, params=params)[
         "anchored_states"
     ]["states"]
-    processed = process_model(model)
-
-    # Add period column but keep aug_period (both are present)
-    filtered_states["period"] = filtered_states["aug_period"].map(
-        processed.labels.aug_periods_to_periods
-    )
     filtered_states = filtered_states.set_index(["id", "period"])
 
     kde = univariate_densities(

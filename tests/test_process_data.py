@@ -1,3 +1,5 @@
+"""Tests for process data."""
+
 import io
 import textwrap
 from types import MappingProxyType
@@ -166,6 +168,40 @@ def test_generate_observed_factor_array() -> None:
     calculated = _generate_observed_factor_array(data, labels, 2)
     expected = jnp.array([[[1, 2], [5, 8]], [[3, 4], [7, 8]]])
     aae(calculated, expected)
+
+
+def test_augment_data_unbalanced_raises(simplest_augmented) -> None:
+    processed_model = process_model(simplest_augmented["model"])
+    pre_processed = pre_process_data(
+        simplest_augmented["data_input"], processed_model.labels.periods
+    )
+    pre_processed["constant"] = 1
+    # Drop a row to make it unbalanced
+    pre_processed = pre_processed.iloc[:-1]
+    with pytest.raises(ValueError, match="not balanced"):
+        _augment_data_for_endogenous_factors(
+            df=pre_processed,
+            labels=processed_model.labels,
+            update_info=processed_model.update_info,
+        )
+
+
+def test_augment_data_wrong_periods_raises(simplest_augmented) -> None:
+    processed_model = process_model(simplest_augmented["model"])
+    pre_processed = pre_process_data(
+        simplest_augmented["data_input"], processed_model.labels.periods
+    )
+    pre_processed["constant"] = 1
+    # Shift periods to create mismatch
+    df = pre_processed.reset_index()
+    df["period"] = df["period"] + 10
+    df = df.set_index(["id", "period"])
+    with pytest.raises(ValueError, match=r"[Pp]eriods"):
+        _augment_data_for_endogenous_factors(
+            df=df,
+            labels=processed_model.labels,
+            update_info=processed_model.update_info,
+        )
 
 
 def _read_csv_string(string, index_cols):

@@ -15,9 +15,6 @@ array_qr_jax = (
 )
 
 
-# ======================================================================================
-# Update Step
-# ======================================================================================
 def kalman_update(
     states: Array,
     upper_chols: Array,
@@ -48,7 +45,6 @@ def kalman_update(
             normals distribution.
 
     Returns:
-        states: Same format as states.
         new_states: Same format as states.
         new_upper_chols: Same format as upper_chols
         new_log_mixture_weights: (jax.numpy.array): Same format as log_mixture_weights
@@ -134,9 +130,6 @@ def kalman_update(
     )
 
 
-# ======================================================================================
-# Predict Step
-# ======================================================================================
 def calculate_sigma_scaling_factor_and_weights(
     n_states: int,
     kappa: float = 2,
@@ -274,11 +267,9 @@ def _calculate_sigma_points(
     sigma_points = sigma_points.at[:, :, 1 : n_fac + 1].add(scaled_upper_chols)
     sigma_points = sigma_points.at[:, :, n_fac + 1 :].add(-scaled_upper_chols)
 
-    observed_part = observed_factors.repeat(n_sigma, axis=0).reshape(
-        n_obs,
-        n_mixtures,
-        n_sigma,
-        n_observed,
+    observed_part = jnp.broadcast_to(
+        observed_factors[:, jnp.newaxis, jnp.newaxis, :],
+        (n_obs, n_mixtures, n_sigma, n_observed),
     )
 
     return jnp.concatenate([sigma_points, observed_part], axis=-1)
