@@ -12,7 +12,7 @@ via `functools.partial`. When the linear path is chosen, extra keyword arguments
 (`latent_factors`, `constant_factor_indices`, `n_all_factors`) are bound at setup time so
 the predict function has the same call signature as the unscented variant.
 
-## Why it is faster
+## Why it is faster and uses less memory
 
 The unscented predict generates $2n + 1$ sigma points (where $n$ is the number of latent
 factors), transforms each one through the transition function, then recovers predicted
@@ -26,6 +26,14 @@ follows from the standard linear Gaussian formula. Its QR decomposition operates
 $(2n) \times n$ matrix: $n$ rows from the propagated Cholesky factor and $n$ rows for the
 shocks. The reduction from $3n + 1$ to $2n$ rows speeds up the QR step and removes all
 sigma-point overhead.
+
+The memory savings can be more important than the speed gains. The unscented path
+materialises $2n + 1$ sigma points for every observation and mixture component, and
+JAX's automatic differentiation retains intermediate buffers for the backward pass. The
+linear path replaces all of this with a single matrix multiply whose memory footprint
+scales with $n^2$ rather than with the number of sigma points times the number of
+observations. On memory-constrained GPUs this can be the difference between fitting the
+model and running out of memory.
 
 ## Building F and c
 
@@ -98,3 +106,17 @@ columns in $F$ and therefore influence the predicted mean through the matrix--ve
 product. However, they carry no uncertainty: their columns are excluded from the
 covariance propagation. This is why $G$ uses only the first $n_\text{latent}$ columns of
 $F$ rather than the full matrix.
+
+## Practical impact
+
+Benchmarks on a 4-factor linear model (`health-cognition`,
+`no_feedback_to_investments_linear`, 8 GiB GPU) show a modest ~6 % speed-up on GPU
+(8.4 vs 8.9 s per optimizer iteration) and negligible difference on CPU. The speed gain
+is small because with only 4 latent factors the unscented transform generates just 9
+sigma points — a trivially cheap operation on modern hardware.
+
+The memory reduction is the more significant benefit. Under the same conditions the
+unscented path ran out of GPU memory when only ~5 GiB was free, while the linear path
+ran without issues. For models with more latent factors both advantages grow: the
+sigma-point count scales as $2n + 1$ and the QR matrix shrinks from $(3n + 1) \times n$
+to $(2n) \times n$.
