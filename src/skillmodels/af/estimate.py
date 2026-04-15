@@ -24,7 +24,7 @@ def estimate_af(
     model_spec: ModelSpec,
     data: pd.DataFrame,
     af_options: AFEstimationOptions | None = None,
-    _start_params: pd.DataFrame | None = None,
+    start_params: pd.DataFrame | None = None,
 ) -> AFEstimationResult:
     """Estimate a latent factor model using the Antweiler-Freyberger method.
 
@@ -40,7 +40,10 @@ def estimate_af(
         model_spec: Model specification (same as for CHS estimation).
         data: Dataset in long format with MultiIndex (id, period).
         af_options: AF-specific estimation options. If None, uses defaults.
-        _start_params: Optional starting parameter values (not yet implemented).
+        start_params: Optional starting parameter values. If provided, any
+            matching index entries override the heuristic defaults. Uses the
+            same 4-level MultiIndex as CHS params (category, period, name1,
+            name2). Unmatched entries keep their heuristic values.
 
     Return:
         AFEstimationResult with per-period results and combined parameters.
@@ -86,6 +89,7 @@ def estimate_af(
         controls=period_data[0]["controls"],
         af_options=af_options,
         state_factors=state_factors,
+        start_params=start_params,
     )
 
     period_results: list[AFPeriodResult] = [period_0_result]
@@ -115,6 +119,7 @@ def estimate_af(
             observed_factor_data=period_data.get(t - 1, {}).get(
                 "observed_factors", None
             ),
+            start_params=start_params,
         )
         period_results.append(period_t_result)
         conditional_dists.append(cond_dist)

@@ -21,6 +21,7 @@ from skillmodels.af.halton import (
 from skillmodels.af.initial_period import _build_loading_mask, _get_ordered_measures
 from skillmodels.af.likelihood import af_loglike_transition, create_loglike_and_gradient
 from skillmodels.af.params import (
+    apply_start_params,
     create_af_params_template,
     get_free_mask,
     get_measurements_per_factor,
@@ -51,6 +52,7 @@ def estimate_transition_period(
     endogenous_factors: tuple[str, ...] = (),
     observed_factors: tuple[str, ...] = (),
     observed_factor_data: Array | None = None,
+    start_params: pd.DataFrame | None = None,
 ) -> tuple[AFPeriodResult, ConditionalDistribution]:
     """Estimate a transition period (Step t, t >= 1) of the AF procedure.
 
@@ -73,6 +75,8 @@ def estimate_transition_period(
         observed_factors: Names of observed (non-latent) factors.
         observed_factor_data: Shape (n_obs, n_obs_factors), observed factor
             values. Required when `observed_factors` is non-empty.
+        start_params: Optional starting values. Matching index entries
+            override heuristic defaults.
 
     Return:
         Tuple of (AFPeriodResult, ConditionalDistribution) where the
@@ -112,6 +116,10 @@ def estimate_transition_period(
 
     # Initialize transition params to reasonable defaults
     params_template = _initialize_transition_params(params_template, measurements)
+
+    # Override with user-supplied starting values where available
+    if start_params is not None:
+        apply_start_params(params_template, start_params)
 
     # Collect transition function constraints (only for state factors' transitions)
     transition_constraints = _collect_transition_constraints(

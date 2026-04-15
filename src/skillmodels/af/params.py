@@ -322,3 +322,26 @@ def is_fixed(row: pd.Series) -> bool:
 def get_free_mask(params_template: pd.DataFrame) -> np.ndarray:
     """Return boolean mask for free (non-fixed) parameters."""
     return (params_template["lower_bound"] != params_template["upper_bound"]).to_numpy()
+
+
+def apply_start_params(
+    params_template: pd.DataFrame,
+    start_params: pd.DataFrame,
+) -> None:
+    """Override heuristic defaults with user-supplied starting values.
+
+    Match on the 4-level MultiIndex. Only free (non-fixed) parameters whose
+    index appears in `start_params` are updated. Fixed parameters and
+    parameters not in `start_params` are left unchanged. Modifies
+    `params_template` in place.
+    """
+    common = params_template.index.intersection(start_params.index)
+    if common.empty:
+        return
+    free = (
+        params_template.loc[common, "lower_bound"]
+        != params_template.loc[common, "upper_bound"]
+    )
+    to_update = common[free]
+    if not to_update.empty:
+        params_template.loc[to_update, "value"] = start_params.loc[to_update, "value"]

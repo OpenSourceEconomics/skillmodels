@@ -14,6 +14,7 @@ from jax import Array
 from skillmodels.af.halton import create_halton_nodes_and_weights
 from skillmodels.af.likelihood import af_loglike_initial, create_loglike_and_gradient
 from skillmodels.af.params import (
+    apply_start_params,
     create_af_params_template,
     get_free_mask,
     get_initial_period_params_index,
@@ -37,6 +38,7 @@ def estimate_initial_period(
     controls: Array,
     af_options: AFEstimationOptions,
     state_factors: tuple[str, ...] | None = None,
+    start_params: pd.DataFrame | None = None,
 ) -> tuple[AFPeriodResult, ConditionalDistribution]:
     """Estimate the initial period (Step 0) of the AF procedure.
 
@@ -52,6 +54,8 @@ def estimate_initial_period(
         af_options: AF estimation options.
         state_factors: Subset of latent factors used as state factors for
             AF propagation. If `None`, all latent factors are used.
+        start_params: Optional starting values. Matching index entries
+            override heuristic defaults.
 
     Return:
         Tuple of (AFPeriodResult, ConditionalDistribution) where the
@@ -86,6 +90,10 @@ def estimate_initial_period(
         n_factors,
         n_components,
     )
+
+    # Override with user-supplied starting values where available
+    if start_params is not None:
+        apply_start_params(params_template, start_params)
 
     # Build loading mask: (n_measures, n_factors) boolean
     all_measures = _get_ordered_measures(measurements_p0)
