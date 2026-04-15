@@ -169,6 +169,7 @@ docs = { features = [ "docs" ], solve-group = "default" }
 tests-cpu = { features = [ "tests" ], solve-group = "default" }
 tests-cuda = { features = [ "tests", "cuda" ], solve-group = "cuda" }
 type-checking = { features = [ "type-checking" ], solve-group = "default" }
+tests-cuda12 = { features = [ "tests", "cuda" ], solve-group = "cuda" }
 [tool.pixi.feature.cuda]
 platforms = [ "linux-64" ]
 system-requirements = { cuda = "12" }
