@@ -85,12 +85,17 @@ def estimate_af(
         if not measurements_pt:
             break
 
+        prev_period_params = period_results[-1].params
+
         period_t_result, cond_dist = estimate_transition_period(
             period=t,
             model_spec=model_spec,
             processed_model=processed_model,
             measurements=period_data[t]["measurements"],
             controls=period_data[t]["controls"],
+            prev_measurements=period_data[t - 1]["measurements"],
+            prev_controls=period_data[t - 1]["controls"],
+            prev_period_params=prev_period_params,
             prev_distribution=cond_dist,
             af_options=af_options,
         )

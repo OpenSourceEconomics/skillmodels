@@ -332,3 +332,241 @@ def test_af_vs_chs_measurement_params_agree() -> None:
         assert abs(af_sd - chs_sd) < tol, (
             f"meas_sd({meas}): AF={af_sd:.4f} vs CHS={chs_sd:.4f}"
         )
+
+
+# ---------------------------------------------------------------------------
+# TDD tests for transition likelihood and parameter recovery
+# ---------------------------------------------------------------------------
+
+
+def _simulate_linear_transition_data(
+    *,
+    n_obs: int = 500,
+    n_periods: int = 3,
+    true_beta: float = 0.8,
+    true_constant: float = 0.1,
+    true_shock_sd: float = 0.3,
+    true_meas_sds: tuple[float, ...] = (0.3, 0.4, 0.35),
+    true_loadings: tuple[float, ...] = (1.0, 0.8, 1.2),
+    true_intercepts: tuple[float, ...] = (0.0, 0.5, -0.2),
+    seed: int = 42,
+) -> tuple[pd.DataFrame, dict[str, float]]:
+    """Simulate panel data from a single-factor linear transition model.
+
+    DGP: theta_{t+1} = constant + beta * theta_t + N(0, shock_sd^2).
+    Measurements: Z_{t,m} = intercept_m + loading_m * theta_t + noise.
+
+    Return tuple of (DataFrame indexed by (caseid, period), dict of true params).
+    """
+    rng = np.random.default_rng(seed)
+    theta = np.zeros((n_obs, n_periods))
+    theta[:, 0] = rng.normal(0, 1, n_obs)
+    for t in range(n_periods - 1):
+        theta[:, t + 1] = (
+            true_constant
+            + true_beta * theta[:, t]
+            + rng.normal(0, true_shock_sd, n_obs)
+        )
+
+    rows = []
+    for i in range(n_obs):
+        for t in range(n_periods):
+            row = {"caseid": i, "period": t}
+            for m_idx, meas_name in enumerate(("m1", "m2", "m3")):
+                row[meas_name] = (
+                    true_intercepts[m_idx]
+                    + true_loadings[m_idx] * theta[i, t]
+                    + rng.normal(0, true_meas_sds[m_idx])
+                )
+            rows.append(row)
+
+    data = pd.DataFrame(rows).set_index(["caseid", "period"])
+    true_params = {
+        "beta": true_beta,
+        "constant": true_constant,
+        "shock_sd": true_shock_sd,
+    }
+    return data, true_params
+
+
+def _make_linear_transition_model(n_periods: int = 3) -> ModelSpec:
+    """Create a single-factor linear transition model for testing."""
+    return ModelSpec(
+        factors={
+            "skill": FactorSpec(
+                measurements=(("m1", "m2", "m3"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"m1": 1},) * n_periods,
+                    intercepts=({"m1": 0},) * n_periods,
+                ),
+                transition_function="linear",
+            ),
+        },
+        estimation_options=EstimationOptions(
+            robust_bounds=True,
+            bounds_distance=0.001,
+            n_mixtures=1,
+        ),
+    )
+
+
+@pytest.mark.end_to_end
+def test_af_transition_params_affect_likelihood() -> None:
+    """Verify that the transition likelihood depends on transition parameters.
+
+    If we run AF estimation with the transition function wired in correctly,
+    the estimated transition parameters should NOT be at their initial values.
+    The likelihood should be sensitive to transition parameter changes.
+    """
+    data, _true_params = _simulate_linear_transition_data(n_obs=300, n_periods=3)
+    model = _make_linear_transition_model(n_periods=3)
+
+    af_opts = AFEstimationOptions(
+        n_halton_points=30,
+        n_halton_points_shock=15,
+        n_mixture_components=1,
+        optimizer_algorithm="scipy_lbfgsb",
+    )
+    result = estimate_af(model_spec=model, data=data, af_options=af_opts)
+
+    # Period 1 result should have transition params
+    p1 = result.period_results[1].params
+    trans_params = p1.query("category == 'transition'")
+    assert len(trans_params) > 0, "Should have transition parameters in period 1"
+
+    # The transition params should NOT all be at their initialization value (0.1).
+    # If the transition function is actually used in the likelihood, the optimizer
+    # will move them away from 0.1 toward the true values.
+    trans_values = trans_params["value"].to_numpy()
+    init_values = np.full_like(trans_values, 0.1)
+    assert not np.allclose(trans_values, init_values, atol=0.01), (
+        f"Transition params stuck at init values: {trans_values}. "
+        "The transition function is not being used in the likelihood."
+    )
+
+
+@pytest.mark.end_to_end
+def test_af_recovers_linear_transition_params() -> None:
+    """Verify AF recovers known linear transition parameters from synthetic data.
+
+    Simulate data with theta_{t+1} = 0.1 + 0.8 * theta_t + N(0, 0.3^2),
+    estimate with AF, and check that estimated beta and constant are close
+    to true values.
+    """
+    data, true_params = _simulate_linear_transition_data(n_obs=500, n_periods=3)
+    model = _make_linear_transition_model(n_periods=3)
+
+    af_opts = AFEstimationOptions(
+        n_halton_points=40,
+        n_halton_points_shock=20,
+        n_mixture_components=1,
+        optimizer_algorithm="scipy_lbfgsb",
+    )
+    result = estimate_af(model_spec=model, data=data, af_options=af_opts)
+
+    # Extract estimated transition params from period 1 (transition 0->1)
+    p1 = result.period_results[1].params
+
+    # For a linear transition with 1 factor "skill", params are:
+    # ("transition", 0, "skill", "skill") = beta
+    # ("transition", 0, "skill", "constant") = constant
+    est_beta = float(
+        p1.loc[("transition", 0, "skill", "skill"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    est_constant = float(
+        p1.loc[("transition", 0, "skill", "constant"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+
+    # Also check shock SD
+    est_shock_sd = float(
+        p1.loc[("shock_sds", 0, "skill", "-"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+
+    tol = 0.25  # generous tolerance for quadrature-based estimation
+    assert abs(est_beta - true_params["beta"]) < tol, (
+        f"beta: estimated={est_beta:.4f}, true={true_params['beta']}"
+    )
+    assert abs(est_constant - true_params["constant"]) < tol, (
+        f"constant: estimated={est_constant:.4f}, true={true_params['constant']}"
+    )
+    assert abs(est_shock_sd - true_params["shock_sd"]) < tol, (
+        f"shock_sd: estimated={est_shock_sd:.4f}, true={true_params['shock_sd']}"
+    )
+
+
+@pytest.mark.end_to_end
+def test_af_vs_chs_transition_params_agree() -> None:
+    """Verify AF and CHS transition parameter estimates are in the same ballpark.
+
+    Use the same synthetic DGP as the measurement params comparison test,
+    but now compare the transition parameters estimated by both methods.
+    """
+    data, _true_params = _simulate_linear_transition_data(n_obs=500, n_periods=3)
+    model = _make_linear_transition_model(n_periods=3)
+
+    # --- AF estimation ---
+    af_result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=AFEstimationOptions(
+            n_halton_points=40,
+            n_halton_points_shock=20,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+        ),
+    )
+
+    # --- CHS estimation ---
+    max_inputs = get_maximization_inputs(model, data)
+    chs_params = max_inputs["params_template"].copy()
+    free = chs_params["lower_bound"] != chs_params["upper_bound"]
+    chs_params.loc[free, "value"] = 0.5
+    load_free = free & (chs_params.index.get_level_values("category") == "loadings")
+    chs_params.loc[load_free, "value"] = 1.0
+    ctrl_free = free & (chs_params.index.get_level_values("category") == "controls")
+    chs_params.loc[ctrl_free, "value"] = 0.0
+
+    def _neg_ll_and_grad(p: pd.DataFrame) -> tuple[float, np.ndarray]:
+        val, grad = max_inputs["loglike_and_gradient"](p)
+        return -float(val), -np.array(grad)
+
+    opt_res = om.minimize(
+        fun=lambda p: -max_inputs["loglike"](p),
+        params=chs_params[["value"]],
+        algorithm="scipy_lbfgsb",
+        bounds=om.Bounds(
+            lower=chs_params["lower_bound"],
+            upper=chs_params["upper_bound"],
+        ),
+        constraints=max_inputs["constraints"],
+        fun_and_jac=_neg_ll_and_grad,
+    )
+    chs_est = opt_res.params
+
+    # --- Compare transition parameters ---
+    af_p1 = af_result.period_results[1].params
+
+    af_beta = float(
+        af_p1.loc[("transition", 0, "skill", "skill"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    af_constant = float(
+        af_p1.loc[("transition", 0, "skill", "constant"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    af_shock = float(
+        af_p1.loc[("shock_sds", 0, "skill", "-"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+
+    chs_beta = float(chs_est.loc[("transition", 0, "skill", "skill"), "value"])
+    chs_constant = float(chs_est.loc[("transition", 0, "skill", "constant"), "value"])
+    chs_shock = float(chs_est.loc[("shock_sds", 0, "skill", "-"), "value"])
+
+    tol = 0.3  # generous: different methods, different # periods used
+    assert abs(af_beta - chs_beta) < tol, (
+        f"beta: AF={af_beta:.4f} vs CHS={chs_beta:.4f}"
+    )
+    assert abs(af_constant - chs_constant) < tol, (
+        f"constant: AF={af_constant:.4f} vs CHS={chs_constant:.4f}"
+    )
+    assert abs(af_shock - chs_shock) < tol, (
+        f"shock_sd: AF={af_shock:.4f} vs CHS={chs_shock:.4f}"
+    )

@@ -265,24 +265,33 @@ def af_loglike_transition(
     measurements: Array,
     controls: Array,
     loading_mask: Array,
+    prev_measurements: Array,
+    prev_controls: Array,
+    prev_loading_mask: Array,
+    prev_control_params: Array,
+    prev_loadings_flat: Array,
+    prev_meas_sds: Array,
     prev_distribution: dict[str, Array],
     state_nodes: Array,
     state_weights: Array,
     shock_nodes: Array,
     shock_weights: Array,
     transition_func: Callable,
-    n_transition_params: int,
+    total_n_transition_params: int,
     stability_floor: float,
 ) -> Array:
     """Negative log-likelihood for a transition period (Step t).
 
-    Integrate over latent factors at period t and production shocks:
+    Integrate over latent factors at period t-1 and production shocks.
+    The likelihood conditions on individual data via re-evaluation of
+    previous-period measurements at each quadrature node::
 
-        L_i = sum_q w_q * f(theta_q | prev_data_i)
-              * prod_m N(Z_{t,m,i} | c_m + lambda_m' theta_q, sigma_m)
-              * [sum_r w_r * prod_m N(Z_{t+1,m,i} | ... f(theta_q) + sd*eta_r ...)]
+        L_i = sum_q w_q * sum_l pi_{l,i}
+              * [prod_m N(Z_{t-1,m,i} | c~_m + lam~_m' th_{t-1}, sd~_m)]
+              * [sum_r w_r * prod_m N(Z_{t,m,i} | c_m + lam_m' th_t, sd_m)]
 
-    For models without future measurements at t+1, the last term is omitted.
+    where ``th_t = f(th_{t-1}; delta) + sd_shock * eta_r`` and tildes
+    denote already-estimated parameters from the previous step.
 
     Args:
         free_params: Free parameter values.
@@ -290,19 +299,23 @@ def af_loglike_transition(
         free_mask: Boolean mask for free parameters.
         n_state_factors: Number of state factors with transition equations.
         n_measures: Number of measurements at period t.
-        n_controls: Number of controls.
+        n_controls: Number of controls at period t.
         measurements: Shape (n_obs, n_measures), measurements at period t.
         controls: Shape (n_obs, n_controls), controls at period t.
         loading_mask: Shape (n_measures, n_state_factors), loading mask.
-        prev_distribution: Dict with keys "cond_weights"
-            (n_obs, n_components), "means" (n_components, n_factors),
-            "chol_covs" (n_components, n_factors, n_factors).
+        prev_measurements: Shape (n_obs, n_prev_measures), measurements t-1.
+        prev_controls: Shape (n_obs, n_prev_controls), controls at t-1.
+        prev_loading_mask: Shape (n_prev_measures, n_factors), prev loadings.
+        prev_control_params: Shape (n_prev_measures, n_prev_controls), fixed.
+        prev_loadings_flat: Packed loadings from previous period, fixed.
+        prev_meas_sds: Shape (n_prev_measures,), fixed from previous step.
+        prev_distribution: Dict with keys "cond_weights", "means", "chol_covs".
         state_nodes: Shape (n_nodes, n_factors), standard normal nodes.
         state_weights: Shape (n_nodes,), quadrature weights.
-        shock_nodes: Shape (n_shock_nodes, n_state_factors), shock nodes.
+        shock_nodes: Shape (n_shock_nodes, n_factors), shock nodes.
         shock_weights: Shape (n_shock_nodes,), shock weights.
-        transition_func: Vectorized transition function f(states, params) -> states.
-        n_transition_params: Number of transition function parameters per factor.
+        transition_func: Combined transition f(states, params) -> new_states.
+        total_n_transition_params: Total transition params across all factors.
         stability_floor: Numerical stability floor.
 
     Return:
@@ -316,8 +329,17 @@ def af_loglike_transition(
         n_state_factors,
         n_measures,
         n_controls,
-        n_transition_params,
+        total_n_transition_params,
     )
+
+    # Expand previous-period loadings (fixed, from previous step)
+    n_prev_measures = prev_loading_mask.shape[0]
+    prev_full_loadings = jnp.zeros((n_prev_measures, n_state_factors))
+    prev_full_loadings = prev_full_loadings.at[prev_loading_mask].set(
+        prev_loadings_flat
+    )
+    prev_control_contrib = prev_controls @ prev_control_params.T
+    prev_residuals_base = prev_measurements - prev_control_contrib
 
     log_likes = _transition_loglike_per_obs(
         transition_params=parsed["transition_params"],
@@ -328,6 +350,9 @@ def af_loglike_transition(
         measurements=measurements,
         controls=controls,
         loading_mask=loading_mask,
+        prev_residuals_base=prev_residuals_base,
+        prev_full_loadings=prev_full_loadings,
+        prev_meas_sds=prev_meas_sds,
         prev_distribution=prev_distribution,
         state_nodes=state_nodes,
         state_weights=state_weights,
@@ -345,18 +370,14 @@ def _parse_transition_params(
     n_state_factors: int,
     n_measures: int,
     n_controls: int,
-    n_transition_params: int,
+    total_n_transition_params: int,
 ) -> dict[str, Array]:
     """Parse flat parameter vector for a transition period."""
     idx = 0
 
-    # Transition parameters per factor
-    total_trans = n_state_factors * n_transition_params
-    transition_params = params[idx : idx + total_trans].reshape(
-        n_state_factors,
-        n_transition_params,
-    )
-    idx += total_trans
+    # Transition parameters (flat vector for all factors combined)
+    transition_params = params[idx : idx + total_n_transition_params]
+    idx += total_n_transition_params
 
     # Shock SDs per factor
     shock_sds = params[idx : idx + n_state_factors]
@@ -394,6 +415,9 @@ def _transition_loglike_per_obs(
     measurements: Array,
     controls: Array,
     loading_mask: Array,
+    prev_residuals_base: Array,
+    prev_full_loadings: Array,
+    prev_meas_sds: Array,
     prev_distribution: dict[str, Array],
     state_nodes: Array,
     state_weights: Array,
@@ -414,25 +438,32 @@ def _transition_loglike_per_obs(
     means = prev_distribution["means"]
     chol_covs = prev_distribution["chol_covs"]
 
-    def _single_obs(residual_base: Array, obs_cond_weights: Array) -> Array:
+    def _single_obs(
+        residual_base: Array,
+        prev_residual_base: Array,
+        obs_cond_weights: Array,
+    ) -> Array:
         return _integrate_transition_single_obs(
             residual_base=residual_base,
             full_loadings=full_loadings,
             meas_sds=meas_sds,
+            prev_residual_base=prev_residual_base,
+            prev_full_loadings=prev_full_loadings,
+            prev_meas_sds=prev_meas_sds,
             obs_cond_weights=obs_cond_weights,
             means=means,
             chol_covs=chol_covs,
             state_nodes=state_nodes,
             state_weights=state_weights,
-            _shock_nodes=shock_nodes,
-            _shock_weights=shock_weights,
-            _transition_func=transition_func,
-            _transition_params=transition_params,
-            _shock_sds=shock_sds,
+            shock_nodes=shock_nodes,
+            shock_weights=shock_weights,
+            transition_func=transition_func,
+            transition_params=transition_params,
+            shock_sds=shock_sds,
             stability_floor=stability_floor,
         )
 
-    return jax.vmap(_single_obs)(residuals_base, cond_weights)
+    return jax.vmap(_single_obs)(residuals_base, prev_residuals_base, cond_weights)
 
 
 def _integrate_transition_single_obs(
@@ -440,41 +471,76 @@ def _integrate_transition_single_obs(
     residual_base: Array,
     full_loadings: Array,
     meas_sds: Array,
+    prev_residual_base: Array,
+    prev_full_loadings: Array,
+    prev_meas_sds: Array,
     obs_cond_weights: Array,
     means: Array,
     chol_covs: Array,
     state_nodes: Array,
     state_weights: Array,
-    _shock_nodes: Array,
-    _shock_weights: Array,
-    _transition_func: Callable,
-    _transition_params: Array,
-    _shock_sds: Array,
+    shock_nodes: Array,
+    shock_weights: Array,
+    transition_func: Callable,
+    transition_params: Array,
+    shock_sds: Array,
     stability_floor: float,
 ) -> Array:
     """Quadrature integration for one observation at a transition period.
 
-    Integrate over (theta_t) and production shocks (eta_t).
-    The measurement likelihood at period t is evaluated at each quadrature node.
+    Integrate over θ_{t-1} (state nodes) and production shocks η (shock nodes).
+    The previous-period measurement density conditions the quadrature on
+    individual-specific data (this is the AF paper's key identification device).
+
+    For each state node z_q, mixture component l, and shock node η_r::
+
+        θ_{t-1} = μ_l + L_l @ z_q
+        th_t = f(th_{t-1}; delta) + sd_shock * eta_r
+
+        kernel = pi_l
+                 * prod_m N(Z_{t-1,m} | c~_m + lam~_m' th_{t-1}, sd~_m)
+                 * prod_m N(Z_{t,m} | c_m + lam_m' th_t, sd_m)
+
     """
     n_components = obs_cond_weights.shape[0]
 
+    def _shock_contribution(eta_r: Array, theta_prev: Array) -> Array:
+        """Evaluate current-period measurement density for one shock."""
+        theta_t = transition_func(theta_prev, transition_params) + shock_sds * eta_r
+        residuals = residual_base - full_loadings @ theta_t
+        log_meas = jnp.sum(
+            _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
+        )
+        return jnp.exp(log_meas)
+
     def _node_contribution(z_q: Array) -> Array:
+        """Integrate over shocks, weighted by previous-period density."""
         total = jnp.array(0.0)
 
         for l_idx in range(n_components):
-            theta_q = means[l_idx] + chol_covs[l_idx] @ z_q
+            theta_prev = means[l_idx] + chol_covs[l_idx] @ z_q
 
-            # Measurement density at period t
-            residuals = residual_base - full_loadings @ theta_q
-            log_meas = jnp.sum(
-                _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
+            # Previous-period measurement density (conditions on individual data)
+            prev_residuals = prev_residual_base - prev_full_loadings @ theta_prev
+            log_prev_meas = jnp.sum(
+                _log_normal_pdf(
+                    prev_residuals, jnp.zeros_like(prev_residuals), prev_meas_sds
+                )
             )
 
-            total = total + obs_cond_weights[l_idx] * jnp.exp(log_meas)
+            # Inner integral: average current-period density over shocks
+            shock_contribs = jax.vmap(_shock_contribution, in_axes=(0, None))(
+                shock_nodes, theta_prev
+            )
+            avg_curr_density = jnp.dot(shock_weights, shock_contribs)
+
+            total = total + (
+                obs_cond_weights[l_idx] * jnp.exp(log_prev_meas) * avg_curr_density
+            )
 
         return total
 
+    # Outer integral: average over state quadrature nodes
     contributions = jax.vmap(_node_contribution)(state_nodes)
     integrated = jnp.dot(state_weights, contributions)
 
