@@ -504,23 +504,20 @@ def _integrate_transition_single_obs(
     """
     n_components = obs_cond_weights.shape[0]
 
-    def _shock_contribution(eta_r: Array, theta_prev: Array) -> Array:
-        """Evaluate current-period measurement density for one shock."""
+    def _log_shock_contribution(eta_r: Array, theta_prev: Array) -> Array:
+        """Log measurement density for one shock realization."""
         theta_t = transition_func(theta_prev, transition_params) + shock_sds * eta_r
         residuals = residual_base - full_loadings @ theta_t
-        log_meas = jnp.sum(
-            _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
-        )
-        return jnp.exp(log_meas)
+        return jnp.sum(_log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds))
 
-    def _node_contribution(z_q: Array) -> Array:
-        """Integrate over shocks, weighted by previous-period density."""
-        total = jnp.array(0.0)
+    def _log_node_contribution(z_q: Array) -> Array:
+        """Log-space kernel for one state quadrature node, LogSumExp over components."""
+        log_component_vals = []
 
         for l_idx in range(n_components):
             theta_prev = means[l_idx] + chol_covs[l_idx] @ z_q
 
-            # Previous-period measurement density (conditions on individual data)
+            # Previous-period measurement density (log space)
             prev_residuals = prev_residual_base - prev_full_loadings @ theta_prev
             log_prev_meas = jnp.sum(
                 _log_normal_pdf(
@@ -528,23 +525,26 @@ def _integrate_transition_single_obs(
                 )
             )
 
-            # Inner integral: average current-period density over shocks
-            shock_contribs = jax.vmap(_shock_contribution, in_axes=(0, None))(
+            # Inner shock integral: LogSumExp over shock nodes
+            log_shock_contribs = jax.vmap(_log_shock_contribution, in_axes=(0, None))(
                 shock_nodes, theta_prev
             )
-            avg_curr_density = jnp.dot(shock_weights, shock_contribs)
-
-            total = total + (
-                obs_cond_weights[l_idx] * jnp.exp(log_prev_meas) * avg_curr_density
+            log_avg_curr = jax.scipy.special.logsumexp(
+                log_shock_contribs + jnp.log(shock_weights)
             )
 
-        return total
+            log_kernel = (
+                jnp.log(obs_cond_weights[l_idx] + stability_floor)
+                + log_prev_meas
+                + log_avg_curr
+            )
+            log_component_vals.append(log_kernel)
 
-    # Outer integral: average over state quadrature nodes
-    contributions = jax.vmap(_node_contribution)(state_nodes)
-    integrated = jnp.dot(state_weights, contributions)
+        return jax.scipy.special.logsumexp(jnp.array(log_component_vals))
 
-    return jnp.log(integrated + stability_floor)
+    # Outer integral: LogSumExp over state quadrature nodes with weights
+    log_contribs = jax.vmap(_log_node_contribution)(state_nodes)
+    return jax.scipy.special.logsumexp(log_contribs + jnp.log(state_weights))
 
 
 def _log_normal_pdf(x: Array, mean: Array, sd: Array) -> Array:

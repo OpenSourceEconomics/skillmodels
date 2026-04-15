@@ -100,6 +100,20 @@ def estimate_transition_period(
     # Initialize transition params to reasonable defaults
     params_template = _initialize_transition_params(params_template, measurements)
 
+    # Collect transition function constraints (e.g. ProbabilityConstraint for log_ces)
+    transition_constraints = _collect_transition_constraints(
+        transition_info,
+        factors,
+        processed_model.labels.all_factors,
+        period,
+    )
+
+    # Satisfy constraints at start values
+    for constr in transition_constraints:
+        if isinstance(constr, om.ProbabilityConstraint):
+            prob_idx = constr.selector(params_template[["value"]]).index
+            params_template.loc[prob_idx, "value"] = 1.0 / len(prob_idx)
+
     # Build loading mask
     loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
 
@@ -205,6 +219,7 @@ def estimate_transition_period(
             lower=free_params_df["lower_bound"],
             upper=free_params_df["upper_bound"],
         ),
+        constraints=transition_constraints or None,
         fun_and_jac=fun_and_jac,
         **dict(af_options.optimizer_options),
     )
@@ -232,6 +247,36 @@ def estimate_transition_period(
     )
 
     return period_result, updated_dist
+
+
+def _collect_transition_constraints(
+    transition_info: TransitionInfo,
+    factors: tuple[str, ...],
+    all_factors: tuple[str, ...],
+    period: int,
+) -> list[om.constraints.Constraint]:
+    """Collect transition function constraints for the AF optimizer.
+
+    Look for `constraints_{function_name}()` in `transition_functions.py`,
+    mirroring how CHS collects them in `constraints.py`.
+    """
+    import skillmodels.transition_functions as tf_mod  # noqa: PLC0415
+
+    constraints: list[om.constraints.Constraint] = []
+    for factor in factors:
+        if factor not in transition_info.function_names:
+            continue
+        fname = transition_info.function_names[factor]
+        constraint_fn = getattr(tf_mod, f"constraints_{fname}", None)
+        if constraint_fn is not None:
+            constraints.append(
+                constraint_fn(
+                    factor=factor,
+                    factors=all_factors,
+                    aug_period=period - 1,
+                )
+            )
+    return constraints
 
 
 def _extract_prev_measurement_params(
