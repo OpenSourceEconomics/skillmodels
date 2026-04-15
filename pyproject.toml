@@ -95,6 +95,7 @@ per-file-ignores."tests/*" = [
   "FBT003", # Boolean positional value in function call
   "INP001", # File is part of an implicit namespace package
   "S101",   # Use of assert detected
+  "T201",   # print found (useful for manual inspection in long-running tests)
 ]
 pydocstyle.convention = "google"
 
@@ -150,7 +151,10 @@ rules.unused-ignore-comment = "error"
 [tool.pytest]
 ini_options.addopts = [ "--pdbcls=pdbp:Pdb" ]
 ini_options.filterwarnings = []
-ini_options.markers = [ "integration: integration tests requiring MODEL2 + data" ]
+ini_options.markers = [
+  "integration: integration tests requiring MODEL2 + data",
+  "long_running: slow tests skipped in CI (run with -m long_running)",
+]
 ini_options.norecursedirs = [ "docs" ]
 
 [tool.pixi.dependencies]
@@ -193,7 +197,7 @@ snakeviz = "*"
 [tool.pixi.feature.tests.target.unix.dependencies]
 pytest-memray = "*"
 [tool.pixi.feature.tests.tasks]
-tests = "pytest tests"
+tests = "pytest tests -m 'not long_running'"
 tests-with-cov = "pytest tests --cov-report=xml --cov=./"
 mem = """\
   pytest -x -s --pdb --memray --fail-on-increase \

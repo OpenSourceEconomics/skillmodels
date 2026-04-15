@@ -570,3 +570,140 @@ def test_af_vs_chs_transition_params_agree() -> None:
     assert abs(af_shock - chs_shock) < tol, (
         f"shock_sd: AF={af_shock:.4f} vs CHS={chs_shock:.4f}"
     )
+
+
+def _run_chs_estimation(
+    model: ModelSpec,
+    data: pd.DataFrame,
+) -> pd.DataFrame:
+    """Run CHS estimation with standard initialisation, return params."""
+    max_inputs = get_maximization_inputs(model, data)
+    params = max_inputs["params_template"].copy()
+    free = params["lower_bound"] != params["upper_bound"]
+    cat = params.index.get_level_values("category")
+    params.loc[free, "value"] = 0.001
+    params.loc[free & (cat == "loadings"), "value"] = 1.0
+    params.loc[free & (cat == "controls"), "value"] = 0.0
+    params.loc[free & (cat == "meas_sds"), "value"] = 0.75
+    params.loc[free & (cat == "shock_sds"), "value"] = 0.5
+    params.loc[free & (cat == "initial_states"), "value"] = 0.0
+    self_prod = (
+        free
+        & (cat == "transition")
+        & (
+            params.index.get_level_values("name1")
+            == params.index.get_level_values("name2")
+        )
+    )
+    params.loc[self_prod, "value"] = 0.8
+    for constr in max_inputs["constraints"]:
+        if isinstance(constr, om.ProbabilityConstraint):
+            prob_idx = constr.selector(params[["value"]]).index
+            params.loc[prob_idx, "value"] = 1.0 / len(prob_idx)
+
+    def _neg_ll_and_grad(p: pd.DataFrame) -> tuple[float, np.ndarray]:
+        val, grad = max_inputs["loglike_and_gradient"](p)
+        return -float(val), -np.array(grad)
+
+    return om.minimize(
+        fun=lambda p: -max_inputs["loglike"](p),
+        params=params[["value"]],
+        algorithm="scipy_lbfgsb",
+        bounds=om.Bounds(lower=params["lower_bound"], upper=params["upper_bound"]),
+        constraints=max_inputs["constraints"],
+        fun_and_jac=_neg_ll_and_grad,
+    ).params
+
+
+@pytest.mark.long_running
+def test_af_vs_chs_both_estimated_on_model2(model2_af, model2_data) -> None:
+    """Run both AF and CHS optimisation on MODEL2 data and compare estimates.
+
+    This test actually optimises both estimators (not just loading stored
+    params), so it takes a while. Skipped in CI via the long_running marker.
+    """
+    chs_est = _run_chs_estimation(model2_af, model2_data)
+
+    # --- AF estimation ---
+    af_result = estimate_af(
+        model_spec=model2_af,
+        data=model2_data,
+        af_options=AFEstimationOptions(
+            n_halton_points=60,
+            n_halton_points_shock=30,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+        ),
+    )
+
+    # --- Compare period-0 measurement params ---
+    af_p0 = af_result.period_results[0].params
+    meas_tol = 0.5  # generous: different estimators, AF uses 3 periods
+
+    for meas, fac in [("y2", "fac1"), ("y3", "fac1"), ("y5", "fac2"), ("y6", "fac2")]:
+        af_val = float(
+            af_p0.loc[("loadings", 0, meas, fac), "value"]  # ty: ignore[invalid-argument-type]
+        )
+        chs_val = float(
+            chs_est.loc[("loadings", 0, meas, fac), "value"]  # ty: ignore[invalid-argument-type]
+        )
+        assert np.isfinite(af_val), f"AF loading({meas},{fac}) not finite"
+        assert np.isfinite(chs_val), f"CHS loading({meas},{fac}) not finite"
+        assert abs(af_val - chs_val) < meas_tol, (
+            f"loading({meas},{fac}): AF={af_val:.4f} vs CHS={chs_val:.4f}"
+        )
+
+    # --- Compare transition params (period 0->1) ---
+    af_p1 = af_result.period_results[1].params
+    trans_tol = 0.5
+
+    # fac2 linear: self-productivity
+    af_fac2_self = float(
+        af_p1.loc[("transition", 0, "fac2", "fac2"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    chs_fac2_self = float(
+        chs_est.loc[("transition", 0, "fac2", "fac2"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    assert abs(af_fac2_self - chs_fac2_self) < trans_tol, (
+        f"fac2 self-prod: AF={af_fac2_self:.4f} vs CHS={chs_fac2_self:.4f}"
+    )
+
+    # All transition params should be finite
+    af_trans = af_p1.query("category == 'transition'")
+    assert af_trans["value"].apply(np.isfinite).all(), (
+        f"Non-finite AF transition params:\n{af_trans}"
+    )
+
+    # AF transition params should NOT be stuck at initialisation
+    trans_values = af_trans["value"].to_numpy()
+    assert not np.allclose(trans_values, 0.1, atol=0.01), (
+        "AF transition params stuck at init values"
+    )
+
+    # --- Print comparison for manual inspection ---
+    print("\n\nMODEL2: AF vs CHS (both estimated)")
+    print("=" * 70)
+    print(f"{'Parameter':40s} {'AF':>10s} {'CHS':>10s}")
+    print("-" * 70)
+    for idx, row in af_trans.iterrows():
+        ix = tuple(idx)  # ty: ignore[invalid-argument-type]
+        chs_loc = ("transition", ix[1], ix[2], ix[3])
+        chs_v = (
+            float(chs_est.loc[chs_loc, "value"])
+            if chs_loc in chs_est.index
+            else float("nan")
+        )
+        print(
+            f"  trans {ix[2]:6s} {ix[3]:12s}       {row['value']:10.4f} {chs_v:10.4f}"
+        )
+    af_shocks = af_p1.query("category == 'shock_sds'")
+    for idx, row in af_shocks.iterrows():
+        ix = tuple(idx)  # ty: ignore[invalid-argument-type]
+        chs_loc = ("shock_sds", ix[1], ix[2], ix[3])
+        chs_v = (
+            float(chs_est.loc[chs_loc, "value"])
+            if chs_loc in chs_est.index
+            else float("nan")
+        )
+        print(f"  shock {ix[2]:19s} {row['value']:10.4f} {chs_v:10.4f}")
+    print("-" * 70)
