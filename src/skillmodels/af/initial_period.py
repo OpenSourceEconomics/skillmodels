@@ -36,6 +36,7 @@ def estimate_initial_period(
     measurements: Array,
     controls: Array,
     af_options: AFEstimationOptions,
+    state_factors: tuple[str, ...] | None = None,
 ) -> tuple[AFPeriodResult, ConditionalDistribution]:
     """Estimate the initial period (Step 0) of the AF procedure.
 
@@ -49,6 +50,8 @@ def estimate_initial_period(
         measurements: Shape (n_obs, n_measures), period 0 measurement values.
         controls: Shape (n_obs, n_controls), period 0 control values.
         af_options: AF estimation options.
+        state_factors: Subset of latent factors used as state factors for
+            AF propagation. If `None`, all latent factors are used.
 
     Return:
         Tuple of (AFPeriodResult, ConditionalDistribution) where the
@@ -154,12 +157,13 @@ def estimate_initial_period(
     result_params = params_template.copy()
     result_params.loc[free_index, "value"] = opt_res.params["value"].to_numpy()
 
-    # Extract conditional distribution
+    # Extract conditional distribution (state factors only for AF propagation)
+    sf = state_factors if state_factors is not None else factors
     cond_dist = _extract_conditional_distribution(
         result_params,
-        n_factors,
+        len(sf),
         n_components,
-        factors,
+        sf,
     )
 
     period_result = AFPeriodResult(
@@ -278,9 +282,9 @@ def _extract_conditional_distribution(
     params: pd.DataFrame,
     n_factors: int,
     n_components: int,
-    _factors: tuple[str, ...],
+    factors: tuple[str, ...],
 ) -> ConditionalDistribution:
-    """Extract the estimated initial distribution from optimized parameters."""
+    """Extract the estimated initial distribution for the given factors."""
     # Mixture weights
     weight_mask = params.index.get_level_values("category") == "mixture_weights"
     weights_raw = jnp.array(params.loc[weight_mask, "value"].to_numpy())
@@ -289,17 +293,28 @@ def _extract_conditional_distribution(
     # Components
     components: list[MixtureComponent] = []
     for m in range(n_components):
-        # Mean
-        mean_mask = (params.index.get_level_values("category") == "initial_states") & (
-            params.index.get_level_values("name1") == f"mixture_{m}"
-        )
-        mean = jnp.array(params.loc[mean_mask, "value"].to_numpy())
+        # Mean: select only the requested factors
+        mean_vals = []
+        for fac in factors:
+            loc = ("initial_states", 0, f"mixture_{m}", fac)
+            if loc in params.index:
+                mean_vals.append(float(params.loc[loc, "value"]))  # ty: ignore[invalid-argument-type]
+        mean = jnp.array(mean_vals)
 
-        # Cholesky
-        chol_mask = (
-            params.index.get_level_values("category") == "initial_cholcovs"
-        ) & (params.index.get_level_values("name1") == f"mixture_{m}")
-        chol_flat = jnp.array(params.loc[chol_mask, "value"].to_numpy())
+        # Cholesky: extract submatrix for requested factors
+        chol_vals = []
+        for row_fac in factors:
+            for col_fac in factors:
+                if factors.index(col_fac) <= factors.index(row_fac):
+                    loc = (
+                        "initial_cholcovs",
+                        0,
+                        f"mixture_{m}",
+                        f"{row_fac}-{col_fac}",
+                    )
+                    if loc in params.index:
+                        chol_vals.append(float(params.loc[loc, "value"]))  # ty: ignore[invalid-argument-type]
+        chol_flat = jnp.array(chol_vals)
         chol = jnp.zeros((n_factors, n_factors))
         chol = chol.at[jnp.tril_indices(n_factors)].set(chol_flat)  # noqa: PD008
 

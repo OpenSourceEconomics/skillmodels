@@ -58,6 +58,16 @@ def estimate_af(
     n_periods = processed_model.dimensions.n_periods
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
+    observed_factors = processed_model.labels.observed_factors
+
+    # Identify endogenous (investment) factors
+    endog_info = processed_model.endogenous_factors_info
+    endogenous_factors = tuple(
+        f
+        for f in factors
+        if f in endog_info.factor_info and endog_info.factor_info[f].is_endogenous
+    )
+    state_factors = tuple(f for f in factors if f not in endogenous_factors)
 
     period_data = _extract_period_data(
         data,
@@ -65,6 +75,7 @@ def estimate_af(
         factors,
         controls_names,
         model_spec,
+        observed_factors=observed_factors,
     )
 
     # Step 0: Initial period
@@ -74,6 +85,7 @@ def estimate_af(
         measurements=period_data[0]["measurements"],
         controls=period_data[0]["controls"],
         af_options=af_options,
+        state_factors=state_factors,
     )
 
     period_results: list[AFPeriodResult] = [period_0_result]
@@ -98,6 +110,11 @@ def estimate_af(
             prev_period_params=prev_period_params,
             prev_distribution=cond_dist,
             af_options=af_options,
+            endogenous_factors=endogenous_factors,
+            observed_factors=observed_factors,
+            observed_factor_data=period_data.get(t - 1, {}).get(
+                "observed_factors", None
+            ),
         )
         period_results.append(period_t_result)
         conditional_dists.append(cond_dist)
@@ -119,23 +136,17 @@ def _extract_period_data(
     _factors: tuple[str, ...],
     controls_names: tuple[str, ...],
     model_spec: ModelSpec,
+    observed_factors: tuple[str, ...] = (),
 ) -> dict[int, dict[str, Array]]:
-    """Extract measurement and control arrays for each period.
-
-    Args:
-        data: Long-format DataFrame with MultiIndex (id, period).
-        n_periods: Number of periods in the model.
-        _factors: Latent factor names (unused, reserved for future use).
-        controls_names: Control variable names (includes "constant").
-        model_spec: Model specification for measurement variable names.
+    """Extract measurement, control, and observed factor arrays per period.
 
     Return:
-        Dict mapping period -> {"measurements": Array, "controls": Array}.
+        Dict mapping period -> {"measurements": Array, "controls": Array,
+        "observed_factors": Array (if any)}.
 
     """
     period_data: dict[int, dict[str, Array]] = {}
 
-    # Get all individuals and periods
     idx_names = data.index.names
     period_col = str(idx_names[1])
 
@@ -144,7 +155,6 @@ def _extract_period_data(
         if not measurements_pt:
             continue
 
-        # Get all unique measurement variable names for this period
         all_measures: list[str] = []
         seen: set[str] = set()
         for measures in measurements_pt.values():
@@ -153,17 +163,14 @@ def _extract_period_data(
                     seen.add(m)
                     all_measures.append(m)
 
-        # Select data for this period
         period_mask = data.index.get_level_values(period_col) == t
         period_df = data.loc[period_mask]
 
-        # Measurements array
         meas_cols = [c for c in all_measures if c in period_df.columns]
         meas_array = jnp.array(
             period_df[meas_cols].to_numpy(dtype=np.float64, na_value=np.nan),
         )
 
-        # Controls array (constant + control variables)
         ctrl_arrays = []
         for ctrl in controls_names:
             if ctrl == "constant":
@@ -172,12 +179,32 @@ def _extract_period_data(
                 ctrl_arrays.append(period_df[ctrl].to_numpy(dtype=np.float64))
             else:
                 ctrl_arrays.append(np.zeros(len(period_df)))
-
         ctrl_array = jnp.array(np.column_stack(ctrl_arrays))
 
-        period_data[t] = {
+        entry: dict[str, Array] = {
             "measurements": meas_array,
             "controls": ctrl_array,
         }
 
+        if observed_factors:
+            entry["observed_factors"] = _extract_observed_factors(
+                period_df, observed_factors
+            )
+
+        period_data[t] = entry
+
     return period_data
+
+
+def _extract_observed_factors(
+    period_df: pd.DataFrame,
+    observed_factors: tuple[str, ...],
+) -> Array:
+    """Extract observed factor values from a period's DataFrame."""
+    obs_arrays = [
+        period_df[of].to_numpy(dtype=np.float64)
+        if of in period_df.columns
+        else np.zeros(len(period_df))
+        for of in observed_factors
+    ]
+    return jnp.array(np.column_stack(obs_arrays))

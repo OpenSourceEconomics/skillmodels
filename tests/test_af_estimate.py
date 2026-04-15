@@ -664,3 +664,139 @@ def test_af_vs_chs_both_estimated_on_model2(model2_af, model2_data) -> None:
         )
         print(f"  shock {ix[2]:19s} {row['value']:10.4f} {chs_v:10.4f}")
     print("-" * 70)
+
+
+# ---------------------------------------------------------------------------
+# Investment equation tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.end_to_end
+def test_af_estimate_with_endogenous_factor() -> None:
+    """Verify AF estimation works with an endogenous (investment) factor.
+
+    DGP:
+      theta_{t+1} = 0.6 * theta_t + 0.3 * I_t + 0.05 + eta
+      (log_ces-like, but linear for simplicity)
+      I_t = 0.5 * theta_t + 0.2 * Y_t + eps_I
+      Skill measures: Z^s_{t,m} = intercept + loading * theta_t + noise
+      Investment measures: Z^I_{t,m} = intercept + loading * I_t + noise
+    """
+    rng = np.random.default_rng(123)
+    n_obs, n_periods = 400, 3
+
+    # True parameters
+    true_beta_skill = 0.6  # theta on theta
+    true_beta_inv = 0.3  # investment on theta_next
+    true_trans_constant = 0.05
+    true_shock_sd = 0.3
+    true_inv_beta0 = 0.0  # investment intercept
+    true_inv_beta_theta = 0.5  # investment depends on skill
+    true_inv_beta_y = 0.2  # investment depends on income
+    true_inv_sd = 0.25
+
+    # Simulate
+    theta = np.zeros((n_obs, n_periods))
+    inv = np.zeros((n_obs, n_periods))
+    income = rng.normal(1.0, 0.5, n_obs)  # exogenous, time-invariant
+    theta[:, 0] = rng.normal(0, 1, n_obs)
+    inv[:, 0] = (
+        true_inv_beta0
+        + true_inv_beta_theta * theta[:, 0]
+        + true_inv_beta_y * income
+        + rng.normal(0, true_inv_sd, n_obs)
+    )
+    for t in range(n_periods - 1):
+        theta[:, t + 1] = (
+            true_trans_constant
+            + true_beta_skill * theta[:, t]
+            + true_beta_inv * inv[:, t]
+            + rng.normal(0, true_shock_sd, n_obs)
+        )
+        if t + 1 < n_periods:
+            inv[:, t + 1] = (
+                true_inv_beta0
+                + true_inv_beta_theta * theta[:, t + 1]
+                + true_inv_beta_y * income
+                + rng.normal(0, true_inv_sd, n_obs)
+            )
+
+    rows = []
+    for i in range(n_obs):
+        for t in range(n_periods):
+            rows.append(
+                {
+                    "caseid": i,
+                    "period": t,
+                    # Skill measures
+                    "s1": theta[i, t] + rng.normal(0, 0.3),
+                    "s2": 0.3 + 0.8 * theta[i, t] + rng.normal(0, 0.35),
+                    "s3": -0.1 + 1.1 * theta[i, t] + rng.normal(0, 0.4),
+                    # Investment measures
+                    "i1": inv[i, t] + rng.normal(0, 0.3),
+                    "i2": 0.2 + 0.9 * inv[i, t] + rng.normal(0, 0.35),
+                    "i3": -0.1 + 1.2 * inv[i, t] + rng.normal(0, 0.4),
+                    # Exogenous variable
+                    "income": income[i],
+                }
+            )
+    data = pd.DataFrame(rows).set_index(["caseid", "period"])
+
+    model = ModelSpec(
+        factors={
+            "skill": FactorSpec(
+                measurements=(("s1", "s2", "s3"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"s1": 1},) * n_periods,
+                    intercepts=({"s1": 0},) * n_periods,
+                ),
+                transition_function="linear",
+            ),
+            "investment": FactorSpec(
+                measurements=(("i1", "i2", "i3"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"i1": 1},) * n_periods,
+                    intercepts=({"i1": 0},) * n_periods,
+                ),
+                transition_function="linear",
+                is_endogenous=True,
+            ),
+        },
+        observed_factors=("income",),
+        estimation_options=EstimationOptions(
+            robust_bounds=True,
+            bounds_distance=0.001,
+            n_mixtures=1,
+        ),
+    )
+
+    result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=AFEstimationOptions(
+            n_halton_points=30,
+            n_halton_points_shock=15,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+        ),
+    )
+
+    # Basic checks: estimation ran, produced results for all periods
+    assert len(result.period_results) == n_periods
+    for pr in result.period_results:
+        assert np.isfinite(pr.loglikelihood), (
+            f"Period {pr.period}: non-finite loglik {pr.loglikelihood}"
+        )
+
+    # Period 1 should have investment equation parameters
+    p1 = result.period_results[1].params
+    inv_eq = p1.query("category == 'investment_eq'")
+    assert len(inv_eq) > 0, (
+        "No investment_eq parameters found — endogenous factor not wired"
+    )
+
+    # Investment equation params should not be stuck at init
+    inv_eq_values = inv_eq["value"].to_numpy()
+    assert not np.allclose(inv_eq_values, 0.5, atol=0.05), (
+        f"Investment eq params stuck at init: {inv_eq_values}"
+    )

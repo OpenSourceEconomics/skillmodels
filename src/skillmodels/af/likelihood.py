@@ -260,6 +260,7 @@ def af_loglike_transition(
     all_params: Array,
     free_mask: Array,
     n_state_factors: int,
+    n_endogenous_factors: int,
     n_measures: int,
     n_controls: int,
     measurements: Array,
@@ -276,8 +277,13 @@ def af_loglike_transition(
     state_weights: Array,
     shock_nodes: Array,
     shock_weights: Array,
+    inv_shock_nodes: Array,
+    inv_shock_weights: Array,
     transition_func: Callable,
     total_n_transition_params: int,
+    total_n_inv_params: int,
+    n_inv_eq_params_per: int,
+    observed_factor_values: Array,
     stability_floor: float,
 ) -> Array:
     """Negative log-likelihood for a transition period (Step t).
@@ -298,6 +304,7 @@ def af_loglike_transition(
         all_params: Full parameter vector with fixed values.
         free_mask: Boolean mask for free parameters.
         n_state_factors: Number of state factors with transition equations.
+        n_endogenous_factors: Number of endogenous (investment) factors.
         n_measures: Number of measurements at period t.
         n_controls: Number of controls at period t.
         measurements: Shape (n_obs, n_measures), measurements at period t.
@@ -314,8 +321,13 @@ def af_loglike_transition(
         state_weights: Shape (n_nodes,), quadrature weights.
         shock_nodes: Shape (n_shock_nodes, n_factors), shock nodes.
         shock_weights: Shape (n_shock_nodes,), shock weights.
+        inv_shock_nodes: Shape (n_inv_nodes, n_endog), investment shock nodes.
+        inv_shock_weights: Shape (n_inv_nodes,), investment shock weights.
         transition_func: Combined transition f(states, params) -> new_states.
         total_n_transition_params: Total transition params across all factors.
+        total_n_inv_params: Total investment equation parameters.
+        n_inv_eq_params_per: Investment equation parameters per endogenous factor.
+        observed_factor_values: Shape (n_obs, n_obs_factors), observed factor data.
         stability_floor: Numerical stability floor.
 
     Return:
@@ -327,14 +339,18 @@ def af_loglike_transition(
     parsed = _parse_transition_params(
         params,
         n_state_factors,
+        n_endogenous_factors,
         n_measures,
         n_controls,
         total_n_transition_params,
+        total_n_inv_params,
+        n_inv_eq_params_per,
     )
 
     # Expand previous-period loadings (fixed, from previous step)
     n_prev_measures = prev_loading_mask.shape[0]
-    prev_full_loadings = jnp.zeros((n_prev_measures, n_state_factors))
+    n_prev_factors = prev_loading_mask.shape[1]
+    prev_full_loadings = jnp.zeros((n_prev_measures, n_prev_factors))
     prev_full_loadings = prev_full_loadings.at[prev_loading_mask].set(
         prev_loadings_flat
     )
@@ -344,6 +360,8 @@ def af_loglike_transition(
     log_likes = _transition_loglike_per_obs(
         transition_params=parsed["transition_params"],
         shock_sds=parsed["shock_sds"],
+        inv_eq_params=parsed["inv_eq_params"],
+        inv_sds=parsed["inv_sds"],
         control_params=parsed["control_params"],
         loadings_flat=parsed["loadings_flat"],
         meas_sds=parsed["meas_sds"],
@@ -358,7 +376,12 @@ def af_loglike_transition(
         state_weights=state_weights,
         shock_nodes=shock_nodes,
         shock_weights=shock_weights,
+        inv_shock_nodes=inv_shock_nodes,
+        inv_shock_weights=inv_shock_weights,
         transition_func=transition_func,
+        n_state_factors=n_state_factors,
+        n_endogenous_factors=n_endogenous_factors,
+        observed_factor_values=observed_factor_values,
         stability_floor=stability_floor,
     )
 
@@ -368,20 +391,31 @@ def af_loglike_transition(
 def _parse_transition_params(
     params: Array,
     n_state_factors: int,
+    n_endogenous_factors: int,
     n_measures: int,
     n_controls: int,
     total_n_transition_params: int,
+    total_n_inv_params: int,
+    _n_inv_eq_params_per: int,
 ) -> dict[str, Array]:
     """Parse flat parameter vector for a transition period."""
     idx = 0
 
-    # Transition parameters (flat vector for all factors combined)
+    # Transition parameters (flat, for state factors only)
     transition_params = params[idx : idx + total_n_transition_params]
     idx += total_n_transition_params
 
-    # Shock SDs per factor
+    # Shock SDs per state factor
     shock_sds = params[idx : idx + n_state_factors]
     idx += n_state_factors
+
+    # Investment equation params (if any endogenous factors)
+    inv_eq_params = params[idx : idx + total_n_inv_params]
+    idx += total_n_inv_params
+
+    # Investment shock SDs
+    inv_sds = params[idx : idx + n_endogenous_factors]
+    idx += n_endogenous_factors
 
     # Control params: (n_measures, n_controls)
     n_ctrl = n_measures * n_controls
@@ -399,6 +433,8 @@ def _parse_transition_params(
     return {
         "transition_params": transition_params,
         "shock_sds": shock_sds,
+        "inv_eq_params": inv_eq_params,
+        "inv_sds": inv_sds,
         "control_params": control_params,
         "loadings_flat": loadings_flat,
         "meas_sds": meas_sds,
@@ -409,6 +445,8 @@ def _transition_loglike_per_obs(
     *,
     transition_params: Array,
     shock_sds: Array,
+    inv_eq_params: Array,
+    inv_sds: Array,
     control_params: Array,
     loadings_flat: Array,
     meas_sds: Array,
@@ -423,12 +461,17 @@ def _transition_loglike_per_obs(
     state_weights: Array,
     shock_nodes: Array,
     shock_weights: Array,
+    inv_shock_nodes: Array,
+    inv_shock_weights: Array,
     transition_func: Callable,
+    n_state_factors: int,
+    n_endogenous_factors: int,
+    observed_factor_values: Array,
     stability_floor: float,
 ) -> Array:
     """Compute per-observation log-likelihood for a transition period."""
-    n_measures, n_factors = loading_mask.shape
-    full_loadings = jnp.zeros((n_measures, n_factors))
+    n_measures, n_loading_factors = loading_mask.shape
+    full_loadings = jnp.zeros((n_measures, n_loading_factors))
     full_loadings = full_loadings.at[loading_mask].set(loadings_flat)
 
     control_contrib = controls @ control_params.T
@@ -442,6 +485,7 @@ def _transition_loglike_per_obs(
         residual_base: Array,
         prev_residual_base: Array,
         obs_cond_weights: Array,
+        obs_factor_values: Array,
     ) -> Array:
         return _integrate_transition_single_obs(
             residual_base=residual_base,
@@ -457,13 +501,54 @@ def _transition_loglike_per_obs(
             state_weights=state_weights,
             shock_nodes=shock_nodes,
             shock_weights=shock_weights,
+            inv_shock_nodes=inv_shock_nodes,
+            inv_shock_weights=inv_shock_weights,
             transition_func=transition_func,
             transition_params=transition_params,
             shock_sds=shock_sds,
+            inv_eq_params=inv_eq_params,
+            inv_sds=inv_sds,
+            n_state_factors=n_state_factors,
+            n_endogenous_factors=n_endogenous_factors,
+            obs_factor_values=obs_factor_values,
             stability_floor=stability_floor,
         )
 
-    return jax.vmap(_single_obs)(residuals_base, prev_residuals_base, cond_weights)
+    return jax.vmap(_single_obs)(
+        residuals_base, prev_residuals_base, cond_weights, observed_factor_values
+    )
+
+
+def _compute_investment(
+    theta_prev: Array,
+    obs_factor_values: Array,
+    inv_eq_params: Array,
+    inv_sds: Array,
+    eps_i: Array,
+    n_endogenous_factors: int,
+    n_state_factors: int,
+) -> Array:
+    """Compute investment from the AF investment equation.
+
+    I_j = beta_0 + beta_k @ theta + beta_y @ Y + sigma_I * eps_I
+
+    """
+    n_obs_factors = obs_factor_values.shape[0]
+    n_per = 1 + n_state_factors + n_obs_factors
+    result = jnp.zeros(n_endogenous_factors)
+    for j in range(n_endogenous_factors):
+        beta = inv_eq_params[j * n_per : (j + 1) * n_per]
+        intercept = beta[0]
+        state_coeffs = beta[1 : 1 + n_state_factors]
+        obs_coeffs = beta[1 + n_state_factors :]
+        inv_j = (
+            intercept
+            + jnp.dot(state_coeffs, theta_prev)
+            + jnp.dot(obs_coeffs, obs_factor_values)
+            + inv_sds[j] * eps_i[j]
+        )
+        result = result.at[j].set(inv_j)
+    return result
 
 
 def _integrate_transition_single_obs(
@@ -481,68 +566,94 @@ def _integrate_transition_single_obs(
     state_weights: Array,
     shock_nodes: Array,
     shock_weights: Array,
+    inv_shock_nodes: Array,
+    inv_shock_weights: Array,
     transition_func: Callable,
     transition_params: Array,
     shock_sds: Array,
+    inv_eq_params: Array,
+    inv_sds: Array,
+    n_state_factors: int,
+    n_endogenous_factors: int,
+    obs_factor_values: Array,
     stability_floor: float,
 ) -> Array:
     """Quadrature integration for one observation at a transition period.
 
-    Integrate over θ_{t-1} (state nodes) and production shocks η (shock nodes).
-    The previous-period measurement density conditions the quadrature on
-    individual-specific data (this is the AF paper's key identification device).
-
-    For each state node z_q, mixture component l, and shock node η_r::
-
-        θ_{t-1} = μ_l + L_l @ z_q
-        th_t = f(th_{t-1}; delta) + sd_shock * eta_r
-
-        kernel = pi_l
-                 * prod_m N(Z_{t-1,m} | c~_m + lam~_m' th_{t-1}, sd~_m)
-                 * prod_m N(Z_{t,m} | c_m + lam_m' th_t, sd_m)
-
+    Triple integral over state factors, investment shocks, and production
+    shocks. When n_endogenous_factors == 0, the investment shock integral
+    collapses (1 node, weight 1) and this reduces to the double integral.
     """
     n_components = obs_cond_weights.shape[0]
 
-    def _log_shock_contribution(eta_r: Array, theta_prev: Array) -> Array:
-        """Log measurement density for one shock realization."""
-        theta_t = transition_func(theta_prev, transition_params) + shock_sds * eta_r
-        residuals = residual_base - full_loadings @ theta_t
+    def _log_inner(eta_r: Array, full_prev_obs: Array, inv: Array) -> Array:
+        """Log measurement density for one production shock realization."""
+        theta_t = transition_func(full_prev_obs, transition_params) + shock_sds * eta_r
+        # Measurements at period t depend on [theta_t, I_{t-1}]
+        all_factors_t = jnp.concatenate([theta_t, inv])
+        residuals = residual_base - full_loadings @ all_factors_t
         return jnp.sum(_log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds))
 
+    def _log_inv_contribution(eps_i: Array, theta_prev: Array) -> Array:
+        """Log kernel for one investment shock, integrating over prod shocks.
+
+        Includes the previous-period investment measurement conditioning,
+        since I_{t-1} depends on the investment shock.
+        """
+        inv = _compute_investment(
+            theta_prev,
+            obs_factor_values,
+            inv_eq_params,
+            inv_sds,
+            eps_i,
+            n_endogenous_factors,
+            n_state_factors,
+        )
+        # Full state for measurement: [state, endogenous]
+        full_prev = jnp.concatenate([theta_prev, inv])
+        # Full state for transition: [state, endogenous, observed]
+        full_prev_with_obs = jnp.concatenate([theta_prev, inv, obs_factor_values])
+
+        # Previous-period investment measurement density (if any)
+        prev_residuals = prev_residual_base - prev_full_loadings @ full_prev
+        log_prev_inv_meas = jnp.sum(
+            _log_normal_pdf(
+                prev_residuals, jnp.zeros_like(prev_residuals), prev_meas_sds
+            )
+        )
+
+        # Integrate over production shocks
+        log_prod_contribs = jax.vmap(_log_inner, in_axes=(0, None, None))(
+            shock_nodes, full_prev_with_obs, inv
+        )
+        log_avg_prod = jax.scipy.special.logsumexp(
+            log_prod_contribs + jnp.log(shock_weights)
+        )
+
+        return log_prev_inv_meas + log_avg_prod
+
     def _log_node_contribution(z_q: Array) -> Array:
-        """Log-space kernel for one state quadrature node, LogSumExp over components."""
+        """Log kernel for one state node, LogSumExp over components."""
         log_component_vals = []
 
         for l_idx in range(n_components):
             theta_prev = means[l_idx] + chol_covs[l_idx] @ z_q
 
-            # Previous-period measurement density (log space)
-            prev_residuals = prev_residual_base - prev_full_loadings @ theta_prev
-            log_prev_meas = jnp.sum(
-                _log_normal_pdf(
-                    prev_residuals, jnp.zeros_like(prev_residuals), prev_meas_sds
-                )
+            # Integrate over investment shocks (middle integral)
+            # This includes prev-period measurement conditioning inside
+            log_inv_contribs = jax.vmap(_log_inv_contribution, in_axes=(0, None))(
+                inv_shock_nodes, theta_prev
+            )
+            log_avg = jax.scipy.special.logsumexp(
+                log_inv_contribs + jnp.log(inv_shock_weights)
             )
 
-            # Inner shock integral: LogSumExp over shock nodes
-            log_shock_contribs = jax.vmap(_log_shock_contribution, in_axes=(0, None))(
-                shock_nodes, theta_prev
-            )
-            log_avg_curr = jax.scipy.special.logsumexp(
-                log_shock_contribs + jnp.log(shock_weights)
-            )
-
-            log_kernel = (
-                jnp.log(obs_cond_weights[l_idx] + stability_floor)
-                + log_prev_meas
-                + log_avg_curr
-            )
+            log_kernel = jnp.log(obs_cond_weights[l_idx] + stability_floor) + log_avg
             log_component_vals.append(log_kernel)
 
         return jax.scipy.special.logsumexp(jnp.array(log_component_vals))
 
-    # Outer integral: LogSumExp over state quadrature nodes with weights
+    # Outer integral: LogSumExp over state quadrature nodes
     log_contribs = jax.vmap(_log_node_contribution)(state_nodes)
     return jax.scipy.special.logsumexp(log_contribs + jnp.log(state_weights))
 

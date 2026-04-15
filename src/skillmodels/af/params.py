@@ -128,12 +128,13 @@ def get_transition_period_params_index(
         # Investment shock SD
         ind_tups.append(("investment_sds", period - 1, endog_factor, "-"))
 
-    # Measurement params for period t
+    # Measurement params for period t (loadings for ALL factors, not just state)
     all_factor_measurements = dict(measurements_at_period)
+    all_latent = (*latent_factors, *endogenous_factors)
     ind_tups.extend(
         _measurement_index_tuples(
             period=period,
-            latent_factors=latent_factors,
+            latent_factors=all_latent,
             measurements=all_factor_measurements,
             controls=controls,
         )

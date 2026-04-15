@@ -48,6 +48,9 @@ def estimate_transition_period(
     prev_period_params: pd.DataFrame,
     prev_distribution: ConditionalDistribution,
     af_options: AFEstimationOptions,
+    endogenous_factors: tuple[str, ...] = (),
+    observed_factors: tuple[str, ...] = (),
+    observed_factor_data: Array | None = None,
 ) -> tuple[AFPeriodResult, ConditionalDistribution]:
     """Estimate a transition period (Step t, t >= 1) of the AF procedure.
 
@@ -66,13 +69,16 @@ def estimate_transition_period(
         prev_period_params: Estimated params DataFrame from period t-1.
         prev_distribution: Estimated conditional distribution from period t-1.
         af_options: AF estimation options.
+        endogenous_factors: Names of endogenous (investment) factors.
+        observed_factors: Names of observed (non-latent) factors.
+        observed_factor_data: Shape (n_obs, n_obs_factors), observed factor
+            values. Required when `observed_factors` is non-empty.
 
     Return:
         Tuple of (AFPeriodResult, ConditionalDistribution) where the
         distribution represents f(theta_t | data_{0:t}).
 
     """
-    n_factors = processed_model.dimensions.n_latent_factors
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
 
@@ -83,12 +89,19 @@ def estimate_transition_period(
     # For now, use the first non-constant factor's transition for the combined function
     transition_info = processed_model.transition_info
 
+    # Separate state factors from endogenous for the parameter index
+    state_factors = tuple(f for f in factors if f not in endogenous_factors)
+    n_state = len(state_factors)
+    n_endog = len(endogenous_factors)
+
     params_index = get_transition_period_params_index(
         period=period,
-        latent_factors=factors,
+        latent_factors=state_factors,
         transition_info=transition_info,
         measurements_at_period=measurements_pt,
         controls=controls_names,
+        endogenous_factors=endogenous_factors,
+        observed_factors=observed_factors,
     )
     normalizations = get_normalizations_for_period(model_spec.factors, period=period)
     params_template = create_af_params_template(
@@ -100,10 +113,10 @@ def estimate_transition_period(
     # Initialize transition params to reasonable defaults
     params_template = _initialize_transition_params(params_template, measurements)
 
-    # Collect transition function constraints (e.g. ProbabilityConstraint for log_ces)
+    # Collect transition function constraints (only for state factors' transitions)
     transition_constraints = _collect_transition_constraints(
         transition_info,
-        factors,
+        state_factors,
         processed_model.labels.all_factors,
         period,
     )
@@ -118,44 +131,180 @@ def estimate_transition_period(
     loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
 
     # Halton quadrature nodes for factor integration
+    # State nodes cover only state factors (conditional distribution dimension)
     state_nodes, state_weights = create_halton_nodes_and_weights(
         af_options.n_halton_points,
-        n_factors,
+        n_state,
     )
     shock_nodes, shock_weights = create_shock_nodes_and_weights(
         af_options.n_halton_points_shock,
-        n_factors,
+        n_state,
     )
 
     prev_dist_arrays, total_n_transition_params = _prepare_transition_inputs(
         prev_distribution,
         transition_info,
-        factors,
+        state_factors,
         measurements.shape[0],
     )
 
-    # Build combined transition from raw transition functions (not the DAG-based
-    # individual_functions, which are vmapped and incompatible with AF's usage).
-    raw_funcs = _get_raw_transition_functions(model_spec, factors)
-    param_counts = tuple(len(transition_info.param_names[f]) for f in factors)
+    # Build combined transition from raw transition functions.
+    # Only state factors have transitions; endogenous factors use the investment eq.
+    raw_funcs = _get_raw_transition_functions(model_spec, state_factors)
+    param_counts = tuple(len(transition_info.param_names[f]) for f in state_factors)
 
-    def combined_transition(states: Array, params: Array) -> Array:
-        """Apply per-factor transition functions to produce next-period states."""
-        result = jnp.zeros(n_factors)
+    def combined_transition(
+        full_states: Array,
+        params: Array,
+    ) -> Array:
+        """Apply per-factor transitions."""
+        result = jnp.zeros(n_state)
         p_idx = 0
-        for i in range(n_factors):
+        for i in range(n_state):
             n_p = param_counts[i]
             factor_params = params[p_idx : p_idx + n_p]
-            result = result.at[i].set(raw_funcs[i](states, factor_params))  # noqa: PD008
+            result = result.at[i].set(  # noqa: PD008
+                raw_funcs[i](full_states, factor_params)
+            )
             p_idx += n_p
         return result
 
-    # Set up optimization
+    # Investment shock nodes (separate from production shocks)
+    if n_endog > 0:
+        inv_shock_nodes, inv_shock_weights = create_halton_nodes_and_weights(
+            af_options.n_halton_points_shock,
+            n_endog,
+            seed=99,
+        )
+    else:
+        inv_shock_nodes = jnp.zeros((1, 0))
+        inv_shock_weights = jnp.ones(1)
+
+    # Count investment equation params (per endogenous factor: intercept + state + obs)
+    n_inv_eq_params_per = 1 + n_state + len(observed_factors) if n_endog > 0 else 0
+    total_n_inv_params = n_endog * n_inv_eq_params_per
+
+    # Observed factor values for investment equation (from previous period)
+    n_obs_fac = len(observed_factors)
+    obs_factor_values = (
+        observed_factor_data
+        if observed_factor_data is not None
+        else jnp.zeros((measurements.shape[0], n_obs_fac))
+    )
+
+    result_params, opt_res = _run_transition_optimization(
+        params_template=params_template,
+        prev_period_params=prev_period_params,
+        model_spec=model_spec,
+        factors=factors,
+        period=period,
+        n_state=n_state,
+        n_endog=n_endog,
+        all_measures=all_measures,
+        controls_names=controls_names,
+        measurements=measurements,
+        controls=controls,
+        prev_measurements=prev_measurements,
+        prev_controls=prev_controls,
+        loading_mask=loading_mask,
+        prev_dist_arrays=prev_dist_arrays,
+        state_nodes=state_nodes,
+        state_weights=state_weights,
+        shock_nodes=shock_nodes,
+        shock_weights=shock_weights,
+        inv_shock_nodes=inv_shock_nodes,
+        inv_shock_weights=inv_shock_weights,
+        combined_transition=combined_transition,
+        total_n_transition_params=total_n_transition_params,
+        total_n_inv_params=total_n_inv_params,
+        n_inv_eq_params_per=n_inv_eq_params_per,
+        obs_factor_values=obs_factor_values,
+        af_options=af_options,
+        transition_constraints=transition_constraints,
+    )
+
+    # Create a state-only transition wrapper for distribution propagation.
+    # Uses mean investment (from investment eq at prior mean) and observed values.
+    prior_mean = prev_distribution.components[0].mean
+    mean_inv = _compute_mean_investment(
+        prior_mean,
+        obs_factor_values,
+        result_params,
+        n_endog,
+        n_state,
+        len(observed_factors),
+    )
+
+    def state_only_transition(state_factors_val: Array, params: Array) -> Array:
+        """Transition wrapper that fills in mean investment + observed."""
+        full = jnp.concatenate([state_factors_val, mean_inv, obs_factor_values[0]])
+        return combined_transition(full, params)
+
+    updated_dist = _update_conditional_distribution(
+        prev_distribution=prev_distribution,
+        result_params=result_params,
+        combined_transition=state_only_transition,
+        state_nodes=state_nodes,
+        state_weights=state_weights,
+        n_factors=n_state,
+    )
+
+    period_result = AFPeriodResult(
+        period=period,
+        params=result_params,
+        loglikelihood=-float(opt_res.fun),
+        success=bool(opt_res.success),
+        optimize_result=opt_res,
+    )
+
+    return period_result, updated_dist
+
+
+def _run_transition_optimization(
+    *,
+    params_template: pd.DataFrame,
+    prev_period_params: pd.DataFrame,
+    model_spec: ModelSpec,
+    factors: tuple[str, ...],
+    period: int,
+    n_state: int,
+    n_endog: int,
+    all_measures: list[str],
+    controls_names: tuple[str, ...],
+    measurements: Array,
+    controls: Array,
+    prev_measurements: Array,
+    prev_controls: Array,
+    loading_mask: np.ndarray,
+    prev_dist_arrays: dict[str, Array],
+    state_nodes: Array,
+    state_weights: Array,
+    shock_nodes: Array,
+    shock_weights: Array,
+    inv_shock_nodes: Array,
+    inv_shock_weights: Array,
+    combined_transition: Callable,
+    total_n_transition_params: int,
+    total_n_inv_params: int,
+    n_inv_eq_params_per: int,
+    obs_factor_values: Array,
+    af_options: AFEstimationOptions,
+    transition_constraints: list[om.constraints.Constraint],
+) -> tuple[pd.DataFrame, om.OptimizeResult]:
+    """Build likelihood, run the optimizer, and return updated params.
+
+    Handle the mechanical optimization setup: construct the log-likelihood
+    keyword arguments, create the jitted value-and-gradient function, build
+    the free-parameter DataFrame, and call `om.minimize`.
+
+    Return:
+        Tuple of (result_params DataFrame, OptimizeResult).
+
+    """
     free_mask_np = get_free_mask(params_template)
     free_mask = jnp.array(free_mask_np)
     all_params_init = jnp.array(params_template["value"].to_numpy())
 
-    # Extract previous-period estimated measurement params (fixed in this step)
     prev_meas_info = _extract_prev_measurement_params(
         prev_period_params,
         model_spec,
@@ -166,7 +315,8 @@ def estimate_transition_period(
     loglike_kwargs = {
         "all_params": all_params_init,
         "free_mask": free_mask,
-        "n_state_factors": n_factors,
+        "n_state_factors": n_state,
+        "n_endogenous_factors": n_endog,
         "n_measures": len(all_measures),
         "n_controls": len(controls_names),
         "measurements": measurements,
@@ -183,8 +333,13 @@ def estimate_transition_period(
         "state_weights": state_weights,
         "shock_nodes": shock_nodes,
         "shock_weights": shock_weights,
+        "inv_shock_nodes": inv_shock_nodes,
+        "inv_shock_weights": inv_shock_weights,
         "transition_func": combined_transition,
         "total_n_transition_params": total_n_transition_params,
+        "total_n_inv_params": total_n_inv_params,
+        "n_inv_eq_params_per": n_inv_eq_params_per,
+        "observed_factor_values": obs_factor_values,
         "stability_floor": af_options.stability_floor,
     }
 
@@ -227,26 +382,37 @@ def estimate_transition_period(
     result_params = params_template.copy()
     result_params.loc[free_index, "value"] = opt_res.params["value"].to_numpy()
 
-    # Update conditional distribution for the next period by propagating
-    # through the estimated transition function
-    updated_dist = _update_conditional_distribution(
-        prev_distribution=prev_distribution,
-        result_params=result_params,
-        combined_transition=combined_transition,
-        state_nodes=state_nodes,
-        state_weights=state_weights,
-        n_factors=n_factors,
-    )
+    return result_params, opt_res
 
-    period_result = AFPeriodResult(
-        period=period,
-        params=result_params,
-        loglikelihood=-float(opt_res.fun),
-        success=bool(opt_res.success),
-        optimize_result=opt_res,
-    )
 
-    return period_result, updated_dist
+def _compute_mean_investment(
+    state_mean: Array,
+    obs_factor_values: Array,
+    result_params: pd.DataFrame,
+    n_endog: int,
+    n_state: int,
+    n_obs_factors: int,
+) -> Array:
+    """Compute mean investment at the prior state mean (no shock)."""
+    if n_endog == 0:
+        return jnp.zeros(0)
+    inv_eq_mask = result_params.index.get_level_values("category") == "investment_eq"
+    inv_eq_vals = jnp.array(result_params.loc[inv_eq_mask, "value"].to_numpy())
+    n_per = 1 + n_state + n_obs_factors
+    # Use mean observed factor values (first obs or zeros)
+    obs_mean = (
+        obs_factor_values[0]
+        if obs_factor_values.shape[0] > 0
+        else jnp.zeros(n_obs_factors)
+    )
+    result = jnp.zeros(n_endog)
+    for j in range(n_endog):
+        beta = inv_eq_vals[j * n_per : (j + 1) * n_per]
+        inv_j = beta[0] + jnp.dot(beta[1 : 1 + n_state], state_mean)
+        if n_obs_factors > 0:
+            inv_j = inv_j + jnp.dot(beta[1 + n_state :], obs_mean)
+        result = result.at[j].set(inv_j)  # noqa: PD008
+    return result
 
 
 def _collect_transition_constraints(
