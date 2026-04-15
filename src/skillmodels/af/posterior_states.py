@@ -91,13 +91,25 @@ def get_af_posterior_states(
             period_df[meas_cols].to_numpy(dtype=np.float64, na_value=np.nan),
         )
 
+        # Build per-observation control contribution
+        ctrl_arrays = []
+        for ctrl in meas_info["control_names"]:
+            if ctrl == "constant":
+                ctrl_arrays.append(np.ones(len(period_df)))
+            elif ctrl in period_df.columns:
+                ctrl_arrays.append(period_df[ctrl].to_numpy(dtype=np.float64))
+            else:
+                ctrl_arrays.append(np.zeros(len(period_df)))
+        controls = jnp.array(np.column_stack(ctrl_arrays))
+        control_contrib = controls @ meas_info["control_params"].T
+
         nodes, weights = create_halton_nodes_and_weights(n_halton_points, n_state)
 
         posterior_means = _compute_posterior_means(
             cond_dist=cond_dist,
             measurements=measurements,
+            control_contrib=control_contrib,
             full_loadings=meas_info["full_loadings"],
-            control_contrib=meas_info["control_contrib"],
             meas_sds=meas_info["meas_sds"],
             nodes=nodes,
             weights=weights,
@@ -128,7 +140,7 @@ def _extract_period_measurement_info(
     model_spec: ModelSpec,
     factors: tuple[str, ...],
     period: int,
-) -> dict[str, Array]:
+) -> dict[str, Any]:
     """Extract measurement loadings, control contribution, and SDs."""
     measurements_pt = get_measurements_per_factor(model_spec.factors, period=period)
     all_measures = _get_ordered_measures(measurements_pt)
@@ -149,12 +161,26 @@ def _extract_period_measurement_info(
         jnp.array(loadings_list)
     )
 
-    ctrl_list = [
-        float(period_params.loc[loc, "value"])  # ty: ignore[invalid-argument-type]
-        if (loc := ("controls", period, meas, "constant")) in period_params.index
-        else 0.0
-        for meas in all_measures
+    # Extract ALL control coefficients (not just "constant")
+    ctrl_entries = period_params.loc[
+        period_params.index.get_level_values("category") == "controls"
     ]
+    ctrl_names = (
+        sorted(set(ctrl_entries.index.get_level_values("name2")))
+        if len(ctrl_entries) > 0
+        else ["constant"]
+    )
+    ctrl_params_list = []
+    for meas in all_measures:
+        for ctrl in ctrl_names:
+            loc = ("controls", period, meas, ctrl)
+            if loc in period_params.index:
+                ctrl_params_list.append(float(period_params.loc[loc, "value"]))
+            else:
+                ctrl_params_list.append(0.0)
+    control_params = jnp.array(ctrl_params_list).reshape(
+        len(all_measures), len(ctrl_names)
+    )
 
     sd_list = [
         float(period_params.loc[loc, "value"])  # ty: ignore[invalid-argument-type]
@@ -165,7 +191,8 @@ def _extract_period_measurement_info(
 
     return {
         "full_loadings": full_loadings,
-        "control_contrib": jnp.array(ctrl_list),
+        "control_params": control_params,
+        "control_names": ctrl_names,
         "meas_sds": jnp.array(sd_list),
     }
 
@@ -189,7 +216,7 @@ def _compute_posterior_means(
     chol_covs = jnp.stack([c.chol_cov for c in cond_dist.components])
     mix_weights = cond_dist.mixture_weights
 
-    residuals_base = measurements - control_contrib[None, :]
+    residuals_base = measurements - control_contrib
 
     def _single_obs(residual_base: Array) -> Array:
         """Posterior mean for one individual."""

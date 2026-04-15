@@ -134,8 +134,7 @@ def _parse_initial_params(
         "mixture_means": mixture_means,
         "mixture_chol_covs": mixture_chol_covs,
         "control_params": control_params,
-        "loadings_flat": loadings_flat,
-        "loadings": loadings_flat,  # Will be expanded using loading_mask
+        "loadings": loadings_flat,
         "meas_sds": meas_sds,
     }
 

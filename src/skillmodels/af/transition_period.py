@@ -114,12 +114,11 @@ def estimate_transition_period(
         period=period,
     )
 
-    # Initialize transition params to reasonable defaults
-    params_template = _initialize_transition_params(params_template, measurements)
-
-    # Override with user-supplied starting values where available
-    if start_params is not None:
-        apply_start_params(params_template, start_params)
+    params_template = _initialize_transition_params(
+        params_template,
+        measurements,
+        start_params,
+    )
 
     # Collect transition function constraints (only for state factors' transitions)
     transition_constraints = _collect_transition_constraints(
@@ -243,9 +242,13 @@ def estimate_transition_period(
         len(observed_factors),
     )
 
-    def state_only_transition(state_factors_val: Array, params: Array) -> Array:
-        """Transition wrapper that fills in mean investment + observed."""
-        full = jnp.concatenate([state_factors_val, mean_inv, obs_factor_values[0]])
+    def state_only_transition(
+        state_factors_val: Array,
+        params: Array,
+    ) -> Array:
+        """Transition wrapper using mean investment + mean observed."""
+        mean_obs = jnp.mean(obs_factor_values, axis=0)
+        full = jnp.concatenate([state_factors_val, mean_inv, mean_obs])
         return combined_transition(full, params)
 
     updated_dist = _update_conditional_distribution(
@@ -407,9 +410,9 @@ def _compute_mean_investment(
     inv_eq_mask = result_params.index.get_level_values("category") == "investment_eq"
     inv_eq_vals = jnp.array(result_params.loc[inv_eq_mask, "value"].to_numpy())
     n_per = 1 + n_state + n_obs_factors
-    # Use mean observed factor values (first obs or zeros)
+    # Use population mean of observed factor values
     obs_mean = (
-        obs_factor_values[0]
+        jnp.mean(obs_factor_values, axis=0)
         if obs_factor_values.shape[0] > 0
         else jnp.zeros(n_obs_factors)
     )
@@ -608,8 +611,12 @@ def _prepare_transition_inputs(
 def _initialize_transition_params(
     params_template: pd.DataFrame,
     measurements: Array,
+    start_params: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Initialize transition period parameters with reasonable defaults."""
+    """Initialize transition period parameters with reasonable defaults.
+
+    If `start_params` is provided, matching entries override the defaults.
+    """
     params = params_template.copy()
     meas_np = np.array(measurements)
 
@@ -636,6 +643,9 @@ def _initialize_transition_params(
     for idx in params.index[load_mask]:
         if params.loc[idx, "lower_bound"] != params.loc[idx, "upper_bound"]:
             params.loc[idx, "value"] = 1.0
+
+    if start_params is not None:
+        apply_start_params(params, start_params)
 
     return params
 

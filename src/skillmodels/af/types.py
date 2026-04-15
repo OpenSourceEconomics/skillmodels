@@ -1,42 +1,71 @@
 """Frozen dataclass definitions for the AF estimator."""
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 from jax import Array
 
+from skillmodels.types import ensure_containers_are_immutable
 
-@dataclass(frozen=True)
+if TYPE_CHECKING:
+    from skillmodels.model_spec import ModelSpec
+
+
+@dataclass(frozen=True, init=False)
 class AFEstimationOptions:
     """Configuration options for the AF estimator."""
 
-    n_halton_points: int = 50
+    n_halton_points: int
     """Halton quadrature nodes per dimension."""
 
-    n_halton_points_shock: int = 30
+    n_halton_points_shock: int
     """Quadrature nodes for production shock integration."""
 
-    n_mixture_components: int = 2
+    n_mixture_components: int
     """Gaussian mixture components for initial distribution."""
 
-    optimizer_algorithm: str = "fides"
+    optimizer_algorithm: str
     """Optimization algorithm for each period's MLE."""
 
-    optimizer_options: MappingProxyType[str, Any] = field(
-        default_factory=lambda: MappingProxyType({})
-    )
+    optimizer_options: MappingProxyType[str, Any]
     """Additional options passed to optimagic."""
 
-    two_stage: bool = False
+    two_stage: bool
     """Whether to use coarse-then-fine grid strategy."""
 
-    coarse_fraction: float = 0.5
+    coarse_fraction: float
     """Fraction of quadrature points for coarse stage (if two_stage is True)."""
 
-    stability_floor: float = 1e-217
-    """Floor added to likelihood for numerical stability (exp(-500) ~ 7e-218)."""
+    stability_floor: float
+    """Floor added to likelihood for numerical stability."""
+
+    def __init__(  # noqa: D107
+        self,
+        n_halton_points: int = 50,
+        n_halton_points_shock: int = 30,
+        n_mixture_components: int = 2,
+        optimizer_algorithm: str = "fides",
+        optimizer_options: Mapping[str, Any] | None = None,
+        *,
+        two_stage: bool = False,
+        coarse_fraction: float = 0.5,
+        stability_floor: float = 1e-217,
+    ) -> None:
+        object.__setattr__(self, "n_halton_points", n_halton_points)
+        object.__setattr__(self, "n_halton_points_shock", n_halton_points_shock)
+        object.__setattr__(self, "n_mixture_components", n_mixture_components)
+        object.__setattr__(self, "optimizer_algorithm", optimizer_algorithm)
+        object.__setattr__(
+            self,
+            "optimizer_options",
+            ensure_containers_are_immutable(optimizer_options or {}),
+        )
+        object.__setattr__(self, "two_stage", two_stage)
+        object.__setattr__(self, "coarse_fraction", coarse_fraction)
+        object.__setattr__(self, "stability_floor", stability_floor)
 
 
 @dataclass(frozen=True)
@@ -102,7 +131,7 @@ class AFEstimationResult:
     all_params: pd.DataFrame
     """Combined parameters from all periods with standard 4-level MultiIndex."""
 
-    model_spec: Any
+    model_spec: ModelSpec
     """The ModelSpec used for estimation."""
 
     conditional_distributions: tuple[ConditionalDistribution, ...]
