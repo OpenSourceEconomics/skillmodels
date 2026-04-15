@@ -275,34 +275,8 @@ def test_af_vs_chs_measurement_params_agree() -> None:
     )
     af_p0 = af_result.period_results[0].params
 
-    # --- CHS estimation ---
-    max_inputs = get_maximization_inputs(model, data)
-    chs_params = max_inputs["params_template"].copy()
-    free = chs_params["lower_bound"] != chs_params["upper_bound"]
-    chs_params.loc[free, "value"] = 0.5
-    load_free = free & (chs_params.index.get_level_values("category") == "loadings")
-    chs_params.loc[load_free, "value"] = 1.0
-    ctrl_free = free & (chs_params.index.get_level_values("category") == "controls")
-    chs_params.loc[ctrl_free, "value"] = 0.0
-
-    def _neg_loglike_and_grad(
-        p: pd.DataFrame,
-    ) -> tuple[float, np.ndarray]:
-        val, grad = max_inputs["loglike_and_gradient"](p)
-        return -float(val), -np.array(grad)
-
-    opt_res = om.minimize(
-        fun=lambda p: -max_inputs["loglike"](p),
-        params=chs_params[["value"]],
-        algorithm="scipy_lbfgsb",
-        bounds=om.Bounds(
-            lower=chs_params["lower_bound"],
-            upper=chs_params["upper_bound"],
-        ),
-        constraints=max_inputs["constraints"],
-        fun_and_jac=_neg_loglike_and_grad,
-    )
-    chs_est = opt_res.params
+    # --- CHS estimation (naive start: all free params = 0.1) ---
+    chs_est = _run_chs_estimation(model, data)
 
     # --- Compare period-0 measurement parameters ---
     tol = 0.15  # generous tolerance for finite-sample differences
@@ -311,7 +285,9 @@ def test_af_vs_chs_measurement_params_agree() -> None:
         af_load = float(
             af_p0.loc[("loadings", 0, meas, "skill"), "value"]  # ty: ignore[invalid-argument-type]
         )
-        chs_load = float(chs_est.loc[("loadings", 0, meas, "skill"), "value"])
+        chs_load = float(
+            chs_est.loc[("loadings", 0, meas, "skill"), "value"]  # ty: ignore[invalid-argument-type]
+        )
         assert abs(af_load - chs_load) < tol, (
             f"loading({meas}): AF={af_load:.4f} vs CHS={chs_load:.4f}"
         )
@@ -319,7 +295,9 @@ def test_af_vs_chs_measurement_params_agree() -> None:
         af_intercept = float(
             af_p0.loc[("controls", 0, meas, "constant"), "value"]  # ty: ignore[invalid-argument-type]
         )
-        chs_intercept = float(chs_est.loc[("controls", 0, meas, "constant"), "value"])
+        chs_intercept = float(
+            chs_est.loc[("controls", 0, meas, "constant"), "value"]  # ty: ignore[invalid-argument-type]
+        )
         assert abs(af_intercept - chs_intercept) < tol, (
             f"intercept({meas}): AF={af_intercept:.4f} vs CHS={chs_intercept:.4f}"
         )
@@ -328,7 +306,9 @@ def test_af_vs_chs_measurement_params_agree() -> None:
         af_sd = float(
             af_p0.loc[("meas_sds", 0, meas, "-"), "value"]  # ty: ignore[invalid-argument-type]
         )
-        chs_sd = float(chs_est.loc[("meas_sds", 0, meas, "-"), "value"])
+        chs_sd = float(
+            chs_est.loc[("meas_sds", 0, meas, "-"), "value"]  # ty: ignore[invalid-argument-type]
+        )
         assert abs(af_sd - chs_sd) < tol, (
             f"meas_sd({meas}): AF={af_sd:.4f} vs CHS={chs_sd:.4f}"
         )
@@ -436,9 +416,9 @@ def test_af_transition_params_affect_likelihood() -> None:
 
     # The transition params should NOT all be at their initialization value (0.1).
     # If the transition function is actually used in the likelihood, the optimizer
-    # will move them away from 0.1 toward the true values.
+    # will move them away from 0.5 toward the true values.
     trans_values = trans_params["value"].to_numpy()
-    init_values = np.full_like(trans_values, 0.1)
+    init_values = np.full_like(trans_values, 0.5)
     assert not np.allclose(trans_values, init_values, atol=0.01), (
         f"Transition params stuck at init values: {trans_values}. "
         "The transition function is not being used in the likelihood."
@@ -516,32 +496,8 @@ def test_af_vs_chs_transition_params_agree() -> None:
         ),
     )
 
-    # --- CHS estimation ---
-    max_inputs = get_maximization_inputs(model, data)
-    chs_params = max_inputs["params_template"].copy()
-    free = chs_params["lower_bound"] != chs_params["upper_bound"]
-    chs_params.loc[free, "value"] = 0.5
-    load_free = free & (chs_params.index.get_level_values("category") == "loadings")
-    chs_params.loc[load_free, "value"] = 1.0
-    ctrl_free = free & (chs_params.index.get_level_values("category") == "controls")
-    chs_params.loc[ctrl_free, "value"] = 0.0
-
-    def _neg_ll_and_grad(p: pd.DataFrame) -> tuple[float, np.ndarray]:
-        val, grad = max_inputs["loglike_and_gradient"](p)
-        return -float(val), -np.array(grad)
-
-    opt_res = om.minimize(
-        fun=lambda p: -max_inputs["loglike"](p),
-        params=chs_params[["value"]],
-        algorithm="scipy_lbfgsb",
-        bounds=om.Bounds(
-            lower=chs_params["lower_bound"],
-            upper=chs_params["upper_bound"],
-        ),
-        constraints=max_inputs["constraints"],
-        fun_and_jac=_neg_ll_and_grad,
-    )
-    chs_est = opt_res.params
+    # --- CHS estimation (naive start: all free params = 0.1) ---
+    chs_est = _run_chs_estimation(model, data)
 
     # --- Compare transition parameters ---
     af_p1 = af_result.period_results[1].params
@@ -556,9 +512,15 @@ def test_af_vs_chs_transition_params_agree() -> None:
         af_p1.loc[("shock_sds", 0, "skill", "-"), "value"]  # ty: ignore[invalid-argument-type]
     )
 
-    chs_beta = float(chs_est.loc[("transition", 0, "skill", "skill"), "value"])
-    chs_constant = float(chs_est.loc[("transition", 0, "skill", "constant"), "value"])
-    chs_shock = float(chs_est.loc[("shock_sds", 0, "skill", "-"), "value"])
+    chs_beta = float(
+        chs_est.loc[("transition", 0, "skill", "skill"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    chs_constant = float(
+        chs_est.loc[("transition", 0, "skill", "constant"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    chs_shock = float(
+        chs_est.loc[("shock_sds", 0, "skill", "-"), "value"]  # ty: ignore[invalid-argument-type]
+    )
 
     tol = 0.3  # generous: different methods, different # periods used
     assert abs(af_beta - chs_beta) < tol, (
@@ -576,26 +538,21 @@ def _run_chs_estimation(
     model: ModelSpec,
     data: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Run CHS estimation with standard initialisation, return params."""
+    """Run CHS estimation with uninformed but feasible start values.
+
+    Use generic defaults that don't favour either estimator: loadings = 1,
+    controls = 0, SDs = 0.5, transition = 0.5, initial_states = 0.
+    Probability constraints are satisfied (equal shares).
+    """
     max_inputs = get_maximization_inputs(model, data)
     params = max_inputs["params_template"].copy()
     free = params["lower_bound"] != params["upper_bound"]
     cat = params.index.get_level_values("category")
-    params.loc[free, "value"] = 0.001
+    params.loc[free, "value"] = 0.5
     params.loc[free & (cat == "loadings"), "value"] = 1.0
     params.loc[free & (cat == "controls"), "value"] = 0.0
-    params.loc[free & (cat == "meas_sds"), "value"] = 0.75
-    params.loc[free & (cat == "shock_sds"), "value"] = 0.5
     params.loc[free & (cat == "initial_states"), "value"] = 0.0
-    self_prod = (
-        free
-        & (cat == "transition")
-        & (
-            params.index.get_level_values("name1")
-            == params.index.get_level_values("name2")
-        )
-    )
-    params.loc[self_prod, "value"] = 0.8
+    # Probability constraints must be satisfied at start params
     for constr in max_inputs["constraints"]:
         if isinstance(constr, om.ProbabilityConstraint):
             prob_idx = constr.selector(params[["value"]]).index
@@ -676,7 +633,7 @@ def test_af_vs_chs_both_estimated_on_model2(model2_af, model2_data) -> None:
 
     # AF transition params should NOT be stuck at initialisation
     trans_values = af_trans["value"].to_numpy()
-    assert not np.allclose(trans_values, 0.1, atol=0.01), (
+    assert not np.allclose(trans_values, 0.5, atol=0.01), (
         "AF transition params stuck at init values"
     )
 

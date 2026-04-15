@@ -399,7 +399,7 @@ def _initialize_transition_params(
     for idx in params.index[trans_mask]:
         if params.loc[idx, "lower_bound"] != params.loc[idx, "upper_bound"]:
             # Set linear terms close to identity
-            params.loc[idx, "value"] = 0.1
+            params.loc[idx, "value"] = 0.5
 
     # Shock SDs: moderate
     shock_mask = params.index.get_level_values("category") == "shock_sds"

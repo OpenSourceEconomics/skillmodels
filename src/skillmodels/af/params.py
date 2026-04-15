@@ -308,7 +308,7 @@ def create_af_params_template(
 
     # Default values for parameters still NaN
     still_nan = params["value"].isna()
-    params.loc[still_nan, "value"] = 0.1
+    params.loc[still_nan, "value"] = 0.5
 
     return params
 
