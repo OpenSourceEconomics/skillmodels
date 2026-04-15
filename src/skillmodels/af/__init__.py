@@ -5,6 +5,7 @@ integration, following Antweiler and Freyberger (2025).
 """
 
 from skillmodels.af.estimate import estimate_af
+from skillmodels.af.posterior_states import get_af_posterior_states
 from skillmodels.af.types import AFEstimationOptions, AFEstimationResult, AFPeriodResult
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "AFEstimationResult",
     "AFPeriodResult",
     "estimate_af",
+    "get_af_posterior_states",
 ]

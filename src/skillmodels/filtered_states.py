@@ -1,6 +1,6 @@
 """Functions to compute and process filtered latent states."""
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jax.numpy as jnp
 import numpy as np
@@ -13,13 +13,46 @@ from skillmodels.parse_params import create_parsing_info, parse_params
 from skillmodels.process_debug_data import create_state_ranges
 from skillmodels.process_model import process_model
 
+if TYPE_CHECKING:
+    from skillmodels.af.types import AFEstimationResult
+
 
 def get_filtered_states(
     model_spec: ModelSpec,
     data: pd.DataFrame,
     params: pd.DataFrame,
+    af_result: AFEstimationResult | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Compute filtered latent states given data and estimated parameters."""
+    """Compute latent state estimates given data and estimated parameters.
+
+    For CHS (Kalman filter) estimation, computes filtered states via the
+    debug likelihood. For AF estimation, computes posterior means via
+    Halton quadrature.
+
+    Args:
+        model_spec: Model specification.
+        data: Dataset in long format with MultiIndex (id, period).
+        params: Estimated parameter DataFrame.
+        af_result: If provided, use AF posterior computation instead of
+            CHS Kalman filtering. Should be an `AFEstimationResult`.
+
+    Return:
+        Dict with "unanchored_states" (always present) and
+        "anchored_states" (CHS only), each containing "states"
+        DataFrame and "state_ranges".
+
+    """
+    if af_result is not None:
+        from skillmodels.af.posterior_states import (  # noqa: PLC0415
+            get_af_posterior_states,
+        )
+
+        return get_af_posterior_states(
+            af_result=af_result,
+            model_spec=model_spec,
+            data=data,
+        )
+
     max_inputs = get_maximization_inputs(model_spec=model_spec, data=data)
     params = params.loc[max_inputs["params_template"].index]
     debug_loglike = max_inputs["debug_loglike"]

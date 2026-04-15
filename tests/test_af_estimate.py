@@ -14,6 +14,7 @@ import pytest
 
 from skillmodels.af import AFEstimationOptions, estimate_af
 from skillmodels.config import TEST_DATA_DIR
+from skillmodels.filtered_states import get_filtered_states
 from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.model_spec import (
     EstimationOptions,
@@ -800,3 +801,57 @@ def test_af_estimate_with_endogenous_factor() -> None:
     assert not np.allclose(inv_eq_values, 0.5, atol=0.05), (
         f"Investment eq params stuck at init: {inv_eq_values}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Posterior states tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.end_to_end
+def test_af_get_filtered_states() -> None:
+    """Verify get_filtered_states works with AF results.
+
+    Run AF on a simple single-factor model, then call get_filtered_states
+    with the AF result. Check the returned DataFrame has the right shape,
+    columns, and reasonable values.
+    """
+    data, _true_params = _simulate_linear_transition_data(n_obs=200, n_periods=3)
+    model = _make_linear_transition_model(n_periods=3)
+
+    af_result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=AFEstimationOptions(
+            n_halton_points=30,
+            n_halton_points_shock=15,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+        ),
+    )
+
+    result = get_filtered_states(
+        model_spec=model,
+        data=data,
+        params=af_result.all_params,
+        af_result=af_result,
+    )
+
+    # Should have unanchored_states
+    assert "unanchored_states" in result
+    states_df = result["unanchored_states"]["states"]
+
+    # DataFrame should have id, period, and factor columns
+    assert "period" in states_df.columns
+    assert "skill" in states_df.columns
+
+    # One row per individual per period
+    n_obs = 200
+    n_periods = 3
+    assert len(states_df) == n_obs * n_periods
+
+    # Values should be finite
+    assert states_df["skill"].apply(np.isfinite).all()
+
+    # State estimates should have non-trivial variance (not all the same)
+    assert states_df["skill"].std() > 0.1
