@@ -1020,3 +1020,108 @@ def test_af_joint_initial_distribution_with_observed_factor() -> None:
     assert cross_val > 0.05, (
         f"Expected positive skill-income covariance; got Cholesky[1,0]={cross_val:.3f}"
     )
+
+
+@pytest.mark.end_to_end
+def test_af_fixed_params_pins_time_invariant_latent() -> None:
+    """Verify fixed_params pins MC-style time-invariant latent factors.
+
+    Construct a 2-factor model where `mc` is time-invariant and `skill`
+    evolves linearly. Pin mc's transitions to identity and its shock SD
+    to a near-zero floor (same convention CHS uses for augmented periods).
+    After estimation, the pinned parameters must equal the input values
+    exactly (not optimized away).
+    """
+    rng = np.random.default_rng(7)
+    n_obs, n_periods = 300, 3
+    mc = rng.normal(0, 1, n_obs)
+    theta = np.zeros((n_obs, n_periods))
+    theta[:, 0] = rng.normal(0, 1, n_obs)
+    for t in range(n_periods - 1):
+        theta[:, t + 1] = 0.7 * theta[:, t] + 0.2 * mc + rng.normal(0, 0.3, n_obs)
+
+    rows = []
+    for i in range(n_obs):
+        for t in range(n_periods):
+            row = {
+                "caseid": i,
+                "period": t,
+                "s1": theta[i, t] + rng.normal(0, 0.3),
+                "s2": 0.3 + 0.9 * theta[i, t] + rng.normal(0, 0.35),
+                "s3": -0.1 + 1.1 * theta[i, t] + rng.normal(0, 0.4),
+            }
+            if t == 0:
+                row["m1"] = mc[i] + rng.normal(0, 0.3)
+                row["m2"] = 0.2 + 0.8 * mc[i] + rng.normal(0, 0.35)
+                row["m3"] = -0.1 + 1.1 * mc[i] + rng.normal(0, 0.4)
+            rows.append(row)
+    data = pd.DataFrame(rows).set_index(["caseid", "period"])
+
+    model = ModelSpec(
+        factors={
+            "skill": FactorSpec(
+                measurements=(("s1", "s2", "s3"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"s1": 1},) * n_periods,
+                    intercepts=({"s1": 0},) * n_periods,
+                ),
+                transition_function="linear",
+            ),
+            "mc": FactorSpec(
+                measurements=(("m1", "m2", "m3"), (), ()),
+                normalizations=Normalizations(
+                    loadings=({"m1": 1}, {}, {}),
+                    intercepts=({"m1": 0}, {}, {}),
+                ),
+                transition_function="linear",
+            ),
+        },
+        estimation_options=EstimationOptions(
+            robust_bounds=True,
+            bounds_distance=0.001,
+            n_mixtures=1,
+        ),
+    )
+
+    # Pin mc to identity transition + floor shock SD across both
+    # transition periods (0 and 1).
+    fixed_entries: list[tuple[tuple[str, int, str, str], float]] = []
+    for t in (0, 1):
+        for reg in ("skill", "mc", "constant"):
+            fixed_entries.append(
+                (("transition", t, "mc", reg), 1.0 if reg == "mc" else 0.0)
+            )
+        fixed_entries.append((("shock_sds", t, "mc", "-"), 0.001))
+    fixed_idx = pd.MultiIndex.from_tuples(
+        [e[0] for e in fixed_entries],
+        names=["category", "period", "name1", "name2"],
+    )
+    fixed_df = pd.DataFrame({"value": [e[1] for e in fixed_entries]}, index=fixed_idx)
+
+    result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=AFEstimationOptions(
+            n_halton_points=30,
+            n_halton_points_shock=15,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+        ),
+        fixed_params=fixed_df,
+    )
+
+    for t_trans in (0, 1):
+        p_t = result.period_results[t_trans + 1].params
+        for reg in ("skill", "mc", "constant"):
+            expected = 1.0 if reg == "mc" else 0.0
+            val = float(
+                p_t.loc[("transition", t_trans, "mc", reg), "value"]  # ty: ignore[invalid-argument-type]
+            )
+            assert val == expected, (
+                f"mc transition period {t_trans}, regressor {reg}: "
+                f"expected {expected}, got {val}"
+            )
+        sd = float(
+            p_t.loc[("shock_sds", t_trans, "mc", "-"), "value"]  # ty: ignore[invalid-argument-type]
+        )
+        assert sd == 0.001, f"mc shock_sd period {t_trans}: {sd} (expected 0.001)"

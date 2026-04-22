@@ -355,3 +355,26 @@ def apply_start_params(
     to_update = common[free]
     if not to_update.empty:
         params_template.loc[to_update, "value"] = start_params.loc[to_update, "value"]
+
+
+def apply_fixed_params(
+    params_template: pd.DataFrame,
+    fixed_params: pd.DataFrame,
+) -> None:
+    """Fix specified parameters at given values by clamping bounds to value.
+
+    Used to pin parameters that would otherwise be free -- e.g., identity
+    transitions and zero shock SDs for time-invariant latent factors, following
+    the same convention CHS uses for augmented periods.
+
+    Match on the 4-level MultiIndex. For each matching entry, set the template's
+    value, lower_bound, and upper_bound all to the value in `fixed_params`.
+    Entries not in the template are ignored. Modifies `params_template` in place.
+    """
+    common = params_template.index.intersection(fixed_params.index)
+    if common.empty:
+        return
+    vals = fixed_params.loc[common, "value"]
+    params_template.loc[common, "value"] = vals
+    params_template.loc[common, "lower_bound"] = vals
+    params_template.loc[common, "upper_bound"] = vals

@@ -21,6 +21,7 @@ from skillmodels.af.halton import (
 from skillmodels.af.initial_period import _build_loading_mask, _get_ordered_measures
 from skillmodels.af.likelihood import af_loglike_transition, create_loglike_and_gradient
 from skillmodels.af.params import (
+    apply_fixed_params,
     apply_start_params,
     create_af_params_template,
     get_free_mask,
@@ -53,6 +54,7 @@ def estimate_transition_period(
     observed_factors: tuple[str, ...] = (),
     observed_factor_data: Array | None = None,
     start_params: pd.DataFrame | None = None,
+    fixed_params: pd.DataFrame | None = None,
 ) -> tuple[AFPeriodResult, ConditionalDistribution]:
     """Estimate a transition period (Step t, t >= 1) of the AF procedure.
 
@@ -77,6 +79,8 @@ def estimate_transition_period(
             values. Required when `observed_factors` is non-empty.
         start_params: Optional starting values. Matching index entries
             override heuristic defaults.
+        fixed_params: Optional DataFrame with a "value" column pinning
+            specified parameters (value + bounds both clamped to the value).
 
     Return:
         Tuple of (AFPeriodResult, ConditionalDistribution) where the
@@ -118,6 +122,7 @@ def estimate_transition_period(
         params_template,
         measurements,
         start_params,
+        fixed_params,
     )
 
     # Collect transition function constraints (only for state factors' transitions)
@@ -612,10 +617,13 @@ def _initialize_transition_params(
     params_template: pd.DataFrame,
     measurements: Array,
     start_params: pd.DataFrame | None = None,
+    fixed_params: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Initialize transition period parameters with reasonable defaults.
 
     If `start_params` is provided, matching entries override the defaults.
+    If `fixed_params` is provided, matching entries are pinned (value +
+    bounds clamped).
     """
     params = params_template.copy()
     meas_np = np.array(measurements)
@@ -646,6 +654,9 @@ def _initialize_transition_params(
 
     if start_params is not None:
         apply_start_params(params, start_params)
+
+    if fixed_params is not None:
+        apply_fixed_params(params, fixed_params)
 
     return params
 
