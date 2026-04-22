@@ -42,6 +42,15 @@ class AFEstimationOptions:
     stability_floor: float
     """Floor added to likelihood for numerical stability."""
 
+    n_obs_per_batch: int | None
+    """Observations per reverse-mode autodiff chunk.
+
+    When `None` (default), an auto-detected value is derived from the
+    available GPU/CPU memory in `estimate_af`. Setting this to a small
+    integer trades compile time and throughput for lower peak VRAM; the
+    likelihood value is unchanged.
+    """
+
     def __init__(  # noqa: D107
         self,
         n_halton_points: int = 50,
@@ -53,6 +62,7 @@ class AFEstimationOptions:
         two_stage: bool = False,
         coarse_fraction: float = 0.5,
         stability_floor: float = 1e-217,
+        n_obs_per_batch: int | None = None,
     ) -> None:
         object.__setattr__(self, "n_halton_points", n_halton_points)
         object.__setattr__(self, "n_halton_points_shock", n_halton_points_shock)
@@ -66,6 +76,7 @@ class AFEstimationOptions:
         object.__setattr__(self, "two_stage", two_stage)
         object.__setattr__(self, "coarse_fraction", coarse_fraction)
         object.__setattr__(self, "stability_floor", stability_floor)
+        object.__setattr__(self, "n_obs_per_batch", n_obs_per_batch)
 
 
 @dataclass(frozen=True)

@@ -11,6 +11,7 @@ import optimagic as om
 import pandas as pd
 from jax import Array
 
+from skillmodels.af.batching import auto_n_obs_per_batch
 from skillmodels.af.halton import create_halton_nodes_and_weights
 from skillmodels.af.likelihood import af_loglike_initial, create_loglike_and_gradient
 from skillmodels.af.params import (
@@ -149,6 +150,16 @@ def estimate_initial_period(
         params_template, fixed_params
     )
 
+    n_obs_per_batch = af_options.n_obs_per_batch
+    if n_obs_per_batch is None:
+        n_obs_per_batch = auto_n_obs_per_batch(
+            n_obs=int(measurements.shape[0]),
+            n_halton_points=af_options.n_halton_points,
+            n_halton_points_shock=af_options.n_halton_points_shock,
+            n_latent=n_joint,
+            n_endogenous=0,
+        )
+
     loglike_kwargs = {
         "n_factors": n_joint,
         "n_latent_factors": n_latent,
@@ -162,6 +173,7 @@ def estimate_initial_period(
         "nodes": nodes,
         "weights": weights,
         "stability_floor": af_options.stability_floor,
+        "n_obs_per_batch": n_obs_per_batch,
     }
 
     loglike_and_grad = create_loglike_and_gradient(

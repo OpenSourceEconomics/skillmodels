@@ -27,6 +27,7 @@ def af_loglike_initial(
     stability_floor: float,
     n_latent_factors: int | None = None,
     observed_factor_values: Array | None = None,
+    n_obs_per_batch: int | None = None,
 ) -> Array:
     """Negative log-likelihood for the initial period (Step 0).
 
@@ -69,6 +70,10 @@ def af_loglike_initial(
         observed_factor_values: Shape (n_obs, n_obs_factors), observed factor
             values used for Schur-complement conditioning. Required when
             `n_latent_factors < n_factors`.
+        n_obs_per_batch: Observations per reverse-mode autodiff chunk.
+            ``None`` falls back to ``jax.vmap`` (single kernel); a positive
+            integer uses ``jax.lax.map`` so the backward-pass tape only
+            retains one chunk at a time.
 
     Return:
         Scalar negative log-likelihood.
@@ -99,6 +104,7 @@ def af_loglike_initial(
             nodes=nodes,
             weights=weights,
             stability_floor=stability_floor,
+            n_obs_per_batch=n_obs_per_batch,
         )
     else:
         assert observed_factor_values is not None  # noqa: S101
@@ -117,6 +123,7 @@ def af_loglike_initial(
             weights=weights,
             n_latent=n_latent,
             stability_floor=stability_floor,
+            n_obs_per_batch=n_obs_per_batch,
         )
 
     return -jnp.mean(log_likes)
@@ -175,6 +182,30 @@ def _parse_initial_params(
     }
 
 
+def _map_over_obs(
+    f: Callable,
+    *xs: Array,
+    n_obs_per_batch: int | None,
+) -> Array:
+    """Map ``f`` over the leading axis of ``xs``, optionally in batches.
+
+    When ``n_obs_per_batch`` is ``None`` or at least as large as the
+    leading axis, falls back to ``jax.vmap`` (single kernel). Otherwise
+    uses ``jax.lax.map`` so the reverse-mode autodiff tape only needs to
+    retain one chunk at a time. Combined with ``jax.checkpoint`` on
+    ``f``, this makes reverse-mode memory proportional to
+    ``n_obs_per_batch`` rather than to the full ``n_obs``.
+    """
+    n_obs = xs[0].shape[0]
+    if n_obs_per_batch is None or n_obs_per_batch >= n_obs:
+        return jax.vmap(f)(*xs)
+
+    def _tupled(args: tuple[Array, ...]) -> Array:
+        return f(*args)
+
+    return jax.lax.map(_tupled, xs, batch_size=n_obs_per_batch)
+
+
 def _initial_loglike_per_obs(
     *,
     mixture_weights: Array,
@@ -188,6 +219,7 @@ def _initial_loglike_per_obs(
     loading_mask: Array,
     nodes: Array,
     weights: Array,
+    n_obs_per_batch: int | None = None,
     stability_floor: float,
 ) -> Array:
     """Compute log-likelihood for each observation at the initial period.
@@ -207,8 +239,15 @@ def _initial_loglike_per_obs(
     # Residuals before factor contribution: (n_obs, n_measures)
     residuals_base = measurements - control_contrib
 
+    @jax.checkpoint
     def _single_obs_loglike(residual_base: Array) -> Array:
-        """Log-likelihood for a single observation, integrated over factors."""
+        """Log-likelihood for a single observation, integrated over factors.
+
+        `jax.checkpoint` keeps the forward pass small: the per-observation
+        quadrature tape is discarded and recomputed during the backward
+        pass, so reverse-mode autodiff memory scales with the per-obs
+        parameter footprint instead of ``n_obs * n_quadrature_nodes``.
+        """
         return _integrate_initial_single_obs(
             residual_base=residual_base,
             full_loadings=full_loadings,
@@ -221,7 +260,9 @@ def _initial_loglike_per_obs(
             stability_floor=stability_floor,
         )
 
-    return jax.vmap(_single_obs_loglike)(residuals_base)
+    return _map_over_obs(
+        _single_obs_loglike, residuals_base, n_obs_per_batch=n_obs_per_batch
+    )
 
 
 def _initial_loglike_per_obs_conditional(
@@ -240,6 +281,7 @@ def _initial_loglike_per_obs_conditional(
     weights: Array,
     n_latent: int,
     stability_floor: float,
+    n_obs_per_batch: int | None = None,
 ) -> Array:
     """Per-observation log-likelihood with Schur-complement conditioning.
 
@@ -265,6 +307,7 @@ def _initial_loglike_per_obs_conditional(
     control_contrib = controls @ control_params.T
     residuals_base = measurements - control_contrib
 
+    @jax.checkpoint
     def _single_obs_loglike(residual_base: Array, y_i: Array) -> Array:
         return _integrate_initial_single_obs_conditional(
             residual_base=residual_base,
@@ -280,7 +323,12 @@ def _initial_loglike_per_obs_conditional(
             stability_floor=stability_floor,
         )
 
-    return jax.vmap(_single_obs_loglike)(residuals_base, observed_factor_values)
+    return _map_over_obs(
+        _single_obs_loglike,
+        residuals_base,
+        observed_factor_values,
+        n_obs_per_batch=n_obs_per_batch,
+    )
 
 
 def _integrate_initial_single_obs_conditional(
@@ -459,6 +507,7 @@ def af_loglike_transition(
     n_inv_eq_params_per: int,
     observed_factor_values: Array,
     stability_floor: float,
+    n_obs_per_batch: int | None = None,
 ) -> Array:
     """Negative log-likelihood for a transition period (Step t).
 
@@ -502,6 +551,10 @@ def af_loglike_transition(
         n_inv_eq_params_per: Investment equation parameters per endogenous factor.
         observed_factor_values: Shape (n_obs, n_obs_factors), observed factor data.
         stability_floor: Numerical stability floor.
+        n_obs_per_batch: Observations per reverse-mode autodiff chunk.
+            ``None`` falls back to ``jax.vmap`` (single kernel); a positive
+            integer uses ``jax.lax.map`` so the backward-pass tape only
+            retains one chunk at a time.
 
     Return:
         Scalar negative log-likelihood.
@@ -554,6 +607,7 @@ def af_loglike_transition(
         n_endogenous_factors=n_endogenous_factors,
         observed_factor_values=observed_factor_values,
         stability_floor=stability_floor,
+        n_obs_per_batch=n_obs_per_batch,
     )
 
     return -jnp.mean(log_likes)
@@ -639,6 +693,7 @@ def _transition_loglike_per_obs(
     n_endogenous_factors: int,
     observed_factor_values: Array,
     stability_floor: float,
+    n_obs_per_batch: int | None = None,
 ) -> Array:
     """Compute per-observation log-likelihood for a transition period."""
     n_measures, n_loading_factors = loading_mask.shape
@@ -652,6 +707,7 @@ def _transition_loglike_per_obs(
     means = prev_distribution["means"]
     chol_covs = prev_distribution["chol_covs"]
 
+    @jax.checkpoint
     def _single_obs(
         residual_base: Array,
         prev_residual_base: Array,
@@ -685,8 +741,13 @@ def _transition_loglike_per_obs(
             stability_floor=stability_floor,
         )
 
-    return jax.vmap(_single_obs)(
-        residuals_base, prev_residuals_base, cond_weights, observed_factor_values
+    return _map_over_obs(
+        _single_obs,
+        residuals_base,
+        prev_residuals_base,
+        cond_weights,
+        observed_factor_values,
+        n_obs_per_batch=n_obs_per_batch,
     )
 
 

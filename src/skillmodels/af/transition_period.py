@@ -14,6 +14,7 @@ import optimagic as om
 import pandas as pd
 from jax import Array
 
+from skillmodels.af.batching import auto_n_obs_per_batch
 from skillmodels.af.halton import (
     create_halton_nodes_and_weights,
     create_shock_nodes_and_weights,
@@ -328,6 +329,16 @@ def _run_transition_optimization(
         period - 1,
     )
 
+    n_obs_per_batch = af_options.n_obs_per_batch
+    if n_obs_per_batch is None:
+        n_obs_per_batch = auto_n_obs_per_batch(
+            n_obs=int(measurements.shape[0]),
+            n_halton_points=af_options.n_halton_points,
+            n_halton_points_shock=af_options.n_halton_points_shock,
+            n_latent=n_state,
+            n_endogenous=n_endog,
+        )
+
     loglike_kwargs = {
         "n_state_factors": n_state,
         "n_endogenous_factors": n_endog,
@@ -355,6 +366,7 @@ def _run_transition_optimization(
         "n_inv_eq_params_per": n_inv_eq_params_per,
         "observed_factor_values": obs_factor_values,
         "stability_floor": af_options.stability_floor,
+        "n_obs_per_batch": n_obs_per_batch,
     }
 
     loglike_and_grad = create_loglike_and_gradient(
