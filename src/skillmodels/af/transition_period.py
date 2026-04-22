@@ -23,8 +23,8 @@ from skillmodels.af.likelihood import af_loglike_transition, create_loglike_and_
 from skillmodels.af.params import (
     apply_fixed_params,
     apply_start_params,
+    build_optimagic_inputs,
     create_af_params_template,
-    get_free_mask,
     get_measurements_per_factor,
     get_normalizations_for_period,
     get_transition_period_params_index,
@@ -133,11 +133,9 @@ def estimate_transition_period(
         period,
     )
 
-    # Satisfy constraints at start values
-    for constr in transition_constraints:
-        if isinstance(constr, om.ProbabilityConstraint):
-            prob_idx = constr.selector(params_template[["value"]]).index
-            params_template.loc[prob_idx, "value"] = 1.0 / len(prob_idx)
+    _seed_probability_start_values(
+        params_template, transition_constraints, fixed_params
+    )
 
     # Build loading mask
     loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
@@ -233,6 +231,7 @@ def estimate_transition_period(
         obs_factor_values=obs_factor_values,
         af_options=af_options,
         transition_constraints=transition_constraints,
+        fixed_params=fixed_params,
     )
 
     # Create a state-only transition wrapper for distribution propagation.
@@ -306,20 +305,21 @@ def _run_transition_optimization(
     obs_factor_values: Array,
     af_options: AFEstimationOptions,
     transition_constraints: list[om.constraints.Constraint],
+    fixed_params: pd.DataFrame | None,
 ) -> tuple[pd.DataFrame, om.OptimizeResult]:
     """Build likelihood, run the optimizer, and return updated params.
 
     Handle the mechanical optimization setup: construct the log-likelihood
     keyword arguments, create the jitted value-and-gradient function, build
-    the free-parameter DataFrame, and call `om.minimize`.
+    the params DataFrame + constraint list, and call `om.minimize`.
 
     Return:
         Tuple of (result_params DataFrame, OptimizeResult).
 
     """
-    free_mask_np = get_free_mask(params_template)
-    free_mask = jnp.array(free_mask_np)
-    all_params_init = jnp.array(params_template["value"].to_numpy())
+    full_params_df, fixed_constraints = build_optimagic_inputs(
+        params_template, fixed_params
+    )
 
     prev_meas_info = _extract_prev_measurement_params(
         prev_period_params,
@@ -329,8 +329,6 @@ def _run_transition_optimization(
     )
 
     loglike_kwargs = {
-        "all_params": all_params_init,
-        "free_mask": free_mask,
         "n_state_factors": n_state,
         "n_endogenous_factors": n_endog,
         "n_measures": len(all_measures),
@@ -372,31 +370,23 @@ def _run_transition_optimization(
         val, grad = loglike_and_grad(jnp.array(params_df["value"].to_numpy()))
         return float(val), np.array(grad)
 
-    free_index = params_template.index[free_mask_np]
-    free_params_df = pd.DataFrame(
-        {
-            "value": params_template.loc[free_index, "value"].to_numpy(),
-            "lower_bound": params_template.loc[free_index, "lower_bound"].to_numpy(),
-            "upper_bound": params_template.loc[free_index, "upper_bound"].to_numpy(),
-        },
-        index=free_index,
-    )
+    combined_constraints = list(transition_constraints) + list(fixed_constraints)
 
     opt_res = om.minimize(
         fun=fun,
-        params=free_params_df[["value"]],
+        params=full_params_df[["value"]],
         algorithm=af_options.optimizer_algorithm,
         bounds=om.Bounds(
-            lower=free_params_df["lower_bound"],
-            upper=free_params_df["upper_bound"],
+            lower=full_params_df["lower_bound"],
+            upper=full_params_df["upper_bound"],
         ),
-        constraints=transition_constraints or None,
+        constraints=combined_constraints or None,
         fun_and_jac=fun_and_jac,
         **dict(af_options.optimizer_options),
     )
 
     result_params = params_template.copy()
-    result_params.loc[free_index, "value"] = opt_res.params["value"].to_numpy()
+    result_params["value"] = opt_res.params["value"].to_numpy()
 
     return result_params, opt_res
 
@@ -611,6 +601,34 @@ def _prepare_transition_inputs(
     )
 
     return prev_dist_arrays, total_n_transition_params
+
+
+def _seed_probability_start_values(
+    params_template: pd.DataFrame,
+    transition_constraints: list[om.constraints.Constraint],
+    fixed_params: pd.DataFrame | None,
+) -> None:
+    """Seed start values for probability-constrained selectors.
+
+    Distribute ``1 - sum(fixed_values)`` uniformly over the unfixed entries
+    so the simplex sums to one before optimization.
+    """
+    fixed_loc = set(fixed_params.index) if fixed_params is not None else set()
+    for constr in transition_constraints:
+        if not isinstance(constr, om.ProbabilityConstraint):
+            continue
+        prob_idx = constr.selector(params_template[["value"]]).index
+        fixed_mask = prob_idx.isin(fixed_loc)
+        fixed_sum = (
+            float(params_template.loc[prob_idx[fixed_mask], "value"].sum())
+            if fixed_mask.any()
+            else 0.0
+        )
+        free_prob_idx = prob_idx[~fixed_mask]
+        if len(free_prob_idx) > 0:
+            params_template.loc[free_prob_idx, "value"] = (1.0 - fixed_sum) / len(
+                free_prob_idx
+            )
 
 
 def _initialize_transition_params(

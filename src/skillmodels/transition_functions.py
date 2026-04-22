@@ -122,17 +122,22 @@ def identity_constraints_translog(
 
 
 def log_ces(states: Array, params: Array) -> Array:
-    """Log CES production function (KLS version)."""
+    """Log CES production function (KLS version).
+
+    Computed as ``log(sum_i gamma_i * exp(states_i * phi)) / phi`` via a
+    numerically stable weighted logsumexp. The weighted form keeps both the
+    forward pass and the gradient finite when some ``gamma_i = 0``; the
+    naive ``logsumexp(log(gamma) + states * phi)`` has a 1 / gamma term in
+    the gradient that produces NaN at ``gamma_i = 0``.
+    """
     phi = params[-1]
     gammas = params[:-1]
     scaling_factor = 1 / phi
 
-    # note: once the b argument is supported in jax.scipy.special.logsumexp, we can set
-    # b = gammas instead of adding the log of gammas to sigma_points * phi
-
-    # the log step for gammas underflows for gamma = 0, but this is handled correctly
-    # by logsumexp and does not raise a warning.
-    unscaled = jax.scipy.special.logsumexp(jnp.log(gammas) + states * phi)
+    exponents = states * phi
+    max_exp = jnp.max(exponents)
+    shifted = jnp.exp(exponents - max_exp)
+    unscaled = max_exp + jnp.log(jnp.sum(gammas * shifted))
     return unscaled * scaling_factor
 
 

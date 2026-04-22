@@ -13,10 +13,8 @@ from jax import Array
 
 
 def af_loglike_initial(
-    free_params: Array,
+    params: Array,
     *,
-    all_params: Array,
-    free_mask: Array,
     n_factors: int,
     n_mixture_components: int,
     n_measures: int,
@@ -53,9 +51,8 @@ def af_loglike_initial(
     posterior component weights given Y_i.
 
     Args:
-        free_params: Free (non-fixed) parameter values.
-        all_params: Full parameter vector with fixed values pre-filled.
-        free_mask: Boolean mask, True for free parameters.
+        params: Full parameter vector in template order. Fixed entries are
+            held constant by optimagic `FixedConstraint`s attached outside.
         n_factors: Number of factors in the joint initial distribution
             (latent + observed).
         n_mixture_components: Number of mixture components.
@@ -77,7 +74,6 @@ def af_loglike_initial(
         Scalar negative log-likelihood.
 
     """
-    params = all_params.at[free_mask].set(free_params)
     n_latent = n_factors if n_latent_factors is None else n_latent_factors
     n_obs_factors = n_factors - n_latent
 
@@ -435,10 +431,8 @@ def _integrate_initial_single_obs(
 
 
 def af_loglike_transition(
-    free_params: Array,
+    params: Array,
     *,
-    all_params: Array,
-    free_mask: Array,
     n_state_factors: int,
     n_endogenous_factors: int,
     n_measures: int,
@@ -480,9 +474,8 @@ def af_loglike_transition(
     denote already-estimated parameters from the previous step.
 
     Args:
-        free_params: Free parameter values.
-        all_params: Full parameter vector with fixed values.
-        free_mask: Boolean mask for free parameters.
+        params: Full parameter vector in template order. Fixed entries are
+            held constant by optimagic `FixedConstraint`s attached outside.
         n_state_factors: Number of state factors with transition equations.
         n_endogenous_factors: Number of endogenous (investment) factors.
         n_measures: Number of measurements at period t.
@@ -514,8 +507,6 @@ def af_loglike_transition(
         Scalar negative log-likelihood.
 
     """
-    params = all_params.at[free_mask].set(free_params)
-
     parsed = _parse_transition_params(
         params,
         n_state_factors,

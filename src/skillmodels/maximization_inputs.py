@@ -14,6 +14,7 @@ from numpy.typing import NDArray
 import skillmodels.likelihood_function as lf
 import skillmodels.likelihood_function_debug as lfd
 from skillmodels.constraints import (
+    FixedConstraintWithValue,
     add_bounds,
     enforce_fixed_constraints,
     get_constraints,
@@ -39,6 +40,7 @@ def get_maximization_inputs(
     model_spec: ModelSpec,
     data: pd.DataFrame,
     split_dataset: int = 1,
+    fixed_params: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Create inputs for optimagic's maximize function.
 
@@ -47,6 +49,16 @@ def get_maximization_inputs(
         data: Dataset in long format.
         split_dataset: Controls into how many slices to split the dataset
             during the gradient computation.
+        fixed_params: Optional DataFrame with a ``"value"`` column pinning
+            specified parameters to fixed values. Uses the same 4-level
+            MultiIndex as the returned ``params_template``. Each matching
+            entry becomes a `FixedConstraintWithValue` in the returned
+            constraints list, so optimagic holds the parameter at the given
+            value during optimization. When a fix overlaps a
+            `ProbabilityConstraint` selector (e.g., a gamma of a ``log_ces``
+            transition), optimagic's fold machinery keeps the remaining free
+            entries on the implied simplex (see
+            ``optimagic.ProbabilityConstraint``).
 
     Returns a dictionary with keys:
         loglike: A jax jitted function that takes an optimagic-style
@@ -62,7 +74,7 @@ def get_maximization_inputs(
         loglike_and_gradient: Combination of loglike and
             loglike_gradient that is faster than calling the two functions separately.
         constraints: List of optimagic constraints that are implied by the
-            model specification.
+            model specification, extended by any user-supplied ``fixed_params``.
         params_template: Parameter DataFrame with correct index and
             bounds. The value column is empty except for the fixed constraints, which
             are set including the bounds.
@@ -178,6 +190,12 @@ def get_maximization_inputs(
         endogenous_factors_info=processed_model.endogenous_factors_info,
     )
 
+    if fixed_params is not None:
+        fixed_constraints = _build_fixed_constraints_from_params(
+            fixed_params, params_index=p_index
+        )
+        constraints = list(constraints) + fixed_constraints
+
     params_template = pd.DataFrame(columns=["value"], index=p_index)
     params_template = add_bounds(
         params=params_template,
@@ -197,6 +215,27 @@ def get_maximization_inputs(
         "constraints": constraints,
         "params_template": params_template,
     }
+
+
+def _build_fixed_constraints_from_params(
+    fixed_params: pd.DataFrame,
+    params_index: pd.MultiIndex,
+) -> list[FixedConstraintWithValue]:
+    """Convert a user-provided ``fixed_params`` DataFrame into constraints.
+
+    Each matching row becomes a ``FixedConstraintWithValue`` so optimagic
+    can treat user fixes uniformly with model-implied fixes (normalisations,
+    anchoring, augmented periods, ...). Entries whose index is not in
+    ``params_index`` are ignored.
+    """
+    common = params_index.intersection(fixed_params.index)
+    return [
+        FixedConstraintWithValue(
+            loc=idx,
+            value=float(fixed_params.loc[idx, "value"]),
+        )
+        for idx in common
+    ]
 
 
 def _partial_some_log_likelihood(

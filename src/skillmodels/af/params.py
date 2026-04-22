@@ -4,8 +4,10 @@ from types import MappingProxyType
 from typing import Any
 
 import numpy as np
+import optimagic as om
 import pandas as pd
 
+from skillmodels.constraints import FixedConstraintWithValue
 from skillmodels.types import Normalizations, TransitionInfo
 
 
@@ -324,16 +326,6 @@ def create_af_params_template(
     return params
 
 
-def is_fixed(row: pd.Series) -> bool:
-    """Check if a parameter row is fixed (lower == upper == value)."""
-    return row["lower_bound"] == row["upper_bound"]
-
-
-def get_free_mask(params_template: pd.DataFrame) -> np.ndarray:
-    """Return boolean mask for free (non-fixed) parameters."""
-    return (params_template["lower_bound"] != params_template["upper_bound"]).to_numpy()
-
-
 def apply_start_params(
     params_template: pd.DataFrame,
     start_params: pd.DataFrame,
@@ -361,20 +353,81 @@ def apply_fixed_params(
     params_template: pd.DataFrame,
     fixed_params: pd.DataFrame,
 ) -> None:
-    """Fix specified parameters at given values by clamping bounds to value.
+    """Set template values to match user-provided fixed values.
 
     Used to pin parameters that would otherwise be free -- e.g., identity
-    transitions and zero shock SDs for time-invariant latent factors, following
-    the same convention CHS uses for augmented periods.
-
-    Match on the 4-level MultiIndex. For each matching entry, set the template's
-    value, lower_bound, and upper_bound all to the value in `fixed_params`.
-    Entries not in the template are ignored. Modifies `params_template` in place.
+    transitions and zero shock SDs for time-invariant latent factors. The
+    pinning itself is enforced through `FixedConstraintWithValue` objects
+    emitted by `build_optimagic_inputs`; this helper only aligns the
+    template's starting values with the fixes so early likelihood evaluations
+    use the correct values. Modifies `params_template` in place.
     """
     common = params_template.index.intersection(fixed_params.index)
     if common.empty:
         return
-    vals = fixed_params.loc[common, "value"]
-    params_template.loc[common, "value"] = vals
-    params_template.loc[common, "lower_bound"] = vals
-    params_template.loc[common, "upper_bound"] = vals
+    params_template.loc[common, "value"] = fixed_params.loc[common, "value"]
+
+
+def build_optimagic_inputs(
+    params_template: pd.DataFrame,
+    fixed_params: pd.DataFrame | None,
+) -> tuple[pd.DataFrame, list[om.constraints.Constraint]]:
+    """Prepare the params DataFrame and fixed-constraint list for `om.minimize`.
+
+    The AF template encodes normalization fixes by clamping
+    ``lower_bound == upper_bound`` on affected rows. User-provided
+    `fixed_params` add further pinned rows. Both are translated into
+    `FixedConstraintWithValue` objects so optimagic can treat them uniformly
+    -- in particular so fixes that overlap a `ProbabilityConstraint` selector
+    get folded correctly. The returned DataFrame has infinite bounds on every
+    row that is pinned by a constraint, since optimagic rejects finite bounds
+    on probability selectors.
+
+    Args:
+        params_template: AF parameter template with value/lower_bound/upper_bound.
+        fixed_params: Optional user-provided fixes (DataFrame with a "value"
+            column and the same 4-level MultiIndex as the template).
+
+    Return:
+        Tuple of (full_params_df, fixed_constraints) where full_params_df
+        carries the template values plus any user fixes on all rows, and
+        fixed_constraints is a list of `FixedConstraintWithValue` objects
+        covering every pinned row (normalisation and user fixes alike).
+
+    """
+    params = params_template.copy()
+
+    if fixed_params is not None:
+        common = params.index.intersection(fixed_params.index)
+        if not common.empty:
+            params.loc[common, "value"] = fixed_params.loc[common, "value"]
+
+    fixed_from_bounds = (
+        params["lower_bound"].to_numpy() == params["upper_bound"].to_numpy()
+    )
+    fixed_from_user: np.ndarray
+    if fixed_params is not None:
+        common = params.index.intersection(fixed_params.index)
+        fixed_from_user = np.asarray(params.index.isin(common))
+    else:
+        fixed_from_user = np.zeros(len(params), dtype=bool)
+
+    pinned = fixed_from_bounds | fixed_from_user
+
+    constraints: list[om.constraints.Constraint] = []
+    for idx in params.index[pinned]:
+        constraints.append(
+            FixedConstraintWithValue(
+                loc=idx,
+                value=float(params.loc[idx, "value"]),
+            )
+        )
+
+    # Relax bounds on pinned rows: optimagic rejects finite bounds that
+    # overlap a probability selector, and the FixedConstraint now does the
+    # pinning.
+    pinned_idx = params.index[pinned]
+    params.loc[pinned_idx, "lower_bound"] = -np.inf
+    params.loc[pinned_idx, "upper_bound"] = np.inf
+
+    return params, constraints

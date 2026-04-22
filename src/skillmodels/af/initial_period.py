@@ -16,8 +16,8 @@ from skillmodels.af.likelihood import af_loglike_initial, create_loglike_and_gra
 from skillmodels.af.params import (
     apply_fixed_params,
     apply_start_params,
+    build_optimagic_inputs,
     create_af_params_template,
-    get_free_mask,
     get_initial_period_params_index,
     get_measurements_per_factor,
     get_normalizations_for_period,
@@ -127,7 +127,8 @@ def estimate_initial_period(
     if start_params is not None:
         apply_start_params(params_template, start_params)
 
-    # Pin any user-fixed parameters (clamps value + bounds)
+    # Align template values with user-supplied fixes (bounds are not clamped;
+    # pinning happens via FixedConstraintWithValue further below).
     if fixed_params is not None:
         apply_fixed_params(params_template, fixed_params)
 
@@ -142,14 +143,13 @@ def estimate_initial_period(
         n_latent,
     )
 
-    # Set up optimization
-    free_mask_np = get_free_mask(params_template)
-    free_mask = jnp.array(free_mask_np)
-    all_params_init = jnp.array(params_template["value"].to_numpy())
+    # Translate normalization fixes and user-supplied fixes into FixedConstraints
+    # so they compose with other constraints (e.g. ProbabilityConstraint).
+    full_params_df, fixed_constraints = build_optimagic_inputs(
+        params_template, fixed_params
+    )
 
     loglike_kwargs = {
-        "all_params": all_params_init,
-        "free_mask": free_mask,
         "n_factors": n_joint,
         "n_latent_factors": n_latent,
         "n_mixture_components": n_components,
@@ -177,32 +177,22 @@ def estimate_initial_period(
         val, grad = loglike_and_grad(jnp.array(params_df["value"].to_numpy()))
         return float(val), np.array(grad)
 
-    # Create free params DataFrame for optimagic
-    free_index = params_template.index[free_mask_np]
-    free_params_df = pd.DataFrame(
-        {
-            "value": params_template.loc[free_index, "value"].to_numpy(),
-            "lower_bound": params_template.loc[free_index, "lower_bound"].to_numpy(),
-            "upper_bound": params_template.loc[free_index, "upper_bound"].to_numpy(),
-        },
-        index=free_index,
-    )
-
     opt_res = om.minimize(
         fun=fun,
-        params=free_params_df[["value"]],
+        params=full_params_df[["value"]],
         algorithm=af_options.optimizer_algorithm,
         bounds=om.Bounds(
-            lower=free_params_df["lower_bound"],
-            upper=free_params_df["upper_bound"],
+            lower=full_params_df["lower_bound"],
+            upper=full_params_df["upper_bound"],
         ),
+        constraints=list(fixed_constraints) or None,
         fun_and_jac=fun_and_jac,
         **dict(af_options.optimizer_options),
     )
 
     # Write optimized values back into full template
     result_params = params_template.copy()
-    result_params.loc[free_index, "value"] = opt_res.params["value"].to_numpy()
+    result_params["value"] = opt_res.params["value"].to_numpy()
 
     # Extract conditional distribution (state factors only for AF propagation)
     sf = state_factors if state_factors is not None else factors

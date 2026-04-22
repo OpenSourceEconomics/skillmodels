@@ -1125,3 +1125,167 @@ def test_af_fixed_params_pins_time_invariant_latent() -> None:
             p_t.loc[("shock_sds", t_trans, "mc", "-"), "value"]  # ty: ignore[invalid-argument-type]
         )
         assert sd == 0.001, f"mc shock_sd period {t_trans}: {sd} (expected 0.001)"
+
+
+def _make_three_factor_log_ces_model(
+    n_periods: int,
+) -> tuple[ModelSpec, pd.DataFrame]:
+    """Build a 3-factor model with log_ces on fac1 and simulated data.
+
+    fac1 is produced via CES from (fac1, fac2, fac3). In the DGP we mute
+    fac3's contribution so tests can recover the pinning without fighting a
+    strong signal from that factor.
+    """
+    rng = np.random.default_rng(17)
+    n_obs = 250
+
+    fac1 = np.zeros((n_obs, n_periods))
+    fac2 = np.zeros((n_obs, n_periods))
+    fac3 = np.zeros((n_obs, n_periods))
+    fac1[:, 0] = rng.normal(0.5, 0.2, n_obs)
+    fac2[:, 0] = rng.normal(0.5, 0.2, n_obs)
+    fac3[:, 0] = rng.normal(0.0, 0.2, n_obs)
+    for t in range(n_periods - 1):
+        fac1[:, t + 1] = 0.4 * fac1[:, t] + 0.6 * fac2[:, t] + rng.normal(0, 0.1, n_obs)
+        fac2[:, t + 1] = 0.9 * fac2[:, t] + rng.normal(0, 0.1, n_obs)
+        fac3[:, t + 1] = fac3[:, t]
+
+    rows = []
+    for i in range(n_obs):
+        for t in range(n_periods):
+            rows.append(
+                {
+                    "caseid": i,
+                    "period": t,
+                    "y1": fac1[i, t] + rng.normal(0, 0.1),
+                    "y2": 0.5 + 0.8 * fac1[i, t] + rng.normal(0, 0.12),
+                    "y3": -0.2 + 1.1 * fac1[i, t] + rng.normal(0, 0.1),
+                    "y4": fac2[i, t] + rng.normal(0, 0.1),
+                    "y5": 0.2 + 0.9 * fac2[i, t] + rng.normal(0, 0.12),
+                    "y6": -0.1 + 1.1 * fac2[i, t] + rng.normal(0, 0.1),
+                    "y7": fac3[i, t] + rng.normal(0, 0.1),
+                    "y8": 0.1 + 0.9 * fac3[i, t] + rng.normal(0, 0.12),
+                    "y9": -0.1 + 1.0 * fac3[i, t] + rng.normal(0, 0.1),
+                }
+            )
+    data = pd.DataFrame(rows).set_index(["caseid", "period"])
+
+    model = ModelSpec(
+        factors={
+            "fac1": FactorSpec(
+                measurements=(("y1", "y2", "y3"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"y1": 1},) * n_periods,
+                    intercepts=({"y1": 0},) * n_periods,
+                ),
+                transition_function="log_ces",
+            ),
+            "fac2": FactorSpec(
+                measurements=(("y4", "y5", "y6"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"y4": 1},) * n_periods,
+                    intercepts=({"y4": 0},) * n_periods,
+                ),
+                transition_function="linear",
+            ),
+            "fac3": FactorSpec(
+                measurements=(("y7", "y8", "y9"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"y7": 1},) * n_periods,
+                    intercepts=({"y7": 0},) * n_periods,
+                ),
+                transition_function="linear",
+            ),
+        },
+        estimation_options=EstimationOptions(
+            robust_bounds=True,
+            bounds_distance=0.001,
+            n_mixtures=1,
+        ),
+    )
+    return model, data
+
+
+@pytest.mark.end_to_end
+def test_af_log_ces_with_cross_factor_gamma_fixed_at_zero() -> None:
+    """Fix gamma_fac3 = 0 in a log_ces transition and run AF end-to-end.
+
+    Before the probability-constraint + fixed-params support was added, this
+    combination raised `InvalidConstraintError` because optimagic refused
+    any fix inside a ProbabilityConstraint selector. Now the fold helper
+    removes gamma_fac3 from the selector and the remaining two gammas are
+    optimised on the simplex summing to one.
+    """
+    model, data = _make_three_factor_log_ces_model(n_periods=2)
+
+    fixed_idx = pd.MultiIndex.from_tuples(
+        [("transition", 0, "fac1", "fac3")],
+        names=["category", "period", "name1", "name2"],
+    )
+    fixed_df = pd.DataFrame({"value": [0.0]}, index=fixed_idx)
+
+    result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=AFEstimationOptions(
+            n_halton_points=20,
+            n_halton_points_shock=10,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+        ),
+        fixed_params=fixed_df,
+    )
+
+    p_t = result.period_results[1].params
+    gamma_fac1 = float(
+        p_t.loc[("transition", 0, "fac1", "fac1"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    gamma_fac2 = float(
+        p_t.loc[("transition", 0, "fac1", "fac2"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    gamma_fac3 = float(
+        p_t.loc[("transition", 0, "fac1", "fac3"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+
+    assert gamma_fac3 == 0.0
+    assert np.isclose(gamma_fac1 + gamma_fac2, 1.0, atol=1e-6)
+    assert gamma_fac1 > 0.0
+    assert gamma_fac2 > 0.0
+
+
+@pytest.mark.end_to_end
+def test_af_log_ces_with_cross_factor_gamma_fixed_at_nonzero() -> None:
+    """Fix gamma_fac3 = 0.2; verify remaining gammas sum to 0.8 at the optimum."""
+    model, data = _make_three_factor_log_ces_model(n_periods=2)
+
+    fixed_idx = pd.MultiIndex.from_tuples(
+        [("transition", 0, "fac1", "fac3")],
+        names=["category", "period", "name1", "name2"],
+    )
+    fixed_df = pd.DataFrame({"value": [0.2]}, index=fixed_idx)
+
+    result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=AFEstimationOptions(
+            n_halton_points=20,
+            n_halton_points_shock=10,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+        ),
+        fixed_params=fixed_df,
+    )
+
+    p_t = result.period_results[1].params
+    gamma_fac1 = float(
+        p_t.loc[("transition", 0, "fac1", "fac1"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    gamma_fac2 = float(
+        p_t.loc[("transition", 0, "fac1", "fac2"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    gamma_fac3 = float(
+        p_t.loc[("transition", 0, "fac1", "fac3"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+
+    assert gamma_fac3 == 0.2
+    assert np.isclose(gamma_fac1 + gamma_fac2, 0.8, atol=1e-6)
