@@ -216,7 +216,7 @@ types-pytz = "*"
 [tool.pixi.feature.type-checking.tasks]
 ty = "ty check src tests docs"
 [tool.pixi.pypi-dependencies]
-optimagic = { path = "../optimagic", editable = true }
+optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "probability-allow-fixed-entries" }
 pdbp = "*"
 skillmodels = { path = ".", editable = true }
 [tool.pixi.workspace]
