@@ -259,6 +259,10 @@ When writing new public-facing code, always accept and return `period`. Convert 
 
 ## Testing
 
-- pytest with markers: `wip`, `unit`, `integration`, `end_to_end`
+- pytest with markers: `wip`, `unit`, `integration`, `end_to_end`, `long_running`
 - Test files mirror source structure in `tests/`
 - Memory profiling available via pytest-memray (Unix only)
+- MATLAB AF CES / translog reproduction tests live in `tests/matlab_ces_repro/`. They
+  skip when the reference data at `/home/hmg/sciebo/Skill estimation/` is missing and
+  are marked `long_running`. Run them on the GPU with
+  `pixi run -e tests-cuda12 pytest tests/matlab_ces_repro -m long_running`.

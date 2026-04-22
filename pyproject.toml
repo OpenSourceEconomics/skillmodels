@@ -154,6 +154,7 @@ ini_options.filterwarnings = []
 ini_options.markers = [
   "integration: integration tests requiring MODEL2 + data",
   "long_running: slow tests skipped in CI (run with -m long_running)",
+  "end_to_end: end-to-end estimation tests requiring external data",
 ]
 ini_options.norecursedirs = [ "docs" ]
 
@@ -194,6 +195,7 @@ pytest = "*"
 pytest-cov = "*"
 pytest-xdist = "*"
 snakeviz = "*"
+xlrd = ">=2"
 [tool.pixi.feature.tests.target.unix.dependencies]
 pytest-memray = "*"
 [tool.pixi.feature.tests.tasks]

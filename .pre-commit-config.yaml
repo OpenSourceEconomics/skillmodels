@@ -37,6 +37,12 @@ repos:
       - id: name-tests-test
         args:
           - --pytest-test-first
+        exclude: |
+          (?x)^(
+            tests/matlab_ces_repro/load_cnlsy\.py
+            |tests/matlab_ces_repro/matlab_mapping\.py
+            |tests/matlab_ces_repro/model_specs\.py
+          )$
       - id: no-commit-to-branch
         args:
           - --branch
