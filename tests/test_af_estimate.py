@@ -438,7 +438,7 @@ def test_af_recovers_linear_transition_params() -> None:
     model = _make_linear_transition_model(n_periods=3)
 
     af_opts = AFEstimationOptions(
-        n_halton_points=40,
+        n_halton_points=800,
         n_halton_points_shock=20,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",

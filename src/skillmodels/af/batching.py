@@ -58,27 +58,29 @@ def auto_n_obs_per_batch(
     *,
     n_obs: int,
     n_halton_points: int,
-    n_halton_points_shock: int,
+    n_halton_points_shock: int,  # noqa: ARG001
     n_latent: int,
     n_endogenous: int,
     target_bytes: int | None = None,
 ) -> int:
     """Pick ``n_obs_per_batch`` from a target-bytes budget.
 
-    The per-observation footprint is estimated as
+    The AF transition-period likelihood forms a joint Halton draw of
+    size ``(n_halton_points, 2 * n_latent + n_endogenous)`` rather than
+    an outer product of per-axis grids, so per-observation memory is
+    linear in ``n_halton_points``. The per-observation footprint is
+    estimated as
 
-    ``n_halton_points * n_halton_points_shock ** (1 + int(n_endogenous > 0))
-    * (n_latent + n_endogenous + 1) * 8 bytes * SAFETY_FACTOR``.
+    ``n_halton_points * (n_latent + n_endogenous + 1) * 8 * SAFETY_FACTOR``.
 
-    That reflects the triple outer product for transition-period
-    integration (state x shock x optional-inv-shock) and a constant
-    per-node vector. For initial-period-only calls the shock factor
-    collapses to 1 but the heuristic still gives a safe lower bound.
+    ``n_halton_points_shock`` is retained in the signature for API
+    compatibility with the earlier per-axis layout but is unused now
+    that draws are joint.
 
     Args:
         n_obs: Total number of observations.
-        n_halton_points: State Halton grid size.
-        n_halton_points_shock: Shock Halton grid size.
+        n_halton_points: Halton grid size (joint dimension count unused here).
+        n_halton_points_shock: Legacy shock Halton count, ignored.
         n_latent: Latent factor count.
         n_endogenous: Endogenous (investment) factor count.
         target_bytes: Budget per batch. Defaults to `target_batch_bytes()`.
@@ -87,10 +89,11 @@ def auto_n_obs_per_batch(
         A positive integer no larger than ``n_obs``.
     """
     budget = target_bytes if target_bytes is not None else target_batch_bytes()
-    shock_axes = 1 + (1 if n_endogenous > 0 else 0)
-    grid_size = n_halton_points * (n_halton_points_shock**shock_axes)
     per_obs_bytes = (
-        grid_size * (n_latent + n_endogenous + 1) * _BYTES_PER_FLOAT64 * _SAFETY_FACTOR
+        n_halton_points
+        * (n_latent + n_endogenous + 1)
+        * _BYTES_PER_FLOAT64
+        * _SAFETY_FACTOR
     )
     per_obs_bytes = max(per_obs_bytes, 1)
     batch = max(1, budget // per_obs_bytes)

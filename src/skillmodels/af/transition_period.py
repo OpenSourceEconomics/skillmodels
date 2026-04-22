@@ -15,10 +15,7 @@ import pandas as pd
 from jax import Array
 
 from skillmodels.af.batching import auto_n_obs_per_batch
-from skillmodels.af.halton import (
-    create_halton_nodes_and_weights,
-    create_shock_nodes_and_weights,
-)
+from skillmodels.af.halton import create_halton_nodes_and_weights
 from skillmodels.af.initial_period import _build_loading_mask, _get_ordered_measures
 from skillmodels.af.likelihood import af_loglike_transition, create_loglike_and_gradient
 from skillmodels.af.params import (
@@ -141,15 +138,16 @@ def estimate_transition_period(
     # Build loading mask
     loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
 
-    # Halton quadrature nodes for factor integration
-    # State nodes cover only state factors (conditional distribution dimension)
-    state_nodes, state_weights = create_halton_nodes_and_weights(
+    # Joint Halton draws: a single low-discrepancy sequence over
+    # (z_state, z_shock, z_inv_shock). The MATLAB AF reference draws one
+    # joint Halton of dimension 2 * n_state + n_endog and sums the
+    # integrand at those points, rather than building the outer product
+    # of three per-axis grids. The joint approach keeps quadrature cost
+    # linear in n_halton_points and matches MATLAB's integration order.
+    joint_dim = 2 * n_state + n_endog
+    joint_nodes, joint_weights = create_halton_nodes_and_weights(
         af_options.n_halton_points,
-        n_state,
-    )
-    shock_nodes, shock_weights = create_shock_nodes_and_weights(
-        af_options.n_halton_points_shock,
-        n_state,
+        joint_dim,
     )
 
     prev_dist_arrays, total_n_transition_params = _prepare_transition_inputs(
@@ -180,17 +178,6 @@ def estimate_transition_period(
             p_idx += n_p
         return result
 
-    # Investment shock nodes (separate from production shocks)
-    if n_endog > 0:
-        inv_shock_nodes, inv_shock_weights = create_halton_nodes_and_weights(
-            af_options.n_halton_points_shock,
-            n_endog,
-            seed=99,
-        )
-    else:
-        inv_shock_nodes = jnp.zeros((1, 0))
-        inv_shock_weights = jnp.ones(1)
-
     # Count investment equation params (per endogenous factor: intercept + state + obs)
     n_inv_eq_params_per = 1 + n_state + len(observed_factors) if n_endog > 0 else 0
     total_n_inv_params = n_endog * n_inv_eq_params_per
@@ -219,12 +206,8 @@ def estimate_transition_period(
         prev_controls=prev_controls,
         loading_mask=loading_mask,
         prev_dist_arrays=prev_dist_arrays,
-        state_nodes=state_nodes,
-        state_weights=state_weights,
-        shock_nodes=shock_nodes,
-        shock_weights=shock_weights,
-        inv_shock_nodes=inv_shock_nodes,
-        inv_shock_weights=inv_shock_weights,
+        joint_nodes=joint_nodes,
+        joint_weights=joint_weights,
         combined_transition=combined_transition,
         total_n_transition_params=total_n_transition_params,
         total_n_inv_params=total_n_inv_params,
@@ -256,12 +239,19 @@ def estimate_transition_period(
         full = jnp.concatenate([state_factors_val, mean_inv, mean_obs])
         return combined_transition(full, params)
 
+    # Distribution propagation uses a marginal state-only grid; integration
+    # is 1-dimensional in each state factor, so the full joint grid is
+    # unnecessary here.
+    marginal_state_nodes, marginal_state_weights = create_halton_nodes_and_weights(
+        af_options.n_halton_points,
+        n_state,
+    )
     updated_dist = _update_conditional_distribution(
         prev_distribution=prev_distribution,
         result_params=result_params,
         combined_transition=state_only_transition,
-        state_nodes=state_nodes,
-        state_weights=state_weights,
+        state_nodes=marginal_state_nodes,
+        state_weights=marginal_state_weights,
         n_factors=n_state,
     )
 
@@ -293,12 +283,8 @@ def _run_transition_optimization(
     prev_controls: Array,
     loading_mask: np.ndarray,
     prev_dist_arrays: dict[str, Array],
-    state_nodes: Array,
-    state_weights: Array,
-    shock_nodes: Array,
-    shock_weights: Array,
-    inv_shock_nodes: Array,
-    inv_shock_weights: Array,
+    joint_nodes: Array,
+    joint_weights: Array,
     combined_transition: Callable,
     total_n_transition_params: int,
     total_n_inv_params: int,
@@ -354,12 +340,8 @@ def _run_transition_optimization(
         "prev_loadings_flat": prev_meas_info["loadings_flat"],
         "prev_meas_sds": prev_meas_info["meas_sds"],
         "prev_distribution": prev_dist_arrays,
-        "state_nodes": state_nodes,
-        "state_weights": state_weights,
-        "shock_nodes": shock_nodes,
-        "shock_weights": shock_weights,
-        "inv_shock_nodes": inv_shock_nodes,
-        "inv_shock_weights": inv_shock_weights,
+        "joint_nodes": joint_nodes,
+        "joint_weights": joint_weights,
         "transition_func": combined_transition,
         "total_n_transition_params": total_n_transition_params,
         "total_n_inv_params": total_n_inv_params,
