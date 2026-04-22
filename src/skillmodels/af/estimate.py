@@ -90,6 +90,8 @@ def estimate_af(
         af_options=af_options,
         state_factors=state_factors,
         start_params=start_params,
+        observed_factors=observed_factors,
+        observed_factor_values=period_data[0].get("observed_factors"),
     )
 
     period_results: list[AFPeriodResult] = [period_0_result]

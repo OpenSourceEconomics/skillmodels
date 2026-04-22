@@ -15,38 +15,48 @@ def get_initial_period_params_index(
     latent_factors: tuple[str, ...],
     measurements_period_0: dict[str, tuple[str, ...]],
     controls: tuple[str, ...],
+    observed_factors: tuple[str, ...] = (),
 ) -> pd.MultiIndex:
     """Build parameter index for the initial period (Step 0).
 
     Parameters estimated in Step 0:
-    - Mixture weights, means, Cholesky covariances (initial distribution)
+    - Mixture weights, means, Cholesky covariances for the joint distribution
+      of latent and observed factors at period 0
     - Measurement loadings, intercepts, SDs for period 0
+
+    When `observed_factors` is non-empty, the initial distribution is modelled
+    over the joint vector (latent, observed). Per-individual observed values
+    let the likelihood condition on them via the Schur complement, which
+    concentrates Halton draws and improves estimation precision.
 
     Args:
         n_mixture_components: Number of Gaussian mixture components.
         latent_factors: Names of latent factors.
         measurements_period_0: Factor name -> tuple of measurement variable names.
         controls: Control variable names (includes "constant").
+        observed_factors: Names of observed factors included in the joint
+            initial distribution.
 
     Return:
         MultiIndex with levels (category, period, name1, name2).
 
     """
     ind_tups: list[tuple[str, int, str, str]] = []
+    joint_factors = (*latent_factors, *observed_factors)
 
     # Mixture weights
     for m in range(n_mixture_components):
         ind_tups.append(("mixture_weights", 0, f"mixture_{m}", "-"))
 
-    # Initial means per component per factor
+    # Initial means per component per joint factor
     for m in range(n_mixture_components):
-        for factor in latent_factors:
+        for factor in joint_factors:
             ind_tups.append(("initial_states", 0, f"mixture_{m}", factor))
 
-    # Initial Cholesky covariances per component (lower triangular)
+    # Initial Cholesky covariances per component (lower triangular) over joint factors
     for m in range(n_mixture_components):
-        for row, f1 in enumerate(latent_factors):
-            for col, f2 in enumerate(latent_factors):
+        for row, f1 in enumerate(joint_factors):
+            for col, f2 in enumerate(joint_factors):
                 if col <= row:
                     ind_tups.append(
                         (

@@ -855,3 +855,168 @@ def test_af_get_filtered_states() -> None:
 
     # State estimates should have non-trivial variance (not all the same)
     assert states_df["skill"].std() > 0.1
+
+
+@pytest.mark.end_to_end
+def test_af_estimate_with_translog() -> None:
+    """Verify AF estimation runs with a translog transition function.
+
+    Simulate from a linear DGP but estimate with translog — translog nests
+    linear (squares and interactions zero), so estimation should still
+    converge to a finite likelihood and recover the linear coefficient
+    roughly. With one factor there are only 3 translog params: beta, beta^2,
+    constant.
+    """
+    data, _true_params = _simulate_linear_transition_data(n_obs=300, n_periods=3)
+    model = ModelSpec(
+        factors={
+            "skill": FactorSpec(
+                measurements=(("m1", "m2", "m3"),) * 3,
+                normalizations=Normalizations(
+                    loadings=({"m1": 1},) * 3,
+                    intercepts=({"m1": 0},) * 3,
+                ),
+                transition_function="translog",
+            ),
+        },
+        estimation_options=EstimationOptions(
+            robust_bounds=True,
+            bounds_distance=0.001,
+            n_mixtures=1,
+        ),
+    )
+
+    result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=AFEstimationOptions(
+            n_halton_points=30,
+            n_halton_points_shock=15,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+        ),
+    )
+
+    assert len(result.period_results) == 3
+    for pr in result.period_results:
+        assert np.isfinite(pr.loglikelihood), (
+            f"Period {pr.period}: non-finite loglik {pr.loglikelihood}"
+        )
+
+    # Period 1 should have 3 translog transition params: skill, skill ** 2, constant
+    p1 = result.period_results[1].params
+    trans = p1.query("category == 'transition'")
+    param_names = set(trans.index.get_level_values("name2"))
+    assert {"skill", "skill ** 2", "constant"}.issubset(param_names), (
+        f"Expected translog params skill, skill ** 2, constant; got {param_names}"
+    )
+
+    # Linear coefficient should be recovered roughly (true beta = 0.8).
+    # Tolerance is wide because translog overfits with squared term.
+    est_beta = float(
+        p1.loc[("transition", 0, "skill", "skill"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    assert abs(est_beta - 0.8) < 0.4, (
+        f"translog skill coefficient: got {est_beta:.3f}, expected ≈ 0.8"
+    )
+
+
+@pytest.mark.end_to_end
+def test_af_joint_initial_distribution_with_observed_factor() -> None:
+    """Verify the joint (latent, observed) initial distribution is estimated.
+
+    When observed factors are specified, the initial period estimator models
+    the joint (latent, observed) distribution and conditions Halton draws on
+    observed values per the Schur complement (Antweiler & Freyberger 2025).
+
+    This test constructs data with a latent skill strongly correlated with
+    observed income, runs AF, and verifies:
+    - The estimated initial_states includes an entry for the observed factor.
+    - The recovered mean of the observed factor is close to its sample mean.
+    - The covariance between latent and observed has the expected sign.
+    """
+    rng = np.random.default_rng(2026)
+    n_obs, n_periods = 400, 2
+    true_corr = 0.7  # strong latent-observed correlation
+
+    # Jointly simulate skill and income with specified correlation
+    z = rng.multivariate_normal(
+        mean=[0.0, 1.0],
+        cov=[[1.0, true_corr * 0.5], [true_corr * 0.5, 0.25]],
+        size=n_obs,
+    )
+    theta = z[:, 0]
+    income = z[:, 1]
+
+    rows = []
+    for i in range(n_obs):
+        for t in range(n_periods):
+            rows.append(
+                {
+                    "caseid": i,
+                    "period": t,
+                    "s1": theta[i] + rng.normal(0, 0.3),
+                    "s2": 0.3 + 0.9 * theta[i] + rng.normal(0, 0.35),
+                    "s3": -0.1 + 1.1 * theta[i] + rng.normal(0, 0.4),
+                    "income": income[i],
+                }
+            )
+    data = pd.DataFrame(rows).set_index(["caseid", "period"])
+
+    model = ModelSpec(
+        factors={
+            "skill": FactorSpec(
+                measurements=(("s1", "s2", "s3"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"s1": 1},) * n_periods,
+                    intercepts=({"s1": 0},) * n_periods,
+                ),
+                transition_function="linear",
+            ),
+        },
+        observed_factors=("income",),
+        estimation_options=EstimationOptions(
+            robust_bounds=True,
+            bounds_distance=0.001,
+            n_mixtures=1,
+        ),
+    )
+
+    result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=AFEstimationOptions(
+            n_halton_points=40,
+            n_halton_points_shock=15,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+        ),
+    )
+
+    p0 = result.period_results[0].params
+
+    # initial_states must now include an entry for the observed factor
+    income_mean_loc = ("initial_states", 0, "mixture_0", "income")
+    assert income_mean_loc in p0.index, (
+        "initial_states should include the observed factor 'income'"
+    )
+    est_income_mean = float(p0.loc[income_mean_loc, "value"])  # ty: ignore[invalid-argument-type]
+    sample_income_mean = float(income.mean())
+    assert abs(est_income_mean - sample_income_mean) < 0.15, (
+        f"Estimated income mean {est_income_mean:.3f} far from sample "
+        f"{sample_income_mean:.3f}."
+    )
+
+    # Cross-covariance entry (skill-income) should reflect the positive
+    # correlation in the DGP; stored as lower-triangular Cholesky with
+    # factor ordering (latent, observed).
+    cross_loc = ("initial_cholcovs", 0, "mixture_0", "income-skill")
+    assert cross_loc in p0.index, (
+        "Cross Cholesky entry between skill and income should be present"
+    )
+    # For a 2x2 joint Cholesky with positive cross-cov, the (1,0) entry
+    # should be positive.
+    cross_val = float(p0.loc[cross_loc, "value"])  # ty: ignore[invalid-argument-type]
+    assert cross_val > 0.05, (
+        f"Expected positive skill-income covariance; got Cholesky[1,0]={cross_val:.3f}"
+    )

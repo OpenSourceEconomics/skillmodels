@@ -27,37 +27,59 @@ def af_loglike_initial(
     nodes: Array,
     weights: Array,
     stability_floor: float,
+    n_latent_factors: int | None = None,
+    observed_factor_values: Array | None = None,
 ) -> Array:
     """Negative log-likelihood for the initial period (Step 0).
 
-    Integrate over latent factors using Halton quadrature:
+    Integrate over latent factors using Halton quadrature.
 
-        L_i = sum_q w_q * [sum_l pi_l * N(z_q | mu_l, Sigma_l)]
-              * prod_m N(Z_{0,m,i} | c_m + lambda_m' z_q, sigma_{eps,m}^2)
+    When `n_latent_factors == n_factors` (no observed factors in the joint
+    distribution), the likelihood reduces to::
 
-    where q indexes quadrature nodes, l indexes mixture components, and
-    m indexes measurements.
+        L_i = sum_q w_q * sum_l pi_l
+              * prod_m N(Z_{0,m,i} | c_m + lam_m' theta_q,l, sd_m)
+
+    where theta_q,l = mu_l + L_l @ z_q.
+
+    When `n_latent_factors < n_factors` (joint distribution over
+    (latent, observed)), for each individual i::
+
+        L_i = p(Y_i) * sum_q w_q * sum_l pi_{l|Y_i}
+              * prod_m N(Z_{0,m,i} | c_m + lam_m' theta_{q,l|Y_i}, sd_m)
+
+    where theta_{q,l|Y_i} is drawn from the conditional N(mu_{theta|Y,l,i},
+    Sigma_{theta|Y,l}) via the Schur complement, and pi_{l|Y_i} are the
+    posterior component weights given Y_i.
 
     Args:
         free_params: Free (non-fixed) parameter values.
         all_params: Full parameter vector with fixed values pre-filled.
         free_mask: Boolean mask, True for free parameters.
-        n_factors: Number of latent factors.
+        n_factors: Number of factors in the joint initial distribution
+            (latent + observed).
         n_mixture_components: Number of mixture components.
         n_measures: Number of measurement variables in period 0.
         n_controls: Number of control variables (including constant).
         measurements: Shape (n_obs, n_measures), observed measurements.
         controls: Shape (n_obs, n_controls), control variable values.
-        loading_mask: Shape (n_measures, n_factors), True where loading exists.
-        nodes: Shape (n_nodes, n_factors), standard normal quadrature nodes.
+        loading_mask: Shape (n_measures, n_latent), True where loading exists.
+        nodes: Shape (n_nodes, n_latent), standard normal quadrature nodes.
         weights: Shape (n_nodes,), quadrature weights.
         stability_floor: Small constant added for numerical stability.
+        n_latent_factors: Number of latent factors (loadings use only these).
+            Defaults to `n_factors` when no observed factors are present.
+        observed_factor_values: Shape (n_obs, n_obs_factors), observed factor
+            values used for Schur-complement conditioning. Required when
+            `n_latent_factors < n_factors`.
 
     Return:
         Scalar negative log-likelihood.
 
     """
     params = all_params.at[free_mask].set(free_params)
+    n_latent = n_factors if n_latent_factors is None else n_latent_factors
+    n_obs_factors = n_factors - n_latent
 
     parsed = _parse_initial_params(
         params,
@@ -67,21 +89,39 @@ def af_loglike_initial(
         n_controls,
     )
 
-    # Evaluate likelihood per observation
-    log_likes = _initial_loglike_per_obs(
-        mixture_weights=parsed["mixture_weights"],
-        mixture_means=parsed["mixture_means"],
-        mixture_chol_covs=parsed["mixture_chol_covs"],
-        control_params=parsed["control_params"],
-        loadings=parsed["loadings"],
-        meas_sds=parsed["meas_sds"],
-        measurements=measurements,
-        controls=controls,
-        loading_mask=loading_mask,
-        nodes=nodes,
-        weights=weights,
-        stability_floor=stability_floor,
-    )
+    if n_obs_factors == 0:
+        log_likes = _initial_loglike_per_obs(
+            mixture_weights=parsed["mixture_weights"],
+            mixture_means=parsed["mixture_means"],
+            mixture_chol_covs=parsed["mixture_chol_covs"],
+            control_params=parsed["control_params"],
+            loadings=parsed["loadings"],
+            meas_sds=parsed["meas_sds"],
+            measurements=measurements,
+            controls=controls,
+            loading_mask=loading_mask,
+            nodes=nodes,
+            weights=weights,
+            stability_floor=stability_floor,
+        )
+    else:
+        assert observed_factor_values is not None  # noqa: S101
+        log_likes = _initial_loglike_per_obs_conditional(
+            mixture_weights=parsed["mixture_weights"],
+            mixture_means=parsed["mixture_means"],
+            mixture_chol_covs=parsed["mixture_chol_covs"],
+            control_params=parsed["control_params"],
+            loadings=parsed["loadings"],
+            meas_sds=parsed["meas_sds"],
+            measurements=measurements,
+            controls=controls,
+            observed_factor_values=observed_factor_values,
+            loading_mask=loading_mask,
+            nodes=nodes,
+            weights=weights,
+            n_latent=n_latent,
+            stability_floor=stability_floor,
+        )
 
     return -jnp.mean(log_likes)
 
@@ -186,6 +226,147 @@ def _initial_loglike_per_obs(
         )
 
     return jax.vmap(_single_obs_loglike)(residuals_base)
+
+
+def _initial_loglike_per_obs_conditional(
+    *,
+    mixture_weights: Array,
+    mixture_means: Array,
+    mixture_chol_covs: Array,
+    control_params: Array,
+    loadings: Array,
+    meas_sds: Array,
+    measurements: Array,
+    controls: Array,
+    observed_factor_values: Array,
+    loading_mask: Array,
+    nodes: Array,
+    weights: Array,
+    n_latent: int,
+    stability_floor: float,
+) -> Array:
+    """Per-observation log-likelihood with Schur-complement conditioning.
+
+    For each individual i with observed factors Y_i, the likelihood is::
+
+        L_i = p(Y_i) * integral p(Z_i | theta) p(theta | Y_i) dtheta
+            = sum_l pi_l N(Y_i | mu_Y_l, Sigma_YY_l)
+              * sum_q w_q prod_m N(residual_m | 0, sd_m)
+
+    where theta is drawn from p(theta | Y_i, component l) using the
+    conditional mean and Cholesky factor derived from the joint
+    (latent, observed) covariance matrix via the Schur complement.
+
+    Note the identity: combining the log-mixture over components l with
+    the measurement density gives an equivalent formulation where each
+    component's contribution is weighted by pi_l * N(Y_i | mu_Y_l, Sigma_YY_l).
+
+    """
+    n_measures = loading_mask.shape[0]
+    full_loadings = jnp.zeros((n_measures, n_latent))
+    full_loadings = full_loadings.at[loading_mask].set(loadings)
+
+    control_contrib = controls @ control_params.T
+    residuals_base = measurements - control_contrib
+
+    def _single_obs_loglike(residual_base: Array, y_i: Array) -> Array:
+        return _integrate_initial_single_obs_conditional(
+            residual_base=residual_base,
+            y_i=y_i,
+            full_loadings=full_loadings,
+            meas_sds=meas_sds,
+            mixture_weights=mixture_weights,
+            mixture_means=mixture_means,
+            mixture_chol_covs=mixture_chol_covs,
+            nodes=nodes,
+            weights=weights,
+            n_latent=n_latent,
+            stability_floor=stability_floor,
+        )
+
+    return jax.vmap(_single_obs_loglike)(residuals_base, observed_factor_values)
+
+
+def _integrate_initial_single_obs_conditional(
+    *,
+    residual_base: Array,
+    y_i: Array,
+    full_loadings: Array,
+    meas_sds: Array,
+    mixture_weights: Array,
+    mixture_means: Array,
+    mixture_chol_covs: Array,
+    nodes: Array,
+    weights: Array,
+    n_latent: int,
+    stability_floor: float,
+) -> Array:
+    """Quadrature integration for one individual with observed-factor conditioning.
+
+    Per component l:
+    - Split joint (mu, L) into latent and observed blocks.
+    - Compute marginal p(Y_i | l) from (mu_Y_l, L_Y_l).
+    - Compute conditional mean mu_{theta | Y_i, l} and Cholesky L_{theta | Y, l}
+      via Schur complement.
+    - Transform nodes: theta_q = mu_{theta|Y,l} + L_{theta|Y,l} @ z_q.
+    - Evaluate measurement density at theta_q, sum over quadrature.
+
+    Aggregate with log-sum-exp over components.
+    """
+    n_components = mixture_weights.shape[0]
+
+    def _component_log_kernel(l_idx: Array) -> Array:
+        mu_full = mixture_means[l_idx]
+        chol_full = mixture_chol_covs[l_idx]
+        cov_full = chol_full @ chol_full.T
+
+        mu_theta = mu_full[:n_latent]
+        mu_y = mu_full[n_latent:]
+        cov_tt = cov_full[:n_latent, :n_latent]
+        cov_ty = cov_full[:n_latent, n_latent:]
+        cov_yy = cov_full[n_latent:, n_latent:]
+
+        # Marginal density of Y_i under component l
+        chol_yy = jnp.linalg.cholesky(cov_yy)
+        log_marg_y = _log_mvn_pdf_chol(y_i, mu_y, chol_yy)
+
+        # Conditional mean and Cholesky of theta | Y_i
+        alpha = jax.scipy.linalg.cho_solve((chol_yy, True), (y_i - mu_y))
+        cond_mean = mu_theta + cov_ty @ alpha
+        # Sigma_{theta|Y} = Sigma_tt - Sigma_ty Sigma_yy^{-1} Sigma_yt
+        solve_tt = jax.scipy.linalg.cho_solve((chol_yy, True), cov_ty.T)
+        cond_cov = cov_tt - cov_ty @ solve_tt
+        # Jitter for numerical stability before Cholesky
+        cond_cov = cond_cov + 1e-10 * jnp.eye(n_latent)
+        cond_chol = jnp.linalg.cholesky(cond_cov)
+
+        def _log_node(z_q: Array) -> Array:
+            theta_q = cond_mean + cond_chol @ z_q
+            residuals = residual_base - full_loadings @ theta_q
+            return jnp.sum(
+                _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
+            )
+
+        log_meas = jax.vmap(_log_node)(nodes)
+        log_integral = jax.scipy.special.logsumexp(log_meas + jnp.log(weights))
+
+        return (
+            jnp.log(mixture_weights[l_idx] + stability_floor)
+            + log_marg_y
+            + log_integral
+        )
+
+    comp_log = jax.vmap(_component_log_kernel)(jnp.arange(n_components))
+    return jax.scipy.special.logsumexp(comp_log)
+
+
+def _log_mvn_pdf_chol(x: Array, mean: Array, chol: Array) -> Array:
+    """Log pdf of multivariate normal given the lower-triangular Cholesky."""
+    diff = x - mean
+    sol = jax.scipy.linalg.solve_triangular(chol, diff, lower=True)
+    log_det = jnp.sum(jnp.log(jnp.diag(chol)))
+    k = x.shape[0]
+    return -0.5 * k * jnp.log(2 * jnp.pi) - log_det - 0.5 * jnp.dot(sol, sol)
 
 
 def _integrate_initial_single_obs(
