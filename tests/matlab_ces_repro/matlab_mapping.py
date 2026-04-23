@@ -18,8 +18,35 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
 from scipy.io import loadmat
+
+from .load_cnlsy import (
+    INCOME_MEASURE,
+    MC_MEASURES,
+    MN_MEASURES,
+    SKILL_MEASURES,
+)
+
+# skillmodels' joint factor ordering in the initial distribution for our
+# 4-latent + 1-observed model; MATLAB's 4-dim distribution covers
+# (skills, MC, MN, log_income). ``investment`` is a skillmodels latent
+# without a MATLAB analogue and is treated as independent of the other
+# factors in the initial distribution.
+_SKM_JOINT_ORDER: tuple[str, ...] = (
+    "skills",
+    "MC",
+    "MN",
+    "investment",
+    INCOME_MEASURE,
+)
+_MATLAB_TO_SKM_INITIAL_INDEX: dict[int, int] = {
+    0: 0,  # skills
+    1: 1,  # MC
+    2: 2,  # MN
+    3: 4,  # log_income (index 4 in skillmodels because of investment at 3)
+}
 
 
 @dataclass(frozen=True)
@@ -292,3 +319,173 @@ def translate_matlab_ces_production(
     phi_skm = rho
     level_shift = a_const + (1.0 / rho) * math.log(total)
     return gamma_skills, gamma_inv, phi_skm, level_shift
+
+
+def _build_matlab_4x4_cov(initial: MatlabInitialResults) -> NDArray[np.float64]:
+    """Reconstruct MATLAB's 4x4 initial covariance from variances + correlations."""
+    var = initial.var_diag
+    corr = initial.correlations
+    cov = np.diag(var).astype(np.float64)
+    cov[1, 0] = corr[0] * math.sqrt(var[0] * var[1])  # (skills, MC)
+    cov[2, 0] = corr[1] * math.sqrt(var[0] * var[2])  # (skills, MN)
+    cov[3, 0] = corr[2] * math.sqrt(var[0] * var[3])  # (skills, Y)
+    cov[2, 1] = corr[3] * math.sqrt(var[1] * var[2])  # (MC, MN)
+    cov[3, 1] = corr[4] * math.sqrt(var[1] * var[3])  # (MC, Y)
+    cov[3, 2] = corr[5] * math.sqrt(var[2] * var[3])  # (MN, Y)
+    cov[0, 1] = cov[1, 0]
+    cov[0, 2] = cov[2, 0]
+    cov[0, 3] = cov[3, 0]
+    cov[1, 2] = cov[2, 1]
+    cov[1, 3] = cov[3, 1]
+    cov[2, 3] = cov[3, 2]
+    return cov
+
+
+def _embed_matlab_cov_in_skillmodels(
+    initial: MatlabInitialResults,
+    *,
+    investment_sd: float = 1.0,
+) -> NDArray[np.float64]:
+    """Build the 5x5 skillmodels initial covariance from MATLAB's 4x4 one.
+
+    ``investment`` (skillmodels dim 3) is placed as independent of the
+    other four factors with variance ``investment_sd**2``. The returned
+    matrix is ordered ``(skills, MC, MN, investment, log_income)``.
+    """
+    cov4 = _build_matlab_4x4_cov(initial)
+    cov5 = np.zeros((5, 5), dtype=np.float64)
+    for i_matlab, i_skm in _MATLAB_TO_SKM_INITIAL_INDEX.items():
+        for j_matlab, j_skm in _MATLAB_TO_SKM_INITIAL_INDEX.items():
+            cov5[i_skm, j_skm] = cov4[i_matlab, j_matlab]
+    cov5[3, 3] = investment_sd**2
+    return cov5
+
+
+def _skillmodels_cholcov_entries(cov: NDArray[np.float64]) -> dict[str, float]:
+    """Map a 5x5 covariance to skillmodels' ``initial_cholcovs`` entries.
+
+    Keys are ``{factor_row}-{factor_col}`` matching the MultiIndex
+    ``name2`` level built by ``get_initial_period_params_index``.
+    """
+    chol = np.linalg.cholesky(cov)
+    entries: dict[str, float] = {}
+    for row, f_row in enumerate(_SKM_JOINT_ORDER):
+        for col in range(row + 1):
+            f_col = _SKM_JOINT_ORDER[col]
+            entries[f"{f_row}-{f_col}"] = float(chol[row, col])
+    return entries
+
+
+def fill_initial_params_from_matlab(
+    params_template: pd.DataFrame,
+    initial: MatlabInitialResults,
+    *,
+    period: int = 0,
+    component: str = "mixture_0",
+    investment_initial_sd: float = 1.0,
+) -> pd.DataFrame:
+    """Populate skillmodels' initial-period entries from MATLAB's ``est_0``.
+
+    Overwrites the ``mixture_weights``, ``initial_states``,
+    ``initial_cholcovs``, ``controls`` (measurement intercepts),
+    ``loadings``, and ``meas_sds`` entries that correspond to the MATLAB
+    initial-period vector. Entries that don't have a MATLAB counterpart
+    (investment measurement model in period 0, investment in the joint
+    initial distribution) are filled with placeholder values.
+
+    Args:
+        params_template: skillmodels AF initial-period params DataFrame
+            with MultiIndex (category, period, name1, name2).
+        initial: Parsed MATLAB initial-period block.
+        period: Calendar period of the initial distribution (typically 0).
+        component: Name of the mixture component (MATLAB uses a single
+            Gaussian; default matches skillmodels' ``mixture_0``).
+        investment_initial_sd: Placeholder SD for investment in the joint
+            initial distribution (MATLAB has no investment dimension).
+
+    Return:
+        Modified copy of ``params_template`` with the MATLAB-derived values
+        written in.
+    """
+    params = params_template.copy()
+
+    # Mixture weights (single component → weight = 1).
+    params.loc[("mixture_weights", period, component, "-"), "value"] = 1.0
+
+    # Initial means: MATLAB has zero mean for skills, MC, MN and
+    # ``mu_log_income`` for the 4th factor. Investment gets 0.
+    means_skm = [0.0, 0.0, 0.0, 0.0, initial.mu_log_income]
+    for factor, mean in zip(_SKM_JOINT_ORDER, means_skm, strict=True):
+        params.loc[("initial_states", period, component, factor), "value"] = mean
+
+    # Initial Cholesky covariances: 5x5 Cholesky of the embedded MATLAB cov.
+    cov5 = _embed_matlab_cov_in_skillmodels(
+        initial, investment_sd=investment_initial_sd
+    )
+    chol_entries = _skillmodels_cholcov_entries(cov5)
+    for name2, value in chol_entries.items():
+        params.loc[("initial_cholcovs", period, component, name2), "value"] = value
+
+    # Measurement model for skills at period 0.
+    _fill_block(
+        params,
+        period=period,
+        measures=SKILL_MEASURES,
+        mu=initial.mu_skills_0,
+        lambdas_free=initial.lambda_skills_0_free,
+        sigmas=initial.sigma_skills_0,
+        factor="skills",
+    )
+
+    # Measurement model for MC at period 0.
+    _fill_block(
+        params,
+        period=period,
+        measures=MC_MEASURES,
+        mu=initial.mu_mc,
+        lambdas_free=initial.lambda_mc_free,
+        sigmas=initial.sigma_mc,
+        factor="MC",
+    )
+
+    # Measurement model for MN at period 0.
+    _fill_block(
+        params,
+        period=period,
+        measures=MN_MEASURES,
+        mu=initial.mu_mn,
+        lambdas_free=initial.lambda_mn_free,
+        sigmas=initial.sigma_mn,
+        factor="MN",
+    )
+
+    return params
+
+
+def _fill_block(
+    params: pd.DataFrame,
+    *,
+    period: int,
+    measures: tuple[str, ...],
+    mu: NDArray[np.float64],
+    lambdas_free: NDArray[np.float64],
+    sigmas: NDArray[np.float64],
+    factor: str,
+) -> None:
+    """Write a measurement block (intercept, loadings, SDs) into params."""
+    # Intercepts: first is normalised to 0, rest come from ``mu``.
+    for i, measure in enumerate(measures):
+        params.loc[("controls", period, measure, "constant"), "value"] = float(mu[i])
+    # First measurement has intercept normalised to 0.
+    params.loc[("controls", period, measures[0], "constant"), "value"] = 0.0
+
+    # Loadings: first is normalised to 1, rest come from ``lambdas_free``.
+    params.loc[("loadings", period, measures[0], factor), "value"] = 1.0
+    for j, measure in enumerate(measures[1:]):
+        params.loc[("loadings", period, measure, factor), "value"] = float(
+            lambdas_free[j]
+        )
+
+    # Measurement SDs.
+    for i, measure in enumerate(measures):
+        params.loc[("meas_sds", period, measure, "-"), "value"] = float(sigmas[i])

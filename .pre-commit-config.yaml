@@ -42,6 +42,7 @@ repos:
             tests/matlab_ces_repro/load_cnlsy\.py
             |tests/matlab_ces_repro/matlab_mapping\.py
             |tests/matlab_ces_repro/model_specs\.py
+            |tests/matlab_ces_repro/evaluate\.py
           )$
       - id: no-commit-to-branch
         args:
