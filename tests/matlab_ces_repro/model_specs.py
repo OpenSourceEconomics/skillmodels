@@ -80,14 +80,22 @@ def _common_factor_specs() -> dict[str, FactorSpec]:
             measurements=_measurements(MC_MEASURES, active_periods=(0,)),
             normalizations=_normalizations(MC_MEASURES, active_periods=(0,)),
             transition_function="linear",
+            has_production_shock=False,
         ),
         "MN": FactorSpec(
             measurements=_measurements(MN_MEASURES, active_periods=(0,)),
             normalizations=_normalizations(MN_MEASURES, active_periods=(0,)),
             transition_function="linear",
+            has_production_shock=False,
         ),
         "investment": FactorSpec(
-            measurements=_measurements(INV_MEASURES, active_periods=_INV_PERIODS),
+            # MATLAB places period-0 investment measurements in transition_01
+            # and reconstructs investment deterministically from the state
+            # factors + log_income at each period. Mirror that by keeping
+            # investment out of the initial distribution (the has_initial_
+            # distribution flag) and restricting its skillmodels measurements
+            # to period 1 only.
+            measurements=_measurements(INV_MEASURES, active_periods=(1,)),
             # MATLAB does not normalise the investment measurement model at
             # any period (all three loadings and intercepts are free); the
             # investment equation pins the scale of investment via the
@@ -96,10 +104,12 @@ def _common_factor_specs() -> dict[str, FactorSpec]:
             # copy.
             normalizations=_normalizations(
                 INV_MEASURES,
-                active_periods=_INV_PERIODS,
+                active_periods=(1,),
                 normalize_periods=(),
             ),
             transition_function="linear",
+            is_endogenous=True,
+            has_initial_distribution=False,
         ),
     }
 
@@ -107,24 +117,29 @@ def _common_factor_specs() -> dict[str, FactorSpec]:
 def _common_fixed_rows() -> list[tuple[tuple[str, int, str, str], float]]:
     """Fixed-parameter rows for time-invariant MC / MN and the investment eq.
 
-    - MC and MN are time-invariant: identity transition, near-zero shock.
-    - Investment's linear transition has its self-coefficient and constant
-      pinned to zero so it reduces to the MATLAB investment equation
-      (linear in the other factors only).
+    - MC and MN are time-invariant with ``has_production_shock=False``: identity
+      transition (self-coefficient 1, all others 0). No shock SD exists because
+      the factor has no production shock in the AF params index.
+    - Investment is endogenous (``is_endogenous=True``) with
+      ``has_initial_distribution=False``; its equation lives in the
+      ``investment_eq`` block. We pin its constant to 0 to match
+      MATLAB's ``log(inv_t) = a_theta * theta + a_mc * MC + a_mn * MN +
+      a_y * log_income + eta_I``.
     """
     rows: list[tuple[tuple[str, int, str, str], float]] = []
     for t in range(_N_PERIODS - 1):
         for factor in ("MC", "MN"):
             rows.append((("transition", t, factor, factor), 1.0))
-            for other in ("skills", "MC", "MN", "investment"):
+            # MC / MN have linear transitions whose param names cover the
+            # non-endogenous latents only after the is_endogenous flag on
+            # investment takes it out of latent_factors for the transition
+            # params index. Pin cross-coefficients to zero.
+            for other in ("skills", "MC", "MN"):
                 if other != factor:
                     rows.append((("transition", t, factor, other), 0.0))
             rows.append((("transition", t, factor, "constant"), 0.0))
-            rows.append((("shock_sds", t, factor, "-"), 1e-3))
-        # Investment equation: no self-dependency and no intercept
-        # (matches MATLAB's ``log(inv_t) = a_theta*theta + ... + eta_I``).
-        rows.append((("transition", t, "investment", "investment"), 0.0))
-        rows.append((("transition", t, "investment", "constant"), 0.0))
+        # Investment equation: no intercept (matches MATLAB).
+        rows.append((("investment_eq", t, "investment", "constant"), 0.0))
     return rows
 
 
@@ -149,9 +164,16 @@ def build_ces_model() -> BuiltModel:
 
     rows = _common_fixed_rows()
     for t in range(_N_PERIODS - 1):
-        # Pin cross-factor gammas to 0: only skills and investment enter CES.
+        # MATLAB's CES is a 2-input form on (skills, investment). Pin all
+        # other factor gammas in skills' production function to 0 so our
+        # log_ces matches MATLAB's form exactly. In particular, MATLAB
+        # *does not* use log_income as an input to the skills CES (it only
+        # enters the investment equation). Leaving its gamma free would
+        # make our model strictly richer and render the log-likelihood
+        # comparison against MATLAB's optimum non-apples-to-apples.
         rows.append((("transition", t, "skills", "MC"), 0.0))
         rows.append((("transition", t, "skills", "MN"), 0.0))
+        rows.append((("transition", t, "skills", INCOME_MEASURE), 0.0))
 
     fixed_idx = pd.MultiIndex.from_tuples(
         [r[0] for r in rows],
@@ -204,19 +226,31 @@ def build_translog_model() -> BuiltModel:
     }
 
     rows = _common_fixed_rows()
-    all_factors = ("skills", "MC", "MN", "investment")
+    # MATLAB's translog is also a 2-input form on (skills, investment) with no
+    # log_income term, so we pin log_income's translog coefficients in
+    # exactly the same way as MC / MN. Leaving them free would make our
+    # translog richer than MATLAB's and bias the comparison.
+    all_factors_including_observed = (
+        "skills",
+        "MC",
+        "MN",
+        "investment",
+        INCOME_MEASURE,
+    )
     keep_linear = {"skills", "investment"}
     for t in range(_N_PERIODS - 1):
         # Zero linear coefficients on non-input factors.
-        for factor in all_factors:
+        for factor in all_factors_including_observed:
             if factor not in keep_linear:
                 rows.append((("transition", t, "skills", factor), 0.0))
         # Zero all squared coefficients (MATLAB translog has no squares).
-        for factor in all_factors:
+        for factor in all_factors_including_observed:
             rows.append((("transition", t, "skills", f"{factor} ** 2"), 0.0))
         # Zero every interaction that isn't skills * investment.
         combinations = [
-            (a, b) for i, a in enumerate(all_factors) for b in all_factors[i + 1 :]
+            (a, b)
+            for i, a in enumerate(all_factors_including_observed)
+            for b in all_factors_including_observed[i + 1 :]
         ]
         for a, b in combinations:
             if {a, b} != {"skills", "investment"}:

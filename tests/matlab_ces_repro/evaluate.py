@@ -76,12 +76,10 @@ def evaluate_af_initial_loglike(
         reports as ``AFPeriodResult.loglikelihood``).
     """
     processed_model = process_model(model_spec)
-    n_latent = processed_model.dimensions.n_latent_factors
     n_components = af_options.n_mixture_components
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
     n_obs_factors = len(observed_factors)
-    n_joint = n_latent + n_obs_factors
 
     obs_values = (
         observed_factor_values
@@ -90,12 +88,19 @@ def evaluate_af_initial_loglike(
     )
 
     measurements_p0 = get_measurements_per_factor(model_spec.factors, period=0)
+    reconstructed_factors = tuple(
+        f for f in factors if not model_spec.factors[f].has_initial_distribution
+    )
+    state_latent_factors = tuple(f for f in factors if f not in reconstructed_factors)
+    n_state_latent = len(state_latent_factors)
+    n_joint = n_state_latent + n_obs_factors
     params_index = get_initial_period_params_index(
         n_mixture_components=n_components,
         latent_factors=factors,
         measurements_period_0=measurements_p0,
         controls=controls_names,
         observed_factors=observed_factors,
+        reconstructed_factors=reconstructed_factors,
     )
     # Sanity check that the caller-supplied params_df matches the AF index.
     if not params_df.index.equals(params_index):
@@ -107,11 +112,22 @@ def evaluate_af_initial_loglike(
     # Unused but kept as a lookup in case future calls need it.
     _ = get_normalizations_for_period(model_spec.factors, period=0)
 
-    all_measures = _get_ordered_measures(measurements_p0)
-    loading_mask = _build_loading_mask(all_measures, factors, measurements_p0)
+    measurements_p0_filtered = {
+        f: m for f, m in measurements_p0.items() if f in state_latent_factors
+    }
+    all_measures_full = _get_ordered_measures(measurements_p0)
+    all_measures = _get_ordered_measures(measurements_p0_filtered)
+    if len(all_measures) != len(all_measures_full):
+        col_indices = jnp.array(
+            [all_measures_full.index(m) for m in all_measures], dtype=jnp.int32
+        )
+        measurements = measurements[:, col_indices]
+    loading_mask = _build_loading_mask(
+        all_measures, state_latent_factors, measurements_p0_filtered
+    )
     nodes, weights = create_halton_nodes_and_weights(
         af_options.n_halton_points,
-        n_latent,
+        n_state_latent,
     )
 
     n_obs_per_batch = af_options.n_obs_per_batch
@@ -126,7 +142,7 @@ def evaluate_af_initial_loglike(
 
     loglike_kwargs = {
         "n_factors": n_joint,
-        "n_latent_factors": n_latent,
+        "n_latent_factors": n_state_latent,
         "n_mixture_components": n_components,
         "n_measures": len(all_measures),
         "n_controls": len(controls_names),
@@ -179,6 +195,13 @@ def evaluate_af_transition_loglike(
     state_factors = tuple(f for f in factors if f not in endogenous_factors)
     n_state = len(state_factors)
     n_endog = len(endogenous_factors)
+    shock_factors = tuple(
+        f for f in state_factors if model_spec.factors[f].has_production_shock
+    )
+    n_shock = len(shock_factors)
+    shock_factor_indices = jnp.array(
+        [state_factors.index(f) for f in shock_factors], dtype=jnp.int32
+    )
 
     params_index = get_transition_period_params_index(
         period=period,
@@ -188,6 +211,7 @@ def evaluate_af_transition_loglike(
         controls=controls_names,
         endogenous_factors=endogenous_factors,
         observed_factors=observed_factors,
+        shock_factors=shock_factors,
     )
     if not params_df.index.equals(params_index):
         msg = (
@@ -199,7 +223,7 @@ def evaluate_af_transition_loglike(
 
     loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
 
-    joint_dim = 2 * n_state + n_endog
+    joint_dim = n_state + n_shock + n_endog
     joint_nodes, joint_weights = create_halton_nodes_and_weights(
         af_options.n_halton_points,
         joint_dim,
@@ -254,6 +278,8 @@ def evaluate_af_transition_loglike(
     loglike_kwargs = {
         "n_state_factors": n_state,
         "n_endogenous_factors": n_endog,
+        "n_shock_factors": n_shock,
+        "shock_factor_indices": shock_factor_indices,
         "n_measures": len(all_measures),
         "n_controls": len(controls_names),
         "measurements": measurements,

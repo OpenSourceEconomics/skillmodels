@@ -30,23 +30,20 @@ from .load_cnlsy import (
     SKILL_MEASURES,
 )
 
-# skillmodels' joint factor ordering in the initial distribution for our
-# 4-latent + 1-observed model; MATLAB's 4-dim distribution covers
-# (skills, MC, MN, log_income). ``investment`` is a skillmodels latent
-# without a MATLAB analogue and is treated as independent of the other
-# factors in the initial distribution.
+# skillmodels' joint factor ordering in the initial distribution. With
+# investment marked ``has_initial_distribution=False`` we now match MATLAB
+# exactly: the joint mixture covers ``(skills, MC, MN, log_income)``.
 _SKM_JOINT_ORDER: tuple[str, ...] = (
     "skills",
     "MC",
     "MN",
-    "investment",
     INCOME_MEASURE,
 )
 _MATLAB_TO_SKM_INITIAL_INDEX: dict[int, int] = {
     0: 0,  # skills
     1: 1,  # MC
     2: 2,  # MN
-    3: 4,  # log_income (index 4 in skillmodels because of investment at 3)
+    3: 3,  # log_income
 }
 
 
@@ -344,26 +341,25 @@ def _build_matlab_4x4_cov(initial: MatlabInitialResults) -> NDArray[np.float64]:
 
 def _embed_matlab_cov_in_skillmodels(
     initial: MatlabInitialResults,
-    *,
-    investment_sd: float = 1.0,
 ) -> NDArray[np.float64]:
-    """Build the 5x5 skillmodels initial covariance from MATLAB's 4x4 one.
+    """Return MATLAB's 4x4 initial covariance in skillmodels' factor ordering.
 
-    ``investment`` (skillmodels dim 3) is placed as independent of the
-    other four factors with variance ``investment_sd**2``. The returned
-    matrix is ordered ``(skills, MC, MN, investment, log_income)``.
+    skillmodels' joint initial distribution now matches MATLAB's exactly:
+    ``(skills, MC, MN, log_income)``. Investment is reconstructed via the
+    investment equation at period 0 (``has_initial_distribution=False``)
+    and so is absent here.
     """
     cov4 = _build_matlab_4x4_cov(initial)
-    cov5 = np.zeros((5, 5), dtype=np.float64)
+    n = len(_SKM_JOINT_ORDER)
+    cov = np.zeros((n, n), dtype=np.float64)
     for i_matlab, i_skm in _MATLAB_TO_SKM_INITIAL_INDEX.items():
         for j_matlab, j_skm in _MATLAB_TO_SKM_INITIAL_INDEX.items():
-            cov5[i_skm, j_skm] = cov4[i_matlab, j_matlab]
-    cov5[3, 3] = investment_sd**2
-    return cov5
+            cov[i_skm, j_skm] = cov4[i_matlab, j_matlab]
+    return cov
 
 
 def _skillmodels_cholcov_entries(cov: NDArray[np.float64]) -> dict[str, float]:
-    """Map a 5x5 covariance to skillmodels' ``initial_cholcovs`` entries.
+    """Map the joint covariance to skillmodels' ``initial_cholcovs`` entries.
 
     Keys are ``{factor_row}-{factor_col}`` matching the MultiIndex
     ``name2`` level built by ``get_initial_period_params_index``.
@@ -384,54 +380,47 @@ def fill_initial_params_from_matlab(
     transition_01: MatlabTransitionResults | None = None,
     period: int = 0,
     component: str = "mixture_0",
-    investment_initial_sd: float = 1.0,
 ) -> pd.DataFrame:
     """Populate skillmodels' initial-period entries from MATLAB's ``est_0``.
 
     Overwrites the ``mixture_weights``, ``initial_states``,
     ``initial_cholcovs``, ``controls`` (measurement intercepts),
     ``loadings``, and ``meas_sds`` entries that correspond to the MATLAB
-    initial-period vector. If ``transition_01`` is supplied, investment
-    measurement parameters at period 0 are also filled from
-    ``transition_01.mu_inv`` / ``lambda_inv`` / ``sigma_inv``; MATLAB
-    places those in ``est_01`` because it accumulates the period-0
-    investment measurement density into the transition-01 likelihood
-    rather than the initial-period likelihood. In skillmodels the same
-    measurements sit in the initial-period params, so the values have to
-    be copied across the period boundary here.
+    initial-period vector. With investment marked
+    ``has_initial_distribution=False`` in the model spec, investment's
+    period-0 measurements are absent from the initial step (they are
+    handled in the transition 0->1 step, matching MATLAB's
+    ``transition_01`` convention).
 
     Args:
         params_template: skillmodels AF initial-period params DataFrame
             with MultiIndex (category, period, name1, name2).
         initial: Parsed MATLAB initial-period block.
-        transition_01: Optional MATLAB transition 0->1 block used to
-            source the period-0 investment measurement parameters.
+        transition_01: Unused in the new layout; retained for backward
+            compatibility with callers that still pass it.
         period: Calendar period of the initial distribution (typically 0).
         component: Name of the mixture component (MATLAB uses a single
             Gaussian; default matches skillmodels' ``mixture_0``).
-        investment_initial_sd: Placeholder SD for investment in the joint
-            initial distribution (MATLAB has no investment dimension).
 
     Return:
         Modified copy of ``params_template`` with the MATLAB-derived values
         written in.
     """
+    del transition_01  # no longer needed; investment measurements move to trans
     params = params_template.copy()
 
     # Mixture weights (single component → weight = 1).
     params.loc[("mixture_weights", period, component, "-"), "value"] = 1.0
 
     # Initial means: MATLAB has zero mean for skills, MC, MN and
-    # ``mu_log_income`` for the 4th factor. Investment gets 0.
-    means_skm = [0.0, 0.0, 0.0, 0.0, initial.mu_log_income]
+    # ``mu_log_income`` for the observed factor.
+    means_skm = [0.0, 0.0, 0.0, initial.mu_log_income]
     for factor, mean in zip(_SKM_JOINT_ORDER, means_skm, strict=True):
         params.loc[("initial_states", period, component, factor), "value"] = mean
 
-    # Initial Cholesky covariances: 5x5 Cholesky of the embedded MATLAB cov.
-    cov5 = _embed_matlab_cov_in_skillmodels(
-        initial, investment_sd=investment_initial_sd
-    )
-    chol_entries = _skillmodels_cholcov_entries(cov5)
+    # Initial Cholesky covariances: Cholesky of the joint MATLAB cov.
+    cov_joint = _embed_matlab_cov_in_skillmodels(initial)
+    chol_entries = _skillmodels_cholcov_entries(cov_joint)
     for name2, value in chol_entries.items():
         params.loc[("initial_cholcovs", period, component, name2), "value"] = value
 
@@ -467,21 +456,6 @@ def fill_initial_params_from_matlab(
         sigmas=initial.sigma_mn,
         factor="MN",
     )
-
-    # Investment measurement at period 0 (MATLAB stores these in est_01;
-    # skillmodels stores them in the initial-period params because
-    # investment is active at period 0 in the model spec).
-    if transition_01 is not None:
-        for j, measure in enumerate(INV_MEASURES):
-            params.loc[("controls", period, measure, "constant"), "value"] = float(
-                transition_01.mu_inv[j]
-            )
-            params.loc[("loadings", period, measure, "investment"), "value"] = float(
-                transition_01.lambda_inv[j]
-            )
-            params.loc[("meas_sds", period, measure, "-"), "value"] = float(
-                transition_01.sigma_inv[j]
-            )
 
     return params
 
@@ -589,45 +563,52 @@ def fill_transition_params_from_matlab(
     )
     params.loc[("transition", trans_period, "skills", "phi"), "value"] = phi_skm
 
-    # --- Investment equation (skillmodels transition category for investment) ---
-    params.loc[("transition", trans_period, "investment", "skills"), "value"] = (
+    # --- Investment equation (investment is endogenous now) ---
+    params.loc[("investment_eq", trans_period, "investment", "skills"), "value"] = (
         transition_for_this.a_theta
     )
-    params.loc[("transition", trans_period, "investment", "MC"), "value"] = (
+    params.loc[("investment_eq", trans_period, "investment", "MC"), "value"] = (
         transition_for_this.a_mc
     )
-    params.loc[("transition", trans_period, "investment", "MN"), "value"] = (
+    params.loc[("investment_eq", trans_period, "investment", "MN"), "value"] = (
         transition_for_this.a_mn
     )
-    params.loc[("transition", trans_period, "investment", INCOME_MEASURE), "value"] = (
-        transition_for_this.a_log_income
-    )
+    params.loc[
+        ("investment_eq", trans_period, "investment", INCOME_MEASURE), "value"
+    ] = transition_for_this.a_log_income
 
     # --- Shock SDs ---
+    # Only skills has a production shock in the new spec (MC / MN have
+    # ``has_production_shock=False``). Investment uses `investment_sds`.
     params.loc[("shock_sds", trans_period, "skills", "-"), "value"] = (
         transition_for_this.sigma_eta_prod
     )
-    params.loc[("shock_sds", trans_period, "investment", "-"), "value"] = (
+    params.loc[("investment_sds", trans_period, "investment", "-"), "value"] = (
         transition_for_this.sigma_eta_inv
     )
 
     # --- Skills measurement at period ``skillmodels_period`` ---
     # MATLAB ties the first skill intercept at period t+1 to the normalised
-    # period-0 value ``mu_skills_0[0]``. Once the CES level shift is absorbed,
-    # the full period-t+1 intercept is ``mu_period_0 + level_shift``.
-    mu_first = float(matlab.initial.mu_skills_0[0]) + level_shift
-    params.loc[
-        ("controls", skillmodels_period, SKILL_MEASURES[0], "constant"), "value"
-    ] = mu_first
-    params.loc[
-        ("controls", skillmodels_period, SKILL_MEASURES[1], "constant"), "value"
-    ] = float(transition_for_this.mu_skills_next_free[0]) + level_shift
-    params.loc[
-        ("controls", skillmodels_period, SKILL_MEASURES[2], "constant"), "value"
-    ] = float(transition_for_this.mu_skills_next_free[1]) + level_shift
+    # period-0 value ``mu_skills_0[0]``. MATLAB's skills at period t+1 equal
+    # skillmodels' skills plus ``level_shift`` (the additive constant that
+    # drops out of skillmodels' simplex-normalised ``log_ces``). Since
+    # MATLAB does not normalise skill loadings at period t+1 (all three are
+    # estimated freely), the absorption into skillmodels' intercepts picks
+    # up the per-measurement loading so the skillmodels intercept equals the
+    # MATLAB intercept plus loading times level_shift. Using just level_shift
+    # is only correct when the loading is 1, which is not the case here.
+    matlab_intercepts = (
+        float(matlab.initial.mu_skills_0[0]),
+        float(transition_for_this.mu_skills_next_free[0]),
+        float(transition_for_this.mu_skills_next_free[1]),
+    )
     for j, measure in enumerate(SKILL_MEASURES):
+        loading = float(transition_for_this.lambda_skills_next[j])
+        params.loc[("controls", skillmodels_period, measure, "constant"), "value"] = (
+            matlab_intercepts[j] + loading * level_shift
+        )
         params.loc[("loadings", skillmodels_period, measure, "skills"), "value"] = (
-            float(transition_for_this.lambda_skills_next[j])
+            loading
         )
         params.loc[("meas_sds", skillmodels_period, measure, "-"), "value"] = float(
             transition_for_this.sigma_skills_next[j]

@@ -114,6 +114,60 @@ def test_total_loglike_ours_vs_matlab(capsys) -> None:
     total_skm_ll = sum(skm_ll_by_period)
 
     # ----- MATLAB params, scored under our likelihood -----
+    period_ll_matlab, matlab_params_by_period = _score_matlab_under_our_lik(
+        built=built,
+        data=data,
+        matlab=matlab,
+        af_options=af_options,
+        our_result=result,
+    )
+    total_matlab_ll = sum(period_ll_matlab)
+
+    print("\n=== log-likelihood comparison ===")
+    for t, (skm, matlab_val) in enumerate(
+        zip(skm_ll_by_period, period_ll_matlab, strict=True)
+    ):
+        tag = "initial" if t == 0 else f"trans {t - 1}->{t}"
+        print(f"  period {t} ({tag}):  ours={skm:+.6f}  matlab={matlab_val:+.6f}")
+    print(f"  TOTAL: ours={total_skm_ll:+.6f}  matlab={total_matlab_ll:+.6f}")
+    diff = total_skm_ll - total_matlab_ll
+    better = "skillmodels higher" if diff >= 0 else "MATLAB higher"
+    print(f"  difference = {diff:+.6f} ({better})")
+
+    assert np.isfinite(total_skm_ll)
+    assert np.isfinite(total_matlab_ll)
+
+    _print_param_comparison(
+        our_params=[pr.params for pr in result.period_results],
+        matlab_params=matlab_params_by_period,
+    )
+
+    _reoptimize_from_matlab_start(
+        built=built,
+        data=data,
+        af_options=af_options,
+        skm_ll_by_period=skm_ll_by_period,
+        total_skm_ll=total_skm_ll,
+        matlab_params_by_period=matlab_params_by_period,
+    )
+
+
+def _score_matlab_under_our_lik(
+    *,
+    built,
+    data: pd.DataFrame,
+    matlab: MatlabResults,
+    af_options: AFEstimationOptions,
+    our_result,
+) -> tuple[list[float], list[pd.DataFrame]]:
+    """Evaluate the AF log-likelihood at MATLAB's translated parameters.
+
+    Uses our own conditional distribution at each period as the prior for
+    the next period's transition evaluation; MATLAB-translated parameters
+    are substituted only in the current-period transition and measurement
+    blocks. Returns per-period log-likelihoods and the per-period
+    MATLAB-filled parameter DataFrames.
+    """
     processed_model = process_model(built.model_spec)
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
@@ -122,32 +176,35 @@ def test_total_loglike_ours_vs_matlab(capsys) -> None:
         for f in factors
         if not processed_model.endogenous_factors_info.factor_info[f].is_endogenous
     )
+    endogenous_factors = tuple(
+        f
+        for f in factors
+        if processed_model.endogenous_factors_info.factor_info[f].is_endogenous
+    )
+    shock_factors = tuple(
+        f for f in state_factors if built.model_spec.factors[f].has_production_shock
+    )
     transition_info = processed_model.transition_info
     meas_p0, ctrls_p0, obs_fac_p0 = _extract_period_0_arrays(
         data, built.model_spec, controls_names=controls_names
     )
 
-    # Initial-period translation (with investment measurement at period 0
-    # sourced from MATLAB's transition_01 block).
     measurements_p0 = get_measurements_per_factor(built.model_spec.factors, period=0)
+    reconstructed_factors = tuple(
+        f for f in factors if not built.model_spec.factors[f].has_initial_distribution
+    )
     initial_index = get_initial_period_params_index(
         n_mixture_components=1,
         latent_factors=factors,
         measurements_period_0=measurements_p0,
         controls=controls_names,
         observed_factors=(INCOME_MEASURE,),
+        reconstructed_factors=reconstructed_factors,
     )
     initial_norms = get_normalizations_for_period(built.model_spec.factors, period=0)
     initial_template = create_af_params_template(initial_index, initial_norms, period=0)
-    # Seed from our own result to handle the investment initial-distribution row
-    # (MATLAB does not carry investment in its initial joint).
-    initial_template.loc[initial_template.index, "value"] = result.period_results[
-        0
-    ].params.loc[initial_template.index, "value"]
     initial_with_matlab = fill_initial_params_from_matlab(
-        initial_template,
-        matlab.initial,
-        transition_01=matlab.transition_01,
+        initial_template, matlab.initial
     )
     matlab_ll_p0 = evaluate_af_initial_loglike(
         model_spec=built.model_spec,
@@ -159,10 +216,8 @@ def test_total_loglike_ours_vs_matlab(capsys) -> None:
         observed_factor_values=obs_fac_p0,
     )
 
-    # Transition-period translations. Use our prev_distribution from
-    # our own estimation (same for both comparisons) but substitute
-    # MATLAB parameters in this period's transition + measurement blocks.
     period_ll_matlab = [matlab_ll_p0]
+    matlab_params_by_period: list[pd.DataFrame] = [initial_with_matlab]
     for skillmodels_period in (1, 2):
         measurements_pt = get_measurements_per_factor(
             built.model_spec.factors, period=skillmodels_period
@@ -173,7 +228,9 @@ def test_total_loglike_ours_vs_matlab(capsys) -> None:
             transition_info=transition_info,
             measurements_at_period=measurements_pt,
             controls=controls_names,
+            endogenous_factors=endogenous_factors,
             observed_factors=(INCOME_MEASURE,),
+            shock_factors=shock_factors,
         )
         t_norms = get_normalizations_for_period(
             built.model_spec.factors, period=skillmodels_period
@@ -183,12 +240,13 @@ def test_total_loglike_ours_vs_matlab(capsys) -> None:
         )
         # Seed from our own converged values for any slot the translator
         # won't touch (currently none, but safe default).
-        t_template.loc[t_template.index, "value"] = result.period_results[
+        t_template.loc[t_template.index, "value"] = our_result.period_results[
             skillmodels_period
         ].params.loc[t_template.index, "value"]
         t_with_matlab = fill_transition_params_from_matlab(
             t_template, matlab, skillmodels_period=skillmodels_period
         )
+        matlab_params_by_period.append(t_with_matlab)
 
         meas_t, ctrls_t, obs_fac_t = _extract_period_arrays(
             data,
@@ -209,31 +267,106 @@ def test_total_loglike_ours_vs_matlab(capsys) -> None:
             controls=ctrls_t,
             prev_measurements=prev_meas,
             prev_controls=prev_ctrls,
-            prev_period_params=result.period_results[skillmodels_period - 1].params,
-            prev_distribution=result.conditional_distributions[skillmodels_period - 1],
+            prev_period_params=our_result.period_results[skillmodels_period - 1].params,
+            prev_distribution=our_result.conditional_distributions[
+                skillmodels_period - 1
+            ],
             params_df=t_with_matlab,
             af_options=af_options,
-            endogenous_factors=(),
+            endogenous_factors=endogenous_factors,
             observed_factors=(INCOME_MEASURE,),
             observed_factor_data=obs_fac_t,
         )
         period_ll_matlab.append(matlab_ll_t)
 
-    total_matlab_ll = sum(period_ll_matlab)
+    return period_ll_matlab, matlab_params_by_period
 
-    print("\n=== log-likelihood comparison ===")
-    for t, (skm, matlab_val) in enumerate(
-        zip(skm_ll_by_period, period_ll_matlab, strict=True)
+
+def _reoptimize_from_matlab_start(
+    *,
+    built,
+    data: pd.DataFrame,
+    af_options: AFEstimationOptions,
+    skm_ll_by_period: list[float],
+    total_skm_ll: float,
+    matlab_params_by_period: list[pd.DataFrame],
+) -> None:
+    """Run a second full AF estimation starting from MATLAB's translated values.
+
+    If our default-start optimum is a strict improvement over MATLAB's
+    basin, starting from MATLAB's params should converge back to our
+    optimum (or very close). If they converge to different
+    log-likelihoods, there are genuinely multiple local maxima.
+    """
+    matlab_start_params = pd.concat(matlab_params_by_period)[["value"]].dropna()
+    result_from_matlab = estimate_af(
+        model_spec=built.model_spec,
+        data=data,
+        af_options=af_options,
+        start_params=matlab_start_params,
+        fixed_params=built.fixed_params,
+    )
+    from_matlab_ll_by_period = [
+        float(pr.loglikelihood) for pr in result_from_matlab.period_results
+    ]
+    total_from_matlab_ll = sum(from_matlab_ll_by_period)
+
+    print("\n=== re-optimization from MATLAB start ===")
+    for t, (skm, fm) in enumerate(
+        zip(skm_ll_by_period, from_matlab_ll_by_period, strict=True)
     ):
         tag = "initial" if t == 0 else f"trans {t - 1}->{t}"
-        print(f"  period {t} ({tag}):  ours={skm:+.6f}  matlab={matlab_val:+.6f}")
-    print(f"  TOTAL: ours={total_skm_ll:+.6f}  matlab={total_matlab_ll:+.6f}")
-    diff = total_skm_ll - total_matlab_ll
-    better = "skillmodels higher" if diff >= 0 else "MATLAB higher"
-    print(f"  difference = {diff:+.6f} ({better})")
+        print(
+            f"  period {t} ({tag}):  default_start={skm:+.6f}  "
+            f"matlab_start={fm:+.6f}  delta={skm - fm:+.6f}"
+        )
+    print(
+        f"  TOTAL: default_start={total_skm_ll:+.6f}  "
+        f"matlab_start={total_from_matlab_ll:+.6f}  "
+        f"delta={total_skm_ll - total_from_matlab_ll:+.6f}"
+    )
 
-    assert np.isfinite(total_skm_ll)
-    assert np.isfinite(total_matlab_ll)
+
+def _print_param_comparison(
+    our_params: list[pd.DataFrame],
+    matlab_params: list[pd.DataFrame],
+) -> None:
+    """Print a side-by-side comparison of estimates by parameter category.
+
+    Excludes parameters whose ``lower_bound == upper_bound`` (normalisations
+    and other pinned rows) and rows MATLAB did not translate (``NaN``).
+    """
+    print("\n=== parameter comparison (ours vs MATLAB, under our spec) ===")
+    for t, (ours_t, matlab_t) in enumerate(zip(our_params, matlab_params, strict=True)):
+        tag = "initial" if t == 0 else f"trans {t - 1}->{t}"
+        merged = pd.DataFrame(
+            {
+                "ours": ours_t["value"],
+                "matlab": matlab_t["value"],
+            }
+        )
+        free = ours_t["lower_bound"] != ours_t["upper_bound"]
+        merged = merged.loc[free & merged["matlab"].notna()]
+        merged["abs_diff"] = merged["ours"] - merged["matlab"]
+        denom = merged["matlab"].abs().clip(lower=1e-6)
+        merged["rel_diff"] = merged["abs_diff"] / denom
+
+        print(f"\n--- period {t} ({tag}) ---")
+        categories = merged.index.get_level_values("category").unique()
+        for cat in categories:
+            sub = merged.xs(cat, level="category", drop_level=False)
+            label_lens = [len(f"{idx[2]}:{idx[3]}") for idx in sub.index]
+            wlabel = max(18, *label_lens) if label_lens else 18
+            print(f"  [{cat}]")
+            for idx, row in sub.iterrows():
+                label = f"{idx[2]}:{idx[3]}"
+                print(
+                    f"    {label:<{wlabel}} "
+                    f"ours={row['ours']:+10.4f}  "
+                    f"matlab={row['matlab']:+10.4f}  "
+                    f"delta={row['abs_diff']:+10.4f}  "
+                    f"rel={row['rel_diff']:+7.2%}"
+                )
 
 
 def _extract_period_arrays(
