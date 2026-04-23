@@ -24,6 +24,7 @@ from scipy.io import loadmat
 
 from .load_cnlsy import (
     INCOME_MEASURE,
+    INV_MEASURES,
     MC_MEASURES,
     MN_MEASURES,
     SKILL_MEASURES,
@@ -380,6 +381,7 @@ def fill_initial_params_from_matlab(
     params_template: pd.DataFrame,
     initial: MatlabInitialResults,
     *,
+    transition_01: MatlabTransitionResults | None = None,
     period: int = 0,
     component: str = "mixture_0",
     investment_initial_sd: float = 1.0,
@@ -389,14 +391,21 @@ def fill_initial_params_from_matlab(
     Overwrites the ``mixture_weights``, ``initial_states``,
     ``initial_cholcovs``, ``controls`` (measurement intercepts),
     ``loadings``, and ``meas_sds`` entries that correspond to the MATLAB
-    initial-period vector. Entries that don't have a MATLAB counterpart
-    (investment measurement model in period 0, investment in the joint
-    initial distribution) are filled with placeholder values.
+    initial-period vector. If ``transition_01`` is supplied, investment
+    measurement parameters at period 0 are also filled from
+    ``transition_01.mu_inv`` / ``lambda_inv`` / ``sigma_inv``; MATLAB
+    places those in ``est_01`` because it accumulates the period-0
+    investment measurement density into the transition-01 likelihood
+    rather than the initial-period likelihood. In skillmodels the same
+    measurements sit in the initial-period params, so the values have to
+    be copied across the period boundary here.
 
     Args:
         params_template: skillmodels AF initial-period params DataFrame
             with MultiIndex (category, period, name1, name2).
         initial: Parsed MATLAB initial-period block.
+        transition_01: Optional MATLAB transition 0->1 block used to
+            source the period-0 investment measurement parameters.
         period: Calendar period of the initial distribution (typically 0).
         component: Name of the mixture component (MATLAB uses a single
             Gaussian; default matches skillmodels' ``mixture_0``).
@@ -459,6 +468,21 @@ def fill_initial_params_from_matlab(
         factor="MN",
     )
 
+    # Investment measurement at period 0 (MATLAB stores these in est_01;
+    # skillmodels stores them in the initial-period params because
+    # investment is active at period 0 in the model spec).
+    if transition_01 is not None:
+        for j, measure in enumerate(INV_MEASURES):
+            params.loc[("controls", period, measure, "constant"), "value"] = float(
+                transition_01.mu_inv[j]
+            )
+            params.loc[("loadings", period, measure, "investment"), "value"] = float(
+                transition_01.lambda_inv[j]
+            )
+            params.loc[("meas_sds", period, measure, "-"), "value"] = float(
+                transition_01.sigma_inv[j]
+            )
+
     return params
 
 
@@ -489,3 +513,137 @@ def _fill_block(
     # Measurement SDs.
     for i, measure in enumerate(measures):
         params.loc[("meas_sds", period, measure, "-"), "value"] = float(sigmas[i])
+
+
+def fill_transition_params_from_matlab(
+    params_template: pd.DataFrame,
+    matlab: MatlabResults,
+    *,
+    skillmodels_period: int,
+) -> pd.DataFrame:
+    """Populate a skillmodels transition-period params DataFrame from MATLAB.
+
+    skillmodels indexes a transition period by its destination period
+    (``skillmodels_period = 1`` for 0->1, ``= 2`` for 1->2). For period 1 we
+    copy MATLAB's ``est_01`` block; for period 2 we copy ``est_12``.
+
+    Responsibilities handled here (CES variant):
+
+    - CES production parameters for skills via the reparameterisation:
+      gamma_skills, gamma_inv (MC / MN gammas stay pinned at 0 via
+      ``fixed_params``), ``phi_skm = rho``.
+    - Shock SDs for skills (MATLAB's ``sigma_eta_prod``) and investment
+      (MATLAB's ``sigma_eta_inv``).
+    - Investment equation coefficients: a_theta -> investment's
+      coefficient on skills, a_mc / a_mn / a_log_income on the other
+      factors. Self-coefficient and constant stay pinned at 0.
+    - Skills measurement system at period ``skillmodels_period``: the
+      per-measurement intercepts get the CES ``level_shift`` added to
+      absorb the additive constant that skillmodels' normalised log_ces
+      drops; loadings and SDs copy directly.
+    - Investment measurement system at period ``skillmodels_period`` if
+      that period is in the investment's active range (here: period 1
+      for skillmodels_period==1; skillmodels_period==2 has no investment
+      measurements). MATLAB's investment measurement block at a given
+      transition uses the *previous*-period investment observations
+      (Z_inv_t). The MATLAB transition_12 therefore supplies the params
+      for skillmodels' period-1 investment measurement.
+
+    Args:
+        params_template: skillmodels transition-period params DataFrame
+            with MultiIndex
+            ``(category, period, name1, name2)``.
+        matlab: Full MATLAB CES results.
+        skillmodels_period: 1 for transition 0->1, 2 for transition 1->2.
+
+    Return:
+        Modified copy of ``params_template``.
+    """
+    if skillmodels_period not in (1, 2):
+        msg = f"skillmodels_period must be 1 or 2; got {skillmodels_period}"
+        raise ValueError(msg)
+
+    params = params_template.copy()
+    transition_for_this = (
+        matlab.transition_01 if skillmodels_period == 1 else matlab.transition_12
+    )
+    # Investment measurement params for period 1 come from MATLAB's
+    # transition_12 (MATLAB labels them "investment at t=1"); the period-0
+    # investment measurement is in the initial-period params and comes
+    # from transition_01.
+    transition_for_investment_measurement = (
+        matlab.transition_12 if skillmodels_period == 1 else None
+    )
+
+    # --- CES production ---
+    gamma_skills, gamma_inv, phi_skm, level_shift = translate_matlab_ces_production(
+        delta=transition_for_this.delta_prod,
+        phi=transition_for_this.phi_prod,
+        rho=transition_for_this.rho_prod,
+        a_const=0.0,
+    )
+    trans_period = skillmodels_period - 1
+    params.loc[("transition", trans_period, "skills", "skills"), "value"] = gamma_skills
+    params.loc[("transition", trans_period, "skills", "investment"), "value"] = (
+        gamma_inv
+    )
+    params.loc[("transition", trans_period, "skills", "phi"), "value"] = phi_skm
+
+    # --- Investment equation (skillmodels transition category for investment) ---
+    params.loc[("transition", trans_period, "investment", "skills"), "value"] = (
+        transition_for_this.a_theta
+    )
+    params.loc[("transition", trans_period, "investment", "MC"), "value"] = (
+        transition_for_this.a_mc
+    )
+    params.loc[("transition", trans_period, "investment", "MN"), "value"] = (
+        transition_for_this.a_mn
+    )
+    params.loc[("transition", trans_period, "investment", INCOME_MEASURE), "value"] = (
+        transition_for_this.a_log_income
+    )
+
+    # --- Shock SDs ---
+    params.loc[("shock_sds", trans_period, "skills", "-"), "value"] = (
+        transition_for_this.sigma_eta_prod
+    )
+    params.loc[("shock_sds", trans_period, "investment", "-"), "value"] = (
+        transition_for_this.sigma_eta_inv
+    )
+
+    # --- Skills measurement at period ``skillmodels_period`` ---
+    # MATLAB ties the first skill intercept at period t+1 to the normalised
+    # period-0 value ``mu_skills_0[0]``. Once the CES level shift is absorbed,
+    # the full period-t+1 intercept is ``mu_period_0 + level_shift``.
+    mu_first = float(matlab.initial.mu_skills_0[0]) + level_shift
+    params.loc[
+        ("controls", skillmodels_period, SKILL_MEASURES[0], "constant"), "value"
+    ] = mu_first
+    params.loc[
+        ("controls", skillmodels_period, SKILL_MEASURES[1], "constant"), "value"
+    ] = float(transition_for_this.mu_skills_next_free[0]) + level_shift
+    params.loc[
+        ("controls", skillmodels_period, SKILL_MEASURES[2], "constant"), "value"
+    ] = float(transition_for_this.mu_skills_next_free[1]) + level_shift
+    for j, measure in enumerate(SKILL_MEASURES):
+        params.loc[("loadings", skillmodels_period, measure, "skills"), "value"] = (
+            float(transition_for_this.lambda_skills_next[j])
+        )
+        params.loc[("meas_sds", skillmodels_period, measure, "-"), "value"] = float(
+            transition_for_this.sigma_skills_next[j]
+        )
+
+    # --- Investment measurement at period 1 (only for skillmodels_period==1) ---
+    if transition_for_investment_measurement is not None:
+        for j, measure in enumerate(INV_MEASURES):
+            params.loc[
+                ("controls", skillmodels_period, measure, "constant"), "value"
+            ] = float(transition_for_investment_measurement.mu_inv[j])
+            params.loc[
+                ("loadings", skillmodels_period, measure, "investment"), "value"
+            ] = float(transition_for_investment_measurement.lambda_inv[j])
+            params.loc[("meas_sds", skillmodels_period, measure, "-"), "value"] = float(
+                transition_for_investment_measurement.sigma_inv[j]
+            )
+
+    return params

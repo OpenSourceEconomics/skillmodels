@@ -24,13 +24,23 @@ from skillmodels.af.initial_period import (
     _build_loading_mask,
     _get_ordered_measures,
 )
-from skillmodels.af.likelihood import af_loglike_initial, create_loglike_and_gradient
+from skillmodels.af.likelihood import (
+    af_loglike_initial,
+    af_loglike_transition,
+    create_loglike_and_gradient,
+)
 from skillmodels.af.params import (
     get_initial_period_params_index,
     get_measurements_per_factor,
     get_normalizations_for_period,
+    get_transition_period_params_index,
 )
-from skillmodels.af.types import AFEstimationOptions
+from skillmodels.af.transition_period import (
+    _extract_prev_measurement_params,
+    _get_raw_transition_functions,
+    _prepare_transition_inputs,
+)
+from skillmodels.af.types import AFEstimationOptions, ConditionalDistribution
 from skillmodels.model_spec import ModelSpec
 from skillmodels.process_model import process_model
 
@@ -132,6 +142,144 @@ def evaluate_af_initial_loglike(
 
     loglike_and_grad = create_loglike_and_gradient(af_loglike_initial, **loglike_kwargs)
 
+    params_array = jnp.array(params_df["value"].to_numpy(dtype=np.float64))
+    neg_ll, _grad = loglike_and_grad(params_array)
+    return -float(neg_ll)
+
+
+def evaluate_af_transition_loglike(
+    *,
+    model_spec: ModelSpec,
+    period: int,
+    measurements: Array,
+    controls: Array,
+    prev_measurements: Array,
+    prev_controls: Array,
+    prev_period_params: pd.DataFrame,
+    prev_distribution: ConditionalDistribution,
+    params_df: pd.DataFrame,
+    af_options: AFEstimationOptions,
+    endogenous_factors: tuple[str, ...] = (),
+    observed_factors: tuple[str, ...] = (),
+    observed_factor_data: Array | None = None,
+) -> float:
+    """Return the log-likelihood at a supplied transition-period params vector.
+
+    Mirrors the setup in ``estimate_transition_period`` but evaluates the
+    jitted likelihood once instead of running an optimizer.
+    """
+    processed_model = process_model(model_spec)
+    factors = processed_model.labels.latent_factors
+    controls_names = processed_model.labels.controls
+
+    measurements_pt = get_measurements_per_factor(model_spec.factors, period=period)
+    all_measures = _get_ordered_measures(measurements_pt)
+
+    transition_info = processed_model.transition_info
+    state_factors = tuple(f for f in factors if f not in endogenous_factors)
+    n_state = len(state_factors)
+    n_endog = len(endogenous_factors)
+
+    params_index = get_transition_period_params_index(
+        period=period,
+        latent_factors=state_factors,
+        transition_info=transition_info,
+        measurements_at_period=measurements_pt,
+        controls=controls_names,
+        endogenous_factors=endogenous_factors,
+        observed_factors=observed_factors,
+    )
+    if not params_df.index.equals(params_index):
+        msg = (
+            "params_df has a different MultiIndex than the transition-period "
+            f"index for period {period}. Build it via "
+            "get_transition_period_params_index."
+        )
+        raise ValueError(msg)
+
+    loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
+
+    joint_dim = 2 * n_state + n_endog
+    joint_nodes, joint_weights = create_halton_nodes_and_weights(
+        af_options.n_halton_points,
+        joint_dim,
+    )
+
+    prev_dist_arrays, total_n_transition_params = _prepare_transition_inputs(
+        prev_distribution,
+        transition_info,
+        state_factors,
+        measurements.shape[0],
+    )
+
+    raw_funcs = _get_raw_transition_functions(model_spec, state_factors)
+    param_counts = tuple(len(transition_info.param_names[f]) for f in state_factors)
+
+    def combined_transition(full_states: Array, params: Array) -> Array:
+        result = jnp.zeros(n_state)
+        p_idx = 0
+        for i in range(n_state):
+            n_p = param_counts[i]
+            factor_params = params[p_idx : p_idx + n_p]
+            result = result.at[i].set(  # noqa: PD008
+                raw_funcs[i](full_states, factor_params)
+            )
+            p_idx += n_p
+        return result
+
+    n_inv_eq_params_per = 1 + n_state + len(observed_factors) if n_endog > 0 else 0
+    total_n_inv_params = n_endog * n_inv_eq_params_per
+
+    n_obs_fac = len(observed_factors)
+    obs_factor_values = (
+        observed_factor_data
+        if observed_factor_data is not None
+        else jnp.zeros((measurements.shape[0], n_obs_fac))
+    )
+
+    prev_meas_info = _extract_prev_measurement_params(
+        prev_period_params, model_spec, factors, period - 1
+    )
+
+    n_obs_per_batch = af_options.n_obs_per_batch
+    if n_obs_per_batch is None:
+        n_obs_per_batch = auto_n_obs_per_batch(
+            n_obs=int(measurements.shape[0]),
+            n_halton_points=af_options.n_halton_points,
+            n_halton_points_shock=af_options.n_halton_points_shock,
+            n_latent=n_state,
+            n_endogenous=n_endog,
+        )
+
+    loglike_kwargs = {
+        "n_state_factors": n_state,
+        "n_endogenous_factors": n_endog,
+        "n_measures": len(all_measures),
+        "n_controls": len(controls_names),
+        "measurements": measurements,
+        "controls": controls,
+        "loading_mask": jnp.array(loading_mask),
+        "prev_measurements": prev_measurements,
+        "prev_controls": prev_controls,
+        "prev_loading_mask": prev_meas_info["loading_mask"],
+        "prev_control_params": prev_meas_info["control_params"],
+        "prev_loadings_flat": prev_meas_info["loadings_flat"],
+        "prev_meas_sds": prev_meas_info["meas_sds"],
+        "prev_distribution": prev_dist_arrays,
+        "joint_nodes": joint_nodes,
+        "joint_weights": joint_weights,
+        "transition_func": combined_transition,
+        "total_n_transition_params": total_n_transition_params,
+        "total_n_inv_params": total_n_inv_params,
+        "n_inv_eq_params_per": n_inv_eq_params_per,
+        "observed_factor_values": obs_factor_values,
+        "stability_floor": af_options.stability_floor,
+        "n_obs_per_batch": n_obs_per_batch,
+    }
+
+    loglike_and_grad = create_loglike_and_gradient(
+        af_loglike_transition, **loglike_kwargs
+    )
     params_array = jnp.array(params_df["value"].to_numpy(dtype=np.float64))
     neg_ll, _grad = loglike_and_grad(params_array)
     return -float(neg_ll)
