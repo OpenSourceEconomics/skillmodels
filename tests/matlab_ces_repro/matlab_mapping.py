@@ -13,6 +13,7 @@ explicit fields per parameter block, so comparison code reads ``res.rho_01``
 instead of ``est_01[22]``.
 """
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -211,36 +212,83 @@ def _parse_transition(
 
 
 def ces_to_skillmodels_gammas(delta: float, phi: float) -> tuple[float, float, float]:
-    """Convert MATLAB (delta, phi) to skillmodels' normalised gammas.
+    """Convert MATLAB ``(delta, phi)`` to skillmodels' normalised gammas.
 
-    MATLAB's CES is ``f = (1/rho) log(delta*theta^rho + phi*X^rho)`` with
-    free ``delta`` and ``phi``. skillmodels' ``log_ces`` normalises the
-    gammas to sum to one and produces
-    ``f = (1/phi_skm) log(gamma_skills*exp(rho*theta) + gamma_inv*exp(rho*X))``.
-    The two forms are related by::
+    Kept for backward compatibility with existing tests. Use
+    `translate_matlab_ces_production` when you need the full translation
+    (including the level shift that must be absorbed into the period-t+1
+    skill intercepts).
+    """
+    gamma_skills, gamma_inv, _, _ = translate_matlab_ces_production(
+        delta=delta, phi=phi, rho=float("nan"), a_const=0.0
+    )
+    return gamma_skills, gamma_inv, float("nan")
 
-        gamma_skills = delta / (delta + phi)
-        gamma_inv    = phi   / (delta + phi)
-        level_shift  = (1 / rho) * log(delta + phi)
 
-    where the ``level_shift`` is an additive constant absorbed into the
-    period-t+1 skill mean.
+@dataclass(frozen=True)
+class SkillmodelsCesTranslation:
+    """Parameters of skillmodels' normalised ``log_ces`` derived from MATLAB.
+
+    skillmodels' ``log_ces`` evaluates
+    ``f_skm = (1 / phi_skm) * logsumexp(log(gamma) + states * phi_skm)``
+    with ``gamma`` on the simplex. MATLAB's unnormalised form is
+    ``f_m = A + (1 / rho) * log(delta * theta**rho + phi * X**rho)``.
+
+    The two are related by ``f_m(theta, X) = f_skm(theta, X) + level_shift``
+    where
+    ``level_shift = A + (1 / rho) * log(delta + phi)``. Because the
+    level shift is an additive constant that appears in every
+    period-t+1 skill value, it is absorbed into the period-t+1 skill
+    measurement intercepts (``mu_skills_next``).
+
+    Attributes:
+        gamma_skills: Normalised weight on skills in skillmodels'
+            ``log_ces``; equals ``delta / (delta + phi)``.
+        gamma_inv: Normalised weight on investment; equals
+            ``phi / (delta + phi)``.
+        phi_skm: The ``phi`` parameter skillmodels expects, equal to
+            MATLAB's ``rho``.
+        level_shift: The additive constant to add to every period-t+1
+            skill measurement intercept to compensate for skillmodels'
+            normalisation of the gammas.
+    """
+
+    gamma_skills: float
+    gamma_inv: float
+    phi_skm: float
+    level_shift: float
+
+
+def translate_matlab_ces_production(
+    *,
+    delta: float,
+    phi: float,
+    rho: float,
+    a_const: float = 0.0,
+) -> tuple[float, float, float, float]:
+    """Translate MATLAB CES params into skillmodels' normalised form.
 
     Args:
-        delta: MATLAB ``delta`` CES coefficient.
-        phi: MATLAB ``phi`` CES coefficient.
+        delta: MATLAB ``delta`` (unnormalised coefficient on skills).
+        phi: MATLAB ``phi`` (unnormalised coefficient on investment).
+        rho: MATLAB ``rho`` (elasticity exponent). Equals skillmodels'
+            ``phi_skm`` directly.
+        a_const: MATLAB ``A`` constant term. MATLAB sets this to ``0`` in
+            both the CES and translog application scripts; accept it as
+            a kwarg for completeness.
 
     Return:
-        Tuple ``(gamma_skills, gamma_inv, level_shift)``. The ``level_shift``
-        is returned separately so callers can add it to the period-t+1 skill
-        intercepts when building a skillmodels start_params DataFrame.
+        Tuple ``(gamma_skills, gamma_inv, phi_skm, level_shift)``.
 
+    Raises:
+        ValueError: If ``delta + phi`` is not positive.
     """
     total = delta + phi
     if not total > 0:
         msg = f"delta + phi must be positive; got {total}"
         raise ValueError(msg)
-    # level_shift uses the same ``rho`` that skillmodels feeds into log_ces;
-    # callers pass that in themselves if they need the shift. Here we only
-    # return the normalisation.
-    return delta / total, phi / total, float("nan")
+    gamma_skills = delta / total
+    gamma_inv = phi / total
+    phi_skm = rho
+    level_shift = a_const + (1.0 / rho) * math.log(total)
+    return gamma_skills, gamma_inv, phi_skm, level_shift

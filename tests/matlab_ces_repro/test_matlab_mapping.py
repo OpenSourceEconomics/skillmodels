@@ -8,6 +8,7 @@ import pytest
 from .matlab_mapping import (
     ces_to_skillmodels_gammas,
     load_matlab_results,
+    translate_matlab_ces_production,
 )
 
 _DEFAULT_RESULTS_DIR = Path("/home/hmg/sciebo/Skill estimation/Results")
@@ -23,6 +24,44 @@ def test_ces_to_skillmodels_gammas_sums_to_one() -> None:
 def test_ces_to_skillmodels_gammas_rejects_non_positive_sum() -> None:
     with pytest.raises(ValueError, match="must be positive"):
         ces_to_skillmodels_gammas(delta=-0.3, phi=0.2)
+
+
+def test_translate_matlab_ces_production_roundtrip() -> None:
+    """At test points, skillmodels' log_ces must equal MATLAB's CES.
+
+    Evaluate both forms at several ``(theta, X)`` test points and assert
+    they differ by exactly the ``level_shift`` returned by the helper.
+    """
+    delta, phi, rho = 0.4, 0.7, 1.3
+    gamma_skills, gamma_inv, phi_skm, level_shift = translate_matlab_ces_production(
+        delta=delta, phi=phi, rho=rho
+    )
+    # ``f_skm`` below is skillmodels' log_ces output (normalised form) and
+    # ``f_matlab`` is MATLAB's CES output (unnormalised). The helper's
+    # ``level_shift`` is what you have to add to ``f_skm`` to recover
+    # ``f_matlab``.
+    for theta, x in [(0.1, 0.2), (-0.5, 1.0), (1.5, -0.3), (0.0, 0.0)]:
+        f_skm = (1.0 / phi_skm) * np.log(
+            gamma_skills * np.exp(rho * theta) + gamma_inv * np.exp(rho * x)
+        )
+        f_matlab = (1.0 / rho) * np.log(
+            delta * np.exp(rho * theta) + phi * np.exp(rho * x)
+        )
+        np.testing.assert_allclose(f_matlab, f_skm + level_shift, rtol=0, atol=1e-12)
+
+
+def test_translate_matlab_ces_production_rejects_non_positive_sum() -> None:
+    with pytest.raises(ValueError, match="must be positive"):
+        translate_matlab_ces_production(delta=-0.5, phi=0.2, rho=1.0)
+
+
+def test_translate_matlab_ces_production_carries_a_constant() -> None:
+    # With delta + phi = 1 the ``(1 / rho) * log(delta + phi)`` term is
+    # zero, so the returned ``level_shift`` equals ``a_const`` exactly.
+    _, _, _, level_shift = translate_matlab_ces_production(
+        delta=0.3, phi=0.7, rho=1.0, a_const=0.5
+    )
+    assert np.isclose(level_shift, 0.5)
 
 
 @pytest.mark.skipif(
