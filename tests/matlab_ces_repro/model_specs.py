@@ -45,16 +45,30 @@ def _measurements(
 
 
 def _normalizations(
-    per_period: tuple[str, ...], active_periods: tuple[int, ...] = (0, 1, 2)
+    per_period: tuple[str, ...],
+    active_periods: tuple[int, ...] = (0, 1, 2),
+    normalize_periods: tuple[int, ...] | None = None,
 ) -> Normalizations:
-    """Fix the first measurement's loading to 1 and its intercept to 0."""
+    """Fix the first measurement's loading to 1 and intercept to 0.
+
+    Args:
+        per_period: Tuple of measurement variable names.
+        active_periods: Periods in which the factor is measured at all.
+        normalize_periods: Periods in which to apply the normalisation. By
+            default equals ``active_periods``. Set it to a subset (e.g.
+            ``(0,)``) to match MATLAB's convention of normalising only at
+            the initial period and letting the production function pin
+            the scale of the factor thereafter.
+    """
+    if normalize_periods is None:
+        normalize_periods = active_periods
     first = per_period[0]
     return Normalizations(
         loadings=tuple(
-            {first: 1} if t in active_periods else {} for t in range(_N_PERIODS)
+            {first: 1} if t in normalize_periods else {} for t in range(_N_PERIODS)
         ),
         intercepts=tuple(
-            {first: 0} if t in active_periods else {} for t in range(_N_PERIODS)
+            {first: 0} if t in normalize_periods else {} for t in range(_N_PERIODS)
         ),
     )
 
@@ -74,13 +88,17 @@ def _common_factor_specs() -> dict[str, FactorSpec]:
         ),
         "investment": FactorSpec(
             measurements=_measurements(INV_MEASURES, active_periods=_INV_PERIODS),
-            normalizations=_normalizations(INV_MEASURES, active_periods=_INV_PERIODS),
-            # MATLAB's investment equation
-            # ``log(inv_t) = a_theta*theta + a_MC*MC + a_MN*MN + a_Y*Y + eta_I``
-            # is a plain linear regression of investment on the other factors
-            # with no self-dependency and no constant. skillmodels' `linear`
-            # transition gives exactly that shape once the self-coefficient
-            # and the constant are pinned to zero (see `_common_fixed_rows`).
+            # MATLAB does not normalise the investment measurement model at
+            # any period (all three loadings and intercepts are free); the
+            # investment equation pins the scale of investment via the
+            # coefficients on (skills, MC, MN, log_income). We follow
+            # MATLAB's convention to make the param translation a direct
+            # copy.
+            normalizations=_normalizations(
+                INV_MEASURES,
+                active_periods=_INV_PERIODS,
+                normalize_periods=(),
+            ),
             transition_function="linear",
         ),
     }
@@ -121,7 +139,9 @@ def build_ces_model() -> BuiltModel:
     factors: dict[str, FactorSpec] = {
         "skills": FactorSpec(
             measurements=_measurements(SKILL_MEASURES),
-            normalizations=_normalizations(SKILL_MEASURES),
+            # MATLAB normalises skills only at period 0; the production
+            # function ties the scale of skills at later periods.
+            normalizations=_normalizations(SKILL_MEASURES, normalize_periods=(0,)),
             transition_function="log_ces",
         ),
         **_common_factor_specs(),
@@ -174,7 +194,10 @@ def build_translog_model() -> BuiltModel:
     factors: dict[str, FactorSpec] = {
         "skills": FactorSpec(
             measurements=_measurements(SKILL_MEASURES),
-            normalizations=_normalizations(SKILL_MEASURES),
+            # Same MATLAB convention as in CES: skills normalised only at
+            # period 0; scale at later periods pinned by the production
+            # function.
+            normalizations=_normalizations(SKILL_MEASURES, normalize_periods=(0,)),
             transition_function="translog",
         ),
         **_common_factor_specs(),
