@@ -75,17 +75,27 @@ def _common_factor_specs() -> dict[str, FactorSpec]:
         "investment": FactorSpec(
             measurements=_measurements(INV_MEASURES, active_periods=_INV_PERIODS),
             normalizations=_normalizations(INV_MEASURES, active_periods=_INV_PERIODS),
-            is_endogenous=True,
+            # MATLAB's investment equation
+            # ``log(inv_t) = a_theta*theta + a_MC*MC + a_MN*MN + a_Y*Y + eta_I``
+            # is a plain linear regression of investment on the other factors
+            # with no self-dependency and no constant. skillmodels' `linear`
+            # transition gives exactly that shape once the self-coefficient
+            # and the constant are pinned to zero (see `_common_fixed_rows`).
             transition_function="linear",
         ),
     }
 
 
 def _common_fixed_rows() -> list[tuple[tuple[str, int, str, str], float]]:
-    """Fixed-parameter rows for time-invariant MC / MN and small shocks."""
+    """Fixed-parameter rows for time-invariant MC / MN and the investment eq.
+
+    - MC and MN are time-invariant: identity transition, near-zero shock.
+    - Investment's linear transition has its self-coefficient and constant
+      pinned to zero so it reduces to the MATLAB investment equation
+      (linear in the other factors only).
+    """
     rows: list[tuple[tuple[str, int, str, str], float]] = []
     for t in range(_N_PERIODS - 1):
-        # MC and MN are time-invariant: identity transition, near-zero shock.
         for factor in ("MC", "MN"):
             rows.append((("transition", t, factor, factor), 1.0))
             for other in ("skills", "MC", "MN", "investment"):
@@ -93,6 +103,10 @@ def _common_fixed_rows() -> list[tuple[tuple[str, int, str, str], float]]:
                     rows.append((("transition", t, factor, other), 0.0))
             rows.append((("transition", t, factor, "constant"), 0.0))
             rows.append((("shock_sds", t, factor, "-"), 1e-3))
+        # Investment equation: no self-dependency and no intercept
+        # (matches MATLAB's ``log(inv_t) = a_theta*theta + ... + eta_I``).
+        rows.append((("transition", t, "investment", "investment"), 0.0))
+        rows.append((("transition", t, "investment", "constant"), 0.0))
     return rows
 
 
