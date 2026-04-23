@@ -32,6 +32,27 @@ class FactorSpec:
     """Whether this factor is a correction factor."""
     transition_function: str | Callable | None = None
     """Transition function name (e.g. `"linear"`, `"log_ces"`) or a callable."""
+    has_production_shock: bool = True
+    """Whether transitions add a stochastic shock for this factor.
+
+    When `False`, the AF transition integrates the factor deterministically:
+    no shock SD parameter, no shock dimension in the joint Halton draw, and
+    the transition output is used as-is. Set this to `False` for
+    time-invariant factors (combined with an identity transition pinned via
+    `fixed_params`) to cut integration dimensionality.
+    """
+    has_initial_distribution: bool = True
+    """Whether this factor is drawn from the AF period-0 mixture distribution.
+
+    When `False`, the factor is not included in the initial joint mixture
+    (no mean / Cholesky entries for it) and is instead reconstructed
+    deterministically per Halton draw. Currently only supported in
+    conjunction with `is_endogenous=True`: the factor's period-0 value is
+    computed from its investment equation at period 0 plus an investment
+    shock, with investment-equation and shock parameters estimated as part
+    of the initial step. The transition function must not depend on the
+    factor's own lag.
+    """
 
     def with_transition_function(self, func: str | Callable) -> Self:
         """Return a new FactorSpec with the given transition function."""
@@ -129,6 +150,8 @@ class ModelSpec:
                 is_endogenous=spec.get("is_endogenous", False),
                 is_correction=spec.get("is_correction", False),
                 transition_function=spec.get("transition_function"),
+                has_production_shock=spec.get("has_production_shock", True),
+                has_initial_distribution=spec.get("has_initial_distribution", True),
             )
 
         anchoring = None

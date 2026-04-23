@@ -18,39 +18,63 @@ def get_initial_period_params_index(
     measurements_period_0: dict[str, tuple[str, ...]],
     controls: tuple[str, ...],
     observed_factors: tuple[str, ...] = (),
+    reconstructed_factors: tuple[str, ...] = (),
 ) -> pd.MultiIndex:
     """Build parameter index for the initial period (Step 0).
 
     Parameters estimated in Step 0:
     - Mixture weights, means, Cholesky covariances for the joint distribution
-      of latent and observed factors at period 0
-    - Measurement loadings, intercepts, SDs for period 0
+      of the *state* latent factors (those with
+      ``has_initial_distribution=True``) and observed factors at period 0.
+    - Investment equation parameters (one block per ``reconstructed_factor``)
+      and an investment shock SD per reconstructed factor. These pin the
+      period-0 value of each reconstructed factor as a deterministic
+      function of the state latents plus a shock.
+    - Measurement loadings, intercepts, SDs for period 0.
 
-    When `observed_factors` is non-empty, the initial distribution is modelled
-    over the joint vector (latent, observed). Per-individual observed values
-    let the likelihood condition on them via the Schur complement, which
-    concentrates Halton draws and improves estimation precision.
+    When ``observed_factors`` is non-empty, the initial distribution is
+    modelled over the joint vector (state_latent, observed). Per-individual
+    observed values let the likelihood condition on them via the Schur
+    complement, which concentrates Halton draws and improves estimation
+    precision.
 
     Args:
         n_mixture_components: Number of Gaussian mixture components.
-        latent_factors: Names of latent factors.
+        latent_factors: Names of *all* latent factors (including reconstructed
+            ones). Used for loading entries in the measurement block so
+            reconstructed factors can still load on period-0 measurements.
         measurements_period_0: Factor name -> tuple of measurement variable names.
         controls: Control variable names (includes "constant").
         observed_factors: Names of observed factors included in the joint
             initial distribution.
+        reconstructed_factors: Latent factors with
+            ``has_initial_distribution=False``. These are excluded from the
+            mixture and receive their own investment-equation block at
+            period 0 instead.
 
     Return:
         MultiIndex with levels (category, period, name1, name2).
 
     """
     ind_tups: list[tuple[str, int, str, str]] = []
-    joint_factors = (*latent_factors, *observed_factors)
+    state_latent_factors = tuple(
+        f for f in latent_factors if f not in reconstructed_factors
+    )
+    joint_factors = (*state_latent_factors, *observed_factors)
+
+    # Measurements for the initial step exclude those that only load on
+    # reconstructed factors; their period-0 measurement params are
+    # estimated in the transition step 0->1 instead (matching MATLAB's
+    # transition_01 block convention).
+    measurements_period_0_filtered = {
+        f: m for f, m in measurements_period_0.items() if f in state_latent_factors
+    }
 
     # Mixture weights
     for m in range(n_mixture_components):
         ind_tups.append(("mixture_weights", 0, f"mixture_{m}", "-"))
 
-    # Initial means per component per joint factor
+    # Initial means per component per joint factor (state latent + observed)
     for m in range(n_mixture_components):
         for factor in joint_factors:
             ind_tups.append(("initial_states", 0, f"mixture_{m}", factor))
@@ -69,12 +93,14 @@ def get_initial_period_params_index(
                         )
                     )
 
-    # Measurement params for period 0
+    # Measurement params for period 0 over state-latent factors only.
+    # Reconstructed factors' period-0 measurement params live in the
+    # transition step 0->1 params index.
     ind_tups.extend(
         _measurement_index_tuples(
             period=0,
-            latent_factors=latent_factors,
-            measurements=measurements_period_0,
+            latent_factors=state_latent_factors,
+            measurements=measurements_period_0_filtered,
             controls=controls,
         )
     )
@@ -94,6 +120,7 @@ def get_transition_period_params_index(
     controls: tuple[str, ...],
     endogenous_factors: tuple[str, ...] = (),
     observed_factors: tuple[str, ...] = (),
+    shock_factors: tuple[str, ...] | None = None,
 ) -> pd.MultiIndex:
     """Build parameter index for a transition period (Step t, t >= 1).
 
@@ -110,11 +137,17 @@ def get_transition_period_params_index(
         controls: Control variable names.
         endogenous_factors: Names of endogenous (investment) factors.
         observed_factors: Names of observed factors.
+        shock_factors: Subset of `latent_factors` for which a production shock
+            SD is estimated. Factors omitted here get no shock SD parameter
+            and are integrated deterministically (dropping their shock
+            dimension from the Halton draw). Defaults to `latent_factors`.
 
     Return:
         MultiIndex with levels (category, period, name1, name2).
 
     """
+    if shock_factors is None:
+        shock_factors = latent_factors
     ind_tups: list[tuple[str, int, str, str]] = []
 
     # Transition parameters (for t-1 -> t)
@@ -123,8 +156,8 @@ def get_transition_period_params_index(
             for name in transition_info.param_names[factor]:
                 ind_tups.append(("transition", period - 1, factor, name))
 
-    # Shock SDs (for t-1 -> t)
-    for factor in latent_factors:
+    # Shock SDs (for t-1 -> t): only factors that have a production shock
+    for factor in shock_factors:
         ind_tups.append(("shock_sds", period - 1, factor, "-"))
 
     # Investment equation parameters (for t-1)

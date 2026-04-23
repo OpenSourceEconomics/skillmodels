@@ -81,12 +81,17 @@ def estimate_initial_period(
         to latent (or `state_factors`) coordinates.
 
     """
-    n_latent = processed_model.dimensions.n_latent_factors
     n_components = af_options.n_mixture_components
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
     n_obs_factors = len(observed_factors)
-    n_joint = n_latent + n_obs_factors
+
+    reconstructed_factors = tuple(
+        f for f in factors if not model_spec.factors[f].has_initial_distribution
+    )
+    state_latent_factors = tuple(f for f in factors if f not in reconstructed_factors)
+    n_state_latent = len(state_latent_factors)
+    n_joint = n_state_latent + n_obs_factors
 
     if n_obs_factors > 0 and observed_factor_values is None:
         msg = "observed_factor_values required when observed_factors is non-empty."
@@ -105,6 +110,7 @@ def estimate_initial_period(
         measurements_period_0=measurements_p0,
         controls=controls_names,
         observed_factors=observed_factors,
+        reconstructed_factors=reconstructed_factors,
     )
     normalizations = get_normalizations_for_period(model_spec.factors, period=0)
     params_template = create_af_params_template(
@@ -118,7 +124,7 @@ def estimate_initial_period(
         params_template,
         measurements,
         controls,
-        n_latent,
+        n_state_latent,
         n_components,
         observed_factors=observed_factors,
         observed_factor_values=obs_values,
@@ -133,15 +139,29 @@ def estimate_initial_period(
     if fixed_params is not None:
         apply_fixed_params(params_template, fixed_params)
 
-    # Build loading mask: (n_measures, n_factors) boolean
-    all_measures = _get_ordered_measures(measurements_p0)
-    loading_mask = _build_loading_mask(all_measures, factors, measurements_p0)
+    # Period-0 measurements and loading mask cover state-latent factors only.
+    # Reconstructed factors' period-0 measurements are handled in the
+    # transition step 0->1.
+    measurements_p0_filtered = {
+        f: m for f, m in measurements_p0.items() if f in state_latent_factors
+    }
+    all_measures_full = _get_ordered_measures(measurements_p0)
+    all_measures = _get_ordered_measures(measurements_p0_filtered)
+    if len(all_measures) != len(all_measures_full):
+        col_indices = jnp.array(
+            [all_measures_full.index(m) for m in all_measures], dtype=jnp.int32
+        )
+        measurements = measurements[:, col_indices]
+    loading_mask = _build_loading_mask(
+        all_measures, state_latent_factors, measurements_p0_filtered
+    )
 
-    # Halton quadrature nodes: dimension equals n_latent (observed factors
-    # are conditioned on, not integrated over, via the Schur complement).
+    # Halton quadrature nodes: dimension equals the state-latent count
+    # (observed factors are conditioned on, not integrated over, via the
+    # Schur complement).
     nodes, weights = create_halton_nodes_and_weights(
         af_options.n_halton_points,
-        n_latent,
+        n_state_latent,
     )
 
     # Translate normalization fixes and user-supplied fixes into FixedConstraints
@@ -162,7 +182,7 @@ def estimate_initial_period(
 
     loglike_kwargs = {
         "n_factors": n_joint,
-        "n_latent_factors": n_latent,
+        "n_latent_factors": n_state_latent,
         "n_mixture_components": n_components,
         "n_measures": len(all_measures),
         "n_controls": len(controls_names),

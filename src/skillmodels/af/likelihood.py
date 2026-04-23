@@ -55,21 +55,26 @@ def af_loglike_initial(
         params: Full parameter vector in template order. Fixed entries are
             held constant by optimagic `FixedConstraint`s attached outside.
         n_factors: Number of factors in the joint initial distribution
-            (latent + observed).
+            (state latents + observed). Reconstructed factors
+            (``has_initial_distribution=False``) are excluded from this
+            count; their period-0 measurements are estimated in the
+            period 0->1 transition step instead.
         n_mixture_components: Number of mixture components.
         n_measures: Number of measurement variables in period 0.
         n_controls: Number of control variables (including constant).
         measurements: Shape (n_obs, n_measures), observed measurements.
         controls: Shape (n_obs, n_controls), control variable values.
-        loading_mask: Shape (n_measures, n_latent), True where loading exists.
-        nodes: Shape (n_nodes, n_latent), standard normal quadrature nodes.
+        loading_mask: Shape (n_measures, n_state_latent), True where loading
+            exists.
+        nodes: Shape (n_nodes, n_state_latent), standard normal quadrature
+            nodes.
         weights: Shape (n_nodes,), quadrature weights.
         stability_floor: Small constant added for numerical stability.
-        n_latent_factors: Number of latent factors (loadings use only these).
-            Defaults to `n_factors` when no observed factors are present.
+        n_latent_factors: Number of state latent factors in the mixture.
+            Defaults to ``n_factors`` when no observed factors are present.
         observed_factor_values: Shape (n_obs, n_obs_factors), observed factor
             values used for Schur-complement conditioning. Required when
-            `n_latent_factors < n_factors`.
+            ``n_latent_factors < n_factors``.
         n_obs_per_batch: Observations per reverse-mode autodiff chunk.
             ``None`` falls back to ``jax.vmap`` (single kernel); a positive
             integer uses ``jax.lax.map`` so the backward-pass tape only
@@ -503,6 +508,8 @@ def af_loglike_transition(
     n_inv_eq_params_per: int,
     observed_factor_values: Array,
     stability_floor: float,
+    n_shock_factors: int | None = None,
+    shock_factor_indices: Array | None = None,
     n_obs_per_batch: int | None = None,
 ) -> Array:
     """Negative log-likelihood for a transition period (Step t).
@@ -535,9 +542,10 @@ def af_loglike_transition(
         prev_loadings_flat: Packed loadings from previous period, fixed.
         prev_meas_sds: Shape (n_prev_measures,), fixed from previous step.
         prev_distribution: Dict with keys "cond_weights", "means", "chol_covs".
-        joint_nodes: Shape (n_halton, 2 * n_state + n_endogenous),
+        joint_nodes: Shape (n_halton, n_state + n_shock + n_endogenous),
             standard-normal Halton draws partitioned into state, production
-            shock, and investment shock components.
+            shock, and investment shock components. `n_shock` equals
+            `n_shock_factors` (defaults to `n_state_factors`).
         joint_weights: Shape (n_halton,) quadrature weights (uniform
             1/n_halton for Halton integration).
         transition_func: Combined transition f(states, params) -> new_states.
@@ -546,6 +554,13 @@ def af_loglike_transition(
         n_inv_eq_params_per: Investment equation parameters per endogenous factor.
         observed_factor_values: Shape (n_obs, n_obs_factors), observed factor data.
         stability_floor: Numerical stability floor.
+        n_shock_factors: Number of state factors that get a production shock.
+            Defaults to `n_state_factors`. Factors without a shock are
+            integrated deterministically (their shock dimension is dropped
+            from the joint Halton draw).
+        shock_factor_indices: Shape (n_shock_factors,) int array mapping each
+            shock slot to its position in the state-factor ordering. Required
+            when `n_shock_factors < n_state_factors`.
         n_obs_per_batch: Observations per reverse-mode autodiff chunk.
             ``None`` falls back to ``jax.vmap`` (single kernel); a positive
             integer uses ``jax.lax.map`` so the backward-pass tape only
@@ -555,6 +570,10 @@ def af_loglike_transition(
         Scalar negative log-likelihood.
 
     """
+    effective_n_shock = n_state_factors if n_shock_factors is None else n_shock_factors
+    if shock_factor_indices is None:
+        shock_factor_indices = jnp.arange(effective_n_shock)
+
     parsed = _parse_transition_params(
         params,
         n_state_factors,
@@ -564,6 +583,7 @@ def af_loglike_transition(
         total_n_transition_params,
         total_n_inv_params,
         n_inv_eq_params_per,
+        n_shock_factors=effective_n_shock,
     )
 
     # Expand previous-period loadings (fixed, from previous step)
@@ -596,6 +616,8 @@ def af_loglike_transition(
         transition_func=transition_func,
         n_state_factors=n_state_factors,
         n_endogenous_factors=n_endogenous_factors,
+        n_shock_factors=effective_n_shock,
+        shock_factor_indices=shock_factor_indices,
         observed_factor_values=observed_factor_values,
         stability_floor=stability_floor,
         n_obs_per_batch=n_obs_per_batch,
@@ -613,17 +635,20 @@ def _parse_transition_params(
     total_n_transition_params: int,
     total_n_inv_params: int,
     _n_inv_eq_params_per: int,
+    *,
+    n_shock_factors: int | None = None,
 ) -> dict[str, Array]:
     """Parse flat parameter vector for a transition period."""
+    effective_n_shock = n_state_factors if n_shock_factors is None else n_shock_factors
     idx = 0
 
     # Transition parameters (flat, for state factors only)
     transition_params = params[idx : idx + total_n_transition_params]
     idx += total_n_transition_params
 
-    # Shock SDs per state factor
-    shock_sds = params[idx : idx + n_state_factors]
-    idx += n_state_factors
+    # Shock SDs per shock-bearing state factor (subset of state factors).
+    shock_sds = params[idx : idx + effective_n_shock]
+    idx += effective_n_shock
 
     # Investment equation params (if any endogenous factors)
     inv_eq_params = params[idx : idx + total_n_inv_params]
@@ -678,6 +703,8 @@ def _transition_loglike_per_obs(
     transition_func: Callable,
     n_state_factors: int,
     n_endogenous_factors: int,
+    n_shock_factors: int,
+    shock_factor_indices: Array,
     observed_factor_values: Array,
     stability_floor: float,
     n_obs_per_batch: int | None = None,
@@ -720,6 +747,8 @@ def _transition_loglike_per_obs(
             inv_sds=inv_sds,
             n_state_factors=n_state_factors,
             n_endogenous_factors=n_endogenous_factors,
+            n_shock_factors=n_shock_factors,
+            shock_factor_indices=shock_factor_indices,
             obs_factor_values=obs_factor_values,
             stability_floor=stability_floor,
         )
@@ -786,6 +815,8 @@ def _integrate_transition_single_obs(
     inv_sds: Array,
     n_state_factors: int,
     n_endogenous_factors: int,
+    n_shock_factors: int,
+    shock_factor_indices: Array,
     obs_factor_values: Array,
     stability_floor: float,
 ) -> Array:
@@ -793,21 +824,26 @@ def _integrate_transition_single_obs(
 
     Integrates over ``(z_state, z_shock, z_inv_shock)`` using a single
     low-discrepancy sequence of shape
-    ``(n_halton, n_state_factors + n_state_factors + n_endogenous_factors)``
+    ``(n_halton, n_state_factors + n_shock_factors + n_endogenous_factors)``
     rather than the outer product of three per-axis grids. The joint
     approach is quadrature-equivalent when the marginals are independent
     (they are, since the three random variables are independent standard
     normals under the measurement model), matches the MATLAB AF
     implementation, and keeps peak memory linear in ``n_halton`` instead
     of cubic.
+
+    State factors with ``has_production_shock=False`` have no shock slot in
+    the joint draw: the shock dimension is ``n_shock_factors`` rather than
+    ``n_state_factors``, and shock contributions are scattered back into
+    the state-factor ordering via ``shock_factor_indices``.
     """
     n_components = obs_cond_weights.shape[0]
 
     def _log_draw_contribution(z_joint: Array) -> Array:
         """Per-draw log kernel, LogSumExp over mixture components."""
         z_state = z_joint[:n_state_factors]
-        z_shock = z_joint[n_state_factors : 2 * n_state_factors]
-        z_inv_shock = z_joint[2 * n_state_factors :]
+        z_shock = z_joint[n_state_factors : n_state_factors + n_shock_factors]
+        z_inv_shock = z_joint[n_state_factors + n_shock_factors :]
 
         log_component_vals = []
         for l_idx in range(n_components):
@@ -834,10 +870,17 @@ def _integrate_transition_single_obs(
                 )
             )
 
-            # Current-period measurement density.
+            # Current-period measurement density. Shocks only apply to
+            # factors with has_production_shock=True; scatter them into the
+            # state-factor ordering and leave deterministic factors as is.
+            state_shock_contrib = (
+                jnp.zeros(n_state_factors)
+                .at[shock_factor_indices]
+                .set(shock_sds * z_shock)
+            )
             theta_t = (
                 transition_func(full_prev_with_obs, transition_params)
-                + shock_sds * z_shock
+                + state_shock_contrib
             )
             all_factors_t = jnp.concatenate([theta_t, inv])
             residuals = residual_base - full_loadings @ all_factors_t

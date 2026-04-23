@@ -99,6 +99,13 @@ def estimate_transition_period(
     state_factors = tuple(f for f in factors if f not in endogenous_factors)
     n_state = len(state_factors)
     n_endog = len(endogenous_factors)
+    shock_factors = tuple(
+        f for f in state_factors if model_spec.factors[f].has_production_shock
+    )
+    n_shock = len(shock_factors)
+    shock_factor_indices = jnp.array(
+        [state_factors.index(f) for f in shock_factors], dtype=jnp.int32
+    )
 
     params_index = get_transition_period_params_index(
         period=period,
@@ -108,6 +115,7 @@ def estimate_transition_period(
         controls=controls_names,
         endogenous_factors=endogenous_factors,
         observed_factors=observed_factors,
+        shock_factors=shock_factors,
     )
     normalizations = get_normalizations_for_period(model_spec.factors, period=period)
     params_template = create_af_params_template(
@@ -140,11 +148,12 @@ def estimate_transition_period(
 
     # Joint Halton draws: a single low-discrepancy sequence over
     # (z_state, z_shock, z_inv_shock). The MATLAB AF reference draws one
-    # joint Halton of dimension 2 * n_state + n_endog and sums the
+    # joint Halton of dimension n_state + n_shock + n_endog and sums the
     # integrand at those points, rather than building the outer product
-    # of three per-axis grids. The joint approach keeps quadrature cost
-    # linear in n_halton_points and matches MATLAB's integration order.
-    joint_dim = 2 * n_state + n_endog
+    # of three per-axis grids. State factors without a production shock
+    # (`has_production_shock=False`) drop out of the shock slice, so
+    # `n_shock <= n_state`.
+    joint_dim = n_state + n_shock + n_endog
     joint_nodes, joint_weights = create_halton_nodes_and_weights(
         af_options.n_halton_points,
         joint_dim,
@@ -198,6 +207,8 @@ def estimate_transition_period(
         period=period,
         n_state=n_state,
         n_endog=n_endog,
+        n_shock=n_shock,
+        shock_factor_indices=shock_factor_indices,
         all_measures=all_measures,
         controls_names=controls_names,
         measurements=measurements,
@@ -275,6 +286,8 @@ def _run_transition_optimization(
     period: int,
     n_state: int,
     n_endog: int,
+    n_shock: int,
+    shock_factor_indices: Array,
     all_measures: list[str],
     controls_names: tuple[str, ...],
     measurements: Array,
@@ -328,6 +341,8 @@ def _run_transition_optimization(
     loglike_kwargs = {
         "n_state_factors": n_state,
         "n_endogenous_factors": n_endog,
+        "n_shock_factors": n_shock,
+        "shock_factor_indices": shock_factor_indices,
         "n_measures": len(all_measures),
         "n_controls": len(controls_names),
         "measurements": measurements,
