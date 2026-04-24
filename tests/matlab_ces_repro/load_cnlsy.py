@@ -188,7 +188,15 @@ def _fill_income(
     t: int,
     income_by_period: list[np.ndarray],
 ) -> None:
-    if t < len(_INCOME_COLS_BY_WAVE):
-        row[INCOME_MEASURE] = float(income_by_period[t][i])
-    else:
-        row[INCOME_MEASURE] = float("nan")
+    """Write income for row ``i`` at period ``t``.
+
+    The CNLSY file ships ``faminc7`` and ``faminc9`` only. For later
+    periods we hold the last observed value (period 1) forward so that
+    CHS's ``process_data`` — which rejects any NaN in an observed
+    factor column — can consume the same frame as AF. The AF model
+    does not use ``log_income`` in the period-2 transition, so the
+    imputed value does not affect its likelihood; CHS uses it only
+    where estimation explicitly references it.
+    """
+    last_idx = min(t, len(_INCOME_COLS_BY_WAVE) - 1)
+    row[INCOME_MEASURE] = float(income_by_period[last_idx][i])

@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from .load_cnlsy import (
+    INCOME_MEASURE,
     INV_MEASURES,
     MC_MEASURES,
     MN_MEASURES,
@@ -59,3 +60,16 @@ def test_cnlsy_investment_filled_in_periods_zero_and_one(cnlsy_data) -> None:
     panel_two = cnlsy_data.xs(2, level="period")
     for col in INV_MEASURES:
         assert panel_two[col].isna().all()
+
+
+def test_cnlsy_log_income_period_two_holds_period_one(cnlsy_data) -> None:
+    """Period 2 log income is hold-last-value from period 1 (faminc9).
+
+    The shipped file has no ``faminc11``. Filling with period 1's value
+    lets CHS's ``process_data`` consume the frame without raising on
+    missing observed factors; AF does not read ``log_income`` at
+    period 2 so the imputed values do not affect its likelihood.
+    """
+    period_one = cnlsy_data.xs(1, level="period")[INCOME_MEASURE]
+    period_two = cnlsy_data.xs(2, level="period")[INCOME_MEASURE]
+    np.testing.assert_array_equal(period_two.to_numpy(), period_one.to_numpy())
