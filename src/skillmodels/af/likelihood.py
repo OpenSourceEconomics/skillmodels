@@ -12,6 +12,76 @@ import jax.numpy as jnp
 from jax import Array
 
 
+def af_per_obs_loglike_initial(
+    params: Array,
+    *,
+    n_factors: int,
+    n_mixture_components: int,
+    n_measures: int,
+    n_controls: int,
+    measurements: Array,
+    controls: Array,
+    loading_mask: Array,
+    nodes: Array,
+    weights: Array,
+    stability_floor: float,
+    n_latent_factors: int | None = None,
+    observed_factor_values: Array | None = None,
+    n_obs_per_batch: int | None = None,
+) -> Array:
+    """Per-observation log-likelihood for the initial period (Step 0).
+
+    Same inputs as `af_loglike_initial`; returns the shape-``(n_obs,)``
+    vector of per-observation log-likelihoods instead of the aggregated
+    negative mean. Used for score-based inference.
+    """
+    n_latent = n_factors if n_latent_factors is None else n_latent_factors
+    n_obs_factors = n_factors - n_latent
+
+    parsed = _parse_initial_params(
+        params,
+        n_factors,
+        n_mixture_components,
+        n_measures,
+        n_controls,
+    )
+
+    if n_obs_factors == 0:
+        return _initial_loglike_per_obs(
+            mixture_weights=parsed["mixture_weights"],
+            mixture_means=parsed["mixture_means"],
+            mixture_chol_covs=parsed["mixture_chol_covs"],
+            control_params=parsed["control_params"],
+            loadings=parsed["loadings"],
+            meas_sds=parsed["meas_sds"],
+            measurements=measurements,
+            controls=controls,
+            loading_mask=loading_mask,
+            nodes=nodes,
+            weights=weights,
+            stability_floor=stability_floor,
+            n_obs_per_batch=n_obs_per_batch,
+        )
+    assert observed_factor_values is not None  # noqa: S101
+    return _initial_loglike_per_obs_conditional(
+        mixture_weights=parsed["mixture_weights"],
+        mixture_means=parsed["mixture_means"],
+        mixture_chol_covs=parsed["mixture_chol_covs"],
+        control_params=parsed["control_params"],
+        loadings=parsed["loadings"],
+        meas_sds=parsed["meas_sds"],
+        measurements=measurements,
+        controls=controls,
+        observed_factor_values=observed_factor_values,
+        loading_mask=loading_mask,
+        nodes=nodes,
+        weights=weights,
+        n_latent=n_latent,
+        stability_floor=stability_floor,
+        n_obs_per_batch=n_obs_per_batch,
+    )
+
+
 def af_loglike_initial(
     params: Array,
     *,
@@ -84,53 +154,22 @@ def af_loglike_initial(
         Scalar negative log-likelihood.
 
     """
-    n_latent = n_factors if n_latent_factors is None else n_latent_factors
-    n_obs_factors = n_factors - n_latent
-
-    parsed = _parse_initial_params(
+    log_likes = af_per_obs_loglike_initial(
         params,
-        n_factors,
-        n_mixture_components,
-        n_measures,
-        n_controls,
+        n_factors=n_factors,
+        n_mixture_components=n_mixture_components,
+        n_measures=n_measures,
+        n_controls=n_controls,
+        measurements=measurements,
+        controls=controls,
+        loading_mask=loading_mask,
+        nodes=nodes,
+        weights=weights,
+        stability_floor=stability_floor,
+        n_latent_factors=n_latent_factors,
+        observed_factor_values=observed_factor_values,
+        n_obs_per_batch=n_obs_per_batch,
     )
-
-    if n_obs_factors == 0:
-        log_likes = _initial_loglike_per_obs(
-            mixture_weights=parsed["mixture_weights"],
-            mixture_means=parsed["mixture_means"],
-            mixture_chol_covs=parsed["mixture_chol_covs"],
-            control_params=parsed["control_params"],
-            loadings=parsed["loadings"],
-            meas_sds=parsed["meas_sds"],
-            measurements=measurements,
-            controls=controls,
-            loading_mask=loading_mask,
-            nodes=nodes,
-            weights=weights,
-            stability_floor=stability_floor,
-            n_obs_per_batch=n_obs_per_batch,
-        )
-    else:
-        assert observed_factor_values is not None  # noqa: S101
-        log_likes = _initial_loglike_per_obs_conditional(
-            mixture_weights=parsed["mixture_weights"],
-            mixture_means=parsed["mixture_means"],
-            mixture_chol_covs=parsed["mixture_chol_covs"],
-            control_params=parsed["control_params"],
-            loadings=parsed["loadings"],
-            meas_sds=parsed["meas_sds"],
-            measurements=measurements,
-            controls=controls,
-            observed_factor_values=observed_factor_values,
-            loading_mask=loading_mask,
-            nodes=nodes,
-            weights=weights,
-            n_latent=n_latent,
-            stability_floor=stability_floor,
-            n_obs_per_batch=n_obs_per_batch,
-        )
-
     return -jnp.mean(log_likes)
 
 
@@ -483,6 +522,94 @@ def _integrate_initial_single_obs(
     return jnp.log(integrated + stability_floor)
 
 
+def af_per_obs_loglike_transition(
+    params: Array,
+    *,
+    n_state_factors: int,
+    n_endogenous_factors: int,
+    n_measures: int,
+    n_controls: int,
+    measurements: Array,
+    controls: Array,
+    loading_mask: Array,
+    prev_measurements: Array,
+    prev_controls: Array,
+    prev_loading_mask: Array,
+    prev_control_params: Array,
+    prev_loadings_flat: Array,
+    prev_meas_sds: Array,
+    prev_distribution: dict[str, Array],
+    joint_nodes: Array,
+    joint_weights: Array,
+    transition_func: Callable,
+    total_n_transition_params: int,
+    total_n_inv_params: int,
+    n_inv_eq_params_per: int,
+    observed_factor_values: Array,
+    stability_floor: float,
+    n_shock_factors: int | None = None,
+    shock_factor_indices: Array | None = None,
+    n_obs_per_batch: int | None = None,
+) -> Array:
+    """Per-observation log-likelihood for a transition period (Step t).
+
+    Same inputs as `af_loglike_transition`; returns the shape-``(n_obs,)``
+    vector of per-observation log-likelihoods instead of the aggregated
+    negative mean. Used for score-based inference.
+    """
+    effective_n_shock = n_state_factors if n_shock_factors is None else n_shock_factors
+    if shock_factor_indices is None:
+        shock_factor_indices = jnp.arange(effective_n_shock)
+
+    parsed = _parse_transition_params(
+        params,
+        n_state_factors,
+        n_endogenous_factors,
+        n_measures,
+        n_controls,
+        total_n_transition_params,
+        total_n_inv_params,
+        n_inv_eq_params_per,
+        n_shock_factors=effective_n_shock,
+    )
+
+    n_prev_measures = prev_loading_mask.shape[0]
+    n_prev_factors = prev_loading_mask.shape[1]
+    prev_full_loadings = jnp.zeros((n_prev_measures, n_prev_factors))
+    prev_full_loadings = prev_full_loadings.at[prev_loading_mask].set(
+        prev_loadings_flat
+    )
+    prev_control_contrib = prev_controls @ prev_control_params.T
+    prev_residuals_base = prev_measurements - prev_control_contrib
+
+    return _transition_loglike_per_obs(
+        transition_params=parsed["transition_params"],
+        shock_sds=parsed["shock_sds"],
+        inv_eq_params=parsed["inv_eq_params"],
+        inv_sds=parsed["inv_sds"],
+        control_params=parsed["control_params"],
+        loadings_flat=parsed["loadings_flat"],
+        meas_sds=parsed["meas_sds"],
+        measurements=measurements,
+        controls=controls,
+        loading_mask=loading_mask,
+        prev_residuals_base=prev_residuals_base,
+        prev_full_loadings=prev_full_loadings,
+        prev_meas_sds=prev_meas_sds,
+        prev_distribution=prev_distribution,
+        joint_nodes=joint_nodes,
+        joint_weights=joint_weights,
+        transition_func=transition_func,
+        n_state_factors=n_state_factors,
+        n_endogenous_factors=n_endogenous_factors,
+        n_shock_factors=effective_n_shock,
+        shock_factor_indices=shock_factor_indices,
+        observed_factor_values=observed_factor_values,
+        stability_floor=stability_floor,
+        n_obs_per_batch=n_obs_per_batch,
+    )
+
+
 def af_loglike_transition(
     params: Array,
     *,
@@ -570,59 +697,34 @@ def af_loglike_transition(
         Scalar negative log-likelihood.
 
     """
-    effective_n_shock = n_state_factors if n_shock_factors is None else n_shock_factors
-    if shock_factor_indices is None:
-        shock_factor_indices = jnp.arange(effective_n_shock)
-
-    parsed = _parse_transition_params(
+    log_likes = af_per_obs_loglike_transition(
         params,
-        n_state_factors,
-        n_endogenous_factors,
-        n_measures,
-        n_controls,
-        total_n_transition_params,
-        total_n_inv_params,
-        n_inv_eq_params_per,
-        n_shock_factors=effective_n_shock,
-    )
-
-    # Expand previous-period loadings (fixed, from previous step)
-    n_prev_measures = prev_loading_mask.shape[0]
-    n_prev_factors = prev_loading_mask.shape[1]
-    prev_full_loadings = jnp.zeros((n_prev_measures, n_prev_factors))
-    prev_full_loadings = prev_full_loadings.at[prev_loading_mask].set(
-        prev_loadings_flat
-    )
-    prev_control_contrib = prev_controls @ prev_control_params.T
-    prev_residuals_base = prev_measurements - prev_control_contrib
-
-    log_likes = _transition_loglike_per_obs(
-        transition_params=parsed["transition_params"],
-        shock_sds=parsed["shock_sds"],
-        inv_eq_params=parsed["inv_eq_params"],
-        inv_sds=parsed["inv_sds"],
-        control_params=parsed["control_params"],
-        loadings_flat=parsed["loadings_flat"],
-        meas_sds=parsed["meas_sds"],
+        n_state_factors=n_state_factors,
+        n_endogenous_factors=n_endogenous_factors,
+        n_measures=n_measures,
+        n_controls=n_controls,
         measurements=measurements,
         controls=controls,
         loading_mask=loading_mask,
-        prev_residuals_base=prev_residuals_base,
-        prev_full_loadings=prev_full_loadings,
+        prev_measurements=prev_measurements,
+        prev_controls=prev_controls,
+        prev_loading_mask=prev_loading_mask,
+        prev_control_params=prev_control_params,
+        prev_loadings_flat=prev_loadings_flat,
         prev_meas_sds=prev_meas_sds,
         prev_distribution=prev_distribution,
         joint_nodes=joint_nodes,
         joint_weights=joint_weights,
         transition_func=transition_func,
-        n_state_factors=n_state_factors,
-        n_endogenous_factors=n_endogenous_factors,
-        n_shock_factors=effective_n_shock,
-        shock_factor_indices=shock_factor_indices,
+        total_n_transition_params=total_n_transition_params,
+        total_n_inv_params=total_n_inv_params,
+        n_inv_eq_params_per=n_inv_eq_params_per,
         observed_factor_values=observed_factor_values,
         stability_floor=stability_floor,
+        n_shock_factors=n_shock_factors,
+        shock_factor_indices=shock_factor_indices,
         n_obs_per_batch=n_obs_per_batch,
     )
-
     return -jnp.mean(log_likes)
 
 

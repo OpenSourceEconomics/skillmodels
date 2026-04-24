@@ -5,7 +5,13 @@ import contextlib
 with contextlib.suppress(ImportError):
     import pdbp  # noqa: F401
 
-from skillmodels.af import AFEstimationOptions, AFEstimationResult, estimate_af
+from skillmodels.af import (
+    AFEstimationOptions,
+    AFEstimationResult,
+    AFInferenceResult,
+    compute_af_standard_errors,
+    estimate_af,
+)
 from skillmodels.diagnostic_plots import (
     plot_likelihood_contributions,
     plot_residual_boxplots,
@@ -29,11 +35,13 @@ from skillmodels.variance_decomposition import (
 __all__ = [
     "AFEstimationOptions",
     "AFEstimationResult",
+    "AFInferenceResult",
     "AnchoringSpec",
     "EstimationOptions",
     "FactorSpec",
     "ModelSpec",
     "Normalizations",
+    "compute_af_standard_errors",
     "create_state_ranges",
     "decompose_measurement_variance",
     "estimate_af",
