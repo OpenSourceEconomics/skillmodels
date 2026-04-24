@@ -1,28 +1,38 @@
 """Asymptotic standard errors for the AF estimator.
 
-Compute the block-diagonal version of the Newey-McFadden sandwich
-covariance for a sequential M-estimator:
+Implement the Newey-McFadden (1994, ch. 6) sandwich covariance for a
+sequential M-estimator. Let ``theta = (theta_0, ..., theta_{T-1})`` be
+the stacked parameter vector and let
 
-    V_t = A_tt^{-1} Omega_tt A_tt^{-T} / n
+    g_{ti}(theta) = d log L_{it} / d theta_t
 
-for each period ``t``, where
+be individual ``i``'s period-``t`` own-parameter score. Stack per
+individual: ``g_i in R^{P_total}``. Then
 
-- ``Omega_tt = (1/n) sum_i g_{ti} g_{ti}^T`` is the outer product of
-  period-``t`` per-individual scores (own parameters only).
-- ``A_tt`` is the Hessian of the period-``t`` negative-mean
-  log-likelihood with respect to its own parameters.
+    Omega_{ts} = (1/n) sum_i g_{ti} g_{si}^T
+    A_{ts}     = (1/n) sum_i d g_{ti} / d theta_s
+    V_hat      = A^{-1} Omega A^{-T} / n_obs
 
-This ignores cross-period terms in ``Omega`` and ``A``, so standard errors
-for parameters at period ``t >= 1`` are a **lower bound** on the true
-asymptotic SE. They do not propagate plug-in uncertainty from
-``theta_{<t}``. See ``docs/superpowers/specs/2026-04-23-af-standard-
-errors-design.md`` for the full formulation and the planned cross-period
-extension.
+``A`` is block lower triangular because period ``t``'s likelihood does
+not depend on ``theta_{>t}``. The off-diagonal blocks of ``A`` and
+``Omega`` are what make this sandwich differ from the naive
+per-period block-diagonal version — they propagate the plug-in
+uncertainty from earlier periods.
+
+Two computation modes:
+
+- ``method="full_sandwich"`` (default): compute the full cross-period
+  sandwich by reconstructing ``prev_distribution`` and
+  ``prev_meas_info`` as JAX-differentiable functions of earlier-period
+  parameters. Asymptotically correct for the AF sequential estimator.
+- ``method="block_diagonal"``: compute only the diagonal blocks
+  ``V_t = A_tt^{-1} Omega_tt A_tt^{-T} / n_obs``. Cheaper, but SEs for
+  periods ``t >= 1`` are a lower bound on the true asymptotic SE.
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 import jax
 import jax.numpy as jnp
@@ -38,6 +48,8 @@ from skillmodels.af.initial_period import (
     _get_ordered_measures,
 )
 from skillmodels.af.likelihood import (
+    _parse_initial_params,
+    _parse_transition_params,
     af_per_obs_loglike_initial,
     af_per_obs_loglike_transition,
 )
@@ -66,19 +78,26 @@ class AFInferenceResult:
     standard_errors: pd.Series
     """Standard errors indexed by ``all_params.index``.
 
-    Fixed-parameter entries are set to zero. Later-period entries use the
-    block-diagonal sandwich and are therefore a lower bound on the true
-    asymptotic SE (see module docstring).
+    Fixed-parameter entries are set to zero. In ``block_diagonal`` mode,
+    period-``t`` entries for ``t >= 1`` are a lower bound on the true
+    asymptotic SE; in ``full_sandwich`` mode they are asymptotically
+    correct.
     """
 
     vcov: pd.DataFrame
     """Full variance-covariance matrix; rows and columns share
-    ``all_params.index``. Off-diagonal cross-period entries are zero in
-    the current block-diagonal implementation.
+    ``all_params.index``. In ``block_diagonal`` mode off-diagonal
+    cross-period entries are zero; in ``full_sandwich`` they are the
+    actual cross-period covariances.
     """
 
     period_results: tuple[AFPeriodInferenceResult, ...]
     """Per-period inference components, in period order."""
+
+    method: str
+    """Which method produced the result (``"full_sandwich"`` or
+    ``"block_diagonal"``).
+    """
 
 
 @dataclass(frozen=True)
@@ -89,30 +108,35 @@ class AFPeriodInferenceResult:
     """Calendar period index."""
 
     free_param_locs: tuple[tuple[Any, ...], ...]
-    """MultiIndex locations of the free (unpinned) parameters used for
-    this period's sandwich, in the same order as ``score_matrix`` columns.
+    """MultiIndex locations of the free (unpinned, non-simplex) parameters
+    used for this period's own-param score columns, in the same order as
+    ``score_matrix`` columns.
     """
 
     score_matrix: Array
-    """Per-observation score matrix, shape ``(n_obs, n_free)``. Row ``i``
-    holds ``d log L_{it} / d theta_t`` for individual ``i`` at the
-    estimated parameters.
+    """Per-observation own-parameter score matrix, shape
+    ``(n_obs, n_free_own)``. Row ``i`` holds
+    ``d log L_{it} / d theta_t`` for individual ``i`` at the estimated
+    parameters.
     """
 
     information_matrix: Array
-    """Estimated information matrix ``A_tt``, shape ``(n_free, n_free)``.
-    Computed as the Hessian of the scalar negative-mean log-likelihood
-    at the estimated parameters.
+    """Estimated diagonal-block information matrix ``A_tt``,
+    shape ``(n_free_own, n_free_own)``. Hessian of the scalar negative
+    mean log-likelihood restricted to period-``t`` own parameters.
     """
 
     score_outer_product: Array
     """Estimated ``Omega_tt = score_matrix.T @ score_matrix / n_obs``,
-    shape ``(n_free, n_free)``.
+    shape ``(n_free_own, n_free_own)``.
     """
 
     vcov: Array
-    """Period-``t`` own-param variance-covariance matrix, shape
-    ``(n_free, n_free)``; equals ``A^{-1} Omega A^{-T} / n_obs``.
+    """Own-parameter block of the variance-covariance matrix,
+    shape ``(n_free_own, n_free_own)``. In ``block_diagonal`` mode
+    this equals ``A_tt^{-1} Omega_tt A_tt^{-T} / n_obs``; in
+    ``full_sandwich`` it is the corresponding diagonal block of the
+    full sandwich (which also accounts for cross-period uncertainty).
     """
 
 
@@ -120,13 +144,9 @@ def compute_af_standard_errors(
     result: AFEstimationResult,
     data: pd.DataFrame,
     af_options: AFEstimationOptions | None = None,
+    method: Literal["full_sandwich", "block_diagonal"] = "full_sandwich",
 ) -> AFInferenceResult:
     """Compute asymptotic standard errors for an AF estimate.
-
-    Use the block-diagonal Newey-McFadden sandwich: for each period,
-    compute ``V_t = A_tt^{-1} Omega_tt A_tt^{-T} / n`` from own-period
-    scores and Hessian. Cross-period terms are ignored; see the module
-    docstring.
 
     Args:
         result: Output of ``estimate_af``.
@@ -135,6 +155,12 @@ def compute_af_standard_errors(
         af_options: Options used at estimation time. Pass the same
             instance used to fit ``result``; defaults are acceptable if
             options were default at estimation time.
+        method: ``"full_sandwich"`` computes the asymptotically correct
+            Newey-McFadden sandwich, propagating plug-in uncertainty
+            through the ``prev_distribution`` and ``prev_meas_info``
+            chain. ``"block_diagonal"`` computes only the diagonal
+            blocks and is faster but underestimates SEs for periods
+            ``t >= 1``.
 
     Return:
         ``AFInferenceResult`` with standard errors, variance-covariance
@@ -170,20 +196,122 @@ def compute_af_standard_errors(
         observed_factors=observed_factors,
     )
 
-    period_inference: list[AFPeriodInferenceResult] = []
-    prev_cond_dists: tuple[ConditionalDistribution | None, ...] = (
-        None,
-        *result.conditional_distributions[:-1],
+    metas = _build_period_metas(
+        result=result,
+        period_data=period_data,
+        model_spec=model_spec,
+        processed_model=processed_model,
+        af_options=af_options,
+        observed_factors=observed_factors,
+        endogenous_factors=endogenous_factors,
     )
-    for period_result, prev_cond_dist in zip(
-        result.period_results,
-        prev_cond_dists,
-        strict=False,
-    ):
+
+    full_free_block: _FreeVcovBlock | None
+    if method == "block_diagonal":
+        period_inference = _compute_block_diagonal_sandwich(result, metas)
+        full_free_block = None
+    elif method == "full_sandwich":
+        period_inference, full_free_block = _compute_full_sandwich(result, metas)
+    else:
+        msg = f"Unknown method: {method!r}"
+        raise ValueError(msg)
+
+    standard_errors, vcov = _assemble_full_vcov(
+        result.all_params,
+        period_inference,
+        full_free_block=full_free_block,
+    )
+
+    return AFInferenceResult(
+        standard_errors=standard_errors,
+        vcov=vcov,
+        period_results=tuple(period_inference),
+        method=method,
+    )
+
+
+@dataclass(frozen=True)
+class _FreeVcovBlock:
+    """Internal carrier for the full cross-period free-parameter vcov."""
+
+    free_param_locs: tuple[tuple[Any, ...], ...]
+    vcov: Array
+
+
+# ---------------------------------------------------------------------------
+# Period metadata: all the static info we need for both sandwich modes.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _PeriodMeta:
+    """Precomputed static metadata for one period's likelihood.
+
+    Pure-Python dataclass; JAX arrays live in ``loglike_kwargs`` and
+    ``propagation``.
+    """
+
+    period: int
+    is_initial: bool
+    slice_start: int
+    slice_stop: int
+    params_df: pd.DataFrame
+    loglike_kwargs: Mapping[str, Any]
+    """Keyword arguments forwarded to ``af_per_obs_loglike_initial`` (if
+    ``is_initial``) or ``af_per_obs_loglike_transition`` otherwise.
+    """
+    parse_kwargs: Mapping[str, Any]
+    """Keyword arguments forwarded to ``_parse_initial_params`` or
+    ``_parse_transition_params`` respectively. Used by the Phase 2 chain.
+    """
+    n_components: int
+    n_factors_joint: int
+    """Joint factor count in the initial mixture (state_latent + observed).
+    Only meaningful for the initial period; zero otherwise.
+    """
+    n_state: int
+    """State-factor count (``n_state_latent`` in the initial period;
+    ``n_state_factors`` in transition periods).
+    """
+    n_endog: int
+    n_shock: int
+    n_observed_factors: int
+    state_factor_indices_in_joint: tuple[int, ...]
+    """Integer positions within the joint factor vector at which state
+    factors live (the complement is observed factors). Used to marginalise
+    the joint cond-dist to its state-factor sub-block.
+    """
+    propagation: Mapping[str, Any] = field(default_factory=dict)
+    """Extra JAX-pure bits for propagation of the conditional distribution
+    through this period's transition. Only populated for transition
+    periods. Keys: ``state_nodes``, ``state_weights``,
+    ``combined_transition``, ``obs_factor_values``.
+    """
+
+
+def _build_period_metas(
+    *,
+    result: AFEstimationResult,
+    period_data: dict[int, dict[str, Array]],
+    model_spec: Any,  # noqa: ANN401
+    processed_model: Any,  # noqa: ANN401
+    af_options: AFEstimationOptions,
+    observed_factors: tuple[str, ...],
+    endogenous_factors: tuple[str, ...],
+) -> tuple[_PeriodMeta, ...]:
+    """Build per-period metadata objects for both inference modes."""
+    metas: list[_PeriodMeta] = []
+    offset = 0
+    for period_result in result.period_results:
         t = period_result.period
+        params_df = period_result.params
+        length = len(params_df)
+
         if t == 0:
-            inference = _inference_for_initial_period(
-                period_result_params=period_result.params,
+            meta = _build_initial_period_meta(
+                period_result_params=params_df,
+                slice_start=offset,
+                slice_stop=offset + length,
                 model_spec=model_spec,
                 processed_model=processed_model,
                 af_options=af_options,
@@ -191,11 +319,13 @@ def compute_af_standard_errors(
                 observed_factors=observed_factors,
             )
         else:
-            assert prev_cond_dist is not None  # noqa: S101
             prev_period_params = result.period_results[t - 1].params
-            inference = _inference_for_transition_period(
+            prev_cond_dist = result.conditional_distributions[t - 1]
+            meta = _build_transition_period_meta(
                 period=t,
-                period_result_params=period_result.params,
+                period_result_params=params_df,
+                slice_start=offset,
+                slice_stop=offset + length,
                 prev_period_params=prev_period_params,
                 prev_cond_dist=prev_cond_dist,
                 model_spec=model_spec,
@@ -206,30 +336,22 @@ def compute_af_standard_errors(
                 endogenous_factors=endogenous_factors,
                 observed_factors=observed_factors,
             )
-        period_inference.append(inference)
-
-    standard_errors, vcov = _assemble_full_vcov(
-        result.all_params,
-        period_inference,
-    )
-
-    return AFInferenceResult(
-        standard_errors=standard_errors,
-        vcov=vcov,
-        period_results=tuple(period_inference),
-    )
+        metas.append(meta)
+        offset += length
+    return tuple(metas)
 
 
-def _inference_for_initial_period(
+def _build_initial_period_meta(
     *,
     period_result_params: pd.DataFrame,
+    slice_start: int,
+    slice_stop: int,
     model_spec: Any,  # noqa: ANN401
     processed_model: Any,  # noqa: ANN401
     af_options: AFEstimationOptions,
     data_at_period: Mapping[str, Array],
     observed_factors: tuple[str, ...],
-) -> AFPeriodInferenceResult:
-    """Compute per-period sandwich for the initial period."""
+) -> _PeriodMeta:
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
     n_components = af_options.n_mixture_components
@@ -241,6 +363,7 @@ def _inference_for_initial_period(
     n_state_latent = len(state_latent_factors)
     n_obs_factors = len(observed_factors)
     n_joint = n_state_latent + n_obs_factors
+    state_factor_indices_in_joint = tuple(range(n_state_latent))
 
     measurements_p0 = get_measurements_per_factor(model_spec.factors, period=0)
     measurements_p0_filtered = {
@@ -261,8 +384,7 @@ def _inference_for_initial_period(
     )
 
     nodes, weights = create_halton_nodes_and_weights(
-        af_options.n_halton_points,
-        n_state_latent,
+        af_options.n_halton_points, n_state_latent
     )
 
     obs_values = data_at_period.get(
@@ -296,18 +418,38 @@ def _inference_for_initial_period(
         "n_obs_per_batch": n_obs_per_batch,
     }
 
-    return _sandwich_from_loglike(
-        params_df=period_result_params,
+    parse_kwargs = {
+        "n_factors": n_joint,
+        "n_mixture_components": n_components,
+        "n_measures": len(all_measures),
+        "n_controls": len(controls_names),
+    }
+
+    return _PeriodMeta(
         period=0,
-        per_obs_loglike_fn=af_per_obs_loglike_initial,
+        is_initial=True,
+        slice_start=slice_start,
+        slice_stop=slice_stop,
+        params_df=period_result_params,
         loglike_kwargs=loglike_kwargs,
+        parse_kwargs=parse_kwargs,
+        n_components=n_components,
+        n_factors_joint=n_joint,
+        n_state=n_state_latent,
+        n_endog=0,
+        n_shock=0,
+        n_observed_factors=n_obs_factors,
+        state_factor_indices_in_joint=state_factor_indices_in_joint,
+        propagation={},
     )
 
 
-def _inference_for_transition_period(
+def _build_transition_period_meta(
     *,
     period: int,
     period_result_params: pd.DataFrame,
+    slice_start: int,
+    slice_stop: int,
     prev_period_params: pd.DataFrame,
     prev_cond_dist: ConditionalDistribution,
     model_spec: Any,  # noqa: ANN401
@@ -317,8 +459,7 @@ def _inference_for_transition_period(
     prev_data_at_period: Mapping[str, Array],
     endogenous_factors: tuple[str, ...],
     observed_factors: tuple[str, ...],
-) -> AFPeriodInferenceResult:
-    """Compute per-period sandwich for a transition period."""
+) -> _PeriodMeta:
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
     transition_info = processed_model.transition_info
@@ -340,8 +481,7 @@ def _inference_for_transition_period(
 
     joint_dim = n_state + n_shock + n_endog
     joint_nodes, joint_weights = create_halton_nodes_and_weights(
-        af_options.n_halton_points,
-        joint_dim,
+        af_options.n_halton_points, joint_dim
     )
 
     measurements = data_at_period["measurements"]
@@ -360,14 +500,14 @@ def _inference_for_transition_period(
     param_counts = tuple(len(transition_info.param_names[f]) for f in state_factors)
 
     def combined_transition(full_states: Array, params: Array) -> Array:
-        result = jnp.zeros(n_state)
+        out = jnp.zeros(n_state)
         p_idx = 0
         for i in range(n_state):
             n_p = param_counts[i]
             factor_params = params[p_idx : p_idx + n_p]
-            result = result.at[i].set(raw_funcs[i](full_states, factor_params))  # noqa: PD008
+            out = out.at[i].set(raw_funcs[i](full_states, factor_params))  # noqa: PD008
             p_idx += n_p
-        return result
+        return out
 
     n_inv_eq_params_per = 1 + n_state + len(observed_factors) if n_endog > 0 else 0
     total_n_inv_params = n_endog * n_inv_eq_params_per
@@ -422,51 +562,115 @@ def _inference_for_transition_period(
         "n_obs_per_batch": n_obs_per_batch,
     }
 
-    return _sandwich_from_loglike(
-        params_df=period_result_params,
+    parse_kwargs = {
+        "n_state_factors": n_state,
+        "n_endogenous_factors": n_endog,
+        "n_measures": len(all_measures),
+        "n_controls": len(controls_names),
+        "total_n_transition_params": total_n_transition_params,
+        "total_n_inv_params": total_n_inv_params,
+        "n_inv_eq_params_per": n_inv_eq_params_per,
+        "n_shock_factors": n_shock,
+    }
+
+    # For propagating the cond-dist forward to the next period: marginal
+    # state grid (same convention as ``_update_conditional_distribution``).
+    propagation_nodes, propagation_weights = create_halton_nodes_and_weights(
+        af_options.n_halton_points, n_state
+    )
+
+    propagation = {
+        "state_nodes": propagation_nodes,
+        "state_weights": propagation_weights,
+        "combined_transition": combined_transition,
+        "obs_factor_values": obs_factor_values,
+    }
+
+    return _PeriodMeta(
         period=period,
-        per_obs_loglike_fn=af_per_obs_loglike_transition,
+        is_initial=False,
+        slice_start=slice_start,
+        slice_stop=slice_stop,
+        params_df=period_result_params,
         loglike_kwargs=loglike_kwargs,
+        parse_kwargs=parse_kwargs,
+        n_components=len(prev_cond_dist.components),
+        n_factors_joint=0,
+        n_state=n_state,
+        n_endog=n_endog,
+        n_shock=n_shock,
+        n_observed_factors=len(observed_factors),
+        state_factor_indices_in_joint=tuple(range(n_state)),
+        propagation=propagation,
     )
 
 
-def _sandwich_from_loglike(
-    *,
-    params_df: pd.DataFrame,
-    period: int,
-    per_obs_loglike_fn: Callable[..., Array],
-    loglike_kwargs: Mapping[str, Any],
-) -> AFPeriodInferenceResult:
-    """Compute the block-diagonal sandwich for a single period.
+# ---------------------------------------------------------------------------
+# Free-parameter bookkeeping.
+# ---------------------------------------------------------------------------
 
-    Identify free (unpinned) parameters from ``params_df`` via the same
-    logic used at estimation time, then compute the per-obs score
-    matrix by ``jax.jacfwd``, the Hessian of the negative-mean
-    log-likelihood, and the sandwich ``V = A^{-1} Omega A^{-T} / n``.
-    """
-    _full_params_df, fixed_constraints = build_optimagic_inputs(params_df, None)
+
+def _free_positions_for_period(
+    params_df: pd.DataFrame,
+) -> tuple[list[int], list[tuple[Any, ...]]]:
+    """Return positions and locs of free (unpinned, non-simplex) params."""
+    _, fixed_constraints = build_optimagic_inputs(params_df, None)
     fixed_locs: set[Any] = set()
     for constraint in fixed_constraints:
         if isinstance(constraint, FixedConstraintWithValue):
             loc = constraint.loc
             fixed_locs.add(tuple(loc) if isinstance(loc, tuple) else loc)
-    # Simplex-constrained parameters (mixture_weights) cannot be treated
-    # as unconstrained for the sandwich; their Hessian along the simplex
-    # direction is degenerate. Drop them from the free set in Phase 1;
-    # their SE is reported as zero. A delta-method treatment on
-    # reparameterized log-odds is a follow-up.
-    all_locs = list(params_df.index)
-    free_positions = [
-        i
-        for i, loc in enumerate(all_locs)
-        if tuple(loc) not in fixed_locs and loc[0] != "mixture_weights"
-    ]
-    free_positions_array = jnp.array(free_positions, dtype=jnp.int32)
 
-    flat_values = jnp.array(params_df["value"].to_numpy())
+    all_locs = list(params_df.index)
+    positions: list[int] = []
+    locs: list[tuple[Any, ...]] = []
+    for i, loc in enumerate(all_locs):
+        loc_t = tuple(loc)
+        if loc_t in fixed_locs or loc[0] == "mixture_weights":
+            continue
+        positions.append(i)
+        locs.append(loc_t)
+    return positions, locs
+
+
+# ---------------------------------------------------------------------------
+# Block-diagonal sandwich (Phase 1 behaviour).
+# ---------------------------------------------------------------------------
+
+
+def _compute_block_diagonal_sandwich(
+    _result: AFEstimationResult,
+    metas: tuple[_PeriodMeta, ...],
+) -> list[AFPeriodInferenceResult]:
+    """Compute per-period block-diagonal sandwich ignoring cross-period terms."""
+    results: list[AFPeriodInferenceResult] = []
+    for meta in metas:
+        per_obs_fn = (
+            af_per_obs_loglike_initial
+            if meta.is_initial
+            else af_per_obs_loglike_transition
+        )
+        inference = _block_diagonal_sandwich_single(
+            meta=meta,
+            per_obs_loglike_fn=per_obs_fn,
+        )
+        results.append(inference)
+    return results
+
+
+def _block_diagonal_sandwich_single(
+    *,
+    meta: _PeriodMeta,
+    per_obs_loglike_fn: Callable[..., Array],
+) -> AFPeriodInferenceResult:
+    """Compute V_t = A_tt^{-1} Omega_tt A_tt^{-T} / n for one period only."""
+    positions, locs = _free_positions_for_period(meta.params_df)
+    free_positions_array = jnp.array(positions, dtype=jnp.int32)
+    flat_values = jnp.array(meta.params_df["value"].to_numpy())
+    kwargs = dict(meta.loglike_kwargs)
 
     def per_obs_loglike_full(flat_params: Array) -> Array:
-        return per_obs_loglike_fn(flat_params, **loglike_kwargs)
+        return per_obs_loglike_fn(flat_params, **kwargs)
 
     def neg_mean_loglike_full(flat_params: Array) -> Array:
         return -jnp.mean(per_obs_loglike_full(flat_params))
@@ -476,16 +680,14 @@ def _sandwich_from_loglike(
 
     score_matrix = jac_full[:, free_positions_array]
     information_matrix = hess_full[free_positions_array][:, free_positions_array]
-
     n_obs = int(score_matrix.shape[0])
     omega = score_matrix.T @ score_matrix / n_obs
-
     a_inv = jnp.linalg.inv(information_matrix)
     vcov_period = a_inv @ omega @ a_inv.T / n_obs
 
     return AFPeriodInferenceResult(
-        period=period,
-        free_param_locs=tuple(tuple(all_locs[i]) for i in free_positions),
+        period=meta.period,
+        free_param_locs=tuple(locs),
         score_matrix=score_matrix,
         information_matrix=information_matrix,
         score_outer_product=omega,
@@ -493,18 +695,327 @@ def _sandwich_from_loglike(
     )
 
 
+# ---------------------------------------------------------------------------
+# Full cross-period sandwich (Phase 2).
+#
+# Reconstruct ``prev_distribution`` and ``prev_meas_info`` as JAX-pure
+# functions of a single concatenated ``flat_super`` parameter vector, so
+# ``jax.jacfwd`` captures the full chain of dependencies.
+# ---------------------------------------------------------------------------
+
+
+def _build_initial_state_cond_dist_jax(
+    flat_params_0: Array,
+    meta: _PeriodMeta,
+) -> tuple[Array, Array, Array]:
+    """JAX-pure state-factor marginal of the initial conditional dist.
+
+    Returns ``(state_means, state_chols, mixture_weights)``.
+    """
+    parsed = _parse_initial_params(
+        flat_params_0,
+        meta.parse_kwargs["n_factors"],
+        meta.parse_kwargs["n_mixture_components"],
+        meta.parse_kwargs["n_measures"],
+        meta.parse_kwargs["n_controls"],
+    )
+    joint_means = parsed["mixture_means"]
+    joint_chols = parsed["mixture_chol_covs"]
+    mixture_weights = parsed["mixture_weights"]
+
+    if meta.n_state == meta.n_factors_joint:
+        return joint_means, joint_chols, mixture_weights
+
+    state_idx = jnp.asarray(meta.state_factor_indices_in_joint, dtype=jnp.int32)
+    joint_covs = joint_chols @ jnp.swapaxes(joint_chols, -1, -2)
+    sub_covs = joint_covs[:, state_idx[:, None], state_idx[None, :]]
+    state_chols = jnp.linalg.cholesky(sub_covs + 1e-10 * jnp.eye(meta.n_state))
+    state_means = joint_means[:, state_idx]
+    return state_means, state_chols, mixture_weights
+
+
+def _propagate_cond_dist_jax(
+    prev_means: Array,
+    prev_chols: Array,
+    flat_params_t: Array,
+    meta: _PeriodMeta,
+) -> tuple[Array, Array]:
+    """Propagate a mixture through period ``t``'s transition.
+
+    Mirrors the estimation-time logic of ``_update_conditional_distribution``
+    and ``_compute_mean_investment`` but operates purely on JAX arrays.
+    """
+    parsed = _parse_transition_params(
+        flat_params_t,
+        meta.parse_kwargs["n_state_factors"],
+        meta.parse_kwargs["n_endogenous_factors"],
+        meta.parse_kwargs["n_measures"],
+        meta.parse_kwargs["n_controls"],
+        meta.parse_kwargs["total_n_transition_params"],
+        meta.parse_kwargs["total_n_inv_params"],
+        meta.parse_kwargs["n_inv_eq_params_per"],
+        n_shock_factors=meta.parse_kwargs["n_shock_factors"],
+    )
+    trans_params = parsed["transition_params"]
+    shock_sds = parsed["shock_sds"]
+    inv_eq_params = parsed["inv_eq_params"]
+
+    n_endog = meta.n_endog
+    n_state = meta.n_state
+    n_obs_factors = meta.n_observed_factors
+    n_per = 1 + n_state + n_obs_factors if n_endog > 0 else 0
+
+    obs_values = meta.propagation["obs_factor_values"]
+    obs_mean = (
+        jnp.mean(obs_values, axis=0)
+        if obs_values.shape[0] > 0
+        else jnp.zeros(n_obs_factors)
+    )
+
+    prior_mean_first = prev_means[0]
+    if n_endog == 0:
+        mean_inv = jnp.zeros(0)
+    else:
+        beta_matrix = inv_eq_params.reshape(n_endog, n_per)
+        state_part = beta_matrix[:, 1 : 1 + n_state] @ prior_mean_first
+        obs_part = (
+            beta_matrix[:, 1 + n_state :] @ obs_mean
+            if n_obs_factors > 0
+            else jnp.zeros(n_endog)
+        )
+        mean_inv = beta_matrix[:, 0] + state_part + obs_part
+
+    combined_transition = meta.propagation["combined_transition"]
+    state_nodes = meta.propagation["state_nodes"]
+    state_weights = meta.propagation["state_weights"]
+
+    def state_only_transition(state_vals: Array, trans_p: Array) -> Array:
+        full = jnp.concatenate([state_vals, mean_inv, obs_mean])
+        return combined_transition(full, trans_p)
+
+    def per_component(mean_k: Array, chol_k: Array) -> tuple[Array, Array]:
+        theta_samples = mean_k[None, :] + state_nodes @ chol_k.T
+        propagated = jax.vmap(state_only_transition, in_axes=(0, None))(
+            theta_samples, trans_params
+        )
+        new_mean = jnp.sum(state_weights[:, None] * propagated, axis=0)
+        centered = propagated - new_mean[None, :]
+        new_cov = jnp.einsum(
+            "q,qi,qj->ij", state_weights, centered, centered
+        ) + jnp.diag(shock_sds**2)
+        new_chol = jnp.linalg.cholesky(new_cov + 1e-8 * jnp.eye(n_state))
+        return new_mean, new_chol
+
+    new_means, new_chols = jax.vmap(per_component)(prev_means, prev_chols)
+    return new_means, new_chols
+
+
+def _extract_prev_meas_info_jax(
+    flat_params_prev: Array,
+    meta: _PeriodMeta,
+) -> dict[str, Array]:
+    """JAX-pure extraction of ``prev_meas_info`` from a period's flat params."""
+    if meta.is_initial:
+        parsed = _parse_initial_params(
+            flat_params_prev,
+            meta.parse_kwargs["n_factors"],
+            meta.parse_kwargs["n_mixture_components"],
+            meta.parse_kwargs["n_measures"],
+            meta.parse_kwargs["n_controls"],
+        )
+        return {
+            "loadings_flat": parsed["loadings"],
+            "control_params": parsed["control_params"],
+            "meas_sds": parsed["meas_sds"],
+        }
+    parsed = _parse_transition_params(
+        flat_params_prev,
+        meta.parse_kwargs["n_state_factors"],
+        meta.parse_kwargs["n_endogenous_factors"],
+        meta.parse_kwargs["n_measures"],
+        meta.parse_kwargs["n_controls"],
+        meta.parse_kwargs["total_n_transition_params"],
+        meta.parse_kwargs["total_n_inv_params"],
+        meta.parse_kwargs["n_inv_eq_params_per"],
+        n_shock_factors=meta.parse_kwargs["n_shock_factors"],
+    )
+    return {
+        "loadings_flat": parsed["loadings_flat"],
+        "control_params": parsed["control_params"],
+        "meas_sds": parsed["meas_sds"],
+    }
+
+
+def _build_prev_dist_arrays(
+    flat_super: Array,
+    target_t: int,
+    metas: tuple[_PeriodMeta, ...],
+) -> dict[str, Array]:
+    """Chain period 0 -> ... -> t-1 to produce prev_dist_arrays for period t."""
+    meta0 = metas[0]
+    flat_params_0 = flat_super[meta0.slice_start : meta0.slice_stop]
+    state_means, state_chols, mixture_weights = _build_initial_state_cond_dist_jax(
+        flat_params_0, meta0
+    )
+
+    for s in range(1, target_t):
+        meta_s = metas[s]
+        flat_params_s = flat_super[meta_s.slice_start : meta_s.slice_stop]
+        state_means, state_chols = _propagate_cond_dist_jax(
+            state_means, state_chols, flat_params_s, meta_s
+        )
+
+    meta_target = metas[target_t]
+    n_obs = int(meta_target.loglike_kwargs["measurements"].shape[0])
+    n_components = metas[0].n_components
+    cond_weights = jnp.broadcast_to(mixture_weights[None, :], (n_obs, n_components))
+    return {
+        "cond_weights": cond_weights,
+        "means": state_means,
+        "chol_covs": state_chols,
+    }
+
+
+def _period_t_per_obs_loglike_full(
+    flat_super: Array,
+    t: int,
+    metas: tuple[_PeriodMeta, ...],
+) -> Array:
+    """Per-obs loglike for period ``t`` as a function of the full flat vector."""
+    meta_t = metas[t]
+    flat_params_t = flat_super[meta_t.slice_start : meta_t.slice_stop]
+    if meta_t.is_initial:
+        return af_per_obs_loglike_initial(flat_params_t, **meta_t.loglike_kwargs)
+
+    prev_dist_arrays = _build_prev_dist_arrays(flat_super, t, metas)
+    meta_prev = metas[t - 1]
+    flat_params_prev = flat_super[meta_prev.slice_start : meta_prev.slice_stop]
+    prev_meas = _extract_prev_meas_info_jax(flat_params_prev, meta_prev)
+
+    kwargs = dict(meta_t.loglike_kwargs)
+    kwargs["prev_distribution"] = prev_dist_arrays
+    kwargs["prev_loadings_flat"] = prev_meas["loadings_flat"]
+    kwargs["prev_control_params"] = prev_meas["control_params"]
+    kwargs["prev_meas_sds"] = prev_meas["meas_sds"]
+    return af_per_obs_loglike_transition(flat_params_t, **kwargs)
+
+
+def _compute_full_sandwich(
+    result: AFEstimationResult,
+    metas: tuple[_PeriodMeta, ...],
+) -> tuple[list[AFPeriodInferenceResult], _FreeVcovBlock]:
+    """Compute the full cross-period Newey-McFadden sandwich."""
+    # Concatenated estimated parameter vector.
+    flat_super = jnp.concatenate(
+        [jnp.array(pr.params["value"].to_numpy()) for pr in result.period_results]
+    )
+    p_total = int(flat_super.shape[0])
+
+    # Free-positions global to flat_super, plus per-period own-param positions.
+    free_positions_global: list[int] = []
+    period_own_global: list[jnp.ndarray] = []
+    period_locs: list[tuple[tuple[Any, ...], ...]] = []
+    for meta in metas:
+        positions, locs = _free_positions_for_period(meta.params_df)
+        global_positions = [meta.slice_start + p for p in positions]
+        free_positions_global.extend(global_positions)
+        period_own_global.append(jnp.array(global_positions, dtype=jnp.int32))
+        period_locs.append(tuple(locs))
+    free_positions_array = jnp.array(free_positions_global, dtype=jnp.int32)
+
+    # Per-period full Jacobians and own-period score blocks.
+    score_matrices_full: list[Array] = []  # (n_obs_t, p_total) each
+    hessian_blocks_full: list[Array] = []  # (p_total, p_total) each
+
+    for t, _ in enumerate(metas):
+
+        def _per_obs_t(fs: Array, t_fixed: int = t) -> Array:
+            return _period_t_per_obs_loglike_full(fs, t_fixed, metas)
+
+        def _neg_mean_t(fs: Array, t_fixed: int = t) -> Array:
+            return -jnp.mean(_per_obs_t(fs, t_fixed))
+
+        score_matrices_full.append(jax.jacfwd(_per_obs_t)(flat_super))
+        hessian_blocks_full.append(jax.hessian(_neg_mean_t)(flat_super))
+
+    # Assemble Omega: stacked per-individual score has non-zero entries only
+    # in each period's own-parameter columns. Accumulate
+    # G = sum_t indicator_cols * S_t, then Omega = G.T G / n_obs.
+    # Panel is assumed balanced; we use the n_obs of period 0.
+    n_obs = int(metas[0].loglike_kwargs["measurements"].shape[0])
+    stacked_scores = jnp.zeros((n_obs, p_total))
+    for t, own_idx in enumerate(period_own_global):
+        stacked_scores = stacked_scores.at[:, own_idx].add(  # noqa: PD008
+            score_matrices_full[t][:, own_idx]
+        )
+    omega_full = stacked_scores.T @ stacked_scores / n_obs
+
+    # Assemble A: row-block t gets the Hessian's own-param rows.
+    a_full = jnp.zeros((p_total, p_total))
+    for t, own_idx in enumerate(period_own_global):
+        a_full = a_full.at[own_idx, :].set(  # noqa: PD008
+            hessian_blocks_full[t][own_idx, :]
+        )
+
+    # Restrict to free positions only.
+    omega_free = omega_full[free_positions_array][:, free_positions_array]
+    a_free = a_full[free_positions_array][:, free_positions_array]
+
+    a_inv = jnp.linalg.inv(a_free)
+    v_free = a_inv @ omega_free @ a_inv.T / n_obs
+
+    # Build per-period inference results, restoring the block-diagonal
+    # components that users commonly inspect.
+    results: list[AFPeriodInferenceResult] = []
+    cumulative_own_in_free = 0
+    v_free_np = np.array(v_free)
+    stacked_np = np.array(stacked_scores)
+    a_full_np = np.array(a_full)
+    for t, meta in enumerate(metas):
+        own_global = np.array(period_own_global[t])
+        n_own = int(own_global.shape[0])
+        # Where are these own params in the free array?
+        own_in_free_slice = slice(
+            cumulative_own_in_free, cumulative_own_in_free + n_own
+        )
+        cumulative_own_in_free += n_own
+        vcov_block = v_free_np[own_in_free_slice, own_in_free_slice]
+        score_block = stacked_np[:, own_global]
+        info_block = a_full_np[np.ix_(own_global, own_global)]
+        omega_block = score_block.T @ score_block / n_obs
+        results.append(
+            AFPeriodInferenceResult(
+                period=meta.period,
+                free_param_locs=period_locs[t],
+                score_matrix=jnp.asarray(score_block),
+                information_matrix=jnp.asarray(info_block),
+                score_outer_product=jnp.asarray(omega_block),
+                vcov=jnp.asarray(vcov_block),
+            )
+        )
+
+    full_free_block = _FreeVcovBlock(
+        free_param_locs=tuple(loc for locs in period_locs for loc in locs),
+        vcov=v_free,
+    )
+    return results, full_free_block
+
+
+# ---------------------------------------------------------------------------
+# Assembly back onto the params MultiIndex.
+# ---------------------------------------------------------------------------
+
+
 def _assemble_full_vcov(
     all_params: pd.DataFrame,
     period_inference: list[AFPeriodInferenceResult],
+    full_free_block: _FreeVcovBlock | None = None,
 ) -> tuple[pd.Series, pd.DataFrame]:
-    """Assemble per-period variance-covariance blocks onto the full params index.
+    """Assemble per-period (and possibly full cross-period) vcov onto params index.
 
-    Returns:
-        Tuple ``(standard_errors, vcov)``. ``standard_errors`` is a
-        Series indexed by ``all_params.index``; fixed entries are zero.
-        ``vcov`` is a square DataFrame with the same index on rows and
-        columns.
-
+    When ``full_free_block`` is provided, the cross-period free-parameter
+    vcov is written in first (so off-diagonal entries come from the full
+    sandwich). Otherwise the per-period block-diagonal entries are used.
     """
     index = all_params.index
     size = len(index)
@@ -512,11 +1023,17 @@ def _assemble_full_vcov(
     vcov_values = np.zeros((size, size))
     pos_lookup = {tuple(loc): i for i, loc in enumerate(index)}
 
-    for period_res in period_inference:
-        block_vcov = np.array(period_res.vcov)
-        positions = [pos_lookup[loc] for loc in period_res.free_param_locs]
+    if full_free_block is not None:
+        block_vcov = np.array(full_free_block.vcov)
+        positions = [pos_lookup[loc] for loc in full_free_block.free_param_locs]
         positions_arr = np.array(positions, dtype=np.int64)
         vcov_values[positions_arr[:, None], positions_arr[None, :]] = block_vcov
+    else:
+        for period_res in period_inference:
+            block_vcov = np.array(period_res.vcov)
+            positions = [pos_lookup[loc] for loc in period_res.free_param_locs]
+            positions_arr = np.array(positions, dtype=np.int64)
+            vcov_values[positions_arr[:, None], positions_arr[None, :]] = block_vcov
 
     standard_errors = pd.Series(
         np.sqrt(np.clip(np.diag(vcov_values), 0.0, None)),

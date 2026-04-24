@@ -106,36 +106,41 @@ the fact.
 
 ## Scope
 
-### Phase 1 (this PR): Block-diagonal sandwich
-
-Ship the block-diagonal version of the sequential sandwich:
+### Phase 1 (shipped): Block-diagonal sandwich
 
 - For each period `t` independently, compute
   `V_t = A_tt^{-1} Omega_tt A_tt^{-T} / n` using the own-period scores
   and own-period Hessian. This is the Newey-McFadden formula restricted
   to its diagonal blocks.
 - Correct handling of `fixed_params` (zero SE, zero covariance rows).
-- Return the per-period Jacobian matrices (`S_t`, one per period, with
-  columns only for `theta_t`). These are exactly the raw ingredients for
-  the block-diagonal version; Phase 2 only adds cross-period Jacobian
-  columns to them. No wasted work.
-- Prominently document that period-`t` SEs for `t >= 1` are a lower
-  bound on the true asymptotic SE, because they do not propagate
-  plug-in uncertainty from `theta_{<t}`.
+- Document that period-`t` SEs for `t >= 1` are a lower bound on the
+  true asymptotic SE, because they do not propagate plug-in uncertainty
+  from `theta_{<t}`.
 
-### Phase 2 (follow-up): Full cross-period chain
+Exposed via `compute_af_standard_errors(..., method="block_diagonal")`.
 
-Required to get asymptotically-correct SEs for later periods. Needs:
+### Phase 2 (shipped): Full cross-period chain
 
-- JAX-pure reconstruction of `prev_distribution` from `flat_params` via
-  a differentiable chain: `theta_0 -> cond_dist_0 -> ... -> cond_dist_{t-1}`.
-  This means mirroring `_extract_conditional_distribution` and
-  `_update_conditional_distribution` as pure functions of flat arrays
-  (no pandas `.loc` access).
-- JAX-pure reconstruction of `prev_meas_info` (control params, loadings,
-  SDs from period `t-1`).
-- Cross-period score columns in `S_t` (non-zero for `theta_s`, `s < t`)
-  and cross-period Hessian columns in `A_tt` row-block.
+Default mode, `method="full_sandwich"`.
+
+- JAX-pure reconstruction of `prev_distribution` from a concatenated
+  flat super-parameter vector: replays the estimation chain
+  `theta_0 -> cond_dist_0 -> propagate -> cond_dist_1 -> ... ->
+  cond_dist_{t-1}` using the existing `_parse_initial_params` and
+  `_parse_transition_params` parsers plus a pure-JAX mirror of
+  `_update_conditional_distribution` and `_compute_mean_investment`.
+- JAX-pure reconstruction of `prev_meas_info` (loadings, control
+  params, meas SDs from period `t-1`) directly from the flat params.
+- `S_t = jax.jacfwd(period_t_per_obs_loglike_full)(flat_super)` has
+  dense columns across all earlier periods, capturing the plug-in
+  dependence.
+- Assemble block-lower-triangular `A` from the row blocks
+  `jax.hessian(neg_mean_loglike_t)(flat_super)[own_idx_t, :]` and the
+  stacked per-individual score matrix `G` from own-param columns, then
+  solve `V = A^{-1} Omega A^{-T} / n`.
+- Diagonal per-period blocks in `AFPeriodInferenceResult.vcov`;
+  off-diagonal cross-period entries are written into `vcov` by a
+  `_FreeVcovBlock` carrier.
 
 ### Out (not planned)
 
@@ -146,6 +151,8 @@ Required to get asymptotically-correct SEs for later periods. Needs:
 - Unbalanced panel — current implementation assumes each period has the
   same number of observations, aligned by individual. Extend to NaN masking
   if needed.
+- Delta-method SEs for simplex-constrained `mixture_weights` — currently
+  SE=0; would need reparameterization to log-odds.
 
 ## Verification
 
