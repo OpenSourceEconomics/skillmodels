@@ -87,56 +87,75 @@ def fitted_result() -> tuple[AFInferenceResult, pd.DataFrame]:
 
 
 @pytest.mark.end_to_end
-def test_af_inference_returns_expected_dataclass(
+def test_af_inference_result_is_inference_dataclass(
     fitted_result: tuple[AFInferenceResult, pd.DataFrame],
 ) -> None:
     inference, _ = fitted_result
     assert isinstance(inference, AFInferenceResult)
+
+
+@pytest.mark.end_to_end
+def test_af_inference_period_results_are_period_dataclass(
+    fitted_result: tuple[AFInferenceResult, pd.DataFrame],
+) -> None:
+    inference, _ = fitted_result
     assert all(isinstance(p, AFPeriodInferenceResult) for p in inference.period_results)
 
 
 @pytest.mark.end_to_end
-def test_af_inference_standard_errors_align_with_params(
+def test_af_inference_standard_errors_index_matches_params(
     fitted_result: tuple[AFInferenceResult, pd.DataFrame],
 ) -> None:
     inference, all_params = fitted_result
     assert inference.standard_errors.index.equals(all_params.index)
+
+
+@pytest.mark.end_to_end
+def test_af_inference_vcov_row_index_matches_params(
+    fitted_result: tuple[AFInferenceResult, pd.DataFrame],
+) -> None:
+    inference, all_params = fitted_result
     assert inference.vcov.index.equals(all_params.index)
+
+
+@pytest.mark.end_to_end
+def test_af_inference_vcov_column_index_matches_params(
+    fitted_result: tuple[AFInferenceResult, pd.DataFrame],
+) -> None:
+    inference, all_params = fitted_result
     assert inference.vcov.columns.equals(all_params.index)
 
 
 @pytest.mark.end_to_end
-def test_af_inference_fixed_entries_have_zero_se(
+def test_af_inference_pinned_loading_has_zero_se(
     fitted_result: tuple[AFInferenceResult, pd.DataFrame],
 ) -> None:
-    """Normalization pins (e.g. loadings[m1, skill] == 1) must have SE = 0."""
-    inference, all_params = fitted_result
-    se = inference.standard_errors
-
-    pinned_loading = ("loadings", 0, "m1", "skill")
-    assert pinned_loading in all_params.index
-    assert se.loc[pinned_loading] == 0.0
-
-    pinned_intercept = ("controls", 0, "m1", "constant")
-    assert pinned_intercept in all_params.index
-    assert se.loc[pinned_intercept] == 0.0
+    inference, _ = fitted_result
+    assert inference.standard_errors.loc[("loadings", 0, "m1", "skill")] == 0.0
 
 
 @pytest.mark.end_to_end
-def test_af_inference_free_params_have_positive_se(
+def test_af_inference_pinned_intercept_has_zero_se(
     fitted_result: tuple[AFInferenceResult, pd.DataFrame],
 ) -> None:
-    """Free (unpinned) measurement parameters should have strictly positive SE."""
-    inference, all_params = fitted_result
-    se = inference.standard_errors
+    inference, _ = fitted_result
+    assert inference.standard_errors.loc[("controls", 0, "m1", "constant")] == 0.0
 
-    free_loading = ("loadings", 0, "m2", "skill")
-    assert free_loading in all_params.index
-    assert se.loc[free_loading] > 0.0
 
-    free_sd = ("meas_sds", 0, "m2", "-")
-    assert free_sd in all_params.index
-    assert se.loc[free_sd] > 0.0
+@pytest.mark.end_to_end
+def test_af_inference_free_loading_has_positive_se(
+    fitted_result: tuple[AFInferenceResult, pd.DataFrame],
+) -> None:
+    inference, _ = fitted_result
+    assert inference.standard_errors.loc[("loadings", 0, "m2", "skill")] > 0.0
+
+
+@pytest.mark.end_to_end
+def test_af_inference_free_meas_sd_has_positive_se(
+    fitted_result: tuple[AFInferenceResult, pd.DataFrame],
+) -> None:
+    inference, _ = fitted_result
+    assert inference.standard_errors.loc[("meas_sds", 0, "m2", "-")] > 0.0
 
 
 @pytest.mark.end_to_end
@@ -288,7 +307,7 @@ def test_af_inference_full_sandwich_has_nonzero_cross_period_covariance(
 
 
 @pytest.mark.end_to_end
-def test_af_inference_method_attribute(
+def test_af_inference_full_sandwich_method_attribute(
     both_methods: tuple[
         AFInferenceResult,
         AFInferenceResult,
@@ -296,8 +315,20 @@ def test_af_inference_method_attribute(
         tuple[pd.Index, ...],
     ],
 ) -> None:
-    inf_full, inf_block, _, _ = both_methods
+    inf_full, _, _, _ = both_methods
     assert inf_full.method == "full_sandwich"
+
+
+@pytest.mark.end_to_end
+def test_af_inference_block_diagonal_method_attribute(
+    both_methods: tuple[
+        AFInferenceResult,
+        AFInferenceResult,
+        pd.DataFrame,
+        tuple[pd.Index, ...],
+    ],
+) -> None:
+    _, inf_block, _, _ = both_methods
     assert inf_block.method == "block_diagonal"
 
 
@@ -314,4 +345,4 @@ def test_af_inference_unknown_method_raises() -> None:
     )
     fit = estimate_af(model_spec=model, data=data, af_options=af_opts)
     with pytest.raises(ValueError, match="Unknown method"):
-        compute_af_standard_errors(fit, data, af_opts, method="bogus")  # type: ignore[arg-type]
+        compute_af_standard_errors(fit, data, af_opts, method="bogus")  # ty: ignore[invalid-argument-type]

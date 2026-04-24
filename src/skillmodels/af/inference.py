@@ -28,10 +28,20 @@ Two computation modes:
 - ``method="block_diagonal"``: compute only the diagonal blocks
   ``V_t = A_tt^{-1} Omega_tt A_tt^{-T} / n_obs``. Cheaper, but SEs for
   periods ``t >= 1`` are a lower bound on the true asymptotic SE.
+
+Memory: the Hessian is computed via ``jax.hessian`` (forward-over-reverse).
+The ``n_obs_per_batch`` memory contract that ``_map_over_obs`` promises
+for a single reverse-mode pass does NOT bound the Hessian tape: the outer
+jacobian materialises the full gradient of length ``n_obs``, so peak
+memory scales with ``n_params * n_obs`` regardless of ``n_obs_per_batch``.
+For very large models the Hessian path may OOM where estimation did not;
+switch to ``method="block_diagonal"`` or reduce ``n_halton_points`` to
+mitigate.
 """
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, Literal
 
 import jax
@@ -68,7 +78,9 @@ from skillmodels.af.types import (
     ConditionalDistribution,
 )
 from skillmodels.constraints import FixedConstraintWithValue
+from skillmodels.model_spec import ModelSpec
 from skillmodels.process_model import process_model
+from skillmodels.types import ProcessedModel
 
 
 @dataclass(frozen=True)
@@ -256,11 +268,11 @@ class _PeriodMeta:
     slice_start: int
     slice_stop: int
     params_df: pd.DataFrame
-    loglike_kwargs: Mapping[str, Any]
+    loglike_kwargs: MappingProxyType[str, Any]
     """Keyword arguments forwarded to ``af_per_obs_loglike_initial`` (if
     ``is_initial``) or ``af_per_obs_loglike_transition`` otherwise.
     """
-    parse_kwargs: Mapping[str, Any]
+    parse_kwargs: MappingProxyType[str, Any]
     """Keyword arguments forwarded to ``_parse_initial_params`` or
     ``_parse_transition_params`` respectively. Used by the Phase 2 chain.
     """
@@ -281,7 +293,9 @@ class _PeriodMeta:
     factors live (the complement is observed factors). Used to marginalise
     the joint cond-dist to its state-factor sub-block.
     """
-    propagation: Mapping[str, Any] = field(default_factory=dict)
+    propagation: MappingProxyType[str, Any] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
     """Extra JAX-pure bits for propagation of the conditional distribution
     through this period's transition. Only populated for transition
     periods. Keys: ``state_nodes``, ``state_weights``,
@@ -293,8 +307,8 @@ def _build_period_metas(
     *,
     result: AFEstimationResult,
     period_data: dict[int, dict[str, Array]],
-    model_spec: Any,  # noqa: ANN401
-    processed_model: Any,  # noqa: ANN401
+    model_spec: ModelSpec,
+    processed_model: ProcessedModel,
     af_options: AFEstimationOptions,
     observed_factors: tuple[str, ...],
     endogenous_factors: tuple[str, ...],
@@ -346,8 +360,8 @@ def _build_initial_period_meta(
     period_result_params: pd.DataFrame,
     slice_start: int,
     slice_stop: int,
-    model_spec: Any,  # noqa: ANN401
-    processed_model: Any,  # noqa: ANN401
+    model_spec: ModelSpec,
+    processed_model: ProcessedModel,
     af_options: AFEstimationOptions,
     data_at_period: Mapping[str, Array],
     observed_factors: tuple[str, ...],
@@ -431,8 +445,8 @@ def _build_initial_period_meta(
         slice_start=slice_start,
         slice_stop=slice_stop,
         params_df=period_result_params,
-        loglike_kwargs=loglike_kwargs,
-        parse_kwargs=parse_kwargs,
+        loglike_kwargs=MappingProxyType(loglike_kwargs),
+        parse_kwargs=MappingProxyType(parse_kwargs),
         n_components=n_components,
         n_factors_joint=n_joint,
         n_state=n_state_latent,
@@ -440,7 +454,7 @@ def _build_initial_period_meta(
         n_shock=0,
         n_observed_factors=n_obs_factors,
         state_factor_indices_in_joint=state_factor_indices_in_joint,
-        propagation={},
+        propagation=MappingProxyType({}),
     )
 
 
@@ -452,8 +466,8 @@ def _build_transition_period_meta(
     slice_stop: int,
     prev_period_params: pd.DataFrame,
     prev_cond_dist: ConditionalDistribution,
-    model_spec: Any,  # noqa: ANN401
-    processed_model: Any,  # noqa: ANN401
+    model_spec: ModelSpec,
+    processed_model: ProcessedModel,
     af_options: AFEstimationOptions,
     data_at_period: Mapping[str, Array],
     prev_data_at_period: Mapping[str, Array],
@@ -584,6 +598,7 @@ def _build_transition_period_meta(
         "state_weights": propagation_weights,
         "combined_transition": combined_transition,
         "obs_factor_values": obs_factor_values,
+        "shock_factor_indices": shock_factor_indices,
     }
 
     return _PeriodMeta(
@@ -592,8 +607,8 @@ def _build_transition_period_meta(
         slice_start=slice_start,
         slice_stop=slice_stop,
         params_df=period_result_params,
-        loglike_kwargs=loglike_kwargs,
-        parse_kwargs=parse_kwargs,
+        loglike_kwargs=MappingProxyType(loglike_kwargs),
+        parse_kwargs=MappingProxyType(parse_kwargs),
         n_components=len(prev_cond_dist.components),
         n_factors_joint=0,
         n_state=n_state,
@@ -601,7 +616,7 @@ def _build_transition_period_meta(
         n_shock=n_shock,
         n_observed_factors=len(observed_factors),
         state_factor_indices_in_joint=tuple(range(n_state)),
-        propagation=propagation,
+        propagation=MappingProxyType(propagation),
     )
 
 
@@ -788,6 +803,11 @@ def _propagate_cond_dist_jax(
     combined_transition = meta.propagation["combined_transition"]
     state_nodes = meta.propagation["state_nodes"]
     state_weights = meta.propagation["state_weights"]
+    shock_factor_indices = meta.propagation["shock_factor_indices"]
+
+    shock_diag = (
+        jnp.zeros(n_state).at[shock_factor_indices].set(shock_sds**2)  # noqa: PD008
+    )
 
     def state_only_transition(state_vals: Array, trans_p: Array) -> Array:
         full = jnp.concatenate([state_vals, mean_inv, obs_mean])
@@ -802,7 +822,7 @@ def _propagate_cond_dist_jax(
         centered = propagated - new_mean[None, :]
         new_cov = jnp.einsum(
             "q,qi,qj->ij", state_weights, centered, centered
-        ) + jnp.diag(shock_sds**2)
+        ) + jnp.diag(shock_diag)
         new_chol = jnp.linalg.cholesky(new_cov + 1e-8 * jnp.eye(n_state))
         return new_mean, new_chol
 
@@ -850,8 +870,16 @@ def _build_prev_dist_arrays(
     flat_super: Array,
     target_t: int,
     metas: tuple[_PeriodMeta, ...],
+    cond_weights_override: Array | None = None,
 ) -> dict[str, Array]:
-    """Chain period 0 -> ... -> t-1 to produce prev_dist_arrays for period t."""
+    """Chain period 0 -> ... -> t-1 to produce prev_dist_arrays for period t.
+
+    When the propagated distribution carries individual-level
+    ``conditional_weights`` (e.g. posterior weights from a Bayes update),
+    pass them via ``cond_weights_override`` — otherwise the chain falls
+    back to the mixture-weights broadcast, which matches the estimation
+    path's default in ``_prepare_transition_inputs``.
+    """
     meta0 = metas[0]
     flat_params_0 = flat_super[meta0.slice_start : meta0.slice_stop]
     state_means, state_chols, mixture_weights = _build_initial_state_cond_dist_jax(
@@ -865,10 +893,13 @@ def _build_prev_dist_arrays(
             state_means, state_chols, flat_params_s, meta_s
         )
 
-    meta_target = metas[target_t]
-    n_obs = int(meta_target.loglike_kwargs["measurements"].shape[0])
-    n_components = metas[0].n_components
-    cond_weights = jnp.broadcast_to(mixture_weights[None, :], (n_obs, n_components))
+    if cond_weights_override is not None:
+        cond_weights = cond_weights_override
+    else:
+        meta_target = metas[target_t]
+        n_obs = int(meta_target.loglike_kwargs["measurements"].shape[0])
+        n_components = metas[0].n_components
+        cond_weights = jnp.broadcast_to(mixture_weights[None, :], (n_obs, n_components))
     return {
         "cond_weights": cond_weights,
         "means": state_means,
@@ -887,7 +918,14 @@ def _period_t_per_obs_loglike_full(
     if meta_t.is_initial:
         return af_per_obs_loglike_initial(flat_params_t, **meta_t.loglike_kwargs)
 
-    prev_dist_arrays = _build_prev_dist_arrays(flat_super, t, metas)
+    # Reuse the baked cond_weights from the meta (it was built via the same
+    # ``_prepare_transition_inputs`` path as estimation and already honours
+    # any stored ``conditional_weights``; when ``conditional_weights`` is
+    # ``None`` it is a broadcast of the initial-period mixture weights).
+    stored_cond_weights = meta_t.loglike_kwargs["prev_distribution"]["cond_weights"]
+    prev_dist_arrays = _build_prev_dist_arrays(
+        flat_super, t, metas, cond_weights_override=stored_cond_weights
+    )
     meta_prev = metas[t - 1]
     flat_params_prev = flat_super[meta_prev.slice_start : meta_prev.slice_stop]
     prev_meas = _extract_prev_meas_info_jax(flat_params_prev, meta_prev)

@@ -264,6 +264,7 @@ def estimate_transition_period(
         state_nodes=marginal_state_nodes,
         state_weights=marginal_state_weights,
         n_factors=n_state,
+        shock_factor_indices=shock_factor_indices,
     )
 
     period_result = AFPeriodResult(
@@ -695,6 +696,7 @@ def _update_conditional_distribution(
     state_nodes: Array,
     state_weights: Array,
     n_factors: int,
+    shock_factor_indices: Array | None = None,
 ) -> ConditionalDistribution:
     """Propagate the conditional distribution through the transition function.
 
@@ -702,6 +704,11 @@ def _update_conditional_distribution(
     the previous distribution at quadrature nodes, propagate through the
     transition function, and compute the new mean and covariance.
 
+    ``shock_factor_indices`` maps each shock-bearing factor to its position in
+    the state-factor ordering. When ``n_shock_factors < n_factors`` (some
+    state factors have ``has_production_shock=False``), the shock covariance
+    is scattered onto just those diagonal entries. Defaults to all state
+    factors having shocks.
     """
     # Extract estimated transition params and shock SDs
     trans_mask = result_params.index.get_level_values("category") == "transition"
@@ -709,6 +716,13 @@ def _update_conditional_distribution(
 
     trans_params = jnp.array(result_params.loc[trans_mask, "value"].to_numpy())
     shock_sds = jnp.array(result_params.loc[shock_mask, "value"].to_numpy())
+
+    if shock_factor_indices is None:
+        shock_factor_indices = jnp.arange(n_factors)
+
+    shock_diag = (
+        jnp.zeros(n_factors).at[shock_factor_indices].set(shock_sds**2)  # noqa: PD008
+    )
 
     new_components: list[MixtureComponent] = []
     for component in prev_distribution.components:
@@ -729,7 +743,7 @@ def _update_conditional_distribution(
         centered = propagated - new_mean[None, :]
         new_cov = jnp.einsum(
             "q,qi,qj->ij", state_weights, centered, centered
-        ) + jnp.diag(shock_sds**2)
+        ) + jnp.diag(shock_diag)
 
         # Cholesky factorization of new covariance
         new_chol = jnp.linalg.cholesky(new_cov + 1e-8 * jnp.eye(n_factors))
