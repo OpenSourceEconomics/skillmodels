@@ -14,7 +14,7 @@ from .load_cnlsy import (
     load_measurements,
 )
 
-_DEFAULT_DATA_PATH = Path("/home/hmg/sciebo/Skill estimation/complete_7_9_11.xls")
+_DEFAULT_DATA_PATH = Path(__file__).parent / "data" / "complete_7_9_11.xls"
 
 
 pytestmark = pytest.mark.skipif(

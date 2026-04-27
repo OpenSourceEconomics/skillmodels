@@ -41,7 +41,7 @@ from .matlab_mapping import (
 from .model_specs import build_ces_model
 
 _REF_DIR = Path("/home/hmg/sciebo/Skill estimation")
-_DATA_PATH = _REF_DIR / "complete_7_9_11.xls"
+_DATA_PATH = Path(__file__).parent / "data" / "complete_7_9_11.xls"
 _CES_RESULTS = _REF_DIR / "Results" / "Results_AF_One_Normal_CES.mat"
 
 
