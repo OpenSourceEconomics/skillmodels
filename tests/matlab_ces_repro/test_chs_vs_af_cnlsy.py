@@ -212,14 +212,12 @@ def _run_af(
     data: pd.DataFrame,
     fixed_params: pd.DataFrame,
 ):
-    # 5_000 Halton nodes balance MATLAB-quality integration error against
-    # the GPU memory needed for the (n_obs x n_halton) matmul at the
-    # transition step. The full reproduction at 20_000 nodes hits cuBLAS
-    # autotune failures on the available card; 5_000 is enough for a
-    # qualitative AF-vs-CHS comparison.
+    # 20_000 Halton nodes match the MATLAB reproduction. Needs a GPU with
+    # enough memory for the (n_obs x n_halton) matmul at the transition
+    # step; smaller cards can hit cuBLAS autotune failures.
     opts = AFEstimationOptions(
-        n_halton_points=5_000,
-        n_halton_points_shock=5_000,
+        n_halton_points=20_000,
+        n_halton_points_shock=20_000,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
     )
