@@ -38,11 +38,12 @@ from .matlab_mapping import (
     fill_transition_params_from_matlab,
     load_matlab_results,
 )
-from .model_specs import build_ces_model
+from .model_specs import build_ces_model, build_translog_model
 
-_REF_DIR = Path("/home/hmg/sciebo/Skill estimation")
+_REF_DIR = Path("/home/hmg/sciebo/Skill estimation/Application")
 _DATA_PATH = Path(__file__).parent / "data" / "complete_7_9_11.xls"
 _CES_RESULTS = _REF_DIR / "Results" / "Results_AF_One_Normal_CES.mat"
+_TRANSLOG_RESULTS = _REF_DIR / "Results" / "Results_AF_One_Normal_Translog.mat"
 
 
 pytestmark = pytest.mark.skipif(
@@ -82,7 +83,14 @@ def _extract_period_0_arrays(
 
 @pytest.mark.end_to_end
 @pytest.mark.long_running
-def test_total_loglike_ours_vs_matlab(capsys) -> None:
+@pytest.mark.parametrize(
+    "variant",
+    [
+        pytest.param("ces", id="ces_matlab_norm"),
+        pytest.param("translog", id="translog"),
+    ],
+)
+def test_total_loglike_ours_vs_matlab(variant: str, capsys) -> None:
     """Sum all three period log-likelihoods under skillmodels' AF and compare.
 
     Under skillmodels' own likelihood:
@@ -91,10 +99,22 @@ def test_total_loglike_ours_vs_matlab(capsys) -> None:
 
     Prints both, asserts both are finite; the arithmetic of the total
     answers "does MATLAB produce a higher likelihood than our solution?".
+
+    For ``variant="ces"`` we use ``match_matlab_normalisation=True`` so the
+    parameter values are directly comparable to MATLAB. For
+    ``variant="translog"`` MATLAB's identification matches skillmodels'
+    default already.
     """
-    built = build_ces_model()
+    if variant == "ces":
+        built = build_ces_model(match_matlab_normalisation=True)
+        results_path = _CES_RESULTS
+    else:
+        built = build_translog_model()
+        results_path = _TRANSLOG_RESULTS
+    if not results_path.exists():
+        pytest.skip(f"MATLAB reference {results_path} not available")
     data = load_measurements(_DATA_PATH)
-    matlab: MatlabResults = load_matlab_results(_CES_RESULTS, variant="ces")
+    matlab: MatlabResults = load_matlab_results(results_path, variant=variant)
 
     af_options = AFEstimationOptions(
         n_halton_points=20_000,
@@ -120,6 +140,7 @@ def test_total_loglike_ours_vs_matlab(capsys) -> None:
         matlab=matlab,
         af_options=af_options,
         our_result=result,
+        match_matlab_normalisation=variant == "ces",
     )
     total_matlab_ll = sum(period_ll_matlab)
 
@@ -159,6 +180,7 @@ def _score_matlab_under_our_lik(
     matlab: MatlabResults,
     af_options: AFEstimationOptions,
     our_result,
+    match_matlab_normalisation: bool = False,
 ) -> tuple[list[float], list[pd.DataFrame]]:
     """Evaluate the AF log-likelihood at MATLAB's translated parameters.
 
@@ -204,8 +226,16 @@ def _score_matlab_under_our_lik(
     initial_norms = get_normalizations_for_period(built.model_spec.factors, period=0)
     initial_template = create_af_params_template(initial_index, initial_norms, period=0)
     initial_with_matlab = fill_initial_params_from_matlab(
-        initial_template, matlab.initial
+        initial_template,
+        matlab.initial,
+        match_matlab_normalisation=match_matlab_normalisation,
     )
+    # Apply built.fixed_params on top so initial_states pins survive.
+    for idx, val in built.fixed_params["value"].items():
+        if idx in initial_with_matlab.index:
+            initial_with_matlab.loc[idx, "value"] = val
+            initial_with_matlab.loc[idx, "lower_bound"] = val
+            initial_with_matlab.loc[idx, "upper_bound"] = val
     matlab_ll_p0 = evaluate_af_initial_loglike(
         model_spec=built.model_spec,
         measurements=meas_p0,

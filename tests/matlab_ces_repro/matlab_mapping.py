@@ -49,34 +49,61 @@ _MATLAB_TO_SKM_INITIAL_INDEX: dict[int, int] = {
 
 @dataclass(frozen=True)
 class MatlabInitialResults:
-    """Layout of MATLAB ``est_0``."""
+    """Layout of MATLAB ``est_0``.
 
-    mu_log_income: float
-    """Mean of the log_income latent factor (``mu_Omega(4)``)."""
+    CES and translog use *different* parameterisations of the initial
+    block. CES pins the latent means of (skills, MC, MN) to 0 and frees
+    the first measurement intercept of each block; translog pins the
+    first measurement intercept of each block to 0 and frees the latent
+    means. We unify the two by always carrying the 4-vector of latent
+    means in ``mu_latent`` (filled with 0 for the pinned entries) and
+    by carrying full-length intercept vectors that include the pinned-to-
+    zero entry where applicable.
+    """
+
+    variant: str
+    """Either ``"ces"`` or ``"translog"``."""
+    mu_latent: NDArray[np.float64]
+    """Latent factor means at period 0 in the order
+    ``(skills, MC, MN, log_income)``. CES pins the first three to 0;
+    translog estimates all four. Shape (4,).
+    """
     var_diag: NDArray[np.float64]
     """Variances of (skills, MC, MN, log_income); shape (4,)."""
     correlations: NDArray[np.float64]
-    """Off-diagonal correlations in Sigma_Omega, ordering
+    """Off-diagonal correlations among the 4-dim latent block, ordering
     (skills,MC), (skills,MN), (skills,Y), (MC,MN), (MC,Y), (MN,Y); shape (6,).
     """
     mu_skills_0: NDArray[np.float64]
-    """Measurement intercepts for skills at period 0; shape (3,)."""
+    """Measurement intercepts for skills at period 0; shape (3,).
+    For translog the first entry is 0 (pinned); for CES all three are
+    estimated.
+    """
     lambda_skills_0_free: NDArray[np.float64]
     """Free skill loadings at period 0 (first loading fixed to 1); shape (2,)."""
     sigma_skills_0: NDArray[np.float64]
     """Measurement SDs for skills at period 0; shape (3,)."""
     mu_mc: NDArray[np.float64]
-    """Measurement intercepts for MC; shape (6,)."""
+    """Measurement intercepts for MC; shape (6,). First entry is 0 for
+    translog (pinned), free for CES.
+    """
     lambda_mc_free: NDArray[np.float64]
     """Free MC loadings (first fixed to 1); shape (5,)."""
     sigma_mc: NDArray[np.float64]
     """Measurement SDs for MC; shape (6,)."""
     mu_mn: NDArray[np.float64]
-    """Measurement intercepts for MN (3 aggregated items); shape (3,)."""
+    """Measurement intercepts for MN (3 aggregated items); shape (3,).
+    First entry is 0 for translog (pinned), free for CES.
+    """
     lambda_mn_free: NDArray[np.float64]
     """Free MN loadings (first fixed to 1); shape (2,)."""
     sigma_mn: NDArray[np.float64]
     """Measurement SDs for MN; shape (3,)."""
+
+    @property
+    def mu_log_income(self) -> float:
+        """Backwards-compatible alias for ``mu_latent[3]``."""
+        return float(self.mu_latent[3])
 
 
 @dataclass(frozen=True)
@@ -123,6 +150,14 @@ class MatlabTransitionResults:
     """CES ``phi`` or translog ``phi``."""
     sigma_eta_prod: float
     """Production shock SD."""
+    intercept_inv: float = 0.0
+    """Investment-equation constant. Free in translog (estimated), pinned
+    to 0 in CES.
+    """
+    a_const: float = 0.0
+    """Translog production-function constant ``A``. Free in translog,
+    pinned to 0 in CES.
+    """
 
 
 @dataclass(frozen=True)
@@ -170,7 +205,7 @@ def load_matlab_results(path: Path, variant: str) -> MatlabResults:
             )
             raise ValueError(msg)
 
-    initial = _parse_initial(est_0)
+    initial = _parse_initial(est_0, variant)
     t01 = _parse_transition(est_01, variant)
     t12 = _parse_transition(est_12, variant)
 
@@ -183,19 +218,47 @@ def load_matlab_results(path: Path, variant: str) -> MatlabResults:
     )
 
 
-def _parse_initial(est: NDArray[np.float64]) -> MatlabInitialResults:
-    """Parse the 44-element initial-period MATLAB vector."""
+def _parse_initial(est: NDArray[np.float64], variant: str) -> MatlabInitialResults:
+    """Parse the 44-element initial-period MATLAB vector.
+
+    CES and translog use different layouts (different identification
+    choices). The two layouts unify into a common ``MatlabInitialResults``
+    shape: ``mu_latent`` always has 4 entries, and the per-block
+    intercept vectors have full length with first entry 0 for translog
+    (where MATLAB pins it).
+    """
+    if variant == "ces":
+        # CES: latent means [skills,MC,MN] pinned to 0, log_income free.
+        # First measurement intercept of each block is FREE.
+        return MatlabInitialResults(
+            variant=variant,
+            mu_latent=np.array([0.0, 0.0, 0.0, float(est[0])], dtype=np.float64),
+            var_diag=est[1:5].copy(),
+            correlations=est[5:11].copy(),
+            mu_skills_0=est[11:14].copy(),
+            lambda_skills_0_free=est[14:16].copy(),
+            sigma_skills_0=est[16:19].copy(),
+            mu_mc=est[19:25].copy(),
+            lambda_mc_free=est[25:30].copy(),
+            sigma_mc=est[30:36].copy(),
+            mu_mn=est[36:39].copy(),
+            lambda_mn_free=est[39:41].copy(),
+            sigma_mn=est[41:44].copy(),
+        )
+    # translog: all 4 latent means free; first measurement intercept of
+    # each block pinned to 0.
     return MatlabInitialResults(
-        mu_log_income=float(est[0]),
-        var_diag=est[1:5].copy(),
-        correlations=est[5:11].copy(),
-        mu_skills_0=est[11:14].copy(),
-        lambda_skills_0_free=est[14:16].copy(),
-        sigma_skills_0=est[16:19].copy(),
-        mu_mc=est[19:25].copy(),
-        lambda_mc_free=est[25:30].copy(),
-        sigma_mc=est[30:36].copy(),
-        mu_mn=est[36:39].copy(),
+        variant=variant,
+        mu_latent=est[0:4].copy(),
+        var_diag=est[4:8].copy(),
+        correlations=est[8:14].copy(),
+        mu_skills_0=np.concatenate([[0.0], est[14:16]]),
+        lambda_skills_0_free=est[16:18].copy(),
+        sigma_skills_0=est[18:21].copy(),
+        mu_mc=np.concatenate([[0.0], est[21:26]]),
+        lambda_mc_free=est[26:31].copy(),
+        sigma_mc=est[31:37].copy(),
+        mu_mn=np.concatenate([[0.0], est[37:39]]),
         lambda_mn_free=est[39:41].copy(),
         sigma_mn=est[41:44].copy(),
     )
@@ -204,35 +267,58 @@ def _parse_initial(est: NDArray[np.float64]) -> MatlabInitialResults:
 def _parse_transition(
     est: NDArray[np.float64], variant: str
 ) -> MatlabTransitionResults:
-    """Parse a transition-period MATLAB vector (26 CES / 25 translog)."""
-    # Common measurement + investment-equation layout runs through index 21.
+    """Parse a transition-period MATLAB vector (26 CES / 25 translog).
+
+    The two variants have *different* layouts even outside the production
+    block: translog pins the first investment intercept and first
+    investment loading to 0/1 respectively (so two fewer free
+    measurement-block parameters), and frees the investment-equation
+    intercept and the translog constant ``A`` (two more free production
+    parameters). Skills loadings: CES has 3 free (first not pinned),
+    translog has 2 free (first pinned to 1).
+    """
     if variant == "ces":
-        rho_prod = float(est[22])
-        delta_prod = float(est[23])
-        phi_prod = float(est[24])
-        sigma_eta_prod = float(est[25])
-    else:  # translog
-        rho_prod = float(est[22])
-        delta_prod = float(est[23])
-        phi_prod = float("nan")
-        sigma_eta_prod = float(est[24])
+        return MatlabTransitionResults(
+            variant=variant,
+            mu_skills_next_free=est[0:2].copy(),
+            lambda_skills_next=est[2:5].copy(),
+            sigma_skills_next=est[5:8].copy(),
+            mu_inv=est[8:11].copy(),
+            lambda_inv=est[11:14].copy(),
+            sigma_inv=est[14:17].copy(),
+            a_theta=float(est[17]),
+            a_mc=float(est[18]),
+            a_mn=float(est[19]),
+            a_log_income=float(est[20]),
+            sigma_eta_inv=float(est[21]),
+            rho_prod=float(est[22]),
+            delta_prod=float(est[23]),
+            phi_prod=float(est[24]),
+            sigma_eta_prod=float(est[25]),
+        )
+    # translog: 25-element layout
     return MatlabTransitionResults(
         variant=variant,
         mu_skills_next_free=est[0:2].copy(),
-        lambda_skills_next=est[2:5].copy(),
-        sigma_skills_next=est[5:8].copy(),
-        mu_inv=est[8:11].copy(),
-        lambda_inv=est[11:14].copy(),
-        sigma_inv=est[14:17].copy(),
-        a_theta=float(est[17]),
-        a_mc=float(est[18]),
-        a_mn=float(est[19]),
-        a_log_income=float(est[20]),
-        sigma_eta_inv=float(est[21]),
-        rho_prod=rho_prod,
-        delta_prod=delta_prod,
-        phi_prod=phi_prod,
-        sigma_eta_prod=sigma_eta_prod,
+        # first loading pinned to 1; reconstruct full 3-vector
+        lambda_skills_next=np.concatenate([[1.0], est[2:4]]),
+        sigma_skills_next=est[4:7].copy(),
+        # first inv intercept pinned to 0; full 3-vector with leading 0
+        mu_inv=np.concatenate([[0.0], est[7:9]]),
+        # first inv loading pinned to 1; full 3-vector with leading 1
+        lambda_inv=np.concatenate([[1.0], est[9:11]]),
+        sigma_inv=est[11:14].copy(),
+        intercept_inv=float(est[14]),
+        a_theta=float(est[15]),
+        a_mc=float(est[16]),
+        a_mn=float(est[17]),
+        a_log_income=float(est[18]),
+        sigma_eta_inv=float(est[19]),
+        rho_prod=float(est[20]),
+        delta_prod=float(est[21]),
+        phi_prod=float(est[22]),
+        a_const=float(est[23]),
+        sigma_eta_prod=float(est[24]),
     )
 
 
@@ -380,6 +466,7 @@ def fill_initial_params_from_matlab(
     transition_01: MatlabTransitionResults | None = None,
     period: int = 0,
     component: str = "mixture_0",
+    match_matlab_normalisation: bool = False,
 ) -> pd.DataFrame:
     """Populate skillmodels' initial-period entries from MATLAB's ``est_0``.
 
@@ -401,6 +488,10 @@ def fill_initial_params_from_matlab(
         period: Calendar period of the initial distribution (typically 0).
         component: Name of the mixture component (MATLAB uses a single
             Gaussian; default matches skillmodels' ``mixture_0``).
+        match_matlab_normalisation: When True, keep MATLAB's first
+            measurement intercepts (free under MATLAB's identification);
+            when False, overwrite them with 0 to match skillmodels' default
+            (first-intercept-pinned) identification.
 
     Return:
         Modified copy of ``params_template`` with the MATLAB-derived values
@@ -412,10 +503,10 @@ def fill_initial_params_from_matlab(
     # Mixture weights (single component → weight = 1).
     params.loc[("mixture_weights", period, component, "-"), "value"] = 1.0
 
-    # Initial means: MATLAB has zero mean for skills, MC, MN and
-    # ``mu_log_income`` for the observed factor.
-    means_skm = [0.0, 0.0, 0.0, initial.mu_log_income]
-    for factor, mean in zip(_SKM_JOINT_ORDER, means_skm, strict=True):
+    # Initial latent means: CES pins skills/MC/MN to 0; translog has all
+    # four free. ``initial.mu_latent`` carries the variant-specific 4-vector
+    # in skillmodels factor order.
+    for factor, mean in zip(_SKM_JOINT_ORDER, initial.mu_latent.tolist(), strict=True):
         params.loc[("initial_states", period, component, factor), "value"] = mean
 
     # Initial Cholesky covariances: Cholesky of the joint MATLAB cov.
@@ -433,6 +524,7 @@ def fill_initial_params_from_matlab(
         lambdas_free=initial.lambda_skills_0_free,
         sigmas=initial.sigma_skills_0,
         factor="skills",
+        keep_first_intercept=match_matlab_normalisation,
     )
 
     # Measurement model for MC at period 0.
@@ -444,6 +536,7 @@ def fill_initial_params_from_matlab(
         lambdas_free=initial.lambda_mc_free,
         sigmas=initial.sigma_mc,
         factor="MC",
+        keep_first_intercept=match_matlab_normalisation,
     )
 
     # Measurement model for MN at period 0.
@@ -455,6 +548,7 @@ def fill_initial_params_from_matlab(
         lambdas_free=initial.lambda_mn_free,
         sigmas=initial.sigma_mn,
         factor="MN",
+        keep_first_intercept=match_matlab_normalisation,
     )
 
     return params
@@ -469,13 +563,30 @@ def _fill_block(
     lambdas_free: NDArray[np.float64],
     sigmas: NDArray[np.float64],
     factor: str,
+    keep_first_intercept: bool = False,
 ) -> None:
-    """Write a measurement block (intercept, loadings, SDs) into params."""
-    # Intercepts: first is normalised to 0, rest come from ``mu``.
+    """Write a measurement block (intercept, loadings, SDs) into params.
+
+    Args:
+        params: Params DataFrame to write into; modified in place.
+        period: Period index for the rows being written.
+        measures: Measurement variable names in this block.
+        mu: Per-measurement intercept values (length ``len(measures)``).
+        lambdas_free: Free loadings (length ``len(measures) - 1``); the
+            first loading is pinned to 1 and not part of this vector.
+        sigmas: Per-measurement standard deviations.
+        factor: Latent factor name used as the column key for loadings.
+        keep_first_intercept: When True, keep ``mu[0]`` in the first
+            measurement's intercept slot (matching MATLAB's identification,
+            where only the first loading is pinned). When False, overwrite
+            it with 0 (matching skillmodels' standard identification).
+    """
+    # Intercepts: first is either pinned to 0 (default) or kept free at mu[0]
+    # (matlab norm).
     for i, measure in enumerate(measures):
         params.loc[("controls", period, measure, "constant"), "value"] = float(mu[i])
-    # First measurement has intercept normalised to 0.
-    params.loc[("controls", period, measures[0], "constant"), "value"] = 0.0
+    if not keep_first_intercept:
+        params.loc[("controls", period, measures[0], "constant"), "value"] = 0.0
 
     # Loadings: first is normalised to 1, rest come from ``lambdas_free``.
     params.loc[("loadings", period, measures[0], factor), "value"] = 1.0
@@ -541,29 +652,46 @@ def fill_transition_params_from_matlab(
     transition_for_this = (
         matlab.transition_01 if skillmodels_period == 1 else matlab.transition_12
     )
-    # Investment measurement params for period 1 come from MATLAB's
-    # transition_12 (MATLAB labels them "investment at t=1"); the period-0
-    # investment measurement is in the initial-period params and comes
-    # from transition_01.
     transition_for_investment_measurement = (
         matlab.transition_12 if skillmodels_period == 1 else None
     )
-
-    # --- CES production ---
-    gamma_skills, gamma_inv, phi_skm, level_shift = translate_matlab_ces_production(
-        delta=transition_for_this.delta_prod,
-        phi=transition_for_this.phi_prod,
-        rho=transition_for_this.rho_prod,
-        a_const=0.0,
-    )
     trans_period = skillmodels_period - 1
-    params.loc[("transition", trans_period, "skills", "skills"), "value"] = gamma_skills
-    params.loc[("transition", trans_period, "skills", "investment"), "value"] = (
-        gamma_inv
-    )
-    params.loc[("transition", trans_period, "skills", "phi"), "value"] = phi_skm
 
-    # --- Investment equation (investment is endogenous now) ---
+    if transition_for_this.variant == "ces":
+        # CES: simplex-gamma reparameterisation with level shift absorbed
+        # into the period-t+1 measurement intercepts.
+        gamma_skills, gamma_inv, phi_skm, level_shift = translate_matlab_ces_production(
+            delta=transition_for_this.delta_prod,
+            phi=transition_for_this.phi_prod,
+            rho=transition_for_this.rho_prod,
+            a_const=0.0,
+        )
+        params.loc[("transition", trans_period, "skills", "skills"), "value"] = (
+            gamma_skills
+        )
+        params.loc[("transition", trans_period, "skills", "investment"), "value"] = (
+            gamma_inv
+        )
+        params.loc[("transition", trans_period, "skills", "phi"), "value"] = phi_skm
+    else:
+        # Translog: direct copy. skillmodels' translog reads the linear
+        # coefficients on each input, the squared/interaction coefficients,
+        # and the constant; MATLAB's form has only rho/delta/phi/A free.
+        params.loc[("transition", trans_period, "skills", "skills"), "value"] = (
+            transition_for_this.rho_prod
+        )
+        params.loc[("transition", trans_period, "skills", "investment"), "value"] = (
+            transition_for_this.delta_prod
+        )
+        params.loc[
+            ("transition", trans_period, "skills", "skills * investment"), "value"
+        ] = transition_for_this.phi_prod
+        params.loc[("transition", trans_period, "skills", "constant"), "value"] = (
+            transition_for_this.a_const
+        )
+        level_shift = 0.0  # no level shift for translog (no simplex)
+
+    # --- Investment equation ---
     params.loc[("investment_eq", trans_period, "investment", "skills"), "value"] = (
         transition_for_this.a_theta
     )
@@ -576,10 +704,13 @@ def fill_transition_params_from_matlab(
     params.loc[
         ("investment_eq", trans_period, "investment", INCOME_MEASURE), "value"
     ] = transition_for_this.a_log_income
+    # Translog has a free investment-equation constant; CES pins it to 0.
+    if transition_for_this.variant == "translog":
+        params.loc[
+            ("investment_eq", trans_period, "investment", "constant"), "value"
+        ] = transition_for_this.intercept_inv
 
     # --- Shock SDs ---
-    # Only skills has a production shock in the new spec (MC / MN have
-    # ``has_production_shock=False``). Investment uses `investment_sds`.
     params.loc[("shock_sds", trans_period, "skills", "-"), "value"] = (
         transition_for_this.sigma_eta_prod
     )
@@ -588,15 +719,8 @@ def fill_transition_params_from_matlab(
     )
 
     # --- Skills measurement at period ``skillmodels_period`` ---
-    # MATLAB ties the first skill intercept at period t+1 to the normalised
-    # period-0 value ``mu_skills_0[0]``. MATLAB's skills at period t+1 equal
-    # skillmodels' skills plus ``level_shift`` (the additive constant that
-    # drops out of skillmodels' simplex-normalised ``log_ces``). Since
-    # MATLAB does not normalise skill loadings at period t+1 (all three are
-    # estimated freely), the absorption into skillmodels' intercepts picks
-    # up the per-measurement loading so the skillmodels intercept equals the
-    # MATLAB intercept plus loading times level_shift. Using just level_shift
-    # is only correct when the loading is 1, which is not the case here.
+    # MATLAB pins the first skill intercept at period t+1 to mu_skills_norm_0
+    # (== MATLAB's est_0(12), i.e. the period-0 first skill intercept).
     matlab_intercepts = (
         float(matlab.initial.mu_skills_0[0]),
         float(transition_for_this.mu_skills_next_free[0]),

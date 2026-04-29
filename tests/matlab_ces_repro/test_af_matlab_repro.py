@@ -18,7 +18,7 @@ from .load_cnlsy import load_measurements
 from .matlab_mapping import MatlabResults, load_matlab_results
 from .model_specs import BuiltModel, build_ces_model, build_translog_model
 
-_REF_DIR = Path("/home/hmg/sciebo/Skill estimation")
+_REF_DIR = Path("/home/hmg/sciebo/Skill estimation/Application")
 _DATA_PATH = Path(__file__).parent / "data" / "complete_7_9_11.xls"
 _CES_RESULTS = _REF_DIR / "Results" / "Results_AF_One_Normal_CES.mat"
 _TRANSLOG_RESULTS = _REF_DIR / "Results" / "Results_AF_One_Normal_Translog.mat"

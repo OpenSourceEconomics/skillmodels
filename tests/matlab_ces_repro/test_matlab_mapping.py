@@ -11,7 +11,7 @@ from .matlab_mapping import (
     translate_matlab_ces_production,
 )
 
-_DEFAULT_RESULTS_DIR = Path("/home/hmg/sciebo/Skill estimation/Results")
+_DEFAULT_RESULTS_DIR = Path("/home/hmg/sciebo/Skill estimation/Application/Results")
 
 
 def test_ces_to_skillmodels_gammas_sums_to_one() -> None:

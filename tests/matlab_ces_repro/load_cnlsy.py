@@ -42,9 +42,13 @@ INCOME_MEASURE: str = "log_income_observed"
 
 
 def _standardise(values: np.ndarray) -> np.ndarray:
-    """Z-score columns of a 2D array (mean 0, sd 1 per column)."""
+    """Z-score columns of a 2D array (mean 0, sd 1 per column).
+
+    Uses ``ddof=1`` (sample SD) to match MATLAB's default ``std`` exactly,
+    which is what the reference implementation uses to standardise inputs.
+    """
     mean = np.nanmean(values, axis=0, keepdims=True)
-    sd = np.nanstd(values, axis=0, keepdims=True)
+    sd = np.nanstd(values, axis=0, ddof=1, keepdims=True)
     sd = np.where(sd == 0.0, 1.0, sd)
     return (values - mean) / sd
 
