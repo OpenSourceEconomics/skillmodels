@@ -697,7 +697,16 @@ def _block_diagonal_sandwich_single(
     information_matrix = hess_full[free_positions_array][:, free_positions_array]
     n_obs = int(score_matrix.shape[0])
     omega = score_matrix.T @ score_matrix / n_obs
-    a_inv = jnp.linalg.inv(information_matrix)
+    # Use the Moore-Penrose pseudoinverse: the user's `fixed_params` argument
+    # to `estimate_af` pins parameter values via FixedConstraintWithValue, but
+    # the bounds-relaxation in `build_optimagic_inputs` strips those rows of
+    # their lb==ub markers, so `_free_positions_for_period` cannot detect them
+    # here. The resulting information matrix is rank-deficient (zero rows on
+    # the pinned coordinates), and `inv` produces NaN that propagates to every
+    # diagonal entry of the vcov. `pinv` returns zero on the null-space
+    # directions instead, so identifiable parameters retain their correct SE
+    # while pinned parameters get SE 0 (rendered as "—" by downstream display).
+    a_inv = jnp.linalg.pinv(information_matrix, hermitian=True)
     vcov_period = a_inv @ omega @ a_inv.T / n_obs
 
     return AFPeriodInferenceResult(
@@ -999,7 +1008,13 @@ def _compute_full_sandwich(
     omega_free = omega_full[free_positions_array][:, free_positions_array]
     a_free = a_full[free_positions_array][:, free_positions_array]
 
-    a_inv = jnp.linalg.inv(a_free)
+    # See comment on `pinv` in `_block_diagonal_sandwich_single`: the user's
+    # `fixed_params` are stripped of their lb==ub markers in
+    # `build_optimagic_inputs`, so the free-position set unavoidably contains
+    # rows for pinned parameters whose Hessian rows are zero. `pinv` keeps the
+    # vcov finite by zeroing out the null-space directions instead of
+    # propagating NaN through `inv`.
+    a_inv = jnp.linalg.pinv(a_free, hermitian=True)
     v_free = a_inv @ omega_free @ a_inv.T / n_obs
 
     # Build per-period inference results, restoring the block-diagonal
