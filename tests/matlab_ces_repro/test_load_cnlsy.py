@@ -39,7 +39,9 @@ def test_cnlsy_skill_measurements_are_standardised_per_period(cnlsy_data) -> Non
         for col in SKILL_MEASURES:
             values = panel[col].to_numpy()
             assert np.isclose(values.mean(), 0.0, atol=1e-8)
-            assert np.isclose(values.std(), 1.0, atol=1e-8)
+            # Use ddof=1 (sample SD) to match the MATLAB-style
+            # standardisation used by `_standardise` in `load_cnlsy`.
+            assert np.isclose(values.std(ddof=1), 1.0, atol=1e-8)
 
 
 def test_cnlsy_mc_mn_filled_only_in_period_zero(cnlsy_data) -> None:

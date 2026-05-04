@@ -96,5 +96,11 @@ def test_load_matlab_results_translog() -> None:
     )
     assert res.n_obs == 1403
     assert res.transition_01.variant == "translog"
-    # Translog transition vectors are 25 elements; `phi_prod` is not present.
-    assert np.isnan(res.transition_01.phi_prod)
+    # MATLAB's translog parametrisation has four production parameters:
+    # rho (linear coef on log(theta)), delta (linear coef on log(X)),
+    # phi (cross-term coef log(theta)*log(X)), and a_const (constant A).
+    # The loader stores the cross term in `phi_prod`, so it must be a
+    # finite number (not NaN). a_const must also be finite for translog
+    # but is pinned to NaN for CES.
+    assert np.isfinite(res.transition_01.phi_prod)
+    assert np.isfinite(res.transition_01.a_const)
