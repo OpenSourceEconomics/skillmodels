@@ -326,6 +326,17 @@ def create_af_params_template(
     params.loc[weight_mask, "lower_bound"] = 0.001
     params.loc[weight_mask, "upper_bound"] = 0.999
 
+    # Bound the log_ces substitution parameter phi from above. Without
+    # an upper bound the optimizer can drift phi to large positive
+    # values where exp(states * phi) overflows and the gradient turns
+    # to NaN. The lower side is well-behaved (phi -> -inf collapses to
+    # a finite minimum via logsumexp), so leave it unbounded to match
+    # MATLAB's (-inf, 1 - c) convention.
+    phi_mask = (params.index.get_level_values("category") == "transition") & (
+        params.index.get_level_values("name2") == "phi"
+    )
+    params.loc[phi_mask, "upper_bound"] = 1.0 - bounds_distance
+
     # Set bounds for Cholesky diagonals (must be positive)
     chol_mask = params.index.get_level_values("category") == "initial_cholcovs"
     for idx in params.index[chol_mask]:
