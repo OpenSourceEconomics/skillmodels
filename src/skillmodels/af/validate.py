@@ -9,6 +9,7 @@ _AF_COMPATIBLE_TRANSITIONS = frozenset(
         "translog",
         "robust_translog",
         "log_ces",
+        "log_ces_with_constant",
         "log_ces_general",
         "linear_and_squares",
     }

@@ -166,6 +166,58 @@ def identity_constraints_log_ces(
     raise NotImplementedError
 
 
+def log_ces_with_constant(states: Array, params: Array) -> Array:
+    """Log CES production function with an additive level constant.
+
+    Computed as ``A + (1/phi) * log(sum_i gamma_i * exp(states_i * phi))``,
+    matching MATLAB's AF reference parametrisation
+    ``log_skills_{t+1} = log(A_t) + (1/sigma) log(sum gamma_i theta_i^sigma)``.
+
+    The plain ``log_ces`` lacks the constant ``A``, which forces models with
+    a non-trivial ``A`` (e.g. AF Sec. 5.1's CES sims with ``A = e``) to
+    absorb the level shift into the next-period skills measurement
+    intercepts. When matching the MATLAB sim parametrisation exactly
+    (all skill intercepts pinned to 0, ``A_t`` free per period), use
+    this variant instead.
+    """
+    constant_term = params[-1]
+    phi = params[-2]
+    gammas = params[:-2]
+    scaling_factor = 1 / phi
+
+    exponents = states * phi
+    max_exp = jnp.max(exponents)
+    shifted = jnp.exp(exponents - max_exp)
+    unscaled = max_exp + jnp.log(jnp.sum(gammas * shifted))
+    return constant_term + unscaled * scaling_factor
+
+
+def params_log_ces_with_constant(factors: tuple[str, ...]) -> list[str]:
+    """Index tuples for ``log_ces_with_constant``."""
+    return [*factors, "phi", "constant"]
+
+
+def constraints_log_ces_with_constant(
+    factor: str,
+    factors: tuple[str, ...],
+    aug_period: int,
+) -> om.constraints.Constraint:
+    """Constraints for ``log_ces_with_constant`` (gammas on the simplex)."""
+    names = params_log_ces_with_constant(factors)
+    # Gammas are everything except the last two entries (phi and constant).
+    loc = [("transition", aug_period, factor, name) for name in names[:-2]]
+    return om.ProbabilityConstraint(selector=functools.partial(select_by_loc, loc=loc))
+
+
+def identity_constraints_log_ces_with_constant(
+    factors: tuple[str, ...],
+    aug_period: int,
+    all_factors: tuple[str, ...],
+) -> list[om.constraints.Constraint]:
+    """Identity constraints for ``log_ces_with_constant``."""
+    raise NotImplementedError
+
+
 def constant(state: Array, params: Array) -> Array:  # noqa: ARG001
     """Constant production function."""
     return state
