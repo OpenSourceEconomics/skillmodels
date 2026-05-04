@@ -1104,8 +1104,177 @@ def _assemble_full_vcov(
     return standard_errors, vcov_df
 
 
+@dataclass(frozen=True)
+class AFBootstrapResult:
+    """Score-resampling bootstrap result for the AF estimator."""
+
+    standard_errors: pd.Series
+    """Bootstrap standard errors indexed by ``all_params.index``.
+
+    SEs are the empirical standard deviation across bootstrap replicates
+    of each parameter's one-step Newton shift from the point estimate.
+    Fixed-parameter and constrained-direction entries are reported as
+    zero (or NaN where the period's information matrix is singular on
+    that direction).
+    """
+
+    replicate_params: pd.DataFrame
+    """``(n_boot, n_params)`` DataFrame of bootstrap parameter draws.
+
+    Each row is ``theta_hat + delta_b`` where ``delta_b = -A^{-1} *
+    bar_g_b``, ``bar_g_b`` is the mean per-cluster score in bootstrap
+    replicate ``b``, and ``A`` is the period's information matrix at
+    the optimum. Columns share ``all_params.index``; pinned-parameter
+    columns are constant at the point estimate.
+    """
+
+    n_clusters: int
+    """Number of caseids resampled per replicate (= number of unique
+    caseids in the data).
+    """
+
+    n_boot: int
+    """Number of bootstrap replicates drawn."""
+
+
+def compute_af_bootstrap_se(
+    result: AFEstimationResult,
+    data: pd.DataFrame,
+    af_options: AFEstimationOptions | None = None,
+    *,
+    n_boot: int = 10_000,
+    seed: int = 0,
+) -> AFBootstrapResult:
+    """Score-resampling cluster bootstrap for the AF estimator.
+
+    Computes per-observation scores once at the point estimate, then for
+    each replicate resamples caseids with replacement, averages their
+    scores, and applies a one-step Newton update from the optimum:
+
+        theta_b = theta_hat - A_t^{-1} * bar_g_b
+
+    where ``A_t`` is the period-``t`` information matrix (same one used
+    by ``compute_af_standard_errors(method="block_diagonal")``) and
+    ``bar_g_b`` is the bootstrap-averaged per-obs score restricted to
+    period-``t`` free parameters. Each AF period is resampled
+    independently — the same caseids would be redrawn jointly, but the
+    block-diagonal information matrix makes the periods' shifts
+    decouple, and we report only own-block bootstrap SEs.
+
+    This is the "score bootstrap" of e.g. Kline & Santos (2012); it
+    avoids re-estimating the model B times. For ``B = 10000`` and
+    ``n_caseids = 1500``, the bootstrap step takes seconds rather than
+    days.
+
+    Args:
+        result: Output of ``estimate_af``.
+        data: The dataset used for estimation; the caseid level of its
+            MultiIndex defines the bootstrap clusters.
+        af_options: Options used at estimation time.
+        n_boot: Number of bootstrap replicates.
+        seed: Seed for the resampling RNG.
+
+    Return:
+        ``AFBootstrapResult`` with bootstrap SEs (per-period block) and
+        the full replicate-by-parameter DataFrame.
+
+    """
+    if af_options is None:
+        af_options = AFEstimationOptions()
+
+    jax.config.update("jax_enable_x64", val=True)
+
+    model_spec = result.model_spec
+    processed_model = process_model(model_spec)
+
+    n_periods = processed_model.dimensions.n_periods
+    latent_factors = processed_model.labels.latent_factors
+    controls_names = processed_model.labels.controls
+    observed_factors = processed_model.labels.observed_factors
+
+    endog_info = processed_model.endogenous_factors_info
+    endogenous_factors = tuple(
+        f
+        for f in latent_factors
+        if f in endog_info.factor_info and endog_info.factor_info[f].is_endogenous
+    )
+
+    period_data = _extract_period_data(
+        data,
+        n_periods,
+        latent_factors,
+        controls_names,
+        model_spec,
+        observed_factors=observed_factors,
+    )
+
+    metas = _build_period_metas(
+        result=result,
+        period_data=period_data,
+        model_spec=model_spec,
+        processed_model=processed_model,
+        af_options=af_options,
+        observed_factors=observed_factors,
+        endogenous_factors=endogenous_factors,
+    )
+
+    # Use the existing block-diagonal scaffolding to get per-period score
+    # matrices and information matrices at the optimum.
+    period_inference = _compute_block_diagonal_sandwich(result, metas)
+
+    # Resample once per period: each AF period sees one observation per
+    # caseid, so caseid-level resampling reduces to row-level resampling
+    # of the (n_caseids, n_free_params) score matrix.
+    rng = np.random.default_rng(seed)
+    all_params = result.all_params
+    replicate_values = np.tile(all_params["value"].to_numpy()[None, :], (n_boot, 1))
+
+    pos_lookup = {tuple(loc): i for i, loc in enumerate(all_params.index)}
+
+    n_clusters = int(metas[0].loglike_kwargs["measurements"].shape[0])
+
+    for period_res in period_inference:
+        score = np.array(period_res.score_matrix)  # (n, n_free_own)
+        info = np.array(period_res.information_matrix)
+        # Use pinv for the same null-space-tolerant reasons as
+        # `_block_diagonal_sandwich_single`.
+        a_inv = np.linalg.pinv(info)
+
+        # Draw indices for all replicates at once: (n_boot, n_clusters).
+        idx = rng.integers(0, n_clusters, size=(n_boot, n_clusters))
+        # mean_score[b, p] = (1/n) * sum_i score[idx[b, i], p]
+        # Use einsum-friendly path: gather then mean over the cluster axis.
+        mean_score = score[idx].mean(axis=1)  # (n_boot, n_free_own)
+        delta = -mean_score @ a_inv.T  # (n_boot, n_free_own); one-step shift
+
+        # Place delta back into the global parameter columns.
+        global_cols = np.array(
+            [pos_lookup[loc] for loc in period_res.free_param_locs],
+            dtype=np.int64,
+        )
+        replicate_values[:, global_cols] += delta
+
+    replicate_params = pd.DataFrame(
+        replicate_values,
+        columns=all_params.index,
+    )
+    standard_errors = pd.Series(
+        replicate_params.std(axis=0, ddof=1).to_numpy(),
+        index=all_params.index,
+        name="bootstrap_se",
+    )
+    return AFBootstrapResult(
+        standard_errors=standard_errors,
+        replicate_params=replicate_params,
+        n_clusters=n_clusters,
+        n_boot=n_boot,
+    )
+
+
 __all__ = [
+    "AFBootstrapResult",
     "AFInferenceResult",
     "AFPeriodInferenceResult",
+    "compute_af_bootstrap_se",
     "compute_af_standard_errors",
 ]

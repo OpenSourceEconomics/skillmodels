@@ -6,8 +6,10 @@ import pytest
 
 from skillmodels.af.estimate import estimate_af
 from skillmodels.af.inference import (
+    AFBootstrapResult,
     AFInferenceResult,
     AFPeriodInferenceResult,
+    compute_af_bootstrap_se,
     compute_af_standard_errors,
 )
 from skillmodels.af.types import AFEstimationOptions
@@ -330,6 +332,79 @@ def test_af_inference_block_diagonal_method_attribute(
 ) -> None:
     _, inf_block, _, _ = both_methods
     assert inf_block.method == "block_diagonal"
+
+
+@pytest.fixture(scope="module")
+def bootstrap_result() -> tuple[AFBootstrapResult, AFInferenceResult, pd.DataFrame]:
+    """Fit once and run both the score-resampling bootstrap and the sandwich.
+
+    Block-diagonal sandwich is the asymptotic equivalent of the bootstrap
+    SE, so both are computed here for cross-comparison.
+    """
+    data = _simulate_linear_data(n_obs=400, n_periods=3, seed=0)
+    model = _make_linear_model(n_periods=3)
+    af_opts = AFEstimationOptions(
+        n_halton_points=25,
+        n_halton_points_shock=15,
+        n_mixture_components=1,
+        optimizer_algorithm="scipy_lbfgsb",
+    )
+    fit = estimate_af(model_spec=model, data=data, af_options=af_opts)
+    boot = compute_af_bootstrap_se(fit, data, af_opts, n_boot=4000, seed=42)
+    inf_block = compute_af_standard_errors(fit, data, af_opts, method="block_diagonal")
+    return boot, inf_block, fit.all_params
+
+
+@pytest.mark.end_to_end
+def test_af_bootstrap_result_dataclass_shape(
+    bootstrap_result: tuple[AFBootstrapResult, AFInferenceResult, pd.DataFrame],
+) -> None:
+    boot, _, all_params = bootstrap_result
+    assert boot.n_boot == 4000
+    assert boot.n_clusters == 400
+    assert list(boot.replicate_params.columns) == list(all_params.index)
+    assert boot.replicate_params.shape == (4000, len(all_params.index))
+    assert list(boot.standard_errors.index) == list(all_params.index)
+
+
+@pytest.mark.end_to_end
+def test_af_bootstrap_se_matches_block_sandwich_within_mc_noise(
+    bootstrap_result: tuple[AFBootstrapResult, AFInferenceResult, pd.DataFrame],
+) -> None:
+    """Bootstrap SEs should match block-diagonal sandwich SEs within MC noise.
+
+    The two estimators are asymptotically equivalent; with B=4000 reps on
+    n=400 they should agree to within a few percent.
+    """
+    boot, inf_block, _ = bootstrap_result
+    se_boot = boot.standard_errors
+    se_block = inf_block.standard_errors
+    # Compare only entries with strictly positive asymptotic SE (skip pinned).
+    mask = se_block > 1e-8
+    rel_diff = (
+        np.abs(se_boot[mask].to_numpy() - se_block[mask].to_numpy())
+        / se_block[mask].to_numpy()
+    )
+    # 4000 bootstrap reps over 400 clusters; allow generous tolerance.
+    np.testing.assert_array_less(rel_diff, 0.15)
+
+
+@pytest.mark.end_to_end
+def test_af_bootstrap_pinned_params_have_zero_se(
+    bootstrap_result: tuple[AFBootstrapResult, AFInferenceResult, pd.DataFrame],
+) -> None:
+    """Pinned-by-normalization loadings/intercepts have zero bootstrap SE.
+
+    Loadings and intercepts pinned via `Normalizations` are constant
+    across all bootstrap replicates by construction.
+    """
+    boot, _, _ = bootstrap_result
+    pinned = [("loadings", t, "m1", "skill") for t in (0, 1, 2)] + [
+        ("controls", t, "m1", "constant") for t in (0, 1, 2)
+    ]
+    for loc in pinned:
+        if loc in boot.standard_errors.index:
+            assert float(boot.standard_errors.loc[loc]) == pytest.approx(0.0, abs=1e-12)
 
 
 @pytest.mark.end_to_end
