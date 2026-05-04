@@ -1014,7 +1014,14 @@ def _compute_full_sandwich(
     # rows for pinned parameters whose Hessian rows are zero. `pinv` keeps the
     # vcov finite by zeroing out the null-space directions instead of
     # propagating NaN through `inv`.
-    a_inv = jnp.linalg.pinv(a_free, hermitian=True)
+    # Unlike the block-diagonal case, `a_free` here is *not* symmetric:
+    # period-t rows are drawn from period-t's Hessian, which has zero
+    # entries in later-period columns but non-zero entries in earlier
+    # ones (period-t LL depends on period-(t-1) params via the
+    # propagated conditional distribution). So we must NOT pass
+    # `hermitian=True`, which would route through `eigh` and silently
+    # symmetrise the input.
+    a_inv = jnp.linalg.pinv(a_free)
     v_free = a_inv @ omega_free @ a_inv.T / n_obs
 
     # Build per-period inference results, restoring the block-diagonal
