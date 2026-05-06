@@ -5,12 +5,23 @@ NVIDIA H100 SXM5, 64 cores, 768 GiB RAM per node).
 
 ## What runs
 
-`run_translog_sim.slurm` launches the translog AF sim sweep across all four H100 GPUs on
-a single node. Each GPU sweeps a disjoint slice of the 500 stored simulations (125
-sims/GPU), plus the 5-sim n=2000 cell on GPU 0.
+`run_translog_sim.slurm` launches the translog sim sweep across all four H100 GPUs on a
+single node, using **two estimators** in parallel:
 
-H100 vs local RTX 3070: per-sim wall-clock drops from ~8 min to roughly 60–90 s, so 500
-sims complete in 30–45 min instead of ~3 days.
+- **AF** (Antweiler-Freyberger): the period-by-period MLE with Halton quadrature. Each
+  GPU sweeps a disjoint slice of the 500 stored simulations (125 sims/GPU).
+- **CHS** (Cunha-Heckman-Schennach via UKF Kalman filter): same datasets, same
+  measurement-system normalisations (first loading=1 + all intercepts pinned to 0), but
+  investment is treated as a regular latent factor (CHS lacks AF's `is_endogenous`
+  notion). Each GPU also runs a CHS slice for the corresponding 125 sims.
+
+The two estimators write to disjoint output directories (`translog_n500/` for AF,
+`translog_n500_chs/` for CHS) so a downstream aggregator can diff their parameter
+recovery.
+
+H100 vs local RTX 3070: per-sim AF wall-clock drops from ~8 min to roughly 60–90 s, so
+500 sims complete in 30–45 min instead of ~3 days. CHS is much cheaper per-sim
+(seconds), so the CHS sweep finishes well before AF.
 
 ## One-time Snellius setup
 

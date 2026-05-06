@@ -68,17 +68,40 @@ launch_worker() {
         > "logs/sweep_${variant}_n${n}_gpu${gpu_id}_${SLURM_JOB_ID}.log" 2>&1 &
 }
 
-# Translog n=500: split 500 sims across the 4 GPUs (125 each).
+launch_chs_worker() {
+    local gpu_id="$1"
+    local variant="$2"
+    local n="$3"
+    local start="$4"
+    local count="$5"
+    CUDA_VISIBLE_DEVICES="$gpu_id" pixi run -e tests-cuda12 python \
+        "$SIM_REPRO_ROOT/sim_sweep_chs.py" \
+        --variant "$variant" --n "$n" --start "$start" --count "$count" \
+        > "logs/sweep_chs_${variant}_n${n}_gpu${gpu_id}_${SLURM_JOB_ID}.log" 2>&1 &
+}
+
+# Translog n=500 AF: split 500 sims across all 4 GPUs (125 each).
 for gpu_id in 0 1 2 3; do
     launch_worker "$gpu_id" translog 500 $((125 * gpu_id)) 125
 done
 
+# Translog n=500 CHS: same dataset + same normalisations, comparison
+# point against AF. CHS is much cheaper per-sim (Kalman filter, no
+# Halton integration), so co-locate one CHS worker per GPU.
+for gpu_id in 0 1 2 3; do
+    launch_chs_worker "$gpu_id" translog 500 $((125 * gpu_id)) 125
+done
+
 # Translog n=2000: small cell (the .mat file holds 5 stored sims).
-# Run on GPU 0 alongside its n=500 chunk; H100 has plenty of memory.
+# Run AF + CHS on GPU 0 alongside its n=500 chunk; H100 has plenty of memory.
 CUDA_VISIBLE_DEVICES=0 pixi run -e tests-cuda12 python \
     "$SIM_REPRO_ROOT/sim_sweep.py" \
     --variant translog --n 2000 --count 5 --n-halton 10000 \
     > "logs/sweep_translog_n2000_gpu0_${SLURM_JOB_ID}.log" 2>&1 &
+CUDA_VISIBLE_DEVICES=0 pixi run -e tests-cuda12 python \
+    "$SIM_REPRO_ROOT/sim_sweep_chs.py" \
+    --variant translog --n 2000 --count 5 \
+    > "logs/sweep_chs_translog_n2000_gpu0_${SLURM_JOB_ID}.log" 2>&1 &
 
 wait
 
@@ -89,7 +112,14 @@ from pathlib import Path
 import os
 
 root = Path(os.environ["SIM_REPRO_OUT"])
-for cell in ("translog_n500", "translog_n2000"):
+for cell in (
+    "translog_n500",
+    "translog_n500_chs",
+    "translog_n2000",
+    "translog_n2000_chs",
+):
+    if not (root / cell).exists():
+        continue
     pkls = sorted((root / cell).glob("sim_*.pkl"))
     ok = sum(1 for f in pkls if pickle.load(open(f, "rb")).get("success"))
     fail = len(pkls) - ok
