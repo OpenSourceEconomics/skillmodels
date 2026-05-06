@@ -94,15 +94,27 @@ class MixtureComponent:
 class ConditionalDistribution:
     """Estimated conditional distribution of latent factors at a given period.
 
-    Represents f(ln theta_t | data_{0:t}) as a mixture of Gaussians, where the
-    mixture parameters may depend on individual-level data from previous periods.
+    Represents f(ln theta_t | data_{0:t}) as a Halton-driven importance sample
+    per mixture component. Each obs has an n_halton-row matrix of chained
+    skills_t draws built deterministically from the previous period's
+    estimated parameters and the joint Halton design — propagating the
+    non-Gaussian shape forward across periods (vs. the Gaussian moment-match
+    that previously caused a ~50% downward bias on investment-shock SDs).
     """
 
     mixture_weights: Array
     """Mixture weights, shape (n_components,)."""
 
     components: tuple[MixtureComponent, ...]
-    """Per-component distribution parameters."""
+    """Per-component summary statistics (mean, chol_cov) derived from the
+    importance sample. Used by `posterior_states` and `inference`; not used
+    in the transition likelihood itself."""
+
+    samples_per_component: tuple[Array, ...]
+    """One importance-sample array per mixture component, each shape
+    ``(n_halton, n_obs, n_state)``. ``samples_per_component[l][j, i, :]`` is
+    the j-th Halton-driven draw of skills_t conditional on individual i's
+    data, under mixture component l."""
 
     conditional_weights: Array | None = None
     """Individual-specific conditional mixture weights, shape (n_obs, n_components).

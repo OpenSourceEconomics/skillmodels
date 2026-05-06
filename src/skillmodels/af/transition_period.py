@@ -146,17 +146,24 @@ def estimate_transition_period(
     # Build loading mask
     loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
 
-    # Joint Halton draws: a single low-discrepancy sequence over
-    # (z_state, z_shock, z_inv_shock). The MATLAB AF reference draws one
-    # joint Halton of dimension n_state + n_shock + n_endog and sums the
-    # integrand at those points, rather than building the outer product
-    # of three per-axis grids. State factors without a production shock
+    # Joint Halton draws over the *fresh* period-t shocks: production
+    # shock z's plus investment shock z's. The state z's are absorbed into
+    # the importance sample carried over from the previous period
+    # (`prev_distribution.samples_per_component`), so they do NOT appear in
+    # `joint_nodes`. State factors without a production shock
     # (`has_production_shock=False`) drop out of the shock slice, so
     # `n_shock <= n_state`.
-    joint_dim = n_state + n_shock + n_endog
+    #
+    # Seed the Halton design with the period index so different periods
+    # draw *independent* low-discrepancy sequences. With a shared seed the
+    # same scrambled Halton is returned every call, which would couple the
+    # period-(t-1) state z (baked into `samples_per_component`) with the
+    # period-t shock z and ruin the joint integration.
+    joint_dim = n_shock + n_endog
     joint_nodes, joint_weights = create_halton_nodes_and_weights(
         af_options.n_halton_points,
         joint_dim,
+        seed=period,
     )
 
     prev_dist_arrays, total_n_transition_params = _prepare_transition_inputs(
@@ -229,42 +236,21 @@ def estimate_transition_period(
         fixed_params=fixed_params,
     )
 
-    # Create a state-only transition wrapper for distribution propagation.
-    # Uses mean investment (from investment eq at prior mean) and observed values.
-    prior_mean = prev_distribution.components[0].mean
-    mean_inv = _compute_mean_investment(
-        prior_mean,
-        obs_factor_values,
-        result_params,
-        n_endog,
-        n_state,
-        len(observed_factors),
-    )
-
-    def state_only_transition(
-        state_factors_val: Array,
-        params: Array,
-    ) -> Array:
-        """Transition wrapper using mean investment + mean observed."""
-        mean_obs = jnp.mean(obs_factor_values, axis=0)
-        full = jnp.concatenate([state_factors_val, mean_inv, mean_obs])
-        return combined_transition(full, params)
-
-    # Distribution propagation uses a marginal state-only grid; integration
-    # is 1-dimensional in each state factor, so the full joint grid is
-    # unnecessary here.
-    marginal_state_nodes, marginal_state_weights = create_halton_nodes_and_weights(
-        af_options.n_halton_points,
-        n_state,
-    )
+    # Build the importance sample for the next period by chaining the
+    # previous-period samples through the current period's estimated
+    # transition + investment equation + production shock, using the same
+    # Halton design (joint_nodes) that fed the period-t likelihood.
     updated_dist = _update_conditional_distribution(
         prev_distribution=prev_distribution,
         result_params=result_params,
-        combined_transition=state_only_transition,
-        state_nodes=marginal_state_nodes,
-        state_weights=marginal_state_weights,
-        n_factors=n_state,
+        combined_transition=combined_transition,
+        joint_nodes=joint_nodes,
+        n_state=n_state,
+        n_endog=n_endog,
+        n_shock=n_shock,
         shock_factor_indices=shock_factor_indices,
+        observed_factor_values=obs_factor_values,
+        n_observed_factors=len(observed_factors),
     )
 
     period_result = AFPeriodResult(
@@ -399,36 +385,6 @@ def _run_transition_optimization(
     result_params["value"] = opt_res.params["value"].to_numpy()
 
     return result_params, opt_res
-
-
-def _compute_mean_investment(
-    state_mean: Array,
-    obs_factor_values: Array,
-    result_params: pd.DataFrame,
-    n_endog: int,
-    n_state: int,
-    n_obs_factors: int,
-) -> Array:
-    """Compute mean investment at the prior state mean (no shock)."""
-    if n_endog == 0:
-        return jnp.zeros(0)
-    inv_eq_mask = result_params.index.get_level_values("category") == "investment_eq"
-    inv_eq_vals = jnp.array(result_params.loc[inv_eq_mask, "value"].to_numpy())
-    n_per = 1 + n_state + n_obs_factors
-    # Use population mean of observed factor values
-    obs_mean = (
-        jnp.mean(obs_factor_values, axis=0)
-        if obs_factor_values.shape[0] > 0
-        else jnp.zeros(n_obs_factors)
-    )
-    result = jnp.zeros(n_endog)
-    for j in range(n_endog):
-        beta = inv_eq_vals[j * n_per : (j + 1) * n_per]
-        inv_j = beta[0] + jnp.dot(beta[1 : 1 + n_state], state_mean)
-        if n_obs_factors > 0:
-            inv_j = inv_j + jnp.dot(beta[1 + n_state :], obs_mean)
-        result = result.at[j].set(inv_j)  # noqa: PD008
-    return result
 
 
 def _collect_transition_constraints(
@@ -576,19 +532,19 @@ def _prepare_transition_inputs(
     factors: tuple[str, ...],
     n_obs: int,
 ) -> tuple[dict[str, Array], int]:
-    """Prepare distribution arrays and count transition params.
+    """Pack the previous-period importance sample for the likelihood.
 
-    Convert the previous-period conditional distribution into JAX arrays
-    for the likelihood, and compute the maximum number of transition
-    parameters across all factors.
+    Stack the per-component samples into a single ``(n_components, n_halton,
+    n_obs, n_state)`` array and broadcast / read the per-obs mixture
+    weights. Also count the total number of transition parameters across
+    all state factors.
 
     Return:
         Tuple of (prev_dist_arrays dict, n_transition_params).
 
     """
     n_components = len(prev_distribution.components)
-    means = jnp.stack([c.mean for c in prev_distribution.components])
-    chol_covs = jnp.stack([c.chol_cov for c in prev_distribution.components])
+    samples = jnp.stack(prev_distribution.samples_per_component, axis=0)
 
     if prev_distribution.conditional_weights is not None:
         cond_weights = prev_distribution.conditional_weights
@@ -600,8 +556,7 @@ def _prepare_transition_inputs(
 
     prev_dist_arrays = {
         "cond_weights": cond_weights,
-        "means": means,
-        "chol_covs": chol_covs,
+        "samples_per_component": samples,
     }
 
     total_n_transition_params = sum(
@@ -693,65 +648,124 @@ def _update_conditional_distribution(
     prev_distribution: ConditionalDistribution,
     result_params: pd.DataFrame,
     combined_transition: Callable,
-    state_nodes: Array,
-    state_weights: Array,
-    n_factors: int,
-    shock_factor_indices: Array | None = None,
+    joint_nodes: Array,
+    n_state: int,
+    n_endog: int,
+    n_shock: int,
+    shock_factor_indices: Array,
+    observed_factor_values: Array,
+    n_observed_factors: int,
 ) -> ConditionalDistribution:
-    """Propagate the conditional distribution through the transition function.
+    """Build the next-period importance sample by chaining forward.
 
-    Use quadrature-based moment matching: for each mixture component, sample
-    the previous distribution at quadrature nodes, propagate through the
-    transition function, and compute the new mean and covariance.
+    For each mixture component l, each Halton index j, and each observation
+    i:
 
-    ``shock_factor_indices`` maps each shock-bearing factor to its position in
-    the state-factor ordering. When ``n_shock_factors < n_factors`` (some
-    state factors have ``has_production_shock=False``), the shock covariance
-    is scattered onto just those diagonal entries. Defaults to all state
-    factors having shocks.
+    1. ``theta_prev = prev_samples[l][j, i, :]`` (no fresh draw).
+    2. ``inv = beta_0 + beta_state @ theta_prev + beta_obs @ Y_i +
+        sigma_inv * z_inv[j]`` (current-period investment equation,
+        evaluated at the just-estimated parameters and the same z_inv that
+        the period-t likelihood used).
+    3. ``theta_t = transition(full_prev_with_obs, trans_params) +
+        sigma_prod * z_prod[j]``.
+
+    The result is a per-component array of shape
+    ``(n_halton, n_obs, n_state)`` which we hand to the next period's
+    likelihood. Per-component summary stats (mean, chol_cov) are computed
+    from each new sample for use by `posterior_states` and `inference`.
+
+    This mirrors MATLAB's `create_nodes_weights_12` style: the previous
+    period's Halton-driven samples are propagated through the just-fitted
+    chain, and that chained sample becomes the next period's importance
+    distribution.
     """
-    # Extract estimated transition params and shock SDs
+    # Extract estimated transition params, shock SDs, investment-equation
+    # params, and investment-shock SDs.
     trans_mask = result_params.index.get_level_values("category") == "transition"
     shock_mask = result_params.index.get_level_values("category") == "shock_sds"
+    inv_eq_mask = result_params.index.get_level_values("category") == "investment_eq"
+    inv_sd_mask = result_params.index.get_level_values("category") == "investment_sds"
 
     trans_params = jnp.array(result_params.loc[trans_mask, "value"].to_numpy())
     shock_sds = jnp.array(result_params.loc[shock_mask, "value"].to_numpy())
-
-    if shock_factor_indices is None:
-        shock_factor_indices = jnp.arange(n_factors)
-
-    shock_diag = (
-        jnp.zeros(n_factors).at[shock_factor_indices].set(shock_sds**2)  # noqa: PD008
+    inv_eq_params = (
+        jnp.array(result_params.loc[inv_eq_mask, "value"].to_numpy())
+        if inv_eq_mask.any()
+        else jnp.zeros(0)
+    )
+    inv_sds = (
+        jnp.array(result_params.loc[inv_sd_mask, "value"].to_numpy())
+        if inv_sd_mask.any()
+        else jnp.zeros(0)
     )
 
+    n_per_inv_eq = 1 + n_state + n_observed_factors if n_endog > 0 else 0
+
+    n_halton = joint_nodes.shape[0]
+
+    def _chain_one_component(prev_sample: Array) -> Array:
+        """Map (j, i) -> theta_t given prev_sample (n_halton, n_obs, n_state)."""
+
+        def _at_node(j_idx: int, i_idx: int) -> Array:
+            theta_prev = prev_sample[j_idx, i_idx]
+            obs_y = (
+                observed_factor_values[i_idx]
+                if n_observed_factors > 0
+                else jnp.zeros(0)
+            )
+            z_at_j = joint_nodes[j_idx]
+            z_shock = z_at_j[:n_shock]
+            z_inv_shock = z_at_j[n_shock:]
+
+            # Investment equation at the just-estimated params.
+            inv = jnp.zeros(n_endog)
+            for k in range(n_endog):
+                beta = inv_eq_params[k * n_per_inv_eq : (k + 1) * n_per_inv_eq]
+                intercept = beta[0]
+                state_coeffs = beta[1 : 1 + n_state]
+                obs_coeffs = beta[1 + n_state :]
+                inv_k = (
+                    intercept
+                    + jnp.dot(state_coeffs, theta_prev)
+                    + jnp.dot(obs_coeffs, obs_y)
+                    + inv_sds[k] * z_inv_shock[k]
+                )
+                inv = inv.at[k].set(inv_k)  # noqa: PD008
+
+            full_prev_with_obs = jnp.concatenate([theta_prev, inv, obs_y])
+            state_shock_contrib = (
+                jnp.zeros(n_state)  # noqa: PD008
+                .at[shock_factor_indices]
+                .set(shock_sds * z_shock)
+            )
+            return combined_transition(full_prev_with_obs, trans_params) + (
+                state_shock_contrib
+            )
+
+        n_obs = prev_sample.shape[1]
+        return jax.vmap(
+            jax.vmap(_at_node, in_axes=(None, 0)),
+            in_axes=(0, None),
+        )(jnp.arange(n_halton), jnp.arange(n_obs))
+
+    new_samples_per_component: list[Array] = []
     new_components: list[MixtureComponent] = []
-    for component in prev_distribution.components:
-        # Sample previous distribution at quadrature nodes
-        # theta_{t-1} = mu + L @ z_q for each node z_q
-        theta_samples = (
-            component.mean[None, :] + state_nodes @ component.chol_cov.T
-        )  # (n_nodes, n_factors)
-
-        # Propagate each sample through transition function
-        propagated = jax.vmap(combined_transition, in_axes=(0, None))(
-            theta_samples, trans_params
-        )  # (n_nodes, n_factors)
-
-        # Moment matching: compute weighted mean and covariance
-        new_mean = jnp.sum(state_weights[:, None] * propagated, axis=0)  # (n_factors,)
-
-        centered = propagated - new_mean[None, :]
-        new_cov = jnp.einsum(
-            "q,qi,qj->ij", state_weights, centered, centered
-        ) + jnp.diag(shock_diag)
-
-        # Cholesky factorization of new covariance
-        new_chol = jnp.linalg.cholesky(new_cov + 1e-8 * jnp.eye(n_factors))
-
+    for prev_sample in prev_distribution.samples_per_component:
+        new_sample = _chain_one_component(prev_sample)
+        new_samples_per_component.append(new_sample)
+        # Summary stats: per-Halton mean across obs for posterior_states
+        # consumption. (Mean is also taken across obs to give a population-
+        # level summary; the actual likelihood uses the per-obs sample.)
+        flat = new_sample.reshape(-1, n_state)
+        new_mean = jnp.mean(flat, axis=0)
+        centered = flat - new_mean[None, :]
+        new_cov = (centered.T @ centered) / flat.shape[0] + 1e-8 * jnp.eye(n_state)
+        new_chol = jnp.linalg.cholesky(new_cov)
         new_components.append(MixtureComponent(mean=new_mean, chol_cov=new_chol))
 
     return ConditionalDistribution(
         mixture_weights=prev_distribution.mixture_weights,
         components=tuple(new_components),
+        samples_per_component=tuple(new_samples_per_component),
         conditional_weights=prev_distribution.conditional_weights,
     )

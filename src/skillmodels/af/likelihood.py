@@ -820,8 +820,10 @@ def _transition_loglike_per_obs(
     residuals_base = measurements - control_contrib
 
     cond_weights = prev_distribution["cond_weights"]
-    means = prev_distribution["means"]
-    chol_covs = prev_distribution["chol_covs"]
+    # samples shape (n_components, n_halton, n_obs, n_state). Re-shape to
+    # (n_obs, n_components, n_halton, n_state) so we can map per-obs.
+    samples_stacked = prev_distribution["samples_per_component"]
+    samples_by_obs = jnp.transpose(samples_stacked, (2, 0, 1, 3))
 
     @jax.checkpoint
     def _single_obs(
@@ -829,6 +831,7 @@ def _transition_loglike_per_obs(
         prev_residual_base: Array,
         obs_cond_weights: Array,
         obs_factor_values: Array,
+        obs_samples: Array,
     ) -> Array:
         return _integrate_transition_single_obs(
             residual_base=residual_base,
@@ -838,8 +841,7 @@ def _transition_loglike_per_obs(
             prev_full_loadings=prev_full_loadings,
             prev_meas_sds=prev_meas_sds,
             obs_cond_weights=obs_cond_weights,
-            means=means,
-            chol_covs=chol_covs,
+            prev_samples_per_component=obs_samples,
             joint_nodes=joint_nodes,
             joint_weights=joint_weights,
             transition_func=transition_func,
@@ -861,6 +863,7 @@ def _transition_loglike_per_obs(
         prev_residuals_base,
         cond_weights,
         observed_factor_values,
+        samples_by_obs,
         n_obs_per_batch=n_obs_per_batch,
     )
 
@@ -906,8 +909,7 @@ def _integrate_transition_single_obs(
     prev_full_loadings: Array,
     prev_meas_sds: Array,
     obs_cond_weights: Array,
-    means: Array,
-    chol_covs: Array,
+    prev_samples_per_component: Array,
     joint_nodes: Array,
     joint_weights: Array,
     transition_func: Callable,
@@ -922,34 +924,34 @@ def _integrate_transition_single_obs(
     obs_factor_values: Array,
     stability_floor: float,
 ) -> Array:
-    """Joint-Halton quadrature integration for one observation.
+    """Importance-sample integration for one observation at a transition period.
 
-    Integrates over ``(z_state, z_shock, z_inv_shock)`` using a single
-    low-discrepancy sequence of shape
-    ``(n_halton, n_state_factors + n_shock_factors + n_endogenous_factors)``
-    rather than the outer product of three per-axis grids. The joint
-    approach is quadrature-equivalent when the marginals are independent
-    (they are, since the three random variables are independent standard
-    normals under the measurement model), matches the MATLAB AF
-    implementation, and keeps peak memory linear in ``n_halton`` instead
-    of cubic.
+    The previous-period skills distribution is supplied as a Halton-driven
+    importance sample ``prev_samples_per_component`` of shape
+    ``(n_components, n_halton, n_state_factors)``. Each row j is a chained
+    realisation of skills_{t-1} for this observation, built deterministically
+    from the previous period's Halton design + the previous period's
+    estimated parameters. This preserves the non-Gaussian shape of skills_{t-1}
+    across periods (vs. the moment-matched Gaussian re-draw, which is the
+    bug Mario Rothfelder identified that biased investment-shock SDs
+    downward by ~50%).
 
-    State factors with ``has_production_shock=False`` have no shock slot in
-    the joint draw: the shock dimension is ``n_shock_factors`` rather than
-    ``n_state_factors``, and shock contributions are scattered back into
-    the state-factor ordering via ``shock_factor_indices``.
+    The joint Halton design at this period covers the *fresh* period-t
+    shocks only:
+    ``joint_nodes`` has shape ``(n_halton, n_shock_factors + n_endogenous_factors)``
+    (no z_state column — that's absorbed into the importance sample).
     """
     n_components = obs_cond_weights.shape[0]
 
-    def _log_draw_contribution(z_joint: Array) -> Array:
-        """Per-draw log kernel, LogSumExp over mixture components."""
-        z_state = z_joint[:n_state_factors]
-        z_shock = z_joint[n_state_factors : n_state_factors + n_shock_factors]
-        z_inv_shock = z_joint[n_state_factors + n_shock_factors :]
+    def _log_draw_contribution(j_idx: Array) -> Array:
+        """Per-draw log kernel at Halton index j, LogSumExp over mixture comps."""
+        z_at_j = joint_nodes[j_idx]
+        z_shock = z_at_j[:n_shock_factors]
+        z_inv_shock = z_at_j[n_shock_factors:]
 
         log_component_vals = []
         for l_idx in range(n_components):
-            theta_prev = means[l_idx] + chol_covs[l_idx] @ z_state
+            theta_prev = prev_samples_per_component[l_idx, j_idx]
             inv = _compute_investment(
                 theta_prev,
                 obs_factor_values,
@@ -962,7 +964,9 @@ def _integrate_transition_single_obs(
             full_prev = jnp.concatenate([theta_prev, inv])
             full_prev_with_obs = jnp.concatenate([theta_prev, inv, obs_factor_values])
 
-            # Previous-period investment measurement density (if any)
+            # Previous-period measurement density (skill measurements at t-1
+            # plus inv measurements at t-1, evaluated against the importance-
+            # sample skills and the chained inv).
             prev_residuals = prev_residual_base - prev_full_loadings @ full_prev
             log_prev_inv_meas = jnp.sum(
                 _log_normal_pdf(
@@ -999,7 +1003,8 @@ def _integrate_transition_single_obs(
 
         return jax.scipy.special.logsumexp(jnp.array(log_component_vals))
 
-    log_contribs = jax.vmap(_log_draw_contribution)(joint_nodes)
+    n_halton = joint_nodes.shape[0]
+    log_contribs = jax.vmap(_log_draw_contribution)(jnp.arange(n_halton))
     return jax.scipy.special.logsumexp(log_contribs + jnp.log(joint_weights))
 
 

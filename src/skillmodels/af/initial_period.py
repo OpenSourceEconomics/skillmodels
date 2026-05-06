@@ -5,6 +5,7 @@ measurement system parameters, using a mixture-of-normals model with
 Halton quadrature for numerical integration.
 """
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import optimagic as om
@@ -13,7 +14,11 @@ from jax import Array
 
 from skillmodels.af.batching import auto_n_obs_per_batch
 from skillmodels.af.halton import create_halton_nodes_and_weights
-from skillmodels.af.likelihood import af_loglike_initial, create_loglike_and_gradient
+from skillmodels.af.likelihood import (
+    _log_mvn_pdf_chol,
+    af_loglike_initial,
+    create_loglike_and_gradient,
+)
 from skillmodels.af.params import (
     apply_fixed_params,
     apply_start_params,
@@ -226,13 +231,17 @@ def estimate_initial_period(
     result_params = params_template.copy()
     result_params["value"] = opt_res.params["value"].to_numpy()
 
-    # Extract conditional distribution (state factors only for AF propagation)
+    # Extract conditional distribution (state factors only for AF propagation),
+    # building the per-obs importance sample of skills_0 from the same Halton
+    # design used for the optimization.
     sf = state_factors if state_factors is not None else factors
     cond_dist = _extract_conditional_distribution(
         result_params,
         len(sf),
         n_components,
         sf,
+        nodes=nodes,
+        observed_factor_values=obs_values,
     )
 
     period_result = AFPeriodResult(
@@ -400,17 +409,26 @@ def _observed_factor_stats(
     return obs_means, obs_sds
 
 
-def _extract_conditional_distribution(
+def _extract_conditional_distribution(  # noqa: PLR0915
     params: pd.DataFrame,
     _n_factors: int,
     n_components: int,
     factors: tuple[str, ...],
+    nodes: Array,
+    observed_factor_values: Array,
 ) -> ConditionalDistribution:
-    """Extract the estimated initial distribution for the given factors.
+    """Extract the initial distribution and build the period-0 importance sample.
 
-    The joint covariance over (latent, observed) may be stored; this
-    function extracts the marginal over `factors` by taking the diagonal
-    submatrix of the joint covariance, recomputing its Cholesky.
+    For each mixture component l, build a per-obs importance sample of
+    skills_0 of shape ``(n_halton, n_obs, n_state)``, conditional (where
+    applicable) on the observed factor values via the Schur complement.
+    Per-obs mixture weights `p(l | Y_i)` are computed by Bayes' rule from
+    the marginal density of Y_i under each component.
+
+    These samples are propagated forward across periods (rather than being
+    re-collapsed to a Gaussian mixture and re-drawn freshly) so the
+    non-Gaussian shape of skills_t survives transitions through the CES
+    production function.
     """
     # Mixture weights
     weight_mask = params.index.get_level_values("category") == "mixture_weights"
@@ -419,8 +437,27 @@ def _extract_conditional_distribution(
 
     # Determine joint factor ordering from the stored initial_states entries
     joint_factors = _get_joint_factors_in_order(params, n_components)
+    n_state = len(factors)
+    n_obs = int(observed_factor_values.shape[0])
+    n_obs_factors = int(observed_factor_values.shape[1])
+
+    # Indices into joint_factors:
+    # - target_idx: positions of `factors` (the state factors we want samples for).
+    # - obs_idx:    positions of observed factors at the joint's tail.
+    # Joint stores (state_latent_factors, observed_factors) in that order.
+    target_idx = jnp.array([joint_factors.index(f) for f in factors], dtype=jnp.int32)
+    obs_idx = jnp.array(
+        [
+            joint_factors.index(joint_factors[len(joint_factors) - n_obs_factors + k])
+            for k in range(n_obs_factors)
+        ],
+        dtype=jnp.int32,
+    )
 
     components: list[MixtureComponent] = []
+    samples_per_component: list[Array] = []
+    log_unnorm_weights_per_component: list[Array] = []
+
     for m in range(n_components):
         joint_mean = jnp.array(
             [
@@ -429,21 +466,66 @@ def _extract_conditional_distribution(
             ]
         )
         joint_chol = _assemble_joint_chol(params, joint_factors, m)
-        if tuple(factors) == joint_factors:
-            sub_chol = joint_chol
-            sub_mean = joint_mean
+        joint_cov = joint_chol @ joint_chol.T
+
+        mu_theta = joint_mean[target_idx]
+        cov_tt = joint_cov[target_idx[:, None], target_idx[None, :]]
+
+        if n_obs_factors == 0:
+            sub_mean = mu_theta
+            sub_chol = jnp.linalg.cholesky(cov_tt + 1e-10 * jnp.eye(n_state))
+            z_for_state = nodes[:, :n_state]
+            per_node = sub_mean[None, :] + z_for_state @ sub_chol.T
+            samples = jnp.broadcast_to(
+                per_node[:, None, :], (nodes.shape[0], n_obs, n_state)
+            )
+            log_unnorm = jnp.full((n_obs,), float(jnp.log(weights[m] + 1e-300)))
         else:
-            fac_idx = jnp.array([joint_factors.index(f) for f in factors])
-            joint_cov = joint_chol @ joint_chol.T
-            sub_cov = joint_cov[fac_idx[:, None], fac_idx[None, :]]
-            sub_chol = jnp.linalg.cholesky(sub_cov)
-            sub_mean = joint_mean[fac_idx]
+            mu_y = joint_mean[obs_idx]
+            cov_ty = joint_cov[target_idx[:, None], obs_idx[None, :]]
+            cov_yy = joint_cov[obs_idx[:, None], obs_idx[None, :]]
+
+            chol_yy = jnp.linalg.cholesky(cov_yy)
+            solve_tt = jax.scipy.linalg.cho_solve((chol_yy, True), cov_ty.T)
+            cond_cov = cov_tt - cov_ty @ solve_tt + 1e-10 * jnp.eye(n_state)
+            cond_chol = jnp.linalg.cholesky(cond_cov)
+
+            def _per_obs(
+                y_i: Array,
+                chol_yy: Array = chol_yy,
+                mu_y: Array = mu_y,
+                mu_theta: Array = mu_theta,
+                cov_ty: Array = cov_ty,
+            ) -> tuple[Array, Array]:
+                alpha = jax.scipy.linalg.cho_solve((chol_yy, True), y_i - mu_y)
+                cond_mean = mu_theta + cov_ty @ alpha
+                log_marg_y = _log_mvn_pdf_chol(y_i, mu_y, chol_yy)
+                return cond_mean, log_marg_y
+
+            cond_means, log_margs = jax.vmap(_per_obs)(observed_factor_values)
+            z_for_state = nodes[:, :n_state]
+            samples = cond_means[None, :, :] + (z_for_state @ cond_chol.T)[:, None, :]
+            sub_mean = mu_theta
+            sub_chol = cond_chol
+            log_unnorm = jnp.log(weights[m] + 1e-300) + log_margs
+
         components.append(MixtureComponent(mean=sub_mean, chol_cov=sub_chol))
+        samples_per_component.append(samples)
+        log_unnorm_weights_per_component.append(log_unnorm)
+
+    if n_obs_factors > 0:
+        log_w_stack = jnp.stack(
+            log_unnorm_weights_per_component, axis=-1
+        )  # (n_obs, n_components)
+        cond_weights = jax.nn.softmax(log_w_stack, axis=-1)
+    else:
+        cond_weights = None
 
     return ConditionalDistribution(
         mixture_weights=weights,
         components=tuple(components),
-        conditional_weights=None,
+        samples_per_component=tuple(samples_per_component),
+        conditional_weights=cond_weights,
     )
 
 

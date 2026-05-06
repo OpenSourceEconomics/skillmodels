@@ -293,13 +293,24 @@ class _PeriodMeta:
     factors live (the complement is observed factors). Used to marginalise
     the joint cond-dist to its state-factor sub-block.
     """
+    target_idx_in_joint: tuple[int, ...] = ()
+    """Initial-period only: positions of the *target* state factors (the
+    ones whose marginal we want carry-over samples for) within
+    `joint_factors`. Differs from ``state_factor_indices_in_joint`` when
+    the joint includes an endogenous factor with ``has_initial_distribution=True``
+    that should be excluded from the carry-over.
+    """
+    obs_idx_in_joint: tuple[int, ...] = ()
+    """Initial-period only: positions of observed factors within
+    `joint_factors`. Empty for transition-period metas.
+    """
     propagation: MappingProxyType[str, Any] = field(
         default_factory=lambda: MappingProxyType({})
     )
     """Extra JAX-pure bits for propagation of the conditional distribution
     through this period's transition. Only populated for transition
-    periods. Keys: ``state_nodes``, ``state_weights``,
-    ``combined_transition``, ``obs_factor_values``.
+    periods. Keys: ``joint_nodes``, ``combined_transition``,
+    ``obs_factor_values``, ``shock_factor_indices``.
     """
 
 
@@ -331,6 +342,7 @@ def _build_period_metas(
                 af_options=af_options,
                 data_at_period=period_data[0],
                 observed_factors=observed_factors,
+                endogenous_factors=endogenous_factors,
             )
         else:
             prev_period_params = result.period_results[t - 1].params
@@ -365,6 +377,7 @@ def _build_initial_period_meta(
     af_options: AFEstimationOptions,
     data_at_period: Mapping[str, Array],
     observed_factors: tuple[str, ...],
+    endogenous_factors: tuple[str, ...] = (),
 ) -> _PeriodMeta:
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
@@ -378,6 +391,17 @@ def _build_initial_period_meta(
     n_obs_factors = len(observed_factors)
     n_joint = n_state_latent + n_obs_factors
     state_factor_indices_in_joint = tuple(range(n_state_latent))
+
+    # Target factors for the carry-over sample = state_latent minus
+    # endogenous (matches what `estimate_initial_period` does in the
+    # estimation path).
+    joint_factors = state_latent_factors + observed_factors
+    target_factors = tuple(
+        f for f in state_latent_factors if f not in endogenous_factors
+    )
+    target_idx_in_joint = tuple(joint_factors.index(f) for f in target_factors)
+    obs_idx_in_joint = tuple(joint_factors.index(f) for f in observed_factors)
+    n_state_target = len(target_factors)
 
     measurements_p0 = get_measurements_per_factor(model_spec.factors, period=0)
     measurements_p0_filtered = {
@@ -449,11 +473,13 @@ def _build_initial_period_meta(
         parse_kwargs=MappingProxyType(parse_kwargs),
         n_components=n_components,
         n_factors_joint=n_joint,
-        n_state=n_state_latent,
+        n_state=n_state_target,
         n_endog=0,
         n_shock=0,
         n_observed_factors=n_obs_factors,
         state_factor_indices_in_joint=state_factor_indices_in_joint,
+        target_idx_in_joint=target_idx_in_joint,
+        obs_idx_in_joint=obs_idx_in_joint,
         propagation=MappingProxyType({}),
     )
 
@@ -493,9 +519,13 @@ def _build_transition_period_meta(
     all_measures = _get_ordered_measures(measurements_pt)
     loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
 
-    joint_dim = n_state + n_shock + n_endog
+    # Match transition_period.py: joint design covers period-t shocks only;
+    # z_state is absorbed into the importance sample carried over from the
+    # previous period. Period-dependent seed avoids correlation with the
+    # samples (which were built using period-(t-1)'s Halton).
+    joint_dim = n_shock + n_endog
     joint_nodes, joint_weights = create_halton_nodes_and_weights(
-        af_options.n_halton_points, joint_dim
+        af_options.n_halton_points, joint_dim, seed=period
     )
 
     measurements = data_at_period["measurements"]
@@ -732,9 +762,13 @@ def _build_initial_state_cond_dist_jax(
     flat_params_0: Array,
     meta: _PeriodMeta,
 ) -> tuple[Array, Array, Array]:
-    """JAX-pure state-factor marginal of the initial conditional dist.
+    """JAX-pure analytical reconstruction of the period-0 carry-over.
 
-    Returns ``(state_means, state_chols, mixture_weights)``.
+    Mirrors ``initial_period._extract_conditional_distribution``: parse
+    initial-period params, build the per-component, per-obs importance
+    sample of skills_0 of shape ``(n_components, n_halton, n_obs, n_state)``,
+    and compute the per-obs Bayes-rule posterior mixture weights when
+    observed factors are present (else broadcast the prior).
     """
     parsed = _parse_initial_params(
         flat_params_0,
@@ -743,31 +777,85 @@ def _build_initial_state_cond_dist_jax(
         meta.parse_kwargs["n_measures"],
         meta.parse_kwargs["n_controls"],
     )
-    joint_means = parsed["mixture_means"]
-    joint_chols = parsed["mixture_chol_covs"]
+    joint_means = parsed["mixture_means"]  # (K, n_joint)
+    joint_chols = parsed["mixture_chol_covs"]  # (K, n_joint, n_joint)
     mixture_weights = parsed["mixture_weights"]
 
-    if meta.n_state == meta.n_factors_joint:
-        return joint_means, joint_chols, mixture_weights
+    nodes = meta.loglike_kwargs["nodes"]
+    obs_values = meta.loglike_kwargs["observed_factor_values"]
+    n_obs = int(obs_values.shape[0])
+    n_obs_factors = meta.n_observed_factors
+    n_state = meta.n_state
+    target_idx = jnp.asarray(meta.target_idx_in_joint, dtype=jnp.int32)
 
-    state_idx = jnp.asarray(meta.state_factor_indices_in_joint, dtype=jnp.int32)
-    joint_covs = joint_chols @ jnp.swapaxes(joint_chols, -1, -2)
-    sub_covs = joint_covs[:, state_idx[:, None], state_idx[None, :]]
-    state_chols = jnp.linalg.cholesky(sub_covs + 1e-10 * jnp.eye(meta.n_state))
-    state_means = joint_means[:, state_idx]
-    return state_means, state_chols, mixture_weights
+    # samples[k, j, i, :] for component k.
+    z_for_state = nodes[:, :n_state]
+
+    if n_obs_factors == 0:
+
+        def _per_component(joint_mean: Array, joint_chol: Array) -> tuple[Array, Array]:
+            joint_cov = joint_chol @ joint_chol.T
+            mu_t = joint_mean[target_idx]
+            cov_tt = joint_cov[target_idx[:, None], target_idx[None, :]]
+            sub_chol = jnp.linalg.cholesky(cov_tt + 1e-10 * jnp.eye(n_state))
+            per_node = mu_t[None, :] + z_for_state @ sub_chol.T
+            sample = jnp.broadcast_to(
+                per_node[:, None, :], (nodes.shape[0], n_obs, n_state)
+            )
+            log_unnorm = jnp.zeros(n_obs)
+            return sample, log_unnorm
+
+        samples, log_unnorms = jax.vmap(_per_component)(joint_means, joint_chols)
+        log_unnorms = log_unnorms + jnp.log(mixture_weights + 1e-300)[:, None]
+    else:
+        obs_idx = jnp.asarray(meta.obs_idx_in_joint, dtype=jnp.int32)
+
+        def _per_component(joint_mean: Array, joint_chol: Array) -> tuple[Array, Array]:
+            joint_cov = joint_chol @ joint_chol.T
+            mu_t = joint_mean[target_idx]
+            mu_y = joint_mean[obs_idx]
+            cov_tt = joint_cov[target_idx[:, None], target_idx[None, :]]
+            cov_ty = joint_cov[target_idx[:, None], obs_idx[None, :]]
+            cov_yy = joint_cov[obs_idx[:, None], obs_idx[None, :]]
+            chol_yy = jnp.linalg.cholesky(cov_yy)
+            solve_tt = jax.scipy.linalg.cho_solve((chol_yy, True), cov_ty.T)
+            cond_cov = cov_tt - cov_ty @ solve_tt + 1e-10 * jnp.eye(n_state)
+            cond_chol = jnp.linalg.cholesky(cond_cov)
+
+            def _per_obs(y_i: Array) -> tuple[Array, Array]:
+                alpha = jax.scipy.linalg.cho_solve((chol_yy, True), y_i - mu_y)
+                cond_mean = mu_t + cov_ty @ alpha
+                # Marginal log p(Y_i | component k)
+                k = y_i.shape[0]
+                sol = jax.scipy.linalg.solve_triangular(chol_yy, y_i - mu_y, lower=True)
+                log_marg = (
+                    -0.5 * k * jnp.log(2 * jnp.pi)
+                    - jnp.sum(jnp.log(jnp.diag(chol_yy)))
+                    - 0.5 * jnp.dot(sol, sol)
+                )
+                return cond_mean, log_marg
+
+            cond_means, log_margs = jax.vmap(_per_obs)(obs_values)
+            sample = cond_means[None, :, :] + (z_for_state @ cond_chol.T)[:, None, :]
+            return sample, log_margs
+
+        samples, log_marg_y = jax.vmap(_per_component)(joint_means, joint_chols)
+        log_unnorms = log_marg_y + jnp.log(mixture_weights + 1e-300)[:, None]
+
+    return samples, log_unnorms, mixture_weights
 
 
 def _propagate_cond_dist_jax(
-    prev_means: Array,
-    prev_chols: Array,
+    prev_samples: Array,
     flat_params_t: Array,
     meta: _PeriodMeta,
-) -> tuple[Array, Array]:
-    """Propagate a mixture through period ``t``'s transition.
+) -> Array:
+    """Chain the importance sample through period ``t``'s transition.
 
-    Mirrors the estimation-time logic of ``_update_conditional_distribution``
-    and ``_compute_mean_investment`` but operates purely on JAX arrays.
+    Takes ``prev_samples`` of shape ``(n_components, n_halton, n_obs, n_state)``
+    and returns the same-shape array after applying the just-fitted
+    investment equation + transition + production shock at this period.
+    Mirrors ``transition_period._update_conditional_distribution``.
     """
     parsed = _parse_transition_params(
         flat_params_t,
@@ -783,60 +871,60 @@ def _propagate_cond_dist_jax(
     trans_params = parsed["transition_params"]
     shock_sds = parsed["shock_sds"]
     inv_eq_params = parsed["inv_eq_params"]
+    inv_sds = parsed["inv_sds"]
 
     n_endog = meta.n_endog
     n_state = meta.n_state
+    n_shock = meta.n_shock
     n_obs_factors = meta.n_observed_factors
     n_per = 1 + n_state + n_obs_factors if n_endog > 0 else 0
 
+    joint_nodes = meta.loglike_kwargs["joint_nodes"]
+    n_halton = joint_nodes.shape[0]
     obs_values = meta.propagation["obs_factor_values"]
-    obs_mean = (
-        jnp.mean(obs_values, axis=0)
-        if obs_values.shape[0] > 0
-        else jnp.zeros(n_obs_factors)
-    )
-
-    prior_mean_first = prev_means[0]
-    if n_endog == 0:
-        mean_inv = jnp.zeros(0)
-    else:
-        beta_matrix = inv_eq_params.reshape(n_endog, n_per)
-        state_part = beta_matrix[:, 1 : 1 + n_state] @ prior_mean_first
-        obs_part = (
-            beta_matrix[:, 1 + n_state :] @ obs_mean
-            if n_obs_factors > 0
-            else jnp.zeros(n_endog)
-        )
-        mean_inv = beta_matrix[:, 0] + state_part + obs_part
-
     combined_transition = meta.propagation["combined_transition"]
-    state_nodes = meta.propagation["state_nodes"]
-    state_weights = meta.propagation["state_weights"]
     shock_factor_indices = meta.propagation["shock_factor_indices"]
 
-    shock_diag = (
-        jnp.zeros(n_state).at[shock_factor_indices].set(shock_sds**2)  # noqa: PD008
-    )
+    def _at_node(theta_prev: Array, obs_y: Array, j_idx: int) -> Array:
+        z_at_j = joint_nodes[j_idx]
+        z_shock = z_at_j[:n_shock]
+        z_inv_shock = z_at_j[n_shock:]
 
-    def state_only_transition(state_vals: Array, trans_p: Array) -> Array:
-        full = jnp.concatenate([state_vals, mean_inv, obs_mean])
-        return combined_transition(full, trans_p)
+        # Investment equation
+        if n_endog == 0:
+            inv = jnp.zeros(0)
+        else:
+            beta_matrix = inv_eq_params.reshape(n_endog, n_per)
+            state_part = beta_matrix[:, 1 : 1 + n_state] @ theta_prev
+            obs_part = (
+                beta_matrix[:, 1 + n_state :] @ obs_y
+                if n_obs_factors > 0
+                else jnp.zeros(n_endog)
+            )
+            inv = beta_matrix[:, 0] + state_part + obs_part + inv_sds * z_inv_shock
 
-    def per_component(mean_k: Array, chol_k: Array) -> tuple[Array, Array]:
-        theta_samples = mean_k[None, :] + state_nodes @ chol_k.T
-        propagated = jax.vmap(state_only_transition, in_axes=(0, None))(
-            theta_samples, trans_params
+        full_prev_with_obs = jnp.concatenate([theta_prev, inv, obs_y])
+        state_shock_contrib = (
+            jnp.zeros(n_state)  # noqa: PD008
+            .at[shock_factor_indices]
+            .set(shock_sds * z_shock)
         )
-        new_mean = jnp.sum(state_weights[:, None] * propagated, axis=0)
-        centered = propagated - new_mean[None, :]
-        new_cov = jnp.einsum(
-            "q,qi,qj->ij", state_weights, centered, centered
-        ) + jnp.diag(shock_diag)
-        new_chol = jnp.linalg.cholesky(new_cov + 1e-8 * jnp.eye(n_state))
-        return new_mean, new_chol
+        return combined_transition(full_prev_with_obs, trans_params) + (
+            state_shock_contrib
+        )
 
-    new_means, new_chols = jax.vmap(per_component)(prev_means, prev_chols)
-    return new_means, new_chols
+    def _chain_one_component(prev_sample: Array) -> Array:
+        def _per_node(j_idx: int) -> Array:
+            def _per_obs(i_idx: int) -> Array:
+                obs_y = obs_values[i_idx] if n_obs_factors > 0 else jnp.zeros(0)
+                return _at_node(prev_sample[j_idx, i_idx], obs_y, j_idx)
+
+            n_obs = prev_sample.shape[1]
+            return jax.vmap(_per_obs)(jnp.arange(n_obs))
+
+        return jax.vmap(_per_node)(jnp.arange(n_halton))
+
+    return jax.vmap(_chain_one_component)(prev_samples)
 
 
 def _extract_prev_meas_info_jax(
@@ -883,27 +971,36 @@ def _build_prev_dist_arrays(
 ) -> dict[str, Array]:
     """Chain period 0 -> ... -> t-1 to produce prev_dist_arrays for period t.
 
-    When the propagated distribution carries individual-level
-    ``conditional_weights`` (e.g. posterior weights from a Bayes update),
-    pass them via ``cond_weights_override`` — otherwise the chain falls
-    back to the mixture-weights broadcast, which matches the estimation
-    path's default in ``_prepare_transition_inputs``.
+    Build the importance sample at period 0 from initial-period params,
+    chain it forward through each transition period using that period's
+    just-fitted parameters and Halton design, and return the dict the
+    period-``t`` likelihood expects (``cond_weights`` plus
+    ``samples_per_component`` of shape
+    ``(n_components, n_halton, n_obs, n_state)``).
+
+    When per-individual posterior mixture weights are available
+    (``cond_weights_override``), use them; otherwise, derive per-obs
+    weights from the period-0 Bayes-rule posterior or fall back to the
+    prior broadcast (matches the estimation path's
+    ``_prepare_transition_inputs`` default).
     """
     meta0 = metas[0]
     flat_params_0 = flat_super[meta0.slice_start : meta0.slice_stop]
-    state_means, state_chols, mixture_weights = _build_initial_state_cond_dist_jax(
+    samples, log_unnorms, mixture_weights = _build_initial_state_cond_dist_jax(
         flat_params_0, meta0
     )
 
     for s in range(1, target_t):
         meta_s = metas[s]
         flat_params_s = flat_super[meta_s.slice_start : meta_s.slice_stop]
-        state_means, state_chols = _propagate_cond_dist_jax(
-            state_means, state_chols, flat_params_s, meta_s
-        )
+        samples = _propagate_cond_dist_jax(samples, flat_params_s, meta_s)
 
     if cond_weights_override is not None:
         cond_weights = cond_weights_override
+    elif meta0.n_observed_factors > 0:
+        # Per-obs Bayes-rule weights from the initial period.
+        # log_unnorms: (n_components, n_obs); softmax across components.
+        cond_weights = jax.nn.softmax(log_unnorms, axis=0).T
     else:
         meta_target = metas[target_t]
         n_obs = int(meta_target.loglike_kwargs["measurements"].shape[0])
@@ -911,8 +1008,7 @@ def _build_prev_dist_arrays(
         cond_weights = jnp.broadcast_to(mixture_weights[None, :], (n_obs, n_components))
     return {
         "cond_weights": cond_weights,
-        "means": state_means,
-        "chol_covs": state_chols,
+        "samples_per_component": samples,
     }
 
 
