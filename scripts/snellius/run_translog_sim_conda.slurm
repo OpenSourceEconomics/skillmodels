@@ -38,13 +38,13 @@ export SIM_REPRO_OUT="${SIM_REPRO_OUT:-$SIM_REPRO_ROOT/estimates}"
 
 mkdir -p logs "$SIM_REPRO_OUT"
 
-# Activate the pre-created conda env. `mamba activate` requires the shell
-# init hooks; `source activate` is the portable equivalent inside SLURM
-# scripts where ~/.bashrc isn't always sourced.
-module load 2024
-module load Mamba/24.9.0-0
-source "$(mamba info --base)/etc/profile.d/conda.sh"
-conda activate tests-cuda12
+# Point at the pre-created conda env directly. We deliberately skip
+# `conda activate` because the Mamba module loaded on the H100 nodes
+# ships without `etc/profile.d/conda.sh` (login-node and compute-node
+# arch dirs differ on Snellius). Setting CONDA_PREFIX + PATH is enough
+# for the env's interpreter and entry points.
+export CONDA_PREFIX="${CONDA_PREFIX_OVERRIDE:-$HOME/.conda/envs/tests-cuda12}"
+export PATH="$CONDA_PREFIX/bin:$PATH"
 
 cd "$SKILLMODELS_ROOT"
 
