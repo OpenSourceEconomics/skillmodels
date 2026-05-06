@@ -61,7 +61,7 @@ launch_worker() {
     local n="$3"
     local start="$4"
     local count="$5"
-    CUDA_VISIBLE_DEVICES="$gpu_id" python \
+    CUDA_VISIBLE_DEVICES="$gpu_id" "$CONDA_PREFIX/bin/python" \
         "$SIM_REPRO_ROOT/sim_sweep.py" \
         --variant "$variant" --n "$n" --start "$start" --count "$count" \
         --n-halton 10000 \
@@ -74,7 +74,7 @@ launch_chs_worker() {
     local n="$3"
     local start="$4"
     local count="$5"
-    CUDA_VISIBLE_DEVICES="$gpu_id" python \
+    CUDA_VISIBLE_DEVICES="$gpu_id" "$CONDA_PREFIX/bin/python" \
         "$SIM_REPRO_ROOT/sim_sweep_chs.py" \
         --variant "$variant" --n "$n" --start "$start" --count "$count" \
         > "logs/sweep_chs_${variant}_n${n}_gpu${gpu_id}_${SLURM_JOB_ID}.log" 2>&1 &
@@ -92,11 +92,11 @@ for gpu_id in 0 1 2 3; do
 done
 
 # Translog n=2000: small cell (the .mat file holds 5 stored sims).
-CUDA_VISIBLE_DEVICES=0 python \
+CUDA_VISIBLE_DEVICES=0 "$CONDA_PREFIX/bin/python" \
     "$SIM_REPRO_ROOT/sim_sweep.py" \
     --variant translog --n 2000 --count 5 --n-halton 10000 \
     > "logs/sweep_translog_n2000_gpu0_${SLURM_JOB_ID}.log" 2>&1 &
-CUDA_VISIBLE_DEVICES=0 python \
+CUDA_VISIBLE_DEVICES=0 "$CONDA_PREFIX/bin/python" \
     "$SIM_REPRO_ROOT/sim_sweep_chs.py" \
     --variant translog --n 2000 --count 5 \
     > "logs/sweep_chs_translog_n2000_gpu0_${SLURM_JOB_ID}.log" 2>&1 &
@@ -104,7 +104,7 @@ CUDA_VISIBLE_DEVICES=0 python \
 wait
 
 echo "All workers exited; aggregating results..."
-python - <<'PY'
+"$CONDA_PREFIX/bin/python" - <<'PY'
 import pickle
 from pathlib import Path
 import os
