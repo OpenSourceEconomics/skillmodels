@@ -25,7 +25,7 @@
 #SBATCH --gpus=4
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=384G
-#SBATCH --time=24:00:00
+#SBATCH --time=05:00:00
 #SBATCH --output=logs/translog-sim_%j.out
 #SBATCH --error=logs/translog-sim_%j.err
 
