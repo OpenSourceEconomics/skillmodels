@@ -30,6 +30,7 @@ from skillmodels.af.params import (
 from skillmodels.af.types import (
     AFEstimationOptions,
     AFPeriodResult,
+    ChainLink,
     ConditionalDistribution,
     MixtureComponent,
 )
@@ -156,20 +157,28 @@ def estimate_transition_period(
     # Build loading mask
     loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
 
-    # Joint Halton draws over the *fresh* period-t shocks: production
-    # shock z's plus investment shock z's. The state z's are absorbed into
-    # the importance sample carried over from the previous period
-    # (`prev_distribution.samples_per_component`), so they do NOT appear in
-    # `joint_nodes`. State factors without a production shock
-    # (`has_production_shock=False`) drop out of the shock slice, so
-    # `n_shock <= n_state`.
+    # JOINT Halton design covering ALL randomness needed at this step,
+    # mirroring MATLAB's `create_nodes_weights_01/12`. The chained sample
+    # θ_0 → θ_{period-1} is rebuilt on-demand inside the integrand from
+    # this single joint sequence (see `_rebuild_chain_at_period` in
+    # `af/likelihood.py` and the obsidian note
+    # `sigma-prod-collapse-2026-05-07.md` for why this matters).
     #
-    # Seed the Halton design with the period index so different periods
-    # draw *independent* low-discrepancy sequences. With a shared seed the
-    # same scrambled Halton is returned every call, which would couple the
-    # period-(t-1) state z (baked into `samples_per_component`) with the
-    # period-t shock z and ruin the joint integration.
-    joint_dim = n_shock + n_endog
+    # Layout of joint_nodes[j]:
+    #   [:n_state]                              -- z_state for θ_0
+    #   for s in 0..period-2:                   -- prior chain steps
+    #       [n_state+s*zb : n_state+s*zb+n_shock]    -- z_P at period s+1
+    #       [...n_shock+n_endog]                      -- z_inv at period s+1
+    #   [tail: n_shock]                         -- z_P at current step (period)
+    #   [tail: n_endog]                         -- z_inv at current step (period)
+    #
+    # Seed the Halton design with the period index. Each step draws an
+    # independent low-discrepancy sequence; the joint structure within a
+    # step delivers proper quasi-uniform 3D+ coverage (vs. the previous
+    # split scheme which paired two independent sequences at the same j).
+    n_chain = period - 1  # number of prior transition steps already estimated
+    z_block = n_shock + n_endog
+    joint_dim = n_state + n_chain * z_block + z_block
     joint_nodes, joint_weights = create_halton_nodes_and_weights(
         af_options.n_halton_points,
         joint_dim,
@@ -216,6 +225,23 @@ def estimate_transition_period(
         else jnp.zeros((measurements.shape[0], n_obs_fac))
     )
 
+    # Carry forward chain links from prior transition steps for the
+    # joint-Halton chain rebuild. The period-0→1 step has chain_links == ().
+    chain_links = prev_distribution.chain_links
+
+    # Per-obs observed factors at the source period of each chain link
+    # (period 0 for link 0, period 1 for link 1, ...). Stack across
+    # links into shape (n_obs, n_chain, n_obs_factors). Each ChainLink
+    # already carries its own period's `obs_factor_values` internally;
+    # extract them here in obs-major order to match the per-obs map in
+    # `_transition_loglike_per_obs`.
+    if len(chain_links) == 0:
+        obs_factor_values_chain = jnp.zeros((measurements.shape[0], 0, n_obs_fac))
+    else:
+        obs_factor_values_chain = jnp.stack(
+            [link.obs_factor_values for link in chain_links], axis=1
+        )
+
     result_params, opt_res = _run_transition_optimization(
         params_template=params_template,
         prev_period_params=prev_period_params,
@@ -235,6 +261,8 @@ def estimate_transition_period(
         prev_controls=prev_controls,
         loading_mask=loading_mask,
         prev_dist_arrays=prev_dist_arrays,
+        chain_links=chain_links,
+        obs_factor_values_chain=obs_factor_values_chain,
         joint_nodes=joint_nodes,
         joint_weights=joint_weights,
         combined_transition=combined_transition,
@@ -247,10 +275,24 @@ def estimate_transition_period(
         fixed_params=fixed_params,
     )
 
-    # Build the importance sample for the next period by chaining the
-    # previous-period samples through the current period's estimated
-    # transition + investment equation + production shock, using the same
-    # Halton design (joint_nodes) that fed the period-t likelihood.
+    # Build the next ChainLink from the just-fitted period parameters and
+    # append it to the chain history. Future transition steps will replay
+    # this link as part of their joint-Halton chain rebuild.
+    new_link = _build_chain_link(
+        period=period,
+        result_params=result_params,
+        combined_transition=combined_transition,
+        shock_factor_indices=shock_factor_indices,
+        n_inv_eq_params_per=n_inv_eq_params_per,
+        obs_factor_values=obs_factor_values,
+    )
+    new_chain_links = (*chain_links, new_link)
+
+    # Build the importance-sample SUMMARY (mean, chol_cov per component)
+    # for posterior-state extraction. This path is no longer load-bearing
+    # for the transition likelihood (rebuilt on-demand from joint Halton),
+    # but `posterior_states.py` still consumes the per-component summary
+    # statistics derived from the chained sample.
     updated_dist = _update_conditional_distribution(
         prev_distribution=prev_distribution,
         result_params=result_params,
@@ -263,6 +305,8 @@ def estimate_transition_period(
         observed_factor_values=obs_factor_values,
         n_observed_factors=len(observed_factors),
     )
+    # Carry the accumulated chain history forward.
+    updated_dist = _replace_chain_links(updated_dist, new_chain_links)
 
     period_result = AFPeriodResult(
         period=period,
@@ -295,6 +339,8 @@ def _run_transition_optimization(
     prev_controls: Array,
     loading_mask: np.ndarray,
     prev_dist_arrays: dict[str, Array],
+    chain_links: tuple[ChainLink, ...],
+    obs_factor_values_chain: Array,
     joint_nodes: Array,
     joint_weights: Array,
     combined_transition: Callable,
@@ -355,6 +401,8 @@ def _run_transition_optimization(
         "prev_loadings_flat": prev_meas_info["loadings_flat"],
         "prev_meas_sds": prev_meas_info["meas_sds"],
         "prev_distribution": prev_dist_arrays,
+        "chain_links": chain_links,
+        "obs_factor_values_chain": obs_factor_values_chain,
         "joint_nodes": joint_nodes,
         "joint_weights": joint_weights,
         "transition_func": combined_transition,
@@ -545,19 +593,23 @@ def _prepare_transition_inputs(
     factors: tuple[str, ...],
     n_obs: int,
 ) -> tuple[dict[str, Array], int]:
-    """Pack the previous-period importance sample for the likelihood.
+    """Pack the period-0 conditional distribution payload for the likelihood.
 
-    Stack the per-component samples into a single ``(n_components, n_halton,
-    n_obs, n_state)`` array and broadcast / read the per-obs mixture
-    weights. Also count the total number of transition parameters across
-    all state factors.
+    Returns a dict the transition likelihood reads to seed its on-demand
+    chain rebuild from a joint Halton draw. The chain is rebuilt fresh at
+    every likelihood call from the period-0 cond_means/cond_chols plus
+    the carried `chain_links` (handled separately); no static
+    chained-sample carry-over is consumed here.
 
     Return:
-        Tuple of (prev_dist_arrays dict, n_transition_params).
+        Tuple of (prev_dist_arrays dict, n_transition_params). The dict
+        contains keys "cond_weights" (per-obs Bayes-posterior mixture
+        weights), "cond_means" (per-component, per-obs Schur-conditional
+        means at period 0), and "cond_chols" (per-component
+        Schur-conditional Cholesky factors at period 0).
 
     """
     n_components = len(prev_distribution.components)
-    samples = jnp.stack(prev_distribution.samples_per_component, axis=0)
 
     if prev_distribution.conditional_weights is not None:
         cond_weights = prev_distribution.conditional_weights
@@ -567,9 +619,18 @@ def _prepare_transition_inputs(
             (n_obs, n_components),
         )
 
+    if prev_distribution.cond_means is None or prev_distribution.cond_chols is None:
+        msg = (
+            "prev_distribution must carry cond_means and cond_chols (the "
+            "period-0 Schur-conditional payload). Initial period must be "
+            "estimated before any transition step."
+        )
+        raise ValueError(msg)
+
     prev_dist_arrays = {
         "cond_weights": cond_weights,
-        "samples_per_component": samples,
+        "cond_means": prev_distribution.cond_means,
+        "cond_chols": prev_distribution.cond_chols,
     }
 
     total_n_transition_params = sum(
@@ -657,6 +718,68 @@ def _initialize_transition_params(
     return params
 
 
+def _replace_chain_links(
+    cond_dist: ConditionalDistribution,
+    chain_links: tuple[ChainLink, ...],
+) -> ConditionalDistribution:
+    """Return a new ConditionalDistribution with `chain_links` replaced.
+
+    Used by `estimate_transition_period` to carry the accumulated chain
+    history forward (one extra `ChainLink` per estimated transition).
+    """
+    return ConditionalDistribution(
+        mixture_weights=cond_dist.mixture_weights,
+        components=cond_dist.components,
+        samples_per_component=cond_dist.samples_per_component,
+        conditional_weights=cond_dist.conditional_weights,
+        cond_means=cond_dist.cond_means,
+        cond_chols=cond_dist.cond_chols,
+        chain_links=chain_links,
+    )
+
+
+def _build_chain_link(
+    *,
+    period: int,
+    result_params: pd.DataFrame,
+    combined_transition: Callable,
+    shock_factor_indices: Array,
+    n_inv_eq_params_per: int,
+    obs_factor_values: Array,
+) -> ChainLink:
+    """Pack a freshly-fitted period's parameters into a ChainLink.
+
+    The resulting `ChainLink` is appended to the carried `chain_links` so
+    that downstream transition periods can replay this period inside their
+    joint-Halton chain rebuild (see `_rebuild_chain_at_period`).
+    """
+    transition_mask = result_params.index.get_level_values("category") == "transition"
+    transition_params = jnp.array(
+        result_params.loc[transition_mask, "value"].to_numpy()
+    )
+
+    shock_mask = result_params.index.get_level_values("category") == "shock_sds"
+    shock_sds = jnp.array(result_params.loc[shock_mask, "value"].to_numpy())
+
+    inv_eq_mask = result_params.index.get_level_values("category") == "investment_eq"
+    inv_eq_params = jnp.array(result_params.loc[inv_eq_mask, "value"].to_numpy())
+
+    inv_sd_mask = result_params.index.get_level_values("category") == "investment_sds"
+    inv_sds = jnp.array(result_params.loc[inv_sd_mask, "value"].to_numpy())
+
+    return ChainLink(
+        period=period,
+        transition_func=combined_transition,
+        transition_params=transition_params,
+        shock_sds=shock_sds,
+        shock_factor_indices=shock_factor_indices,
+        inv_eq_params=inv_eq_params,
+        inv_sds=inv_sds,
+        n_inv_eq_params_per=n_inv_eq_params_per,
+        obs_factor_values=obs_factor_values,
+    )
+
+
 def _update_conditional_distribution(
     prev_distribution: ConditionalDistribution,
     result_params: pd.DataFrame,
@@ -715,6 +838,11 @@ def _update_conditional_distribution(
     n_per_inv_eq = 1 + n_state + n_observed_factors if n_endog > 0 else 0
 
     n_halton = joint_nodes.shape[0]
+    # The joint Halton design now has a larger dimension than just the
+    # current step's shocks (it also covers the chain rebuild's z_state
+    # and prior-step shocks; see `estimate_transition_period`). The
+    # current-step shocks live in the LAST `n_shock + n_endog` columns.
+    z_block_curr = n_shock + n_endog
 
     def _chain_one_component(prev_sample: Array) -> Array:
         """Map (j, i) -> theta_t given prev_sample (n_halton, n_obs, n_state)."""
@@ -726,7 +854,8 @@ def _update_conditional_distribution(
                 if n_observed_factors > 0
                 else jnp.zeros(0)
             )
-            z_at_j = joint_nodes[j_idx]
+            z_at_j_full = joint_nodes[j_idx]
+            z_at_j = z_at_j_full[-z_block_curr:]
             z_shock = z_at_j[:n_shock]
             z_inv_shock = z_at_j[n_shock:]
 
@@ -781,4 +910,10 @@ def _update_conditional_distribution(
         components=tuple(new_components),
         samples_per_component=tuple(new_samples_per_component),
         conditional_weights=prev_distribution.conditional_weights,
+        # Carry the period-0 Schur conditional payload AND the chain
+        # history forward; downstream transition steps replay the chain
+        # from period 0, not from this period's chained samples.
+        cond_means=prev_distribution.cond_means,
+        cond_chols=prev_distribution.cond_chols,
+        chain_links=prev_distribution.chain_links,
     )

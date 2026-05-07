@@ -226,10 +226,13 @@ def evaluate_af_transition_loglike(
 
     loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
 
-    joint_dim = n_state + n_shock + n_endog
+    n_chain = period - 1
+    z_block = n_shock + n_endog
+    joint_dim = n_state + n_chain * z_block + z_block
     joint_nodes, joint_weights = create_halton_nodes_and_weights(
         af_options.n_halton_points,
         joint_dim,
+        seed=period,
     )
 
     prev_dist_arrays, total_n_transition_params = _prepare_transition_inputs(
@@ -264,6 +267,14 @@ def evaluate_af_transition_loglike(
         else jnp.zeros((measurements.shape[0], n_obs_fac))
     )
 
+    chain_links = prev_distribution.chain_links
+    if len(chain_links) == 0:
+        obs_factor_values_chain = jnp.zeros((measurements.shape[0], 0, n_obs_fac))
+    else:
+        obs_factor_values_chain = jnp.stack(
+            [link.obs_factor_values for link in chain_links], axis=1
+        )
+
     prev_meas_info = _extract_prev_measurement_params(
         prev_period_params, model_spec, factors, period - 1
     )
@@ -296,6 +307,8 @@ def evaluate_af_transition_loglike(
         "prev_loadings_flat": prev_meas_info["loadings_flat"],
         "prev_meas_sds": prev_meas_info["meas_sds"],
         "prev_distribution": prev_dist_arrays,
+        "chain_links": chain_links,
+        "obs_factor_values_chain": obs_factor_values_chain,
         "joint_nodes": joint_nodes,
         "joint_weights": joint_weights,
         "transition_func": combined_transition,

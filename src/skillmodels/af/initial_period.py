@@ -457,6 +457,8 @@ def _extract_conditional_distribution(  # noqa: PLR0915
     components: list[MixtureComponent] = []
     samples_per_component: list[Array] = []
     log_unnorm_weights_per_component: list[Array] = []
+    cond_means_per_component: list[Array] = []
+    cond_chols_per_component: list[Array] = []
 
     for m in range(n_components):
         joint_mean = jnp.array(
@@ -480,6 +482,9 @@ def _extract_conditional_distribution(  # noqa: PLR0915
                 per_node[:, None, :], (nodes.shape[0], n_obs, n_state)
             )
             log_unnorm = jnp.full((n_obs,), float(jnp.log(weights[m] + 1e-300)))
+            # Per-obs cond_means broadcast (n_obs, n_state); shared chol.
+            cond_means_obs = jnp.broadcast_to(sub_mean[None, :], (n_obs, n_state))
+            cond_chol_comp = sub_chol
         else:
             mu_y = joint_mean[obs_idx]
             cov_ty = joint_cov[target_idx[:, None], obs_idx[None, :]]
@@ -508,10 +513,14 @@ def _extract_conditional_distribution(  # noqa: PLR0915
             sub_mean = mu_theta
             sub_chol = cond_chol
             log_unnorm = jnp.log(weights[m] + 1e-300) + log_margs
+            cond_means_obs = cond_means
+            cond_chol_comp = cond_chol
 
         components.append(MixtureComponent(mean=sub_mean, chol_cov=sub_chol))
         samples_per_component.append(samples)
         log_unnorm_weights_per_component.append(log_unnorm)
+        cond_means_per_component.append(cond_means_obs)
+        cond_chols_per_component.append(cond_chol_comp)
 
     if n_obs_factors > 0:
         log_w_stack = jnp.stack(
@@ -519,13 +528,15 @@ def _extract_conditional_distribution(  # noqa: PLR0915
         )  # (n_obs, n_components)
         cond_weights = jax.nn.softmax(log_w_stack, axis=-1)
     else:
-        cond_weights = None
+        cond_weights = jnp.broadcast_to(weights[None, :], (n_obs, n_components))
 
     return ConditionalDistribution(
         mixture_weights=weights,
         components=tuple(components),
         samples_per_component=tuple(samples_per_component),
         conditional_weights=cond_weights,
+        cond_means=jnp.stack(cond_means_per_component, axis=0),
+        cond_chols=jnp.stack(cond_chols_per_component, axis=0),
     )
 
 

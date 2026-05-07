@@ -1,10 +1,11 @@
 """Frozen dataclass definitions for the AF estimator."""
 
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+import jax
 import pandas as pd
 from jax import Array
 
@@ -91,15 +92,93 @@ class MixtureComponent:
 
 
 @dataclass(frozen=True)
+class ChainLink:
+    """Frozen-period parameters for one prior step in the θ_0→θ_{t-1} chain.
+
+    Used by the AF transition likelihood to rebuild the chained importance
+    sample on-demand from a single joint Halton design at every transition
+    step (mirroring MATLAB's ``create_nodes_weights_01/12``). Each
+    `ChainLink` carries the just-fitted parameters of one prior transition
+    so the chain can be replayed inside the next step's likelihood call.
+    """
+
+    period: int
+    """Calendar period at which this link applies (1-indexed; the link
+    transforms θ_{period-1} → θ_period)."""
+
+    transition_func: Callable
+    """Combined per-factor transition function f(full_states, params)."""
+
+    transition_params: Array
+    """Flat transition parameter vector for this period, shape
+    ``(total_n_transition_params,)``."""
+
+    shock_sds: Array
+    """Production shock SDs for shock-bearing state factors, shape
+    ``(n_shock_factors,)``."""
+
+    shock_factor_indices: Array
+    """Mapping each shock slot to its position in the state-factor
+    ordering, shape ``(n_shock_factors,)`` int."""
+
+    inv_eq_params: Array
+    """Flat investment-equation parameters, shape
+    ``(n_endogenous * n_inv_eq_params_per,)``."""
+
+    inv_sds: Array
+    """Investment shock SDs, shape ``(n_endogenous,)``."""
+
+    n_inv_eq_params_per: int
+    """Investment equation parameters per endogenous factor (1 + n_state +
+    n_observed_factors when n_endogenous > 0; 0 otherwise)."""
+
+    obs_factor_values: Array
+    """Observed factor values at this link's source period (i.e. period -
+    1), shape ``(n_obs, n_observed_factors)``. Used in the chain rebuild
+    for the inv equation and the transition function."""
+
+
+# Register ChainLink as a JAX pytree so tuples of ChainLinks can be passed
+# through `jax.jit` in the AF transition likelihood. Array fields are
+# leaves; the period index, transition function, and per-link int counts
+# are static metadata baked into the trace.
+jax.tree_util.register_dataclass(
+    ChainLink,
+    data_fields=[
+        "transition_params",
+        "shock_sds",
+        "shock_factor_indices",
+        "inv_eq_params",
+        "inv_sds",
+        "obs_factor_values",
+    ],
+    meta_fields=["period", "transition_func", "n_inv_eq_params_per"],
+)
+
+
+@dataclass(frozen=True)
 class ConditionalDistribution:
     """Estimated conditional distribution of latent factors at a given period.
 
-    Represents f(ln theta_t | data_{0:t}) as a Halton-driven importance sample
-    per mixture component. Each obs has an n_halton-row matrix of chained
-    skills_t draws built deterministically from the previous period's
-    estimated parameters and the joint Halton design — propagating the
-    non-Gaussian shape forward across periods (vs. the Gaussian moment-match
-    that previously caused a ~50% downward bias on investment-shock SDs).
+    Holds two things that downstream code consumes:
+
+    * Per-component summary statistics (`mean`, `chol_cov`) of the chained
+      sample at this period — used by `posterior_states.py` and the
+      inference sandwich code.
+    * The chain history (`chain_links`) needed to rebuild the chained
+      sample on-demand inside the next transition step's likelihood (joint
+      Halton design — see `_rebuild_chain_at_period` in
+      `af.likelihood`).
+
+    For the period-0 distribution: per-obs `cond_means` / `cond_chols`
+    encode the Schur conditional of latent factors given observed factors
+    (`Y_0`); `conditional_weights` are the Bayes posterior mixture weights
+    given `Y_0`. For later periods these are unused (chain replays from
+    period 0).
+
+    Note: `samples_per_component` is retained for backward compatibility
+    and posterior-state-summary computation, but is no longer load-bearing
+    inside the transition likelihood (which rebuilds the chain on-demand).
     """
 
     mixture_weights: Array
@@ -112,9 +191,10 @@ class ConditionalDistribution:
 
     samples_per_component: tuple[Array, ...]
     """One importance-sample array per mixture component, each shape
-    ``(n_halton, n_obs, n_state)``. ``samples_per_component[l][j, i, :]`` is
-    the j-th Halton-driven draw of skills_t conditional on individual i's
-    data, under mixture component l."""
+    ``(n_halton, n_obs, n_state)``. Retained for posterior-state summary
+    statistics; not consumed by the transition likelihood (which rebuilds
+    the chain on-demand from a joint Halton). May use a smaller Halton
+    count than the likelihood's `n_halton_points`."""
 
     conditional_weights: Array | None = None
     """Individual-specific conditional mixture weights, shape (n_obs, n_components).
@@ -122,6 +202,26 @@ class ConditionalDistribution:
     When not None, these override `mixture_weights` for each observation (computed
     from Bayes' rule using data from previous periods).
     """
+
+    cond_means: Array | None = None
+    """Per-obs Schur-conditional means of the latent state given observed
+    factors at period 0, shape ``(n_components, n_obs, n_state)``. Built
+    by the initial period only. None for transition-period distributions.
+    """
+
+    cond_chols: Array | None = None
+    """Per-component Schur-conditional Cholesky factors at period 0, shape
+    ``(n_components, n_state, n_state)``. Shared across observations
+    because the conditional covariance does not depend on Y_i (it's the
+    prior cov_yy minus a Schur term). None for transition-period
+    distributions."""
+
+    chain_links: tuple[ChainLink, ...] = field(default_factory=tuple)
+    """Sequence of frozen prior-period parameter packages, one per
+    transition already estimated. Empty before period 1; one entry after
+    period 1 estimation; two entries after period 2; etc. Used by the
+    transition likelihood to rebuild the chained sample on-demand from a
+    single joint Halton."""
 
 
 @dataclass(frozen=True)

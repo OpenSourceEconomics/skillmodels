@@ -4,6 +4,7 @@ Run AF estimation on MODEL2 test data and verify it produces reasonable
 results, comparing to the CHS Kalman filter estimates where applicable.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 
 import jax
@@ -14,7 +15,8 @@ import pandas as pd
 import pytest
 
 from skillmodels.af import AFEstimationOptions, estimate_af
-from skillmodels.af.likelihood import af_loglike_transition
+from skillmodels.af.likelihood import _rebuild_chain_at_period, af_loglike_transition
+from skillmodels.af.types import ChainLink
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.filtered_states import get_filtered_states
 from skillmodels.maximization_inputs import get_maximization_inputs
@@ -860,19 +862,22 @@ def test_prev_period_inv_meas_does_not_affect_transition_loglik_gradient() -> No
     prev_control_params = jnp.zeros((n_prev_measures, n_controls))
     prev_meas_sds = jnp.array([0.5, 0.4])
 
-    # Prev-period importance sample: arbitrary draws of the state factor
-    # at this small toy scale.
-    samples_per_component = jnp.array(
-        rng.normal(size=(n_components, n_halton, n_obs, n_state))
-    )
+    # Period-0 Schur-conditional payload: per-obs cond_means and per-component
+    # cond_chols (for the joint-Halton chain rebuild scheme).
+    cond_means = jnp.array(rng.normal(size=(n_components, n_obs, n_state)))
+    cond_chols = jnp.array([[[0.5]], [[0.4]]])
     cond_weights = jnp.ones((n_obs, n_components))
     prev_distribution = {
         "cond_weights": cond_weights,
-        "samples_per_component": samples_per_component,
+        "cond_means": cond_means,
+        "cond_chols": cond_chols,
     }
 
-    # Joint Halton over (z_shock, z_inv_shock); n_shock=1, n_endog=1.
-    joint_nodes = jnp.array(rng.normal(size=(n_halton, n_state + n_endog)))
+    # No prior chain (this is the 0->1 step). Joint Halton dim:
+    # n_state (z_state) + 0 prior steps + (n_shock + n_endog) current step.
+    chain_links: tuple = ()
+    obs_factor_values_chain = jnp.zeros((n_obs, 0, n_obs_factors))
+    joint_nodes = jnp.array(rng.normal(size=(n_halton, n_state + n_state + n_endog)))
     joint_weights = jnp.full(n_halton, 1.0 / n_halton)
 
     def transition_func(full_states: jax.Array, params: jax.Array) -> jax.Array:
@@ -927,6 +932,8 @@ def test_prev_period_inv_meas_does_not_affect_transition_loglik_gradient() -> No
             prev_loadings_flat=prev_loadings_flat,
             prev_meas_sds=prev_meas_sds,
             prev_distribution=prev_distribution,
+            chain_links=chain_links,
+            obs_factor_values_chain=obs_factor_values_chain,
             joint_nodes=joint_nodes,
             joint_weights=joint_weights,
             transition_func=transition_func,
@@ -960,6 +967,607 @@ def test_prev_period_inv_meas_does_not_affect_transition_loglik_gradient() -> No
     assert not np.isclose(val_a, val_b), (
         "Test sanity failure: perturbing prev inv-meas changed nothing -- "
         "the test isn't exercising the inv-loading rows."
+    )
+
+
+def test_rebuild_chain_at_period_matches_python_forward_pass() -> None:
+    """Unit test for `_rebuild_chain_at_period`.
+
+    Hand-code a 2-step linear chain (1 state factor, 1 endog factor, 1
+    observed factor) and assert the helper's output matches a Python
+    forward pass to numerical precision. Catches index/reshape bugs in
+    the chain-rebuild helper independently of the integrand.
+    """
+    rng = np.random.default_rng(20260507)
+    n_state = 1
+    n_endog = 1
+    n_obs_factors = 1
+    n_inv_eq_params_per = 1 + n_state + n_obs_factors
+
+    # Two prior chain steps (so we're computing θ_0 → θ_1 → θ_2).
+    z_state = jnp.asarray(rng.normal(size=n_state))
+    z_inv_per_step = jnp.asarray(rng.normal(size=(2, n_endog)))
+    z_shock_per_step = jnp.asarray(rng.normal(size=(2, n_state)))
+
+    initial_mean = jnp.asarray(rng.normal(size=n_state))
+    initial_chol = jnp.asarray([[0.7]])
+
+    obs_factor_values_per_step = jnp.asarray(rng.normal(size=(2, n_obs_factors)))
+
+    # Linear "transition": theta_next = a * theta + b * inv + c * obs + d.
+    # Wrap as the f(full_states, params) signature used in production.
+    def make_transition_func() -> Callable[[jax.Array, jax.Array], jax.Array]:
+        def fn(full_states: jax.Array, params: jax.Array) -> jax.Array:
+            a, b, c, d = params[0], params[1], params[2], params[3]
+            return jnp.array(
+                [a * full_states[0] + b * full_states[1] + c * full_states[2] + d]
+            )
+
+        return fn
+
+    transition_func = make_transition_func()
+
+    link_1 = ChainLink(
+        period=1,
+        transition_func=transition_func,
+        transition_params=jnp.array([0.6, 0.3, 0.05, 0.1]),
+        shock_sds=jnp.array([0.4]),
+        shock_factor_indices=jnp.array([0], dtype=jnp.int32),
+        inv_eq_params=jnp.array([0.0, 0.5, 0.2]),  # intercept, beta_skills, beta_inc
+        inv_sds=jnp.array([0.25]),
+        n_inv_eq_params_per=n_inv_eq_params_per,
+        obs_factor_values=jnp.zeros((1, n_obs_factors)),  # unused by helper
+    )
+    link_2 = ChainLink(
+        period=2,
+        transition_func=transition_func,
+        transition_params=jnp.array([0.5, 0.4, 0.0, 0.2]),
+        shock_sds=jnp.array([0.3]),
+        shock_factor_indices=jnp.array([0], dtype=jnp.int32),
+        inv_eq_params=jnp.array([0.05, 0.6, 0.3]),
+        inv_sds=jnp.array([0.15]),
+        n_inv_eq_params_per=n_inv_eq_params_per,
+        obs_factor_values=jnp.zeros((1, n_obs_factors)),
+    )
+    chain_links = (link_1, link_2)
+
+    # Hand-coded forward pass.
+    theta_0 = initial_mean + initial_chol @ z_state
+    for step_idx, link in enumerate(chain_links):
+        z_inv = z_inv_per_step[step_idx]
+        z_shock = z_shock_per_step[step_idx]
+        obs_y = obs_factor_values_per_step[step_idx]
+        beta = link.inv_eq_params  # (intercept, beta_skills, beta_inc)
+        inv_val = (
+            beta[0]
+            + beta[1] * theta_0[0]
+            + beta[2] * obs_y[0]
+            + (link.inv_sds[0] * z_inv[0])
+        )
+        inv = jnp.array([inv_val])
+        full = jnp.concatenate([theta_0, inv, obs_y])
+        theta_next_det = transition_func(full, link.transition_params)
+        theta_0 = theta_next_det + jnp.array([link.shock_sds[0] * z_shock[0]])
+    expected = theta_0  # θ at the last link's target period
+
+    actual = _rebuild_chain_at_period(
+        z_state=z_state,
+        z_inv_per_step=z_inv_per_step,
+        z_shock_per_step=z_shock_per_step,
+        initial_mean=initial_mean,
+        initial_chol=initial_chol,
+        chain_links=chain_links,
+        obs_factor_values_at_obs_per_step=obs_factor_values_per_step,
+        n_state_factors=n_state,
+        n_endogenous_factors=n_endog,
+    )
+    np.testing.assert_allclose(np.asarray(actual), np.asarray(expected), atol=1e-12)
+
+
+def test_rebuild_chain_at_period_empty_chain_returns_period_0() -> None:
+    """Verify the empty-chain (0->1) path of `_rebuild_chain_at_period`.
+
+    With no chain links, the helper just returns
+    ``initial_mean + initial_chol @ z_state``.
+    """
+    rng = np.random.default_rng(7)
+    n_state = 2
+    z_state = jnp.asarray(rng.normal(size=n_state))
+    initial_mean = jnp.asarray(rng.normal(size=n_state))
+    initial_chol = jnp.asarray([[0.5, 0.0], [0.1, 0.4]])
+    expected = initial_mean + initial_chol @ z_state
+
+    actual = _rebuild_chain_at_period(
+        z_state=z_state,
+        z_inv_per_step=jnp.zeros((0, 1)),
+        z_shock_per_step=jnp.zeros((0, n_state)),
+        initial_mean=initial_mean,
+        initial_chol=initial_chol,
+        chain_links=(),
+        obs_factor_values_at_obs_per_step=jnp.zeros((0, 0)),
+        n_state_factors=n_state,
+        n_endogenous_factors=1,
+    )
+    np.testing.assert_allclose(np.asarray(actual), np.asarray(expected), atol=1e-14)
+
+
+def test_af_joint_halton_recovers_sigma_prod_argmax() -> None:  # noqa: PLR0915
+    """Catch regression to split-Halton: sigma_prod recovery on synthetic translog.
+
+    With all params except sigma_prod_0 pinned at the truth, the per-obs mean
+    log-likelihood at sigma_prod=truth must beat sigma_prod ≈ truth/4 by at least
+    1.0 nat per obs. Under the buggy split-Halton scheme the argmax sat
+    near sigma ≈ truth/4 with truth being WORSE; under the joint-Halton fix
+    the argmax aligns with truth. The empirical joint-vs-split gap on
+    the MATLAB sim was ~2.5 nats per obs (see
+    ``sim_repro/debug_joint_halton.py`` and
+    ``obsidian/Professional/skillmodels/sigma-prod-collapse-2026-05-07.md``);
+    1.0 nat is generous headroom that still flags any return to split.
+
+    The test calls ``af_loglike_transition`` directly with hand-built
+    kwargs on a tiny synthetic translog DGP (1 state factor, 1 endog
+    factor, 1 observed factor), so it isolates the integrand from the
+    optimizer and runs in ~10s.
+    """
+    rng = np.random.default_rng(20260508)
+    n_obs = 200
+    n_halton = 500
+    n_state = 1
+    n_endog = 1
+    n_obs_factors = 1
+    n_inv_eq_params_per = 1 + n_state + n_obs_factors
+
+    # MATLAB-translog truth values (from set_parameters in
+    # AF_Simulations_Translog.m), restricted to one state factor.
+    a_true = 0.9283
+    sigma_t_true = 0.5125  # log(skills) coef in translog
+    gamma_t_true = 0.6113  # log(inv) coef
+    delta_t_true = -0.0175  # cross coef
+    sigma_p_true = 0.36
+    sigma_i_true = 0.10
+    beta_skills_true = 0.10
+    beta_inc_true = 0.90
+
+    # Mixture truth (matches MATLAB sim): two components on (skills, log_inc).
+    p_a_true = 0.62
+    mu_a = jnp.array([-4.0, -2.0])  # (skills, log_inc)
+    cov_a = jnp.array([[0.62, 0.035], [0.035, 0.056]])
+    mu_b = jnp.array([6.0, 3.0])
+    cov_b = jnp.array([[0.83, 0.17], [0.17, 1.28]])
+
+    # Period-0 measurement system (3 skill measures).
+    lam_skills_0 = jnp.array([1.0, 0.36, 0.56])
+    sd_skills_0 = jnp.array([0.68, 0.03, 0.08])
+    # Period-1 measurement system: 3 skill measures + 3 inv measures.
+    lam_skills_1 = jnp.array([1.0, 0.66, 1.18])
+    sd_skills_1 = jnp.array([0.51, 0.12, 0.19])
+    lam_inv_1 = jnp.array([1.0, 0.84, 0.79])
+    sd_inv_1 = jnp.array([0.15, 0.39, 0.47])
+
+    # Forward simulation of one panel.
+    u = rng.uniform(size=n_obs)
+    is_a = (u < p_a_true).astype(np.float64)
+
+    def _draw_2d(mu: jax.Array, cov: jax.Array, n: int) -> np.ndarray:
+        chol = np.linalg.cholesky(np.asarray(cov))
+        z = rng.normal(size=(n, 2))
+        return np.asarray(mu)[None, :] + z @ chol.T
+
+    draw_a = _draw_2d(mu_a, cov_a, n_obs)
+    draw_b = _draw_2d(mu_b, cov_b, n_obs)
+    skills_0 = is_a * draw_a[:, 0] + (1 - is_a) * draw_b[:, 0]
+    log_inc = is_a * draw_a[:, 1] + (1 - is_a) * draw_b[:, 1]
+
+    # Period-0 data: z_skills_0 = lam * skills_0 + meas_noise.
+    z_skills_0 = (
+        np.asarray(lam_skills_0)[None, :] * skills_0[:, None]
+        + rng.normal(size=(n_obs, 3)) * np.asarray(sd_skills_0)[None, :]
+    )
+
+    # Period-0->1 transition: inv_0 = beta_sk*skills_0 + beta_inc*log_inc + sd_I*z.
+    inv_0_true = (
+        beta_skills_true * skills_0
+        + beta_inc_true * log_inc
+        + rng.normal(size=n_obs) * sigma_i_true
+    )
+    skills_1 = (
+        a_true
+        + sigma_t_true * skills_0
+        + gamma_t_true * inv_0_true
+        + delta_t_true * skills_0 * inv_0_true
+        + rng.normal(size=n_obs) * sigma_p_true
+    )
+    z_skills_1 = (
+        np.asarray(lam_skills_1)[None, :] * skills_1[:, None]
+        + rng.normal(size=(n_obs, 3)) * np.asarray(sd_skills_1)[None, :]
+    )
+    z_inv_1 = (
+        np.asarray(lam_inv_1)[None, :] * inv_0_true[:, None]
+        + rng.normal(size=(n_obs, 3)) * np.asarray(sd_inv_1)[None, :]
+    )
+
+    # Period-0 cond-distribution payload (Schur conditional given log_inc).
+    def _schur(mu_2d: jax.Array, cov_2d: jax.Array) -> tuple[jax.Array, jax.Array]:
+        # skills given log_inc: cond_mean (per obs) and cond_chol (scalar).
+        sigma_skills_inc = cov_2d[0, 1]
+        var_inc = cov_2d[1, 1]
+        var_cond = cov_2d[0, 0] - sigma_skills_inc**2 / var_inc
+        cond_chol = jnp.sqrt(var_cond)
+        cond_means = mu_2d[0] + (sigma_skills_inc / var_inc) * (
+            jnp.asarray(log_inc) - mu_2d[1]
+        )
+        return cond_means.reshape(n_obs, 1), jnp.asarray([[cond_chol]])
+
+    cond_mean_a, cond_chol_a = _schur(mu_a, cov_a)
+    cond_mean_b, cond_chol_b = _schur(mu_b, cov_b)
+    cond_means = jnp.stack([cond_mean_a, cond_mean_b], axis=0)
+    cond_chols = jnp.stack([cond_chol_a, cond_chol_b], axis=0)
+
+    # Per-obs Bayes posterior weights from the marginal Y density.
+    def _log_marg_y(mu: jax.Array, cov: jax.Array) -> jax.Array:
+        var_y = cov[1, 1]
+        return (
+            -0.5 * jnp.log(2 * jnp.pi * var_y)
+            - 0.5 * (jnp.asarray(log_inc) - mu[1]) ** 2 / var_y
+        )
+
+    log_w_a = jnp.log(p_a_true) + _log_marg_y(mu_a, cov_a)
+    log_w_b = jnp.log(1.0 - p_a_true) + _log_marg_y(mu_b, cov_b)
+    log_w = jnp.stack([log_w_a, log_w_b], axis=-1)
+    cond_weights = jax.nn.softmax(log_w, axis=-1)
+
+    prev_distribution = {
+        "cond_weights": cond_weights,
+        "cond_means": cond_means,
+        "cond_chols": cond_chols,
+    }
+
+    # Period-1 measurement loadings: 6 measures in order (skill_1, skill_2,
+    # skill_3, inv_1, inv_2, inv_3) -- skill measures load on factor 0
+    # (skills), inv measures load on factor 1 (investment).
+    n_measures = 6
+    measurements = jnp.concatenate(
+        [jnp.asarray(z_skills_1), jnp.asarray(z_inv_1)], axis=1
+    )
+    loading_mask = jnp.array(
+        [
+            [True, False],
+            [True, False],
+            [True, False],
+            [False, True],
+            [False, True],
+            [False, True],
+        ]
+    )
+    loadings_flat_curr = jnp.concatenate([lam_skills_1, lam_inv_1])
+    meas_sds_curr = jnp.concatenate([sd_skills_1, sd_inv_1])
+
+    # Period-0 measurement system (prev) -- 3 skill measures.
+    n_prev_measures = 3
+    prev_measurements = jnp.asarray(z_skills_0)
+    prev_loading_mask = jnp.array([[True, False]] * 3)
+    prev_loadings_flat = lam_skills_0
+    prev_meas_sds = sd_skills_0
+
+    # No controls (zeros).
+    n_controls = 1  # constant
+    controls = jnp.ones((n_obs, 1))
+    prev_controls = jnp.ones((n_obs, 1))
+
+    obs_factor_values = jnp.asarray(log_inc).reshape(n_obs, 1)
+
+    # Transition function: log-translog (matches MATLAB sim).
+    def transition_func(full_states: jax.Array, params: jax.Array) -> jax.Array:
+        # full_states = [theta, inv, log_inc]; params = [lin_skills, lin_inv,
+        # lin_inc, sq_skills, sq_inv, sq_inc, inter_skills_inv,
+        # inter_skills_inc, inter_inv_inc, constant].
+        skills = full_states[0]
+        inv = full_states[1]
+        return jnp.array(
+            [
+                params[9]
+                + params[0] * skills
+                + params[1] * inv
+                + params[6] * skills * inv
+            ]
+        )
+
+    total_n_transition_params = 10
+    n_per_inv = n_inv_eq_params_per
+    total_n_inv_params = n_endog * n_per_inv
+
+    state_factor_indices_in_latent = jnp.array([0], dtype=jnp.int32)
+    shock_factor_indices = jnp.array([0], dtype=jnp.int32)
+
+    # Param vector layout: transition (10) + shock_sds (1) + inv_eq (3) +
+    # inv_sds (1) + control_params (n_measures*n_controls=6) + loadings (6)
+    # + meas_sds (6) = 33.
+    transition_params_truth = jnp.array(
+        [
+            sigma_t_true,
+            gamma_t_true,
+            0.0,  # lin coef on log_inc
+            0.0,
+            0.0,
+            0.0,  # squares
+            delta_t_true,  # skills * inv
+            0.0,
+            0.0,  # other interactions
+            a_true,
+        ]
+    )
+    inv_eq_params_truth = jnp.array([0.0, beta_skills_true, beta_inc_true])
+
+    def _build_params(sigma_p: float) -> jax.Array:
+        return jnp.concatenate(
+            [
+                transition_params_truth,
+                jnp.array([sigma_p]),
+                inv_eq_params_truth,
+                jnp.array([sigma_i_true]),
+                jnp.zeros(n_measures * n_controls),  # control intercepts
+                loadings_flat_curr,
+                meas_sds_curr,
+            ]
+        )
+
+    def _ll(sigma_p: float) -> float:
+        params_value = _build_params(sigma_p)
+        neg_mean = af_loglike_transition(
+            params_value,
+            n_state_factors=n_state,
+            n_endogenous_factors=n_endog,
+            n_measures=n_measures,
+            n_controls=n_controls,
+            measurements=measurements,
+            controls=controls,
+            loading_mask=loading_mask,
+            prev_measurements=prev_measurements,
+            prev_controls=prev_controls,
+            prev_loading_mask=prev_loading_mask,
+            prev_control_params=jnp.zeros((n_prev_measures, n_controls)),
+            prev_loadings_flat=prev_loadings_flat,
+            prev_meas_sds=prev_meas_sds,
+            prev_distribution=prev_distribution,
+            chain_links=(),
+            obs_factor_values_chain=jnp.zeros((n_obs, 0, n_obs_factors)),
+            joint_nodes=jnp.array(
+                np.random.default_rng(1).normal(
+                    size=(n_halton, n_state + n_state + n_endog)
+                )
+            ),
+            joint_weights=jnp.full(n_halton, 1.0 / n_halton),
+            transition_func=transition_func,
+            total_n_transition_params=total_n_transition_params,
+            total_n_inv_params=total_n_inv_params,
+            n_inv_eq_params_per=n_per_inv,
+            observed_factor_values=obs_factor_values,
+            stability_floor=1e-300,
+            state_factor_indices_in_latent=state_factor_indices_in_latent,
+            n_shock_factors=1,
+            shock_factor_indices=shock_factor_indices,
+        )
+        # Convert from neg-mean back to per-obs mean ll.
+        return float(-neg_mean)
+
+    sigma_truth = sigma_p_true
+    sigma_wrong = 0.09  # well below truth (= truth / 4)
+    ll_truth = _ll(sigma_truth)
+    ll_wrong = _ll(sigma_wrong)
+    gap = ll_truth - ll_wrong
+    assert gap > 1.0, (
+        f"Joint-Halton sigma_prod recovery REGRESSED: ll(truth={sigma_truth})="
+        f"{ll_truth:.4f} should beat ll(wrong={sigma_wrong})={ll_wrong:.4f} by "
+        f"at least 1.0 nat per obs but gap is only {gap:.4f}. The empirical "
+        f"joint-vs-split gap on the MATLAB translog sim was ~2.5 nats; a gap "
+        f"below 1.0 here suggests the AF likelihood has reverted to the split-"
+        f"Halton scheme that biases sigma_prod toward 0."
+    )
+
+
+def test_af_joint_halton_recovers_sigma_prod_with_chain_link() -> None:  # noqa: PLR0915
+    """As above, but exercise a 1→2 step where ``chain_links`` is non-empty.
+
+    For the 0→1 step the joint Halton dim is just `n_state + n_shock +
+    n_endog` and the joint-vs-split distinction is subtle (no prior
+    chain to bridge). For 1→2 steps the joint Halton couples z_state +
+    prior chain shocks + current shocks all in one sequence — that's
+    where MATLAB's working scheme actually outperforms split Halton.
+
+    This test runs `estimate_af` end-to-end on a tiny synthetic translog
+    DGP through periods 0, 1, 2, then verifies the period-2 (= 1→2)
+    estimated sigma_prod_1 is within 30% of truth. Under split Halton this
+    parameter collapses toward 0; under joint Halton it recovers near
+    truth (0.42 in the MATLAB sim).
+    """
+    pytest.importorskip("optimagic")
+    rng = np.random.default_rng(20260509)
+    n_obs = 300
+    n_periods = 3
+
+    # MATLAB-translog truths.
+    a_t = (0.9283, 0.9536)
+    sigma_t_arr = (0.5125, 0.7295)
+    gamma_t_arr = (0.6113, 0.2814)
+    delta_t_arr = (-0.0175, -0.0024)
+    sigma_p_arr = (0.36, 0.42)
+    sigma_i_arr = (0.10, 0.10)
+    beta_skills = (0.10, 0.10)
+    beta_inc = (0.90, 0.90)
+    lam_skills = (
+        np.array([1.0, 0.36, 0.56]),
+        np.array([1.0, 0.66, 1.18]),
+        np.array([1.0, 0.19, 0.50]),
+    )
+    sd_skills = (
+        np.array([0.68, 0.03, 0.08]),
+        np.array([0.51, 0.12, 0.19]),
+        np.array([0.14, 0.03, 0.15]),
+    )
+    lam_inv = (np.array([1.0, 0.84, 0.79]),) * 2
+    sd_inv = (np.array([0.15, 0.39, 0.47]),) * 2
+
+    # Initial mixture (matches MATLAB).
+    p_a = 0.62
+    mu_a = np.array([-4.0, -2.0])
+    cov_a = np.array([[0.62, 0.035], [0.035, 0.056]])
+    mu_b = np.array([6.0, 3.0])
+    cov_b = np.array([[0.83, 0.17], [0.17, 1.28]])
+
+    u = rng.uniform(size=n_obs)
+    is_a = (u < p_a).astype(np.float64)
+    chol_a = np.linalg.cholesky(cov_a)
+    chol_b = np.linalg.cholesky(cov_b)
+    z_init = rng.normal(size=(n_obs, 2))
+    draw_a = mu_a[None, :] + z_init @ chol_a.T
+    draw_b = mu_b[None, :] + z_init @ chol_b.T
+    skills = np.zeros((n_obs, n_periods))
+    skills[:, 0] = is_a * draw_a[:, 0] + (1 - is_a) * draw_b[:, 0]
+    log_inc = is_a * draw_a[:, 1] + (1 - is_a) * draw_b[:, 1]
+    inv = np.zeros((n_obs, n_periods - 1))
+    for t in range(n_periods - 1):
+        inv[:, t] = (
+            beta_skills[t] * skills[:, t]
+            + beta_inc[t] * log_inc
+            + rng.normal(size=n_obs) * sigma_i_arr[t]
+        )
+        skills[:, t + 1] = (
+            a_t[t]
+            + sigma_t_arr[t] * skills[:, t]
+            + gamma_t_arr[t] * inv[:, t]
+            + delta_t_arr[t] * skills[:, t] * inv[:, t]
+            + rng.normal(size=n_obs) * sigma_p_arr[t]
+        )
+
+    rows = []
+    for i in range(n_obs):
+        for t in range(n_periods):
+            row = {
+                "caseid": int(i),
+                "period": int(t),
+                "skill_1": lam_skills[t][0] * skills[i, t]
+                + rng.normal() * sd_skills[t][0],
+                "skill_2": lam_skills[t][1] * skills[i, t]
+                + rng.normal() * sd_skills[t][1],
+                "skill_3": lam_skills[t][2] * skills[i, t]
+                + rng.normal() * sd_skills[t][2],
+                "log_income": float(log_inc[i]),
+            }
+            if 1 <= t <= 2:
+                inv_t_idx = t - 1
+                row["inv_1"] = (
+                    lam_inv[inv_t_idx][0] * inv[i, inv_t_idx]
+                    + rng.normal() * sd_inv[inv_t_idx][0]
+                )
+                row["inv_2"] = (
+                    lam_inv[inv_t_idx][1] * inv[i, inv_t_idx]
+                    + rng.normal() * sd_inv[inv_t_idx][1]
+                )
+                row["inv_3"] = (
+                    lam_inv[inv_t_idx][2] * inv[i, inv_t_idx]
+                    + rng.normal() * sd_inv[inv_t_idx][2]
+                )
+            else:
+                row["inv_1"] = np.nan
+                row["inv_2"] = np.nan
+                row["inv_3"] = np.nan
+            rows.append(row)
+    data = pd.DataFrame(rows).set_index(["caseid", "period"])
+
+    skill_normalisations = Normalizations(
+        loadings=({"skill_1": 1.0},) * n_periods,
+        intercepts=({"skill_1": 0.0},) * n_periods,
+    )
+    inv_normalisations = Normalizations(
+        loadings=({}, {"inv_1": 1.0}, {"inv_1": 1.0}),
+        intercepts=({}, {"inv_1": 0.0}, {"inv_1": 0.0}),
+    )
+
+    model = ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("skill_1", "skill_2", "skill_3"),) * n_periods,
+                normalizations=skill_normalisations,
+                transition_function="translog",
+            ),
+            "investment": FactorSpec(
+                measurements=(
+                    (),
+                    ("inv_1", "inv_2", "inv_3"),
+                    ("inv_1", "inv_2", "inv_3"),
+                ),
+                normalizations=inv_normalisations,
+                transition_function="linear",
+                is_endogenous=True,
+            ),
+        },
+        observed_factors=("log_income",),
+        estimation_options=EstimationOptions(
+            robust_bounds=True, bounds_distance=0.001, n_mixtures=2
+        ),
+    )
+
+    # Pin everything except sigma_prod_0 / sigma_prod_1 at MATLAB truth.
+    truth_extras: list[tuple[tuple[str, int, str, str], float]] = [
+        (("transition", 0, "skills", "constant"), a_t[0]),
+        (("transition", 0, "skills", "skills"), sigma_t_arr[0]),
+        (("transition", 0, "skills", "investment"), gamma_t_arr[0]),
+        (("transition", 0, "skills", "skills * investment"), delta_t_arr[0]),
+        (("transition", 1, "skills", "constant"), a_t[1]),
+        (("transition", 1, "skills", "skills"), sigma_t_arr[1]),
+        (("transition", 1, "skills", "investment"), gamma_t_arr[1]),
+        (("transition", 1, "skills", "skills * investment"), delta_t_arr[1]),
+        # Pin sigma_prod_0 at truth so we can isolate sigma_prod_1.
+        (("shock_sds", 0, "skills", "-"), sigma_p_arr[0]),
+        (("investment_eq", 0, "investment", "skills"), beta_skills[0]),
+        (("investment_eq", 0, "investment", "log_income"), beta_inc[0]),
+        (("investment_eq", 0, "investment", "constant"), 0.0),
+        (("investment_eq", 1, "investment", "skills"), beta_skills[1]),
+        (("investment_eq", 1, "investment", "log_income"), beta_inc[1]),
+        (("investment_eq", 1, "investment", "constant"), 0.0),
+        (("investment_sds", 0, "investment", "-"), sigma_i_arr[0]),
+        (("investment_sds", 1, "investment", "-"), sigma_i_arr[1]),
+    ]
+    # Pin all squares + log_income terms in translog to 0.
+    for t in range(n_periods - 1):
+        for fac in ("skills", "investment", "log_income"):
+            truth_extras.append((("transition", t, "skills", f"{fac} ** 2"), 0.0))
+        truth_extras.append((("transition", t, "skills", "log_income"), 0.0))
+        for cross in ("skills * log_income", "investment * log_income"):
+            truth_extras.append((("transition", t, "skills", cross), 0.0))
+
+    fixed_idx = pd.MultiIndex.from_tuples(
+        [r[0] for r in truth_extras],
+        names=["category", "period", "name1", "name2"],
+    )
+    fixed_params = pd.DataFrame(
+        {"value": [r[1] for r in truth_extras]}, index=fixed_idx
+    )
+
+    truth_df = pd.DataFrame({"value": [v for _, v in truth_extras]}, index=fixed_idx)
+
+    af_opts = AFEstimationOptions(
+        n_halton_points=200,
+        n_halton_points_shock=200,
+        n_mixture_components=2,
+        optimizer_algorithm="scipy_lbfgsb",
+    )
+    result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=af_opts,
+        fixed_params=fixed_params,
+        start_params=truth_df,
+    )
+    p2 = result.period_results[2].params
+    sigma_prod_1_est = float(
+        p2.loc[("shock_sds", 1, "skills", "-"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    rel_err = abs(sigma_prod_1_est - sigma_p_arr[1]) / sigma_p_arr[1]
+    assert rel_err < 0.30, (
+        f"sigma_prod_1 estimate {sigma_prod_1_est:.4f} is more than 30% off truth "
+        f"{sigma_p_arr[1]:.4f} (rel error {rel_err:.2%}). Suggests joint-Halton "
+        f"chain rebuild has regressed and sigma_prod is collapsing toward 0."
     )
 
 

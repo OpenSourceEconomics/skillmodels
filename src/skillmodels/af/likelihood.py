@@ -11,6 +11,8 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+from skillmodels.af.types import ChainLink
+
 
 def af_per_obs_loglike_initial(
     params: Array,
@@ -539,6 +541,8 @@ def af_per_obs_loglike_transition(
     prev_loadings_flat: Array,
     prev_meas_sds: Array,
     prev_distribution: dict[str, Array],
+    chain_links: tuple[ChainLink, ...],
+    obs_factor_values_chain: Array,
     joint_nodes: Array,
     joint_weights: Array,
     transition_func: Callable,
@@ -603,6 +607,8 @@ def af_per_obs_loglike_transition(
         prev_full_loadings=prev_full_loadings,
         prev_meas_sds=prev_meas_sds,
         prev_distribution=prev_distribution,
+        chain_links=chain_links,
+        obs_factor_values_chain=obs_factor_values_chain,
         joint_nodes=joint_nodes,
         joint_weights=joint_weights,
         transition_func=transition_func,
@@ -634,6 +640,8 @@ def af_loglike_transition(
     prev_loadings_flat: Array,
     prev_meas_sds: Array,
     prev_distribution: dict[str, Array],
+    chain_links: tuple[ChainLink, ...],
+    obs_factor_values_chain: Array,
     joint_nodes: Array,
     joint_weights: Array,
     transition_func: Callable,
@@ -649,16 +657,26 @@ def af_loglike_transition(
 ) -> Array:
     """Negative log-likelihood for a transition period (Step t).
 
-    Integrate over latent factors at period t-1 and production shocks.
+    Integrate over latent factors at period t-1 and production shocks
+    via a single joint Halton design covering ALL randomness needed at
+    this step (mirroring MATLAB's ``create_nodes_weights_01/12``):
+
+    * the period-0 latent draw ``z_state`` (shared across mixture comps)
+    * one ``z_inv`` and one ``z_P`` per prior chain step (periods 1..t-1)
+    * one ``z_inv`` and one ``z_P`` for the current step (t-1)→t
+
+    The chained sample θ_0 → θ_{t-1} is rebuilt on-demand inside the
+    integrand from this joint Halton via ``_rebuild_chain_at_period``.
     The likelihood conditions on individual data via re-evaluation of
-    previous-period measurements at each quadrature node::
+    previous-period state-factor measurements at each Halton draw::
 
-        L_i = sum_q w_q * sum_l pi_{l,i}
-              * [prod_m N(Z_{t-1,m,i} | c~_m + lam~_m' th_{t-1}, sd~_m)]
-              * [sum_r w_r * prod_m N(Z_{t,m,i} | c_m + lam_m' th_t, sd_m)]
+        L_i = sum_j w_j * sum_l pi_{l,i}
+              * [prod_m N(Z_{t-1,m,i} | c~_m + lam~_m' th_{t-1}_j, sd~_m)]
+              * [prod_m N(Z_{t,m,i}   | c_m + lam_m' th_t_j, sd_m)]
 
-    where ``th_t = f(th_{t-1}; delta) + sd_shock * eta_r`` and tildes
-    denote already-estimated parameters from the previous step.
+    where ``th_{t-1}_j = chain_rebuild(joint_z_j)`` and
+    ``th_t_j = f(th_{t-1}_j; delta) + sd_shock * z_shock_curr_j``.
+    Tildes denote already-estimated parameters from previous steps.
 
     Args:
         params: Full parameter vector in template order. Fixed entries are
@@ -689,6 +707,15 @@ def af_loglike_transition(
         n_inv_eq_params_per: Investment equation parameters per endogenous factor.
         observed_factor_values: Shape (n_obs, n_obs_factors), observed factor data.
         stability_floor: Numerical stability floor.
+        chain_links: Tuple of `ChainLink` objects, one per prior transition
+            step (length `period - 1` for the (period-1)→period step).
+            Empty for the 0→1 step. Carries each prior period's just-fitted
+            parameters so the chain replays from period 0 inside this
+            step's joint-Halton chain rebuild.
+        obs_factor_values_chain: Per-obs observed factor values at each
+            chain link's source period, shape `(n_obs, n_chain,
+            n_observed_factors)`. The current step's observed factors are
+            passed via `observed_factor_values`.
         state_factor_indices_in_latent: Shape (n_state_factors,) int array
             mapping each state factor to its column index in the
             previous-period loading mask (which is in `latent_factors` order
@@ -730,6 +757,8 @@ def af_loglike_transition(
         prev_loadings_flat=prev_loadings_flat,
         prev_meas_sds=prev_meas_sds,
         prev_distribution=prev_distribution,
+        chain_links=chain_links,
+        obs_factor_values_chain=obs_factor_values_chain,
         joint_nodes=joint_nodes,
         joint_weights=joint_weights,
         transition_func=transition_func,
@@ -818,6 +847,8 @@ def _transition_loglike_per_obs(
     prev_full_loadings: Array,
     prev_meas_sds: Array,
     prev_distribution: dict[str, Array],
+    chain_links: tuple[ChainLink, ...],
+    obs_factor_values_chain: Array,
     joint_nodes: Array,
     joint_weights: Array,
     transition_func: Callable,
@@ -830,7 +861,14 @@ def _transition_loglike_per_obs(
     stability_floor: float,
     n_obs_per_batch: int | None = None,
 ) -> Array:
-    """Compute per-observation log-likelihood for a transition period."""
+    """Compute per-observation log-likelihood for a transition period.
+
+    Uses the joint-Halton chain rebuild scheme: at every transition step,
+    a single joint Halton design covers (z_state, z_inv_chain,
+    z_shock_chain, z_inv_t, z_shock_t). The chained sample θ_0 → θ_{t-1}
+    is rebuilt on-demand inside the integrand from this single joint
+    Halton, mirroring MATLAB's ``create_nodes_weights_01/12``.
+    """
     n_measures, n_loading_factors = loading_mask.shape
     full_loadings = jnp.zeros((n_measures, n_loading_factors))
     full_loadings = full_loadings.at[loading_mask].set(loadings_flat)
@@ -839,10 +877,11 @@ def _transition_loglike_per_obs(
     residuals_base = measurements - control_contrib
 
     cond_weights = prev_distribution["cond_weights"]
-    # samples shape (n_components, n_halton, n_obs, n_state). Re-shape to
-    # (n_obs, n_components, n_halton, n_state) so we can map per-obs.
-    samples_stacked = prev_distribution["samples_per_component"]
-    samples_by_obs = jnp.transpose(samples_stacked, (2, 0, 1, 3))
+    cond_means = prev_distribution["cond_means"]
+    cond_chols = prev_distribution["cond_chols"]
+    # cond_means shape (n_components, n_obs, n_state). Re-shape to
+    # (n_obs, n_components, n_state) so we can map per-obs.
+    cond_means_by_obs = jnp.transpose(cond_means, (1, 0, 2))
 
     @jax.checkpoint
     def _single_obs(
@@ -850,7 +889,8 @@ def _transition_loglike_per_obs(
         prev_residual_base: Array,
         obs_cond_weights: Array,
         obs_factor_values: Array,
-        obs_samples: Array,
+        obs_cond_means: Array,
+        obs_factor_values_chain_i: Array,
     ) -> Array:
         return _integrate_transition_single_obs(
             residual_base=residual_base,
@@ -860,7 +900,10 @@ def _transition_loglike_per_obs(
             prev_full_loadings=prev_full_loadings,
             prev_meas_sds=prev_meas_sds,
             obs_cond_weights=obs_cond_weights,
-            prev_samples_per_component=obs_samples,
+            obs_cond_means=obs_cond_means,
+            cond_chols=cond_chols,
+            chain_links=chain_links,
+            obs_factor_values_chain=obs_factor_values_chain_i,
             joint_nodes=joint_nodes,
             joint_weights=joint_weights,
             transition_func=transition_func,
@@ -883,7 +926,8 @@ def _transition_loglike_per_obs(
         prev_residuals_base,
         cond_weights,
         observed_factor_values,
-        samples_by_obs,
+        cond_means_by_obs,
+        obs_factor_values_chain,
         n_obs_per_batch=n_obs_per_batch,
     )
 
@@ -920,6 +964,80 @@ def _compute_investment(
     return result
 
 
+def _rebuild_chain_at_period(
+    *,
+    z_state: Array,
+    z_inv_per_step: Array,
+    z_shock_per_step: Array,
+    initial_mean: Array,
+    initial_chol: Array,
+    chain_links: tuple[ChainLink, ...],
+    obs_factor_values_at_obs_per_step: Array,
+    n_state_factors: int,
+    n_endogenous_factors: int,
+) -> Array:
+    """Forward-iterate θ_0 → θ_{t-1} from one joint-Halton draw.
+
+    Mirrors MATLAB's `create_nodes_weights_12`: rebuild the chained sample
+    on-demand inside the transition likelihood from a single joint Halton
+    draw, so the (z_state, z_inv_per_step, z_shock_per_step) triple is
+    quasi-uniformly distributed in joint space at each index `j` (rather
+    than paired across two independent Halton sequences as the previous
+    static `samples_per_component` carry-over did).
+
+    Args:
+        z_state: Shape (n_state_factors,). Standard-normal sample driving
+            the period-0 latent state for one (j, i, l).
+        z_inv_per_step: Shape (n_chain, n_endogenous_factors). One row
+            per prior chain step (period 1 .. period t-1). Standard-normal
+            inv shocks.
+        z_shock_per_step: Shape (n_chain, n_shock_factors). Standard-normal
+            production shocks per prior chain step.
+        initial_mean: Shape (n_state_factors,). Schur-conditional mean of
+            the period-0 state for one (i, l).
+        initial_chol: Shape (n_state_factors, n_state_factors). Cholesky
+            of the period-0 conditional covariance, shared across i.
+        chain_links: Tuple of ChainLink objects, one per prior transition
+            step (period 1 → period 2 → ...). Length n_chain.
+        obs_factor_values_at_obs_per_step: Shape (n_chain, n_obs_factors).
+            Observed factor values at the *source* period of each chain
+            step (i.e. period 0 for the first link, period 1 for the
+            second, etc.) for one observation.
+        n_state_factors: Number of state factors.
+        n_endogenous_factors: Number of endogenous factors (investment).
+
+    Return:
+        theta at period t-1 (= start period of the current likelihood
+        step), shape (n_state_factors,). When `chain_links` is empty,
+        returns the period-0 state directly.
+    """
+    theta = initial_mean + initial_chol @ z_state
+    for step_idx, link in enumerate(chain_links):
+        z_inv = z_inv_per_step[step_idx]
+        z_shock = z_shock_per_step[step_idx]
+        obs_y = obs_factor_values_at_obs_per_step[step_idx]
+        inv = _compute_investment(
+            theta,
+            obs_y,
+            link.inv_eq_params,
+            link.inv_sds,
+            z_inv,
+            n_endogenous_factors,
+            n_state_factors,
+        )
+        full_with_obs = jnp.concatenate([theta, inv, obs_y])
+        state_shock_contrib = (
+            jnp.zeros(n_state_factors)
+            .at[link.shock_factor_indices]
+            .set(link.shock_sds * z_shock)
+        )
+        theta = (
+            link.transition_func(full_with_obs, link.transition_params)
+            + state_shock_contrib
+        )
+    return theta
+
+
 def _integrate_transition_single_obs(
     *,
     residual_base: Array,
@@ -929,7 +1047,10 @@ def _integrate_transition_single_obs(
     prev_full_loadings: Array,
     prev_meas_sds: Array,
     obs_cond_weights: Array,
-    prev_samples_per_component: Array,
+    obs_cond_means: Array,
+    cond_chols: Array,
+    chain_links: tuple[ChainLink, ...],
+    obs_factor_values_chain: Array,
     joint_nodes: Array,
     joint_weights: Array,
     transition_func: Callable,
@@ -945,45 +1066,84 @@ def _integrate_transition_single_obs(
     obs_factor_values: Array,
     stability_floor: float,
 ) -> Array:
-    """Importance-sample integration for one observation at a transition period.
+    """Joint-Halton importance integration for one obs at a transition step.
 
-    The previous-period skills distribution is supplied as a Halton-driven
-    importance sample ``prev_samples_per_component`` of shape
-    ``(n_components, n_halton, n_state_factors)``. Each row j is a chained
-    realisation of skills_{t-1} for this observation, built deterministically
-    from the previous period's Halton design + the previous period's
-    estimated parameters. This preserves the non-Gaussian shape of skills_{t-1}
-    across periods (vs. the moment-matched Gaussian re-draw, which is the
-    bug Mario Rothfelder identified that biased investment-shock SDs
-    downward by ~50%).
+    Rebuilds the chained sample theta_0 -> theta_{t-1} on-demand from a
+    single joint Halton design at every transition step (matching MATLAB's
+    ``create_nodes_weights_01/12``). At index j, the joint Halton draw
+    couples (z_state, z_inv_chain, z_shock_chain, z_inv_t, z_shock_t) in
+    a quasi-uniform 3D+ space, replacing the previous broken scheme that
+    paired a period-0-seeded chained-sample's z_state[j] with a
+    period-t-seeded shock z[j] across two independent Halton sequences at
+    the same index. The split scheme aliased into sigma_prod optimization
+    (see commit message and ``sigma-prod-collapse-2026-05-07.md``).
 
-    The joint Halton design at this period covers the *fresh* period-t
-    shocks only:
-    ``joint_nodes`` has shape ``(n_halton, n_shock_factors + n_endogenous_factors)``
-    (no z_state column — that's absorbed into the importance sample).
+    The non-trivial inputs:
+
+    * ``obs_cond_means``: per-component Schur-conditional means for this
+      obs at period 0, shape ``(n_components, n_state_factors)``.
+    * ``cond_chols``: per-component Schur-conditional Cholesky factors at
+      period 0, shape ``(n_components, n_state_factors, n_state_factors)``.
+      Shared across observations.
+    * ``chain_links``: tuple of `ChainLink` objects, one per prior
+      transition step (length ``period - 1`` for the (period-1)->period
+      step). Empty for the 0->1 step.
+    * ``obs_factor_values_chain``: observed factor values at the source
+      period of each prior chain step for this observation, shape
+      ``(n_chain, n_obs_factors)``. The current step's observed factors
+      are passed via ``obs_factor_values``.
+
+    The joint Halton design has dimension
+    ``n_state_factors + n_chain * (n_shock_factors + n_endogenous_factors)
+    + (n_shock_factors + n_endogenous_factors)``. Layout per draw j:
+
+    * ``[:n_state_factors]``: z_state for theta_0 (shared across comps)
+    * for s in 0..n_chain-1: per-step ``z_shock`` followed by ``z_inv``
+    * tail: current step's ``z_shock`` followed by ``z_inv``.
 
     The previous-period measurement density factor is restricted to
-    measurements that load on STATE factors only — endogenous-factor
-    (investment) measurements at period t-1 are deliberately omitted,
-    matching MATLAB's ``create_nodes_weights_12`` (which evaluates only
-    skill measurements at the chained sample, not investment measurements;
-    investment measurements at period t-1 were already evaluated as
-    *current-period* measurements at the (t-2)→(t-1) step).
-    ``state_factor_indices_in_latent`` selects the state-factor columns of
-    ``prev_full_loadings`` regardless of how state vs. endogenous factors
-    are interleaved in the latent-factor ordering.
+    state-factor loadings (matches MATLAB's deliberate omission of
+    ``Z_inv_est_0`` from the chained-sample importance weight at
+    ``create_nodes_weights_12``).
     """
     n_components = obs_cond_weights.shape[0]
+    n_chain = len(chain_links)
+    z_block = n_shock_factors + n_endogenous_factors
 
     def _log_draw_contribution(j_idx: Array) -> Array:
         """Per-draw log kernel at Halton index j, LogSumExp over mixture comps."""
         z_at_j = joint_nodes[j_idx]
-        z_shock = z_at_j[:n_shock_factors]
-        z_inv_shock = z_at_j[n_shock_factors:]
+        z_state = z_at_j[:n_state_factors]
+        # Chain shocks at indices [n_state, n_state + n_chain*z_block).
+        chain_block_start = n_state_factors
+        chain_block_end = chain_block_start + n_chain * z_block
+        if n_chain > 0:
+            z_chain = z_at_j[chain_block_start:chain_block_end].reshape(
+                n_chain, z_block
+            )
+            z_shock_chain = z_chain[:, :n_shock_factors]
+            z_inv_chain = z_chain[:, n_shock_factors:]
+        else:
+            z_shock_chain = jnp.zeros((0, n_shock_factors))
+            z_inv_chain = jnp.zeros((0, n_endogenous_factors))
+        # Current step shocks at the tail.
+        z_shock_curr = z_at_j[chain_block_end : chain_block_end + n_shock_factors]
+        z_inv_shock = z_at_j[chain_block_end + n_shock_factors :]
 
         log_component_vals = []
         for l_idx in range(n_components):
-            theta_prev = prev_samples_per_component[l_idx, j_idx]
+            # Rebuild θ_{t-1} from the joint Halton.
+            theta_prev = _rebuild_chain_at_period(
+                z_state=z_state,
+                z_inv_per_step=z_inv_chain,
+                z_shock_per_step=z_shock_chain,
+                initial_mean=obs_cond_means[l_idx],
+                initial_chol=cond_chols[l_idx],
+                chain_links=chain_links,
+                obs_factor_values_at_obs_per_step=obs_factor_values_chain,
+                n_state_factors=n_state_factors,
+                n_endogenous_factors=n_endogenous_factors,
+            )
             inv = _compute_investment(
                 theta_prev,
                 obs_factor_values,
@@ -1020,7 +1180,7 @@ def _integrate_transition_single_obs(
             state_shock_contrib = (
                 jnp.zeros(n_state_factors)
                 .at[shock_factor_indices]
-                .set(shock_sds * z_shock)
+                .set(shock_sds * z_shock_curr)
             )
             theta_t = (
                 transition_func(full_prev_with_obs, transition_params)
