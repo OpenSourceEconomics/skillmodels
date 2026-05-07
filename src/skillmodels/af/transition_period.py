@@ -106,6 +106,16 @@ def estimate_transition_period(
     shock_factor_indices = jnp.array(
         [state_factors.index(f) for f in shock_factors], dtype=jnp.int32
     )
+    # Indices of the state factors within the full latent-factor ordering.
+    # `prev_full_loadings` has columns in `factors` order (state +
+    # endogenous, possibly interleaved); the prev-meas factor restricts to
+    # state-factor columns to mirror MATLAB's likelihood_12 (which omits
+    # period-(t-1) inv measurements from the chained-sample importance
+    # weight). Build the mapping explicitly rather than relying on
+    # state-before-endogenous ordering.
+    state_factor_indices_in_latent = jnp.array(
+        [factors.index(f) for f in state_factors], dtype=jnp.int32
+    )
 
     params_index = get_transition_period_params_index(
         period=period,
@@ -216,6 +226,7 @@ def estimate_transition_period(
         n_endog=n_endog,
         n_shock=n_shock,
         shock_factor_indices=shock_factor_indices,
+        state_factor_indices_in_latent=state_factor_indices_in_latent,
         all_measures=all_measures,
         controls_names=controls_names,
         measurements=measurements,
@@ -275,6 +286,7 @@ def _run_transition_optimization(
     n_endog: int,
     n_shock: int,
     shock_factor_indices: Array,
+    state_factor_indices_in_latent: Array,
     all_measures: list[str],
     controls_names: tuple[str, ...],
     measurements: Array,
@@ -330,6 +342,7 @@ def _run_transition_optimization(
         "n_endogenous_factors": n_endog,
         "n_shock_factors": n_shock,
         "shock_factor_indices": shock_factor_indices,
+        "state_factor_indices_in_latent": state_factor_indices_in_latent,
         "n_measures": len(all_measures),
         "n_controls": len(controls_names),
         "measurements": measurements,

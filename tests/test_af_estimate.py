@@ -7,12 +7,14 @@ results, comparing to the CHS Kalman filter estimates where applicable.
 from pathlib import Path
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import optimagic as om
 import pandas as pd
 import pytest
 
 from skillmodels.af import AFEstimationOptions, estimate_af
+from skillmodels.af.likelihood import af_loglike_transition
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.filtered_states import get_filtered_states
 from skillmodels.maximization_inputs import get_maximization_inputs
@@ -800,6 +802,164 @@ def test_af_estimate_with_endogenous_factor() -> None:
     inv_eq_values = inv_eq["value"].to_numpy()
     assert not np.allclose(inv_eq_values, 0.5, atol=0.05), (
         f"Investment eq params stuck at init: {inv_eq_values}"
+    )
+
+
+def test_prev_period_inv_meas_does_not_affect_transition_loglik_gradient() -> None:
+    """Guard inv-prev-meas invariance of the AF transition-step gradient.
+
+    Inv-type measurements at the previous period must not contribute to
+    the gradient of `af_loglike_transition` w.r.t. current-step parameters.
+    MATLAB's reference AF likelihood (`AF_Application_One_Normal_Translog.m`,
+    `create_nodes_weights_12`) evaluates inv-type measurements exactly once,
+    at the step where the inv is generated as a current-period measurement.
+    They are deliberately omitted from the chained-sample importance weight
+    at the next transition step (`prod_inv` is commented out in the MATLAB
+    source). Re-evaluating them would be wrong: the chained sample carries
+    forward only state factors, so the previous step's inv value is no
+    longer available; evaluating prev-period inv measurements against the
+    *current* step's freshly-drawn inv would be a wrong-value comparison.
+
+    The Python port restricts the prev-meas factor to state-factor
+    loadings only (using `state_factor_indices_in_latent` to slice the
+    columns). This test guards against future refactors that re-introduce
+    a parameter-dependent contribution from inv-loading rows at the
+    previous period: it perturbs only the inv-meas columns of
+    `prev_measurements` and asserts the gradient w.r.t. all current-step
+    parameters is unchanged.
+    """
+    rng = np.random.default_rng(20260507)
+    n_obs = 5
+    n_state = 1
+    n_endog = 1
+    n_obs_factors = 0
+    n_measures = 2  # 1 skill + 1 inv at current period
+    n_prev_measures = 2  # 1 skill + 1 inv at prev period
+    n_controls = 1  # constant
+    n_halton = 3
+    n_components = 1
+
+    # Loading masks: row 0 = skill meas (loads on factor 0=skills), row 1 =
+    # inv meas (loads on factor 1=investment). Both at current and prev.
+    loading_mask = jnp.array([[True, False], [False, True]])
+    prev_loading_mask = jnp.array([[True, False], [False, True]])
+
+    measurements = jnp.array(rng.normal(size=(n_obs, n_measures)))
+    controls = jnp.ones((n_obs, n_controls))
+    prev_measurements_a = jnp.array(rng.normal(size=(n_obs, n_prev_measures)))
+    # Perturb ONLY the inv-meas column (index 1) at the previous period.
+    inv_perturbation = jnp.array(rng.normal(size=n_obs))
+    prev_measurements_b = prev_measurements_a.at[:, 1].set(  # noqa: PD008
+        prev_measurements_a[:, 1] + inv_perturbation
+    )
+    prev_controls = jnp.ones((n_obs, n_controls))
+
+    # Prev-period measurement-system parameters (held fixed at the
+    # transition step in production -- they were estimated previously).
+    prev_loadings_flat = jnp.array([1.0, 1.0])
+    prev_control_params = jnp.zeros((n_prev_measures, n_controls))
+    prev_meas_sds = jnp.array([0.5, 0.4])
+
+    # Prev-period importance sample: arbitrary draws of the state factor
+    # at this small toy scale.
+    samples_per_component = jnp.array(
+        rng.normal(size=(n_components, n_halton, n_obs, n_state))
+    )
+    cond_weights = jnp.ones((n_obs, n_components))
+    prev_distribution = {
+        "cond_weights": cond_weights,
+        "samples_per_component": samples_per_component,
+    }
+
+    # Joint Halton over (z_shock, z_inv_shock); n_shock=1, n_endog=1.
+    joint_nodes = jnp.array(rng.normal(size=(n_halton, n_state + n_endog)))
+    joint_weights = jnp.full(n_halton, 1.0 / n_halton)
+
+    def transition_func(full_states: jax.Array, params: jax.Array) -> jax.Array:
+        # Linear: theta_t = a * theta_prev + b * inv + c. Returns shape (n_state,).
+        return jnp.array(
+            [params[0] * full_states[0] + params[1] * full_states[1] + params[2]]
+        )
+
+    total_n_transition_params = 3
+    n_inv_eq_params_per = 1 + n_state + n_obs_factors
+    total_n_inv_params = n_endog * n_inv_eq_params_per
+
+    # Param vector layout matches `_parse_transition_params`: 3 transition
+    # params, 1 shock sd, 2 inv_eq params, 1 inv sd, 2 control params, 2
+    # loadings, 2 meas sds = 13 entries total.
+    params_value = jnp.array(
+        [
+            0.6,
+            0.3,
+            0.1,
+            0.4,
+            0.0,
+            0.5,
+            0.2,
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            0.3,
+            0.3,
+        ]
+    )
+
+    state_factor_indices_in_latent = jnp.array([0], dtype=jnp.int32)
+    shock_factor_indices = jnp.array([0], dtype=jnp.int32)
+    obs_factor_values = jnp.zeros((n_obs, n_obs_factors))
+
+    def _ll(prev_meas: jax.Array, params: jax.Array) -> jax.Array:
+        return af_loglike_transition(
+            params,
+            n_state_factors=n_state,
+            n_endogenous_factors=n_endog,
+            n_measures=n_measures,
+            n_controls=n_controls,
+            measurements=measurements,
+            controls=controls,
+            loading_mask=loading_mask,
+            prev_measurements=prev_meas,
+            prev_controls=prev_controls,
+            prev_loading_mask=prev_loading_mask,
+            prev_control_params=prev_control_params,
+            prev_loadings_flat=prev_loadings_flat,
+            prev_meas_sds=prev_meas_sds,
+            prev_distribution=prev_distribution,
+            joint_nodes=joint_nodes,
+            joint_weights=joint_weights,
+            transition_func=transition_func,
+            total_n_transition_params=total_n_transition_params,
+            total_n_inv_params=total_n_inv_params,
+            n_inv_eq_params_per=n_inv_eq_params_per,
+            observed_factor_values=obs_factor_values,
+            stability_floor=1e-300,
+            state_factor_indices_in_latent=state_factor_indices_in_latent,
+            n_shock_factors=1,
+            shock_factor_indices=shock_factor_indices,
+        )
+
+    def loglike_a(params: jax.Array) -> jax.Array:
+        return _ll(prev_measurements_a, params)
+
+    def loglike_b(params: jax.Array) -> jax.Array:
+        return _ll(prev_measurements_b, params)
+
+    grad_a = jax.grad(loglike_a)(params_value)
+    grad_b = jax.grad(loglike_b)(params_value)
+
+    np.testing.assert_allclose(np.asarray(grad_a), np.asarray(grad_b), atol=1e-10)
+
+    # Sanity: with a non-zero perturbation, the inv-row residuals do change,
+    # so the loglik *value* itself differs (by a per-obs constant). That
+    # difference must NOT be zero -- otherwise the test isn't actually
+    # exercising the inv-loading rows.
+    val_a = float(loglike_a(params_value))
+    val_b = float(loglike_b(params_value))
+    assert not np.isclose(val_a, val_b), (
+        "Test sanity failure: perturbing prev inv-meas changed nothing -- "
+        "the test isn't exercising the inv-loading rows."
     )
 
 

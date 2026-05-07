@@ -547,6 +547,7 @@ def af_per_obs_loglike_transition(
     n_inv_eq_params_per: int,
     observed_factor_values: Array,
     stability_floor: float,
+    state_factor_indices_in_latent: Array | None = None,
     n_shock_factors: int | None = None,
     shock_factor_indices: Array | None = None,
     n_obs_per_batch: int | None = None,
@@ -560,6 +561,11 @@ def af_per_obs_loglike_transition(
     effective_n_shock = n_state_factors if n_shock_factors is None else n_shock_factors
     if shock_factor_indices is None:
         shock_factor_indices = jnp.arange(effective_n_shock)
+    if state_factor_indices_in_latent is None:
+        # Default: assume state factors precede endogenous factors in the
+        # latent-factor ordering (the existing convention). Callers that
+        # don't follow that convention must pass explicit indices.
+        state_factor_indices_in_latent = jnp.arange(n_state_factors)
 
     parsed = _parse_transition_params(
         params,
@@ -604,6 +610,7 @@ def af_per_obs_loglike_transition(
         n_endogenous_factors=n_endogenous_factors,
         n_shock_factors=effective_n_shock,
         shock_factor_indices=shock_factor_indices,
+        state_factor_indices_in_latent=state_factor_indices_in_latent,
         observed_factor_values=observed_factor_values,
         stability_floor=stability_floor,
         n_obs_per_batch=n_obs_per_batch,
@@ -635,6 +642,7 @@ def af_loglike_transition(
     n_inv_eq_params_per: int,
     observed_factor_values: Array,
     stability_floor: float,
+    state_factor_indices_in_latent: Array | None = None,
     n_shock_factors: int | None = None,
     shock_factor_indices: Array | None = None,
     n_obs_per_batch: int | None = None,
@@ -681,6 +689,15 @@ def af_loglike_transition(
         n_inv_eq_params_per: Investment equation parameters per endogenous factor.
         observed_factor_values: Shape (n_obs, n_obs_factors), observed factor data.
         stability_floor: Numerical stability floor.
+        state_factor_indices_in_latent: Shape (n_state_factors,) int array
+            mapping each state factor to its column index in the
+            previous-period loading mask (which is in `latent_factors` order
+            = state + endogenous, possibly interleaved). Used to restrict
+            the prev-meas factor to state-factor loadings, mirroring
+            MATLAB's `create_nodes_weights_12` (which omits prev-period
+            inv measurements from the chained-sample importance weight).
+            Defaults to `arange(n_state_factors)` (assuming state factors
+            precede endogenous in the latent ordering).
         n_shock_factors: Number of state factors that get a production shock.
             Defaults to `n_state_factors`. Factors without a shock are
             integrated deterministically (their shock dimension is dropped
@@ -721,6 +738,7 @@ def af_loglike_transition(
         n_inv_eq_params_per=n_inv_eq_params_per,
         observed_factor_values=observed_factor_values,
         stability_floor=stability_floor,
+        state_factor_indices_in_latent=state_factor_indices_in_latent,
         n_shock_factors=n_shock_factors,
         shock_factor_indices=shock_factor_indices,
         n_obs_per_batch=n_obs_per_batch,
@@ -807,6 +825,7 @@ def _transition_loglike_per_obs(
     n_endogenous_factors: int,
     n_shock_factors: int,
     shock_factor_indices: Array,
+    state_factor_indices_in_latent: Array,
     observed_factor_values: Array,
     stability_floor: float,
     n_obs_per_batch: int | None = None,
@@ -853,6 +872,7 @@ def _transition_loglike_per_obs(
             n_endogenous_factors=n_endogenous_factors,
             n_shock_factors=n_shock_factors,
             shock_factor_indices=shock_factor_indices,
+            state_factor_indices_in_latent=state_factor_indices_in_latent,
             obs_factor_values=obs_factor_values,
             stability_floor=stability_floor,
         )
@@ -921,6 +941,7 @@ def _integrate_transition_single_obs(
     n_endogenous_factors: int,
     n_shock_factors: int,
     shock_factor_indices: Array,
+    state_factor_indices_in_latent: Array,
     obs_factor_values: Array,
     stability_floor: float,
 ) -> Array:
@@ -940,6 +961,17 @@ def _integrate_transition_single_obs(
     shocks only:
     ``joint_nodes`` has shape ``(n_halton, n_shock_factors + n_endogenous_factors)``
     (no z_state column — that's absorbed into the importance sample).
+
+    The previous-period measurement density factor is restricted to
+    measurements that load on STATE factors only — endogenous-factor
+    (investment) measurements at period t-1 are deliberately omitted,
+    matching MATLAB's ``create_nodes_weights_12`` (which evaluates only
+    skill measurements at the chained sample, not investment measurements;
+    investment measurements at period t-1 were already evaluated as
+    *current-period* measurements at the (t-2)→(t-1) step).
+    ``state_factor_indices_in_latent`` selects the state-factor columns of
+    ``prev_full_loadings`` regardless of how state vs. endogenous factors
+    are interleaved in the latent-factor ordering.
     """
     n_components = obs_cond_weights.shape[0]
 
@@ -961,13 +993,19 @@ def _integrate_transition_single_obs(
                 n_endogenous_factors,
                 n_state_factors,
             )
-            full_prev = jnp.concatenate([theta_prev, inv])
             full_prev_with_obs = jnp.concatenate([theta_prev, inv, obs_factor_values])
 
-            # Previous-period measurement density (skill measurements at t-1
-            # plus inv measurements at t-1, evaluated against the importance-
-            # sample skills and the chained inv).
-            prev_residuals = prev_residual_base - prev_full_loadings @ full_prev
+            # Previous-period measurement density: state-factor (skill)
+            # measurements at theta_prev only. Endogenous-factor (inv)
+            # measurements at t-1 are NOT re-evaluated here -- they were
+            # already used as current-period measurements at the (t-2)->(t-1)
+            # step (matches MATLAB's likelihood_12, which omits Z_inv_est_0
+            # from the chained-sample importance weight). For rows that load
+            # only on endogenous factors, the slice picks zero loadings and
+            # the residual reduces to the centered measurement, contributing
+            # a per-obs constant that is invariant under the parameters.
+            prev_state_loadings = prev_full_loadings[:, state_factor_indices_in_latent]
+            prev_residuals = prev_residual_base - prev_state_loadings @ theta_prev
             log_prev_inv_meas = jnp.sum(
                 _log_normal_pdf(
                     prev_residuals,

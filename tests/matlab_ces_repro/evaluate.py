@@ -202,6 +202,9 @@ def evaluate_af_transition_loglike(
     shock_factor_indices = jnp.array(
         [state_factors.index(f) for f in shock_factors], dtype=jnp.int32
     )
+    state_factor_indices_in_latent = jnp.array(
+        [factors.index(f) for f in state_factors], dtype=jnp.int32
+    )
 
     params_index = get_transition_period_params_index(
         period=period,
@@ -280,6 +283,7 @@ def evaluate_af_transition_loglike(
         "n_endogenous_factors": n_endog,
         "n_shock_factors": n_shock,
         "shock_factor_indices": shock_factor_indices,
+        "state_factor_indices_in_latent": state_factor_indices_in_latent,
         "n_measures": len(all_measures),
         "n_controls": len(controls_names),
         "measurements": measurements,

@@ -514,6 +514,9 @@ def _build_transition_period_meta(
     shock_factor_indices = jnp.array(
         [state_factors.index(f) for f in shock_factors], dtype=jnp.int32
     )
+    state_factor_indices_in_latent = jnp.array(
+        [factors.index(f) for f in state_factors], dtype=jnp.int32
+    )
 
     measurements_pt = get_measurements_per_factor(model_spec.factors, period=period)
     all_measures = _get_ordered_measures(measurements_pt)
@@ -583,6 +586,7 @@ def _build_transition_period_meta(
         "n_endogenous_factors": n_endog,
         "n_shock_factors": n_shock,
         "shock_factor_indices": shock_factor_indices,
+        "state_factor_indices_in_latent": state_factor_indices_in_latent,
         "n_measures": len(all_measures),
         "n_controls": len(controls_names),
         "measurements": measurements,
