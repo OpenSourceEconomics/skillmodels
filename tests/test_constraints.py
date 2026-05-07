@@ -430,24 +430,24 @@ def test_get_constraints_for_augmented_periods(simplest_augmented_model) -> None
         endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
     )
     as_dicts = [_to_dict(c) for c in calculated]
+    # Only the non-final aug-period of each meas-type should produce
+    # identity constraints: `get_transition_index_tuples` truncates
+    # transitions at `aug_periods[:-2]` when endogenous factors are
+    # present, so emitting fixed constraints at the last STATES- or
+    # ENDO-typed aug-period would target locs that don't exist in the
+    # params index. Aug 2 (last STATES-typed) and aug 3 (last
+    # ENDO-typed) are therefore intentionally absent from the expected
+    # list.
     expected = [
         {"loc": ("transition", 0, "fac1", "fac1"), "type": "fixed", "value": 1.0},
         {"loc": ("transition", 0, "fac1", "fac2"), "type": "fixed", "value": 0.0},
         {"loc": ("transition", 0, "fac1", "of"), "type": "fixed", "value": 0.0},
         {"loc": ("transition", 0, "fac1", "constant"), "type": "fixed", "value": 0.0},
         {"loc": ("shock_sds", 0, "fac1", "-"), "type": "fixed", "value": 0.00000001},
-        {"loc": ("transition", 2, "fac1", "fac1"), "type": "fixed", "value": 1.0},
-        {"loc": ("transition", 2, "fac1", "fac2"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 2, "fac1", "of"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 2, "fac1", "constant"), "type": "fixed", "value": 0.0},
         {"loc": ("transition", 1, "fac2", "fac1"), "type": "fixed", "value": 0.0},
         {"loc": ("transition", 1, "fac2", "fac2"), "type": "fixed", "value": 1.0},
         {"loc": ("transition", 1, "fac2", "of"), "type": "fixed", "value": 0.0},
         {"loc": ("transition", 1, "fac2", "constant"), "type": "fixed", "value": 0.0},
         {"loc": ("shock_sds", 1, "fac2", "-"), "type": "fixed", "value": 0.00000001},
-        {"loc": ("transition", 3, "fac2", "fac1"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 3, "fac2", "fac2"), "type": "fixed", "value": 1.0},
-        {"loc": ("transition", 3, "fac2", "of"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 3, "fac2", "constant"), "type": "fixed", "value": 0.0},
     ]
     assert_list_equal_except_for_order(as_dicts, expected)

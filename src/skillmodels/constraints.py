@@ -429,7 +429,16 @@ def _get_constraints_for_augmented_periods(
             for k, v in aug_period_meas_types.items()
             if v == aug_period_meas_type_to_constrain
         ]
-        for aug_period in aug_periods_to_constrain:
+        # The last entry of `aug_periods_to_constrain` is the aug-period
+        # half of the last calendar period for this factor's meas-type.
+        # `get_transition_index_tuples` stops at `aug_periods[:-2]` when
+        # endogenous factors are present (or `[:-1]` otherwise), so the
+        # params index has no transition entries at that final aug-period
+        # for any factor. Emitting identity constraints there would target
+        # locs that don't exist and trip the optimagic selector. The
+        # shock-sds loop below already uses `[:-1]` for the same reason
+        # — keep them symmetric.
+        for aug_period in aug_periods_to_constrain[:-1]:
             if func := getattr(t_f_module, f"identity_constraints_{tname}", False):
                 constraints += func(  # ty: ignore[call-non-callable]
                     factor=factor,
