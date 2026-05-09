@@ -7,6 +7,10 @@ import pandas as pd
 from jax import Array
 
 from skillmodels.af.initial_period import estimate_initial_period
+from skillmodels.af.measurement_first_stage import (
+    estimate_measurement_system,
+    merge_with_user_fixed_params,
+)
 from skillmodels.af.params import get_measurements_per_factor
 from skillmodels.af.transition_period import estimate_transition_period
 from skillmodels.af.types import (
@@ -86,6 +90,19 @@ def estimate_af(
         model_spec,
         observed_factors=observed_factors,
     )
+
+    # Optional Stage-1 measurement-system pre-estimation. When enabled,
+    # estimate loadings + sigma_meas via Spearman cross-covariances and
+    # merge into fixed_params so AF Stage-2 holds those values fixed —
+    # eliminating the sigma_inv / sigma_meas ridge that otherwise causes
+    # ~40% sigma_inv_0 boundary collapse on translog-style DGPs.
+    if af_options.two_stage_measurement:
+        stage1_fixed = estimate_measurement_system(
+            model_spec=model_spec,
+            data=data,
+            user_fixed_params=fixed_params,
+        )
+        fixed_params = merge_with_user_fixed_params(fixed_params, stage1_fixed)
 
     # Step 0: Initial period
     period_0_result, cond_dist = estimate_initial_period(
