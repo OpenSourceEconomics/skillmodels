@@ -18,6 +18,11 @@ from skillmodels.af.batching import auto_n_obs_per_batch
 from skillmodels.af.halton import create_halton_nodes_and_weights
 from skillmodels.af.initial_period import _build_loading_mask, _get_ordered_measures
 from skillmodels.af.likelihood import af_loglike_transition, create_loglike_and_gradient
+from skillmodels.af.moment_init import (
+    SpearmanResult,
+    seed_beta_from_ols,
+    spearman_factor_moments,
+)
 from skillmodels.af.params import (
     apply_fixed_params,
     apply_start_params,
@@ -140,6 +145,15 @@ def estimate_transition_period(
         measurements,
         start_params,
         fixed_params,
+        period=period,
+        model_spec=model_spec,
+        state_factors=state_factors,
+        endogenous_factors=endogenous_factors,
+        observed_factors=observed_factors,
+        observed_factor_data=observed_factor_data,
+        prev_measurements=prev_measurements,
+        af_options=af_options,
+        normalizations=normalizations,
     )
 
     # Collect transition function constraints (only for state factors' transitions)
@@ -675,12 +689,29 @@ def _initialize_transition_params(
     measurements: Array,
     start_params: pd.DataFrame | None = None,
     fixed_params: pd.DataFrame | None = None,
+    *,
+    period: int | None = None,
+    model_spec: ModelSpec | None = None,
+    state_factors: tuple[str, ...] = (),
+    endogenous_factors: tuple[str, ...] = (),
+    observed_factors: tuple[str, ...] = (),
+    observed_factor_data: Array | None = None,
+    prev_measurements: Array | None = None,
+    af_options: AFEstimationOptions | None = None,
+    normalizations: dict[str, dict[tuple[str, str], float]] | None = None,
 ) -> pd.DataFrame:
     """Initialize transition period parameters with reasonable defaults.
 
     If `start_params` is provided, matching entries override the defaults.
     If `fixed_params` is provided, matching entries are pinned (value +
     bounds clamped).
+
+    When ``af_options.initialization_strategy == "moment_based"``, run
+    Spearman cross-covariance estimation per factor at the current period
+    and seed loadings, sigma_meas, sigma_shock, sigma_inv, and inv-equation β from
+    those moments. Falls back to the static defaults below for any factor
+    with fewer than two measurements or where Spearman identification is
+    degenerate.
     """
     params = params_template.copy()
     meas_np = np.array(measurements)
@@ -709,6 +740,31 @@ def _initialize_transition_params(
         if params.loc[idx, "lower_bound"] != params.loc[idx, "upper_bound"]:
             params.loc[idx, "value"] = 1.0
 
+    # Optional moment-based override: seed loadings / sigma_meas / sigma_shock /
+    # sigma_inv from Spearman cross-covariances of the current-period
+    # measurements. This puts the optimizer near the strongly-identified
+    # MLE neighborhood; for sigma_inv_0 specifically, this is the difference
+    # between converging at truth and drifting to the lower bound along
+    # the sigma_inv / sigma_meas constant-Var ridge.
+    if (
+        af_options is not None
+        and af_options.initialization_strategy == "moment_based"
+        and model_spec is not None
+        and period is not None
+    ):
+        params = _apply_moment_based_overrides_transition(
+            params,
+            measurements,
+            prev_measurements=prev_measurements,
+            observed_factor_data=observed_factor_data,
+            model_spec=model_spec,
+            period=period,
+            state_factors=state_factors,
+            endogenous_factors=endogenous_factors,
+            observed_factors=observed_factors,
+            normalizations=normalizations or {},
+        )
+
     if start_params is not None:
         apply_start_params(params, start_params)
 
@@ -716,6 +772,206 @@ def _initialize_transition_params(
         apply_fixed_params(params, fixed_params)
 
     return params
+
+
+def _apply_moment_based_overrides_transition(  # noqa: C901, PLR0912, PLR0915
+    params: pd.DataFrame,
+    measurements: Array,
+    *,
+    prev_measurements: Array | None,
+    observed_factor_data: Array | None,
+    model_spec: ModelSpec,
+    period: int,
+    state_factors: tuple[str, ...],
+    endogenous_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
+    normalizations: dict[str, dict[tuple[str, str], float]],
+) -> pd.DataFrame:
+    """Override transition-period params with Spearman cross-cov moments.
+
+    For each factor with at least two measurements at the current period,
+    run `spearman_factor_moments` and write back loadings, sigma_meas, and
+    derive a starting sigma_shock (state factors) or sigma_inv (endogenous factors)
+    from the latent variance. Investment-equation β coefficients are seeded
+    via OLS of the endogenous-factor anchor measurement on the prev-period
+    state anchor measurements plus the observed factors.
+    """
+    out = params.copy()
+    meas_np = np.array(measurements)
+    measurements_pt = get_measurements_per_factor(model_spec.factors, period=period)
+    all_measures = _get_ordered_measures(measurements_pt)
+    meas_index = {m: i for i, m in enumerate(all_measures)}
+    loading_norms = normalizations.get("loadings", {})
+
+    spearman_results: dict[str, SpearmanResult] = {}
+
+    for factor, factor_meas in measurements_pt.items():
+        if len(factor_meas) < 2:
+            continue
+        cols = [meas_index[m] for m in factor_meas if m in meas_index]
+        if len(cols) < 2:
+            continue
+        if max(cols) >= meas_np.shape[1]:
+            continue
+        sub = meas_np[:, cols]
+
+        anchor_loading = 1.0
+        anchor_local = 0
+        for local_idx, meas_name in enumerate(factor_meas):
+            if (meas_name, factor) in loading_norms:
+                anchor_local = local_idx
+                anchor_loading = float(loading_norms[(meas_name, factor)])
+                break
+
+        result = spearman_factor_moments(
+            sub,
+            anchor_idx=anchor_local,
+            anchor_loading=anchor_loading,
+        )
+        if not result.valid:
+            continue
+        spearman_results[factor] = result
+
+        # Override loadings (skip pinned rows).
+        for local_idx, meas_name in enumerate(factor_meas):
+            loc = ("loadings", period, meas_name, factor)
+            if loc not in out.index:
+                continue
+            if out.loc[loc, "lower_bound"] != out.loc[loc, "upper_bound"]:
+                out.loc[loc, "value"] = float(result.loadings[local_idx])
+
+        # Override measurement SDs (skip pinned rows).
+        for local_idx, meas_name in enumerate(factor_meas):
+            loc = ("meas_sds", period, meas_name, "-")
+            if loc not in out.index:
+                continue
+            if out.loc[loc, "lower_bound"] != out.loc[loc, "upper_bound"]:
+                out.loc[loc, "value"] = float(result.meas_sds[local_idx])
+
+    # Seed shock_sds (state factors) and investment_sds (endogenous
+    # factors), and the investment equation's β coefficients, via OLS of
+    # the current-period anchor measurement on the prev-period state
+    # anchors plus observed factors. The OLS residual variance gives
+    # sigma_shock² + sigma_meas² (state) or sigma_inv² + sigma_meas² (endogenous);
+    # subtracting sigma_meas² gives a clean starting point for the latent
+    # shock SD that correctly accounts for variance explained by
+    # observed factors and the prev state. (Without this subtraction
+    # the seed is dominated by observed-factor variance, which can make
+    # sigma_inv start orders of magnitude above truth.)
+    if prev_measurements is not None and len(state_factors) > 0:
+        prev_meas_np = np.array(prev_measurements)
+        prev_measurements_pt = get_measurements_per_factor(
+            model_spec.factors, period=period - 1
+        )
+        prev_all_measures = _get_ordered_measures(prev_measurements_pt)
+        prev_meas_index = {m: i for i, m in enumerate(prev_all_measures)}
+
+        state_anchor_cols: list[int] = []
+        for sf in state_factors:
+            sf_meas = prev_measurements_pt.get(sf, ())
+            if not sf_meas or sf_meas[0] not in prev_meas_index:
+                state_anchor_cols.append(-1)
+                continue
+            state_anchor_cols.append(prev_meas_index[sf_meas[0]])
+
+        obs_data = (
+            np.array(observed_factor_data)
+            if observed_factor_data is not None and len(observed_factors) > 0
+            else np.zeros((prev_meas_np.shape[0], 0))
+        )
+
+        anchors_ok = all(c >= 0 for c in state_anchor_cols)
+
+        # Seed sigma_shock for each state factor: residual variance of
+        # OLS(Z_state_anchor_t ~ Z_state_anchor_{t-1}, observed) minus
+        # sigma_meas².
+        if anchors_ok:
+            state_anchor_data = prev_meas_np[:, state_anchor_cols]
+            regressors_state = np.column_stack([state_anchor_data, obs_data])
+            for sf in state_factors:
+                if sf not in spearman_results:
+                    continue
+                sf_meas = measurements_pt.get(sf, ())
+                if not sf_meas:
+                    continue
+                anchor_idx = meas_index.get(sf_meas[0])
+                if anchor_idx is None:
+                    continue
+                response = meas_np[:, anchor_idx]
+                if response.shape[0] != regressors_state.shape[0]:
+                    continue
+                beta_hat = seed_beta_from_ols(response, regressors_state)
+                if not np.all(np.isfinite(beta_hat)):
+                    continue
+                fitted = regressors_state @ beta_hat
+                resid = response - fitted
+                resid_finite = resid[np.isfinite(resid)]
+                if resid_finite.size < 2:
+                    continue
+                resid_var = float(np.var(resid_finite, ddof=1))
+                sigma_meas_anchor = float(spearman_results[sf].meas_sds[0])
+                seed_sd = float(np.sqrt(max(resid_var - sigma_meas_anchor**2, 1e-6)))
+                loc = ("shock_sds", period - 1, sf, "-")
+                if (
+                    loc in out.index
+                    and out.loc[loc, "lower_bound"] != out.loc[loc, "upper_bound"]
+                ):
+                    out.loc[loc, "value"] = seed_sd
+
+        # Seed sigma_inv and inv-equation β for each endogenous factor. β goes
+        # from OLS coefs (the same regression used for the sigma_inv residual).
+        if anchors_ok and len(endogenous_factors) > 0:
+            state_anchor_data = prev_meas_np[:, state_anchor_cols]
+            regressors_inv = np.column_stack([state_anchor_data, obs_data])
+            for ef in endogenous_factors:
+                if ef not in spearman_results:
+                    continue
+                ef_meas = measurements_pt.get(ef, ())
+                if not ef_meas:
+                    continue
+                ef_anchor_idx = meas_index.get(ef_meas[0])
+                if ef_anchor_idx is None:
+                    continue
+                response = meas_np[:, ef_anchor_idx]
+                if response.shape[0] != regressors_inv.shape[0]:
+                    continue
+                beta_hat = seed_beta_from_ols(response, regressors_inv)
+                if not np.all(np.isfinite(beta_hat)):
+                    continue
+                fitted = regressors_inv @ beta_hat
+                resid = response - fitted
+                resid_finite = resid[np.isfinite(resid)]
+                if resid_finite.size < 2:
+                    continue
+                resid_var = float(np.var(resid_finite, ddof=1))
+                sigma_meas_anchor = float(spearman_results[ef].meas_sds[0])
+                seed_sd = float(np.sqrt(max(resid_var - sigma_meas_anchor**2, 1e-6)))
+                loc = ("investment_sds", period - 1, ef, "-")
+                if (
+                    loc in out.index
+                    and out.loc[loc, "lower_bound"] != out.loc[loc, "upper_bound"]
+                ):
+                    out.loc[loc, "value"] = seed_sd
+
+                # Write β into inv_eq rows.
+                state_betas = beta_hat[: len(state_factors)]
+                obs_betas = beta_hat[len(state_factors) :]
+                for sf, b in zip(state_factors, state_betas, strict=True):
+                    loc = ("investment_eq", period - 1, ef, sf)
+                    if (
+                        loc in out.index
+                        and out.loc[loc, "lower_bound"] != out.loc[loc, "upper_bound"]
+                    ):
+                        out.loc[loc, "value"] = float(b)
+                for of, b in zip(observed_factors, obs_betas, strict=True):
+                    loc = ("investment_eq", period - 1, ef, of)
+                    if (
+                        loc in out.index
+                        and out.loc[loc, "lower_bound"] != out.loc[loc, "upper_bound"]
+                    ):
+                        out.loc[loc, "value"] = float(b)
+
+    return out
 
 
 def _replace_chain_links(

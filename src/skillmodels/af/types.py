@@ -3,7 +3,7 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import jax
 import pandas as pd
@@ -52,6 +52,18 @@ class AFEstimationOptions:
     likelihood value is unchanged.
     """
 
+    initialization_strategy: Literal["constant", "moment_based"]
+    """Strategy for seeding optimizer start values.
+
+    `"moment_based"` uses Spearman cross-covariance moments (factor-analysis
+    identification) to seed loadings, sigma_meas, sigma_shock, and sigma_inv from the
+    data. `"constant"` reproduces the legacy 0.5 / 0.5*obs_sd defaults.
+
+    The default is `"constant"` while the moment-based path is being
+    rolled out; downstream applications can opt in by setting this to
+    `"moment_based"`.
+    """
+
     def __init__(  # noqa: D107
         self,
         n_halton_points: int = 50,
@@ -64,6 +76,7 @@ class AFEstimationOptions:
         coarse_fraction: float = 0.5,
         stability_floor: float = 1e-217,
         n_obs_per_batch: int | None = None,
+        initialization_strategy: Literal["constant", "moment_based"] = "constant",
     ) -> None:
         object.__setattr__(self, "n_halton_points", n_halton_points)
         object.__setattr__(self, "n_halton_points_shock", n_halton_points_shock)
@@ -78,6 +91,7 @@ class AFEstimationOptions:
         object.__setattr__(self, "coarse_fraction", coarse_fraction)
         object.__setattr__(self, "stability_floor", stability_floor)
         object.__setattr__(self, "n_obs_per_batch", n_obs_per_batch)
+        object.__setattr__(self, "initialization_strategy", initialization_strategy)
 
 
 @dataclass(frozen=True)

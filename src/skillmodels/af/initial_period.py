@@ -19,6 +19,7 @@ from skillmodels.af.likelihood import (
     af_loglike_initial,
     create_loglike_and_gradient,
 )
+from skillmodels.af.moment_init import spearman_factor_moments
 from skillmodels.af.params import (
     apply_fixed_params,
     apply_start_params,
@@ -134,6 +135,23 @@ def estimate_initial_period(
         observed_factors=observed_factors,
         observed_factor_values=obs_values,
     )
+
+    # Optionally override SDs / loadings / Cholesky diagonals via Spearman
+    # moments. This places the optimizer near the strongly-identified MLE
+    # neighborhood instead of at the static default 0.5 / obs_sd*0.5; for
+    # parameters on weakly-identified ridges (notably sigma_inv vs sigma_meas) the
+    # moment-based seed is the difference between converging at truth and
+    # drifting to the boundary.
+    if af_options.initialization_strategy == "moment_based":
+        all_measures_full = _get_ordered_measures(measurements_p0)
+        params_template = _apply_moment_based_overrides_initial(
+            params_template,
+            measurements,
+            measurements_per_factor=measurements_p0,
+            all_measures=all_measures_full,
+            normalizations=normalizations,
+            n_components=n_components,
+        )
 
     # Override with user-supplied starting values where available
     if start_params is not None:
@@ -567,3 +585,92 @@ def _assemble_joint_chol(
                 val = float(params.loc[loc, "value"])  # ty: ignore[invalid-argument-type]
                 chol = chol.at[row, col].set(val)  # noqa: PD008
     return chol
+
+
+def _apply_moment_based_overrides_initial(  # noqa: C901, PLR0912
+    params: pd.DataFrame,
+    measurements: Array,
+    measurements_per_factor: dict[str, tuple[str, ...]],
+    all_measures: list[str],
+    normalizations: dict[str, dict[tuple[str, str], float]],
+    n_components: int,
+) -> pd.DataFrame:
+    """Override static initialization with Spearman cross-cov moments.
+
+    For each latent factor with at least two period-0 measurements, apply
+    `spearman_factor_moments` to the corresponding columns of
+    `measurements` and write the recovered loadings, sigma_meas, and per-component
+    Cholesky-diagonal sqrt(Var(F)) values into `params`. Skip rows where
+    `lower_bound == upper_bound` (i.e. user normalizations or fixed
+    constraints).
+
+    The anchor measurement is determined from `normalizations["loadings"]`
+    when a loading is pinned for the factor; otherwise the first measurement
+    is the anchor.
+    """
+    out = params.copy()
+    meas_np = np.array(measurements)
+    n_obs = meas_np.shape[0]
+    if n_obs == 0:
+        return out
+    meas_index = {m: i for i, m in enumerate(all_measures)}
+    loading_norms = normalizations.get("loadings", {})
+
+    for factor, factor_meas in measurements_per_factor.items():
+        if len(factor_meas) < 2:
+            continue
+        cols = [meas_index[m] for m in factor_meas if m in meas_index]
+        if len(cols) < 2:
+            continue
+        sub = meas_np[:, cols]
+
+        # Anchor: pick the measurement whose loading is pinned for this
+        # factor, falling back to the first measurement.
+        anchor_loading = 1.0
+        anchor_local = 0
+        for local_idx, meas_name in enumerate(factor_meas):
+            if (meas_name, factor) in loading_norms:
+                anchor_local = local_idx
+                anchor_loading = float(loading_norms[(meas_name, factor)])
+                break
+
+        result = spearman_factor_moments(
+            sub,
+            anchor_idx=anchor_local,
+            anchor_loading=anchor_loading,
+        )
+        if not result.valid:
+            continue
+
+        # Override loadings (skip pinned rows).
+        for local_idx, meas_name in enumerate(factor_meas):
+            loc = ("loadings", 0, meas_name, factor)
+            if loc not in out.index:
+                continue
+            if out.loc[loc, "lower_bound"] != out.loc[loc, "upper_bound"]:
+                out.loc[loc, "value"] = float(result.loadings[local_idx])
+
+        # Override measurement SDs (skip pinned rows).
+        for local_idx, meas_name in enumerate(factor_meas):
+            loc = ("meas_sds", 0, meas_name, "-")
+            if loc not in out.index:
+                continue
+            if out.loc[loc, "lower_bound"] != out.loc[loc, "upper_bound"]:
+                out.loc[loc, "value"] = float(result.meas_sds[local_idx])
+
+        # Override per-component Cholesky diagonal for this factor with
+        # sqrt(Var(F)). Off-diagonals stay at 0 (set by the heuristic).
+        sd_factor = float(np.sqrt(max(result.latent_var, 1e-12)))
+        for comp in range(n_components):
+            loc = (
+                "initial_cholcovs",
+                0,
+                f"mixture_{comp}",
+                f"{factor}-{factor}",
+            )
+            if loc not in out.index:
+                continue
+            if out.loc[loc, "lower_bound"] != out.loc[loc, "upper_bound"]:
+                out.loc[loc, "value"] = sd_factor
+
+    return out
