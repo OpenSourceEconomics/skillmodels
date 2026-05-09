@@ -1,4 +1,11 @@
-"""Tests for ``skillmodels.af.inference.compute_af_standard_errors``."""
+"""Tests for ``skillmodels.af.inference.compute_af_standard_errors``.
+
+The AF inference path is the score bootstrap of Antweiler & Freyberger
+(2025) §4.2 (Armstrong-Bertanha-Hong 2014 style). There is no
+analytical sandwich path: AF §4.2 explicitly notes the closed-form
+variance ignores estimation error in earlier-period nuisance
+parameters and is therefore incorrect for any t >= 1.
+"""
 
 import numpy as np
 import pandas as pd
@@ -6,10 +13,7 @@ import pytest
 
 from skillmodels.af.estimate import estimate_af
 from skillmodels.af.inference import (
-    AFBootstrapResult,
     AFInferenceResult,
-    AFPeriodInferenceResult,
-    compute_af_bootstrap_se,
     compute_af_standard_errors,
 )
 from skillmodels.af.types import AFEstimationOptions
@@ -74,7 +78,7 @@ def _make_linear_model(n_periods: int = 2) -> ModelSpec:
 
 @pytest.fixture(scope="module")
 def fitted_result() -> tuple[AFInferenceResult, pd.DataFrame]:
-    """Fit the AF estimator once and compute SEs; reused across tests."""
+    """Fit the AF estimator once and bootstrap SEs; reused across tests."""
     data = _simulate_linear_data(n_obs=400, n_periods=2)
     model = _make_linear_model(n_periods=2)
     af_opts = AFEstimationOptions(
@@ -84,7 +88,7 @@ def fitted_result() -> tuple[AFInferenceResult, pd.DataFrame]:
         optimizer_algorithm="scipy_lbfgsb",
     )
     fit = estimate_af(model_spec=model, data=data, af_options=af_opts)
-    inference = compute_af_standard_errors(fit, data, af_opts)
+    inference = compute_af_standard_errors(fit, data, af_opts, n_boot=2000, seed=0)
     return inference, fit.all_params
 
 
@@ -97,11 +101,14 @@ def test_af_inference_result_is_inference_dataclass(
 
 
 @pytest.mark.end_to_end
-def test_af_inference_period_results_are_period_dataclass(
+def test_af_inference_replicate_params_shape(
     fitted_result: tuple[AFInferenceResult, pd.DataFrame],
 ) -> None:
-    inference, _ = fitted_result
-    assert all(isinstance(p, AFPeriodInferenceResult) for p in inference.period_results)
+    inference, all_params = fitted_result
+    assert inference.n_boot == 2000
+    assert inference.n_clusters == 400
+    assert inference.replicate_params.shape == (2000, len(all_params.index))
+    assert list(inference.replicate_params.columns) == list(all_params.index)
 
 
 @pytest.mark.end_to_end
@@ -129,11 +136,24 @@ def test_af_inference_vcov_column_index_matches_params(
 
 
 @pytest.mark.end_to_end
+def test_af_inference_vcov_diagonal_matches_se_squared(
+    fitted_result: tuple[AFInferenceResult, pd.DataFrame],
+) -> None:
+    """SEs and vcov are computed from the same replicate distribution."""
+    inference, _ = fitted_result
+    diag = np.diag(inference.vcov.to_numpy())
+    se_squared = inference.standard_errors.to_numpy() ** 2
+    np.testing.assert_allclose(diag, se_squared, rtol=1e-10, atol=1e-12)
+
+
+@pytest.mark.end_to_end
 def test_af_inference_pinned_loading_has_zero_se(
     fitted_result: tuple[AFInferenceResult, pd.DataFrame],
 ) -> None:
     inference, _ = fitted_result
-    assert inference.standard_errors.loc[("loadings", 0, "m1", "skill")] == 0.0
+    assert float(inference.standard_errors.loc[("loadings", 0, "m1", "skill")]) == (
+        pytest.approx(0.0, abs=1e-12)
+    )
 
 
 @pytest.mark.end_to_end
@@ -141,7 +161,9 @@ def test_af_inference_pinned_intercept_has_zero_se(
     fitted_result: tuple[AFInferenceResult, pd.DataFrame],
 ) -> None:
     inference, _ = fitted_result
-    assert inference.standard_errors.loc[("controls", 0, "m1", "constant")] == 0.0
+    assert float(
+        inference.standard_errors.loc[("controls", 0, "m1", "constant")]
+    ) == pytest.approx(0.0, abs=1e-12)
 
 
 @pytest.mark.end_to_end
@@ -179,13 +201,18 @@ def test_af_inference_vcov_diagonal_nonnegative(
 
 
 @pytest.mark.end_to_end
-def test_af_inference_score_matrix_row_count_matches_n_obs(
+def test_af_inference_pinned_params_have_constant_replicates(
     fitted_result: tuple[AFInferenceResult, pd.DataFrame],
 ) -> None:
+    """Loadings/intercepts pinned via Normalizations are constant across replicates."""
     inference, _ = fitted_result
-    n_obs = 400
-    for period_res in inference.period_results:
-        assert int(period_res.score_matrix.shape[0]) == n_obs
+    pinned = [("loadings", t, "m1", "skill") for t in (0, 1)] + [
+        ("controls", t, "m1", "constant") for t in (0, 1)
+    ]
+    for loc in pinned:
+        if loc in inference.replicate_params.columns:
+            col = inference.replicate_params[loc].to_numpy()
+            assert col.std() == pytest.approx(0.0, abs=1e-12)
 
 
 @pytest.mark.end_to_end
@@ -205,219 +232,21 @@ def test_af_inference_se_shrinks_with_sample_size() -> None:
     fit_small = estimate_af(model_spec=model, data=data_small, af_options=af_opts)
     fit_large = estimate_af(model_spec=model, data=data_large, af_options=af_opts)
 
-    inf_small = compute_af_standard_errors(fit_small, data_small, af_opts)
-    inf_large = compute_af_standard_errors(fit_large, data_large, af_opts)
+    inf_small = compute_af_standard_errors(
+        fit_small, data_small, af_opts, n_boot=2000, seed=1
+    )
+    inf_large = compute_af_standard_errors(
+        fit_large, data_large, af_opts, n_boot=2000, seed=1
+    )
 
     loc = ("loadings", 0, "m2", "skill")
     se_small = float(inf_small.standard_errors.loc[loc])
     se_large = float(inf_large.standard_errors.loc[loc])
 
     # Sample size quadrupled: expect SE ~ halved. Tolerate a wide band
-    # because the sandwich is noisy on moderate samples.
+    # because the bootstrap is noisy on moderate samples.
     ratio = se_large / se_small
     assert 0.25 < ratio < 0.8, (
         f"Expected SE ratio in (0.25, 0.8) under 4x sample-size bump; "
         f"got {ratio:.3f} (se_small={se_small}, se_large={se_large})"
     )
-
-
-# ---------------------------------------------------------------------------
-# Phase 2: full cross-period sandwich.
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(scope="module")
-def both_methods() -> tuple[
-    AFInferenceResult,
-    AFInferenceResult,
-    pd.DataFrame,
-    tuple[pd.Index, ...],
-]:
-    """Fit once, compute SEs both ways, reused across comparisons."""
-    data = _simulate_linear_data(n_obs=400, n_periods=3)
-    model = _make_linear_model(n_periods=3)
-    af_opts = AFEstimationOptions(
-        n_halton_points=25,
-        n_halton_points_shock=15,
-        n_mixture_components=1,
-        optimizer_algorithm="scipy_lbfgsb",
-    )
-    fit = estimate_af(model_spec=model, data=data, af_options=af_opts)
-    inf_full = compute_af_standard_errors(fit, data, af_opts, method="full_sandwich")
-    inf_block = compute_af_standard_errors(fit, data, af_opts, method="block_diagonal")
-    # Per-period own-param index sets (derived from each estimation block).
-    per_period_indices = tuple(r.params.index for r in fit.period_results)
-    return inf_full, inf_block, fit.all_params, per_period_indices
-
-
-@pytest.mark.end_to_end
-def test_af_inference_full_sandwich_matches_block_at_period_0(
-    both_methods: tuple[
-        AFInferenceResult,
-        AFInferenceResult,
-        pd.DataFrame,
-        tuple[pd.Index, ...],
-    ],
-) -> None:
-    """Period 0's own-params SE must match: period 0 has no earlier dependencies."""
-    inf_full, inf_block, _, per_period_idx = both_methods
-    p0_own = per_period_idx[0]
-    se_full = inf_full.standard_errors.loc[p0_own]
-    se_block = inf_block.standard_errors.loc[p0_own]
-    np.testing.assert_allclose(se_full, se_block, rtol=1e-5, atol=1e-8)
-
-
-@pytest.mark.end_to_end
-def test_af_inference_full_sandwich_has_larger_se_in_later_periods(
-    both_methods: tuple[
-        AFInferenceResult,
-        AFInferenceResult,
-        pd.DataFrame,
-        tuple[pd.Index, ...],
-    ],
-) -> None:
-    """Full sandwich should report >= SE than block diagonal for period 2 params."""
-    inf_full, inf_block, _, _ = both_methods
-    loc = ("loadings", 2, "m2", "skill")
-    se_full = float(inf_full.standard_errors.loc[loc])
-    se_block = float(inf_block.standard_errors.loc[loc])
-    assert se_full >= se_block - 1e-10, (
-        f"Full sandwich SE should dominate block-diagonal SE; "
-        f"got full={se_full}, block={se_block}"
-    )
-
-
-@pytest.mark.end_to_end
-def test_af_inference_full_sandwich_has_nonzero_cross_period_covariance(
-    both_methods: tuple[
-        AFInferenceResult,
-        AFInferenceResult,
-        pd.DataFrame,
-        tuple[pd.Index, ...],
-    ],
-) -> None:
-    """Full sandwich vcov should have non-zero cross-period off-diagonal blocks."""
-    inf_full, _, _, per_period_idx = both_methods
-    p0_own = per_period_idx[0]
-    p1_own = per_period_idx[1]
-    cross_block = inf_full.vcov.loc[p0_own, p1_own].to_numpy()
-    max_abs = float(np.max(np.abs(cross_block)))
-    assert max_abs > 0.0, (
-        "Expected at least one non-zero cross-period covariance entry; "
-        f"got max|V_01| = {max_abs}"
-    )
-
-
-@pytest.mark.end_to_end
-def test_af_inference_full_sandwich_method_attribute(
-    both_methods: tuple[
-        AFInferenceResult,
-        AFInferenceResult,
-        pd.DataFrame,
-        tuple[pd.Index, ...],
-    ],
-) -> None:
-    inf_full, _, _, _ = both_methods
-    assert inf_full.method == "full_sandwich"
-
-
-@pytest.mark.end_to_end
-def test_af_inference_block_diagonal_method_attribute(
-    both_methods: tuple[
-        AFInferenceResult,
-        AFInferenceResult,
-        pd.DataFrame,
-        tuple[pd.Index, ...],
-    ],
-) -> None:
-    _, inf_block, _, _ = both_methods
-    assert inf_block.method == "block_diagonal"
-
-
-@pytest.fixture(scope="module")
-def bootstrap_result() -> tuple[AFBootstrapResult, AFInferenceResult, pd.DataFrame]:
-    """Fit once and run both the score-resampling bootstrap and the sandwich.
-
-    Block-diagonal sandwich is the asymptotic equivalent of the bootstrap
-    SE, so both are computed here for cross-comparison.
-    """
-    data = _simulate_linear_data(n_obs=400, n_periods=3, seed=0)
-    model = _make_linear_model(n_periods=3)
-    af_opts = AFEstimationOptions(
-        n_halton_points=25,
-        n_halton_points_shock=15,
-        n_mixture_components=1,
-        optimizer_algorithm="scipy_lbfgsb",
-    )
-    fit = estimate_af(model_spec=model, data=data, af_options=af_opts)
-    boot = compute_af_bootstrap_se(fit, data, af_opts, n_boot=4000, seed=42)
-    inf_block = compute_af_standard_errors(fit, data, af_opts, method="block_diagonal")
-    return boot, inf_block, fit.all_params
-
-
-@pytest.mark.end_to_end
-def test_af_bootstrap_result_dataclass_shape(
-    bootstrap_result: tuple[AFBootstrapResult, AFInferenceResult, pd.DataFrame],
-) -> None:
-    boot, _, all_params = bootstrap_result
-    assert boot.n_boot == 4000
-    assert boot.n_clusters == 400
-    assert list(boot.replicate_params.columns) == list(all_params.index)
-    assert boot.replicate_params.shape == (4000, len(all_params.index))
-    assert list(boot.standard_errors.index) == list(all_params.index)
-
-
-@pytest.mark.end_to_end
-def test_af_bootstrap_se_matches_block_sandwich_within_mc_noise(
-    bootstrap_result: tuple[AFBootstrapResult, AFInferenceResult, pd.DataFrame],
-) -> None:
-    """Bootstrap SEs should match block-diagonal sandwich SEs within MC noise.
-
-    The two estimators are asymptotically equivalent; with B=4000 reps on
-    n=400 they should agree to within a few percent.
-    """
-    boot, inf_block, _ = bootstrap_result
-    se_boot = boot.standard_errors
-    se_block = inf_block.standard_errors
-    # Compare only entries with strictly positive asymptotic SE (skip pinned).
-    mask = se_block > 1e-8
-    rel_diff = (
-        np.abs(se_boot[mask].to_numpy() - se_block[mask].to_numpy())
-        / se_block[mask].to_numpy()
-    )
-    # 4000 bootstrap reps over 400 clusters; allow generous tolerance.
-    np.testing.assert_array_less(rel_diff, 0.15)
-
-
-@pytest.mark.end_to_end
-def test_af_bootstrap_pinned_params_have_zero_se(
-    bootstrap_result: tuple[AFBootstrapResult, AFInferenceResult, pd.DataFrame],
-) -> None:
-    """Pinned-by-normalization loadings/intercepts have zero bootstrap SE.
-
-    Loadings and intercepts pinned via `Normalizations` are constant
-    across all bootstrap replicates by construction.
-    """
-    boot, _, _ = bootstrap_result
-    pinned = [("loadings", t, "m1", "skill") for t in (0, 1, 2)] + [
-        ("controls", t, "m1", "constant") for t in (0, 1, 2)
-    ]
-    for loc in pinned:
-        if loc in boot.standard_errors.index:
-            assert float(boot.standard_errors.loc[loc]) == pytest.approx(0.0, abs=1e-12)
-
-
-@pytest.mark.end_to_end
-def test_af_inference_unknown_method_raises() -> None:
-    """Passing an unsupported method must raise ``ValueError``."""
-    data = _simulate_linear_data(n_obs=100, n_periods=2, seed=0)
-    model = _make_linear_model(n_periods=2)
-    af_opts = AFEstimationOptions(
-        n_halton_points=15,
-        n_halton_points_shock=10,
-        n_mixture_components=1,
-        optimizer_algorithm="scipy_lbfgsb",
-    )
-    fit = estimate_af(model_spec=model, data=data, af_options=af_opts)
-    with pytest.raises(ValueError, match="Unknown method"):
-        compute_af_standard_errors(fit, data, af_opts, method="bogus")  # ty: ignore[invalid-argument-type]

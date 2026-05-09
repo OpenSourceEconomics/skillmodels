@@ -7,7 +7,6 @@ integration, following Antweiler and Freyberger (2025).
 from skillmodels.af.estimate import estimate_af
 from skillmodels.af.inference import (
     AFInferenceResult,
-    AFPeriodInferenceResult,
     compute_af_standard_errors,
 )
 from skillmodels.af.posterior_states import get_af_posterior_states
@@ -17,7 +16,6 @@ __all__ = [
     "AFEstimationOptions",
     "AFEstimationResult",
     "AFInferenceResult",
-    "AFPeriodInferenceResult",
     "AFPeriodResult",
     "compute_af_standard_errors",
     "estimate_af",
