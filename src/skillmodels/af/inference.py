@@ -182,7 +182,13 @@ def compute_af_standard_errors(
 
     """
     if af_options is None:
-        af_options = AFEstimationOptions()
+        msg = (
+            "compute_af_standard_errors requires an explicit `af_options` "
+            "argument because AFEstimationOptions has no default for "
+            "`two_stage_measurement`. Pass the same instance used at "
+            "estimation time."
+        )
+        raise TypeError(msg)
 
     jax.config.update("jax_enable_x64", val=True)
 

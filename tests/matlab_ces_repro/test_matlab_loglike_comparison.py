@@ -121,6 +121,7 @@ def test_total_loglike_ours_vs_matlab(variant: str, capsys) -> None:
         n_halton_points_shock=20_000,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
+        two_stage_measurement=False,
     )
 
     # ----- our own estimate (all periods) -----

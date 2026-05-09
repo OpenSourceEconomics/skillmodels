@@ -90,6 +90,7 @@ def test_af_estimate_runs_on_model2(model2_af, model2_data) -> None:
         n_halton_points_shock=10,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
+        two_stage_measurement=False,
     )
 
     result = estimate_af(
@@ -126,6 +127,7 @@ def test_af_measurement_params_in_ballpark(
         n_halton_points_shock=15,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
+        two_stage_measurement=False,
     )
 
     result = estimate_af(
@@ -194,6 +196,7 @@ def test_af_estimate_single_factor() -> None:
         n_halton_points_shock=10,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
+        two_stage_measurement=False,
     )
 
     result = estimate_af(model_spec=model, data=data, af_options=af_options)
@@ -276,6 +279,7 @@ def test_af_vs_chs_measurement_params_agree() -> None:
             n_halton_points_shock=20,
             n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
         ),
     )
     af_p0 = af_result.period_results[0].params
@@ -411,6 +415,7 @@ def test_af_transition_params_affect_likelihood() -> None:
         n_halton_points_shock=15,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
+        two_stage_measurement=False,
     )
     result = estimate_af(model_spec=model, data=data, af_options=af_opts)
 
@@ -446,6 +451,7 @@ def test_af_recovers_linear_transition_params() -> None:
         n_halton_points_shock=20,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
+        two_stage_measurement=False,
     )
     result = estimate_af(model_spec=model, data=data, af_options=af_opts)
 
@@ -498,6 +504,7 @@ def test_af_vs_chs_transition_params_agree() -> None:
             n_halton_points_shock=20,
             n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
         ),
     )
 
@@ -595,6 +602,7 @@ def test_af_vs_chs_both_estimated_on_model2(model2_af, model2_data) -> None:
             n_halton_points_shock=30,
             n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
         ),
     )
 
@@ -783,6 +791,7 @@ def test_af_estimate_with_endogenous_factor() -> None:
             n_halton_points_shock=15,
             n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
         ),
     )
 
@@ -1551,6 +1560,7 @@ def test_af_joint_halton_recovers_sigma_prod_with_chain_link() -> None:  # noqa:
         n_halton_points_shock=200,
         n_mixture_components=2,
         optimizer_algorithm="scipy_lbfgsb",
+        two_stage_measurement=False,
     )
     result = estimate_af(
         model_spec=model,
@@ -1595,6 +1605,7 @@ def test_af_get_filtered_states() -> None:
             n_halton_points_shock=15,
             n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
         ),
     )
 
@@ -1662,6 +1673,7 @@ def test_af_estimate_with_translog() -> None:
             n_halton_points_shock=15,
             n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
         ),
     )
 
@@ -1758,6 +1770,7 @@ def test_af_joint_initial_distribution_with_observed_factor() -> None:
             n_halton_points_shock=15,
             n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
         ),
     )
 
@@ -1874,6 +1887,7 @@ def test_af_fixed_params_pins_time_invariant_latent() -> None:
             n_halton_points_shock=15,
             n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
         ),
         fixed_params=fixed_df,
     )
@@ -2000,6 +2014,7 @@ def test_af_log_ces_with_cross_factor_gamma_fixed_at_zero() -> None:
             n_halton_points_shock=10,
             n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
         ),
         fixed_params=fixed_df,
     )
@@ -2040,6 +2055,7 @@ def test_af_log_ces_with_cross_factor_gamma_fixed_at_nonzero() -> None:
             n_halton_points_shock=10,
             n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
         ),
         fixed_params=fixed_df,
     )

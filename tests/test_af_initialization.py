@@ -7,17 +7,27 @@ from skillmodels.af.moment_init import spearman_factor_moments
 from skillmodels.af.types import AFEstimationOptions
 
 
-def test_default_initialization_strategy_is_constant():
-    """Default behavior must remain the legacy 'constant' init."""
-    opts = AFEstimationOptions()
+def test_default_initialization_strategy_is_moment_based():
+    """Default initialization is moment-based (Spearman cross-cov seeds)."""
+    opts = AFEstimationOptions(two_stage_measurement=False)
+
+    assert opts.initialization_strategy == "moment_based"
+
+
+def test_initialization_strategy_can_be_set_to_constant():
+    """Legacy constant init remains available for regression testing."""
+    opts = AFEstimationOptions(
+        two_stage_measurement=False,
+        initialization_strategy="constant",
+    )
 
     assert opts.initialization_strategy == "constant"
 
 
-def test_initialization_strategy_can_be_set_to_moment_based():
-    opts = AFEstimationOptions(initialization_strategy="moment_based")
-
-    assert opts.initialization_strategy == "moment_based"
+def test_two_stage_measurement_has_no_default():
+    """Constructing AFEstimationOptions without two_stage_measurement raises."""
+    with pytest.raises(TypeError, match="two_stage_measurement"):
+        AFEstimationOptions()  # ty: ignore[missing-argument]
 
 
 def test_spearman_seed_closer_to_truth_than_constant_default():
@@ -67,7 +77,7 @@ def test_spearman_falls_back_for_single_measurement_factor():
 
 def test_initialization_strategy_other_options_unchanged():
     """Other AFEstimationOptions fields remain at their existing defaults."""
-    opts = AFEstimationOptions()
+    opts = AFEstimationOptions(two_stage_measurement=False)
 
     assert opts.n_halton_points == 50
     assert opts.n_halton_points_shock == 30

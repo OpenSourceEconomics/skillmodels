@@ -220,6 +220,7 @@ def _run_af(
         n_halton_points_shock=20_000,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
+        two_stage_measurement=False,
     )
     res = estimate_af(
         model_spec=model,

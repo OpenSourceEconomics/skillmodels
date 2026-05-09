@@ -55,31 +55,36 @@ class AFEstimationOptions:
     initialization_strategy: Literal["constant", "moment_based"]
     """Strategy for seeding optimizer start values.
 
-    `"moment_based"` uses Spearman cross-covariance moments (factor-analysis
-    identification) to seed loadings, sigma_meas, sigma_shock, and sigma_inv from the
-    data. `"constant"` reproduces the legacy 0.5 / 0.5*obs_sd defaults.
-
-    The default is `"constant"` while the moment-based path is being
-    rolled out; downstream applications can opt in by setting this to
-    `"moment_based"`.
+    `"moment_based"` (default) uses Spearman cross-covariance moments
+    (factor-analysis identification) to seed loadings, sigma_meas,
+    sigma_shock, and sigma_inv from the data. `"constant"` reproduces
+    the legacy 0.5 / 0.5*obs_sd defaults; provided for regression
+    testing and pre-fix reproducibility.
     """
 
     two_stage_measurement: bool
     """Estimate the measurement system in a Stage-1 pre-step.
 
-    When True, run `estimate_measurement_system` (Spearman / multi-indicator
-    factor-analysis identification) before AF Stage-2 optimization, and
-    hold the recovered loadings and sigma_meas fixed in Stage 2. This
-    eliminates the sigma_inv / sigma_meas constant-Var(I_meas) ridge that
-    causes ~40% sigma_inv_0 boundary collapse on translog-style DGPs.
+    When True, run `estimate_measurement_system` (Spearman /
+    multi-indicator factor-analysis identification) before AF Stage-2
+    optimization, and hold the recovered loadings and sigma_meas fixed
+    in Stage 2. This eliminates the sigma_inv / sigma_meas
+    constant-Var(I_meas) ridge that causes ~30-50% sigma_inv_0 boundary
+    collapse on translog-style DGPs.
 
-    Standard-error caveat: the existing AF sandwich treats Stage-1
-    outputs as known and therefore under-states variance for Stage-2
-    parameters that covary with sigma_meas. Users wanting fully-correct
-    SEs should run a parametric bootstrap until a Murphy-Topel correction
-    lands.
+    Standard-error caveat: when True, the score bootstrap currently
+    holds Stage-1 outputs fixed across replicates and therefore
+    underestimates variance for Stage-2 parameters that covary with
+    sigma_meas. Users wanting fully-correct SEs should run a parametric
+    bootstrap (resample data, redo `estimate_af`) until the
+    per-replicate-Spearman bootstrap extension lands.
 
-    Default `False` (opt-in).
+    No default: users must make an explicit choice given this trade-off
+    between point-estimate robustness (favors True) and SE correctness
+    within the existing bootstrap (favors False). When False, sigma_meas
+    enters the AF MLE chain and the score bootstrap captures Spearman-
+    free SEs correctly; when True, point estimates are far more
+    reliable but SEs miss the Stage-1 contribution.
     """
 
     def __init__(  # noqa: D107
@@ -90,12 +95,12 @@ class AFEstimationOptions:
         optimizer_algorithm: str = "fides",
         optimizer_options: Mapping[str, Any] | None = None,
         *,
+        two_stage_measurement: bool,
         two_stage: bool = False,
         coarse_fraction: float = 0.5,
         stability_floor: float = 1e-217,
         n_obs_per_batch: int | None = None,
-        initialization_strategy: Literal["constant", "moment_based"] = "constant",
-        two_stage_measurement: bool = False,
+        initialization_strategy: Literal["constant", "moment_based"] = "moment_based",
     ) -> None:
         object.__setattr__(self, "n_halton_points", n_halton_points)
         object.__setattr__(self, "n_halton_points_shock", n_halton_points_shock)

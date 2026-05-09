@@ -62,7 +62,18 @@ def estimate_af(
     jax.config.update("jax_enable_x64", val=True)
 
     if af_options is None:
-        af_options = AFEstimationOptions()
+        msg = (
+            "estimate_af requires an explicit `af_options` argument because "
+            "AFEstimationOptions has no default for `two_stage_measurement`. "
+            "Construct AFEstimationOptions(two_stage_measurement=True) "
+            "(measurement system pinned via Spearman pre-step; recommended "
+            "for point-estimate robustness) or "
+            "AFEstimationOptions(two_stage_measurement=False) (sigma_meas "
+            "free in MLE chain; use when bootstrap SEs must capture Stage-1 "
+            "variance) and pass it explicitly. See AFEstimationOptions "
+            "docstring for the trade-off."
+        )
+        raise TypeError(msg)
 
     validate_af_model(model_spec)
     processed_model = process_model(model_spec)

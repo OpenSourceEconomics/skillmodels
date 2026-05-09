@@ -58,6 +58,7 @@ def _quick_af_options(n_halton: int = 20) -> AFEstimationOptions:
         n_halton_points_shock=n_halton,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
+        two_stage_measurement=False,
     )
 
 
@@ -68,6 +69,7 @@ def _full_af_options() -> AFEstimationOptions:
         n_halton_points_shock=20_000,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
+        two_stage_measurement=False,
     )
 
 
