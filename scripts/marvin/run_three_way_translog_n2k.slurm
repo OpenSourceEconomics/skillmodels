@@ -45,7 +45,10 @@ set -euo pipefail
 SKILLMODELS_ROOT="${SKILLMODELS_ROOT:-$HOME/skillmodels-applications/skillmodels}"
 SIM_REPRO_ROOT="${SIM_REPRO_ROOT:-$HOME/skillmodels-applications/sim_repro}"
 export SIM_RESULTS_DIR="${SIM_RESULTS_DIR:-$HOME/sciebo_data/Skill estimation/Simulations/Results}"
-export SIM_REPRO_OUT="${SIM_REPRO_OUT:-$SIM_REPRO_ROOT/estimates}"
+# Land outputs in a dedicated subroot so the new 3-way comparison does
+# NOT collide with existing `estimates/{variant}_n{n}*/` cells from
+# prior n_halton=10000 runs.
+export SIM_REPRO_OUT="${SIM_REPRO_OUT:-$SIM_REPRO_ROOT/estimates_3way_h2000}"
 
 mkdir -p logs "$SIM_REPRO_OUT"
 
