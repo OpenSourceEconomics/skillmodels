@@ -3,6 +3,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optimagic as om
 import pandas as pd
 from jax import Array
 
@@ -30,6 +31,7 @@ def estimate_af(
     af_options: AFEstimationOptions | None = None,
     start_params: pd.DataFrame | None = None,
     fixed_params: pd.DataFrame | None = None,
+    constraints: list[om.constraints.Constraint] | None = None,
 ) -> AFEstimationResult:
     """Estimate a latent factor model using the Antweiler-Freyberger method.
 
@@ -54,6 +56,15 @@ def estimate_af(
             to the value so the optimizer excludes them. Used, e.g., to pin
             time-invariant latent factors to identity transitions with zero
             shocks (same convention as CHS augmented periods).
+        constraints: Optional list of optimagic Constraint objects. Only
+            `om.EqualityConstraint` entries that select via
+            `skillmodels.constraints.select_by_loc` are honoured: their
+            members are propagated forward through the chain — once any
+            member of an equality group has been estimated, every other
+            member (including those at not-yet-estimated periods) is
+            pinned to that value via `fixed_params`. Other constraint
+            types are ignored (AF's per-period MLE handles model-implied
+            within-period constraints internally).
 
     Return:
         AFEstimationResult with per-period results and combined parameters.
@@ -115,6 +126,8 @@ def estimate_af(
         )
         fixed_params = merge_with_user_fixed_params(fixed_params, stage1_fixed)
 
+    equality_groups = _extract_equality_groups(constraints)
+
     # Step 0: Initial period
     period_0_result, cond_dist = estimate_initial_period(
         model_spec=model_spec,
@@ -131,6 +144,11 @@ def estimate_af(
 
     period_results: list[AFPeriodResult] = [period_0_result]
     conditional_dists: list[ConditionalDistribution] = [cond_dist]
+    fixed_params = _propagate_equality_groups(
+        period_results=period_results,
+        fixed_params=fixed_params,
+        equality_groups=equality_groups,
+    )
 
     # Steps 1..T-1: Transition periods
     for t in range(1, n_periods):
@@ -161,6 +179,11 @@ def estimate_af(
         )
         period_results.append(period_t_result)
         conditional_dists.append(cond_dist)
+        fixed_params = _propagate_equality_groups(
+            period_results=period_results,
+            fixed_params=fixed_params,
+            equality_groups=equality_groups,
+        )
 
     # Combine parameters from all periods
     all_params = pd.concat([r.params for r in period_results])
@@ -251,3 +274,84 @@ def _extract_observed_factors(
         for of in observed_factors
     ]
     return jnp.array(np.column_stack(obs_arrays))
+
+
+def _extract_equality_groups(
+    constraints: list[om.constraints.Constraint] | None,
+) -> list[pd.MultiIndex]:
+    """Pull cross-period equality groups out of an optimagic constraints list.
+
+    Honours `om.EqualityConstraint` instances whose selector is built via
+    `functools.partial(skillmodels.constraints.select_by_loc, loc=...)`.
+    The `loc` keyword carries the `pd.MultiIndex` of params that must be
+    equal — those are the equality groups returned here.
+    """
+    if not constraints:
+        return []
+    groups: list[pd.MultiIndex] = []
+    for c in constraints:
+        if not isinstance(c, om.EqualityConstraint):
+            continue
+        selector = c.selector
+        keywords = getattr(selector, "keywords", None)
+        if not keywords or "loc" not in keywords:
+            continue
+        loc = keywords["loc"]
+        if isinstance(loc, pd.MultiIndex) and len(loc) > 1:
+            groups.append(loc)
+    return groups
+
+
+def _propagate_equality_groups(
+    *,
+    period_results: list[AFPeriodResult],
+    fixed_params: pd.DataFrame | None,
+    equality_groups: list[pd.MultiIndex],
+) -> pd.DataFrame | None:
+    """Propagate just-estimated values to all members of cross-period equality groups.
+
+    For each equality group: if any member is in the union of
+    `period_results[*].params`, pin every other member of the group
+    (that is not already pinned by `fixed_params`) to that member's
+    estimated value via additions to `fixed_params`. Subsequent
+    periods' MLEs see those entries as fixed, enforcing equality
+    across the chain.
+    """
+    if not equality_groups:
+        return fixed_params
+
+    estimated = pd.concat([r.params for r in period_results])
+    if "value" in estimated.columns:
+        estimated_series = estimated["value"]
+    else:
+        estimated_series = estimated.iloc[:, 0]
+
+    if fixed_params is None or len(fixed_params) == 0:
+        index_names = ["category", "period", "name1", "name2"]
+        running = pd.DataFrame(
+            {"value": []},
+            index=pd.MultiIndex.from_tuples([], names=index_names),
+        )
+    else:
+        running = fixed_params.copy()
+
+    new_locs: list[tuple] = []
+    new_values: list[float] = []
+    for group in equality_groups:
+        in_estimated = [loc for loc in group if loc in estimated_series.index]
+        if not in_estimated:
+            continue
+        anchor_value = float(estimated_series.loc[in_estimated[0]])
+        for loc in group:
+            if loc in running.index:
+                continue
+            new_locs.append(loc)
+            new_values.append(anchor_value)
+    if not new_locs:
+        return running
+
+    addition = pd.DataFrame(
+        {"value": new_values},
+        index=pd.MultiIndex.from_tuples(new_locs, names=running.index.names),
+    )
+    return pd.concat([running, addition])
