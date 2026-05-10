@@ -176,6 +176,7 @@ tests-cpu = { features = [ "tests" ], solve-group = "default" }
 tests-cuda = { features = [ "tests", "cuda" ], solve-group = "cuda" }
 type-checking = { features = [ "type-checking" ], solve-group = "default" }
 tests-cuda12 = { features = [ "tests", "cuda" ], solve-group = "cuda" }
+tests-cuda13 = { features = [ "tests", "cuda13" ], solve-group = "cuda13" }
 [tool.pixi.feature.cuda]
 platforms = [ "linux-64" ]
 system-requirements = { cuda = "12" }
@@ -188,6 +189,13 @@ mem-cuda = """\
   pytest -x -s --pdb --memray --fail-on-increase \
   tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs\
   """
+[tool.pixi.feature.cuda13]
+platforms = [ "linux-64" ]
+system-requirements = { cuda = "13" }
+[tool.pixi.feature.cuda13.dependencies]
+cuda-nvcc = ">=13"
+[tool.pixi.feature.cuda13.pypi-dependencies]
+jax = { version = ">=0.9", extras = [ "cuda13" ] }
 [tool.pixi.feature.docs.tasks]
 build-docs = { cmd = "jupyter book build --html", cwd = "docs" }
 view-docs = { cmd = "jupyter book start", cwd = "docs" }

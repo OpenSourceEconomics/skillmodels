@@ -31,6 +31,7 @@ from skillmodels.parse_params import create_parsing_info
 from skillmodels.process_data import process_data
 from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
+from skillmodels.start_values import get_moment_based_start_params
 from skillmodels.types import ParsingInfo, ProcessedModel
 
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
@@ -207,6 +208,14 @@ def get_maximization_inputs(
     )
     if not params_template.index.equals(p_index):
         raise ValueError("params_template index is not equal to p_index")
+
+    if processed_model.estimation_options.start_params_strategy == "moment_based":
+        params_template = get_moment_based_start_params(
+            model_spec=model_spec,
+            data=data,
+            params_template=params_template,
+        )
+
     return {
         "loglike": loglike,
         "loglikeobs": loglikeobs,

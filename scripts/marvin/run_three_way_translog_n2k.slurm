@@ -31,7 +31,7 @@
 #SBATCH --gpus=4
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=96G
-#SBATCH --time=01:30:00
+#SBATCH --time=08:00:00
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=hmgaudecker@gmail.com
 #SBATCH --output=logs/translog-3way-n2k_%j.out
@@ -52,8 +52,14 @@ export SIM_REPRO_OUT="${SIM_REPRO_OUT:-$SIM_REPRO_ROOT/estimates_3way_h2000}"
 
 mkdir -p logs "$SIM_REPRO_OUT"
 
-module load Pixi
+# Use the user-installed pixi at ~/.pixi/bin (AMD64-generic upstream
+# build) — NOT the `module load Pixi` version, which was compiled for
+# Intel ISA and SIGILLs on the AMD Epyc 7713 sgpu_short compute nodes
+# (the path /opt/software/easybuild-INTEL/software/Pixi/... uses
+# instructions like AVX-512 that the Epyc lacks).
+export PATH="$HOME/.pixi/bin:$PATH"
 cd "$SKILLMODELS_ROOT"
+echo "Using pixi: $(which pixi) $(pixi --version)"
 
 nvidia-smi --list-gpus
 
@@ -73,7 +79,7 @@ launch_af_worker() {
     local start="$4"
     local count="$5"
     CUDA_VISIBLE_DEVICES="$gpu_id" \
-        pixi run -e tests-cuda12 python "$SIM_REPRO_ROOT/sim_sweep.py" \
+        pixi run -e tests-cuda13 python "$SIM_REPRO_ROOT/sim_sweep.py" \
         --variant "$VARIANT" \
         --n "$N" \
         --start "$start" \
@@ -105,7 +111,7 @@ launch_chs_worker() {
     local start="$2"
     local count="$3"
     JAX_PLATFORMS=cpu \
-        pixi run -e tests-cpu python "$SIM_REPRO_ROOT/sim_sweep_chs.py" \
+        pixi run -e tests-cuda13 python "$SIM_REPRO_ROOT/sim_sweep_chs.py" \
         --variant "$VARIANT" \
         --n "$N" \
         --start "$start" \
@@ -131,7 +137,7 @@ wait
 
 echo
 echo "All workers exited; computing per-cell coverage..."
-pixi run -e tests-cpu python - <<'PY'
+pixi run -e tests-cuda13 python - <<'PY'
 import os
 import pickle
 from pathlib import Path

@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from types import MappingProxyType
-from typing import Any, NewType, cast
+from typing import Any, Literal, NewType, cast
 
 import pandas as pd
 from jax import Array
@@ -216,6 +216,15 @@ class EstimationOptions:
     """Hardness of lower clipping."""
     clipping_upper_hardness: float = 1
     """Hardness of upper clipping."""
+    start_params_strategy: Literal["none", "moment_based"] = "moment_based"
+    """How to populate the `value` column of the `params_template`.
+
+    `"moment_based"` (default) seeds free entries from data moments
+    (Spearman cross-covariance for loadings + meas_sds + initial cov;
+    neutral defaults for transition / shock / mixture). `"none"`
+    leaves free entries as `NaN` so the caller can fill them — used
+    by tests and by callers that want full control.
+    """
 
     def __post_init__(self) -> None:  # noqa: D105
         if not self.robust_bounds:
