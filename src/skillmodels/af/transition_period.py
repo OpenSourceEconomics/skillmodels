@@ -5,7 +5,8 @@ using Halton quadrature over the latent factor distribution from the
 previous period.
 """
 
-from collections.abc import Callable
+import inspect
+from collections.abc import Callable, Mapping
 
 import jax
 import jax.numpy as jnp
@@ -208,7 +209,12 @@ def estimate_transition_period(
 
     # Build combined transition from raw transition functions.
     # Only state factors have transitions; endogenous factors use the investment eq.
-    raw_funcs = _get_raw_transition_functions(model_spec, state_factors)
+    raw_funcs = _get_raw_transition_functions(
+        model_spec,
+        state_factors,
+        all_factors=processed_model.labels.all_factors,
+        param_names=transition_info.param_names,
+    )
     param_counts = tuple(len(transition_info.param_names[f]) for f in state_factors)
 
     def combined_transition(
@@ -579,11 +585,18 @@ def _collect_ctrl_params(
 def _get_raw_transition_functions(
     model_spec: ModelSpec,
     factors: tuple[str, ...],
+    *,
+    all_factors: tuple[str, ...],
+    param_names: Mapping[str, tuple[str, ...]],
 ) -> tuple[Callable, ...]:
     """Get the raw (non-vmapped) transition functions for each factor.
 
-    These are the simple `(states, params) -> scalar` callables from
-    `transition_functions.py`, suitable for use inside JIT-compiled code.
+    Returns callables with a uniform `(states, params_array) -> scalar`
+    signature for use inside JIT-compiled code. Built-in transitions
+    from `transition_functions.py` already match that signature;
+    `@register_params`-decorated user functions take individual factor
+    arguments plus a `params` dict, so they are wrapped here to convert
+    from AF's packed representation.
     """
     import skillmodels.transition_functions as tf_mod  # noqa: PLC0415
 
@@ -594,11 +607,51 @@ def _get_raw_transition_functions(
         if isinstance(tf, str):
             funcs.append(getattr(tf_mod, tf))
         elif callable(tf):
-            funcs.append(tf)
+            if hasattr(tf, "__registered_params__"):
+                funcs.append(
+                    _wrap_registered_transition_function(
+                        tf,
+                        all_factors=all_factors,
+                        param_names=tuple(param_names[factor]),
+                    )
+                )
+            else:
+                funcs.append(tf)
         else:
             msg = f"Factor '{factor}': no transition function specified."
             raise TypeError(msg)
     return tuple(funcs)
+
+
+def _wrap_registered_transition_function(
+    user_func: Callable,
+    *,
+    all_factors: tuple[str, ...],
+    param_names: tuple[str, ...],
+) -> Callable:
+    """Bridge `@register_params` user functions to AF's `(states, params)` convention.
+
+    A user-defined transition function takes one positional argument
+    per factor it consumes (matching factor names in `all_factors`)
+    plus a final `params` dict keyed by `__registered_params__`. AF's
+    `combined_transition`, in contrast, supplies a packed state vector
+    and a flat parameter slice. This wrapper looks up each consumed
+    factor's position in `all_factors`, slices `states` accordingly,
+    rebuilds the `params` dict, and forwards the call.
+    """
+    sig = inspect.signature(user_func)
+    arg_names = [name for name in sig.parameters if name != "params"]
+    arg_positions = tuple(all_factors.index(name) for name in arg_names)
+
+    def wrapped(states: Array, factor_params: Array) -> Array:
+        kwargs: dict[str, Array | dict[str, Array]] = {
+            name: states[pos]
+            for name, pos in zip(arg_names, arg_positions, strict=True)
+        }
+        kwargs["params"] = dict(zip(param_names, factor_params, strict=True))
+        return user_func(**kwargs)
+
+    return wrapped
 
 
 def _prepare_transition_inputs(

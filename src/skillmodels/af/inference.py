@@ -574,7 +574,12 @@ def _build_transition_period_meta(
         int(measurements.shape[0]),
     )
 
-    raw_funcs = _get_raw_transition_functions(model_spec, state_factors)
+    raw_funcs = _get_raw_transition_functions(
+        model_spec,
+        state_factors,
+        all_factors=processed_model.labels.all_factors,
+        param_names=transition_info.param_names,
+    )
     param_counts = tuple(len(transition_info.param_names[f]) for f in state_factors)
 
     def combined_transition(full_states: Array, params: Array) -> Array:

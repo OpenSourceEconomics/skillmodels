@@ -20,6 +20,7 @@ from skillmodels.af.types import ChainLink
 from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.config import TEST_DATA_DIR
+from skillmodels.decorators import register_params
 from skillmodels.model_spec import (
     EstimationOptions,
     FactorSpec,
@@ -2146,4 +2147,72 @@ def test_af_estimate_tolerates_nan_measurements() -> None:
     )
     for pr in result.period_results:
         assert pr.success, f"Period {pr.period} failed with NaN measurements"
+        assert np.isfinite(pr.loglikelihood)
+
+
+@pytest.mark.end_to_end
+def test_af_estimate_with_register_params_user_transition() -> None:
+    """AF must accept `@register_params`-decorated user transition functions.
+
+    User-defined transition functions take individual factor arguments
+    plus a `params` dict; AF's per-period likelihood passes a packed
+    state vector and a flat parameter slice. Without the bridging
+    wrapper in `_get_raw_transition_functions`, callers that supply
+    custom transitions (e.g. `skane-struct-bw`) raise TypeError at the
+    first transition-step call.
+    """
+
+    @register_params(params=["constant", "skill"])
+    def f_skill(skill: jax.Array, params: dict[str, float]) -> jax.Array:
+        return params["constant"] + params["skill"] * skill
+
+    rng = np.random.default_rng(2026)
+    n_obs, n_periods = 300, 3
+    theta = rng.normal(0, 1, (n_obs, n_periods))
+    for t in range(1, n_periods):
+        theta[:, t] = 0.1 + 0.8 * theta[:, t - 1] + rng.normal(0, 0.4, n_obs)
+
+    rows = []
+    for i in range(n_obs):
+        for t in range(n_periods):
+            rows.append(
+                {
+                    "caseid": i,
+                    "period": t,
+                    "s1": theta[i, t] + rng.normal(0, 0.3),
+                    "s2": 0.3 + 0.9 * theta[i, t] + rng.normal(0, 0.35),
+                    "s3": -0.1 + 1.1 * theta[i, t] + rng.normal(0, 0.4),
+                }
+            )
+    data = pd.DataFrame(rows).set_index(["caseid", "period"])
+
+    model = ModelSpec(
+        factors={
+            "skill": FactorSpec(
+                measurements=(("s1", "s2", "s3"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"s1": 1},) * n_periods,
+                    intercepts=({"s1": 0},) * n_periods,
+                ),
+                transition_function=f_skill,
+            ),
+        },
+        estimation_options=EstimationOptions(
+            robust_bounds=True, bounds_distance=0.001, n_mixtures=1
+        ),
+    )
+
+    result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=AFEstimationOptions(
+            n_halton_points=30,
+            n_halton_points_shock=15,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
+        ),
+    )
+    for pr in result.period_results:
+        assert pr.success, f"Period {pr.period} failed"
         assert np.isfinite(pr.loglikelihood)
