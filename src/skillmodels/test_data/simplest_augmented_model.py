@@ -35,5 +35,9 @@ SIMPLEST_AUGMENTED_MODEL = ModelSpec(
     observed_factors=("of",),
     estimation_options=EstimationOptions(
         bounds_distance=1e-8,
+        # Tests using this fixture exercise CHS plumbing rather than
+        # full estimation; opt into the cheap Spearman start-value
+        # path so collection stays fast. End-user defaults remain "amn".
+        start_params_strategy="spearman",
     ),
 )

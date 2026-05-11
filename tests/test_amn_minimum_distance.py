@@ -51,7 +51,7 @@ def _build_oracle_mixture(
     n_aug: int = 6,
     seed: int = 0,
     layout: AugmentedMeasureLayout | None = None,
-) -> MixtureFitResult:
+) -> tuple[MixtureFitResult, dict[str, np.ndarray]]:
     """Build a synthetic MixtureFitResult with known structural moments.
 
     Layout: 2 periods x 3 measurements on a single latent factor, anchor
@@ -170,21 +170,9 @@ def test_solve_minimum_distance_recovers_oracle():
 
     # Loadings should match truth within tolerance.
     loadings = result.loadings.reset_index().set_index(["period", "measurement"])
-    np.testing.assert_allclose(
-        loadings.loc[(0, "y1"), "loading"],
-        1.0,
-        atol=1e-6,
-    )
-    np.testing.assert_allclose(
-        loadings.loc[(0, "y2"), "loading"],
-        0.8,
-        atol=5e-2,
-    )
-    np.testing.assert_allclose(
-        loadings.loc[(0, "y3"), "loading"],
-        1.2,
-        atol=5e-2,
-    )
+    assert loadings.loc[(0, "y1"), "loading"] == pytest.approx(1.0, abs=1e-6)
+    assert loadings.loc[(0, "y2"), "loading"] == pytest.approx(0.8, abs=5e-2)
+    assert loadings.loc[(0, "y3"), "loading"] == pytest.approx(1.2, abs=5e-2)
 
 
 def test_solve_minimum_distance_rejects_unknown_weighting():

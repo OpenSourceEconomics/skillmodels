@@ -53,5 +53,10 @@ MODEL2 = ModelSpec(
         robust_bounds=True,
         bounds_distance=0.001,
         n_mixtures=1,
+        # Tests using this fixture run `get_maximization_inputs` for
+        # shape and value checks rather than full estimation; opt into
+        # the cheap Spearman start-value path so the fixture stays fast.
+        # End-user defaults (EstimationOptions()) keep `"amn"`.
+        start_params_strategy="spearman",
     ),
 )

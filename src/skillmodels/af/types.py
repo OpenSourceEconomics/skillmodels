@@ -52,14 +52,16 @@ class AFEstimationOptions:
     likelihood value is unchanged.
     """
 
-    initialization_strategy: Literal["constant", "moment_based"]
+    initialization_strategy: Literal["constant", "spearman", "amn"]
     """Strategy for seeding optimizer start values.
 
-    `"moment_based"` (default) uses Spearman cross-covariance moments
-    (factor-analysis identification) to seed loadings, sigma_meas,
-    sigma_shock, and sigma_inv from the data. `"constant"` reproduces
-    the legacy 0.5 / 0.5*obs_sd defaults; provided for regression
-    testing and pre-fix reproducibility.
+    `"amn"` (default) runs the full AMN 2020 three-stage estimator
+    upfront and uses its parameter estimates as start values for the
+    per-period MLE. `"spearman"` uses Spearman cross-covariance
+    moments per period (factor-analysis identification) to seed
+    loadings, sigma_meas, sigma_shock, and sigma_inv. `"constant"`
+    reproduces the legacy 0.5 / 0.5*obs_sd defaults; provided for
+    regression testing and pre-fix reproducibility.
     """
 
     def __init__(  # noqa: D107
@@ -74,7 +76,7 @@ class AFEstimationOptions:
         coarse_fraction: float = 0.5,
         stability_floor: float = 1e-217,
         n_obs_per_batch: int | None = None,
-        initialization_strategy: Literal["constant", "moment_based"] = "moment_based",
+        initialization_strategy: Literal["constant", "spearman", "amn"] = "amn",
     ) -> None:
         object.__setattr__(self, "n_halton_points", n_halton_points)
         object.__setattr__(self, "n_halton_points_shock", n_halton_points_shock)

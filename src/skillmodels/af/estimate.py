@@ -22,6 +22,7 @@ from skillmodels.af.types import (
     MixtureComponent,
 )
 from skillmodels.af.validate import validate_af_model
+from skillmodels.amn.estimate import estimate_amn
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
@@ -78,6 +79,38 @@ def estimate_af(
 
     validate_af_model(model_spec)
     processed_model = process_model(model_spec)
+
+    # If AMN-based starts are requested, run the full AMN three-stage
+    # estimator upfront and overlay its parameter estimates onto the
+    # caller-supplied `start_params` (user values win on overlap).
+    # After this the per-period MLE proceeds with `initialization_strategy
+    # = "constant"` internally so the within-period Spearman pre-pass is
+    # skipped (AMN's values are already in the optimizer's starting
+    # neighbourhood).
+    if af_options.initialization_strategy == "amn":
+        amn_result = estimate_amn(model_spec=model_spec, data=data)
+        amn_start = amn_result.all_params[["value"]]
+        if start_params is not None:
+            user_idx = start_params.index
+            amn_start = amn_start.drop(
+                index=amn_start.index.intersection(user_idx),
+                errors="ignore",
+            )
+            start_params = pd.concat([amn_start, start_params]).sort_index()
+        else:
+            start_params = amn_start
+        af_options = AFEstimationOptions(
+            n_halton_points=af_options.n_halton_points,
+            n_halton_points_shock=af_options.n_halton_points_shock,
+            n_mixture_components=af_options.n_mixture_components,
+            optimizer_algorithm=af_options.optimizer_algorithm,
+            optimizer_options=dict(af_options.optimizer_options),
+            two_stage=af_options.two_stage,
+            coarse_fraction=af_options.coarse_fraction,
+            stability_floor=af_options.stability_floor,
+            n_obs_per_batch=af_options.n_obs_per_batch,
+            initialization_strategy="constant",
+        )
 
     # Extract data arrays per period
     n_periods = processed_model.dimensions.n_periods

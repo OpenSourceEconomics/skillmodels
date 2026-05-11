@@ -13,7 +13,8 @@ from numpy.typing import NDArray
 
 import skillmodels.chs.likelihood as lf
 import skillmodels.chs.likelihood_debug as lfd
-from skillmodels.amn.start_values import get_moment_based_start_params
+from skillmodels.amn.estimate import estimate_amn
+from skillmodels.amn.start_values import get_spearman_start_params
 from skillmodels.chs.kalman_filters import (
     calculate_sigma_scaling_factor_and_weights,
     is_all_linear,
@@ -37,7 +38,7 @@ from skillmodels.common.types import ParsingInfo, ProcessedModel
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
 
-def get_maximization_inputs(
+def get_maximization_inputs(  # noqa: C901, PLR0915
     model_spec: ModelSpec,
     data: pd.DataFrame,
     split_dataset: int = 1,
@@ -209,12 +210,31 @@ def get_maximization_inputs(
     if not params_template.index.equals(p_index):
         raise ValueError("params_template index is not equal to p_index")
 
-    if processed_model.estimation_options.start_params_strategy == "moment_based":
-        params_template = get_moment_based_start_params(
+    strategy = processed_model.estimation_options.start_params_strategy
+    if strategy == "spearman":
+        params_template = get_spearman_start_params(
             model_spec=model_spec,
             data=data,
             params_template=params_template,
         )
+    elif strategy == "amn":
+        amn_result = estimate_amn(model_spec=model_spec, data=data)
+        # First fill template via Spearman for entries AMN doesn't touch
+        # (mixture weights, initial Cholesky diagonals not directly
+        # produced by AMN's three stages); then overlay AMN values onto
+        # the common index. Skip indices whose value was pre-pinned by
+        # `enforce_fixed_constraints` (non-NaN before either fill).
+        pre_pinned = params_template["value"].notna()
+        params_template = get_spearman_start_params(
+            model_spec=model_spec,
+            data=data,
+            params_template=params_template,
+        )
+        common = amn_result.all_params.index.intersection(params_template.index)
+        free_common = common[~pre_pinned.reindex(common, fill_value=False)]
+        params_template.loc[free_common, "value"] = amn_result.all_params.loc[
+            free_common, "value"
+        ]
 
     return {
         "loglike": loglike,

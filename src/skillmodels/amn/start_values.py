@@ -36,7 +36,7 @@ from skillmodels.common.process_model import process_model
 from skillmodels.common.types import Normalizations, ProcessedModel
 
 
-def get_moment_based_start_params(
+def get_spearman_start_params(
     model_spec: ModelSpec,
     data: pd.DataFrame,
     params_template: pd.DataFrame,

@@ -139,5 +139,7 @@ def test_simulate_and_regress_returns_linear_transition_for_simple_model():
     # The OLS slope of period-1 factor on period-0 factor (with intercept)
     # should approximate cov(0,1) / var(0) = 0.7.
     params = result.production_params
-    slope = params.loc[("transition", 0, "skills", "skills"), "value"]
-    np.testing.assert_allclose(slope, 0.7, atol=0.05)
+    slope = float(
+        params.loc[("transition", 0, "skills", "skills"), "value"]  # ty: ignore[invalid-argument-type]
+    )
+    assert slope == _pytest_approx(0.7, abs_tol=0.05)

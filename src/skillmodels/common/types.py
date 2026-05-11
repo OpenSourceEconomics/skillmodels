@@ -216,14 +216,15 @@ class EstimationOptions:
     """Hardness of lower clipping."""
     clipping_upper_hardness: float = 1
     """Hardness of upper clipping."""
-    start_params_strategy: Literal["none", "moment_based"] = "moment_based"
+    start_params_strategy: Literal["none", "spearman", "amn"] = "amn"
     """How to populate the `value` column of the `params_template`.
 
-    `"moment_based"` (default) seeds free entries from data moments
-    (Spearman cross-covariance for loadings + meas_sds + initial cov;
-    neutral defaults for transition / shock / mixture). `"none"`
-    leaves free entries as `NaN` so the caller can fill them — used
-    by tests and by callers that want full control.
+    `"amn"` (default) runs the full Attanasio-Meghir-Nix (2020)
+    three-stage estimator and uses its parameter estimates as starting
+    values for the downstream MLE. `"spearman"` seeds free entries
+    from Spearman cross-covariance / Bartlett-OLS moments only (fast
+    but less accurate on non-Gaussian factor distributions). `"none"`
+    leaves free entries as `NaN` so the caller can fill them.
     """
 
     def __post_init__(self) -> None:  # noqa: D105
