@@ -1,6 +1,7 @@
 """Main driver for the AF estimation procedure."""
 
 import dataclasses
+import gc
 
 import jax
 import jax.numpy as jnp
@@ -164,12 +165,21 @@ def estimate_af(
     # Combine parameters from all periods
     all_params = pd.concat([r.params for r in period_results])
 
+    # Free the XLA compilation cache + any unreferenced device buffers
+    # before materialising the result. The per-period likelihoods and
+    # gradients leave hundreds of MB of compiled executables and stale
+    # intermediates on the device; without this the GPU→host copy in
+    # `_to_numpy(...)` has been observed to OOM on a host-side staging
+    # allocation, even though the arrays themselves are small.
+    jax.clear_caches()
+    gc.collect()
+
     # Materialise every JAX array in the result as a numpy array, and
     # drop the large per-period importance-sample buffers. Downstream
     # consumers (pickling, plotting, posterior_states) don't need GPU
-    # residency, and leaving the arrays as jax.Array forces materialisation
-    # at pickle time -- which routinely OOMs when JIT caches still occupy
-    # most of the device's memory.
+    # residency, and leaving the arrays as jax.Array would force
+    # materialisation at pickle time -- which on a busy device routinely
+    # OOMs inside `__reduce__`.
     conditional_dists_compact = tuple(
         _to_numpy_conditional_distribution(cd) for cd in conditional_dists
     )
