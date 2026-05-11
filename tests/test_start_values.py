@@ -1,13 +1,20 @@
 """Tests for `skillmodels.start_values.get_moment_based_start_params`."""
 
+import functools
+
 import numpy as np
+import optimagic as om
 import pandas as pd
 import pytest
 
 from skillmodels.config import TEST_DATA_DIR
+from skillmodels.constraints import select_by_loc
 from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.model_spec import ModelSpec
-from skillmodels.start_values import get_moment_based_start_params
+from skillmodels.start_values import (
+    get_moment_based_start_params,
+    pool_equality_groups,
+)
 from skillmodels.test_data.model2 import MODEL2
 from skillmodels.types import EstimationOptions
 from skillmodels.utilities import reduce_n_periods
@@ -172,3 +179,44 @@ def test_shock_sds_seeded_via_residual_variance(
     free_mask = free_sds["lower_bound"] != free_sds["upper_bound"]
     free_values = free_sds.loc[free_mask, "value"]
     assert (free_values != 0.5).any()
+
+
+def test_pool_equality_groups_averages_unpinned() -> None:
+    """Members of an `om.EqualityConstraint` group are averaged."""
+    idx = pd.MultiIndex.from_tuples(
+        [
+            ("meas_sds", 0, "z1", "-"),
+            ("meas_sds", 1, "z1", "-"),
+            ("meas_sds", 2, "z1", "-"),
+        ],
+        names=["category", "period", "name1", "name2"],
+    )
+    params = pd.DataFrame({"value": [0.2, 0.4, 0.6]}, index=idx)
+    constraints: list[om.constraints.Constraint] = [
+        om.EqualityConstraint(
+            selector=functools.partial(select_by_loc, loc=idx),
+        ),
+    ]
+    out = pool_equality_groups(params, constraints)
+    assert list(out["value"]) == pytest.approx([0.4, 0.4, 0.4])
+
+
+def test_pool_equality_groups_respects_pinned() -> None:
+    """If any group member is pinned, that value propagates to the rest."""
+    idx = pd.MultiIndex.from_tuples(
+        [
+            ("meas_sds", 0, "z1", "-"),
+            ("meas_sds", 1, "z1", "-"),
+            ("meas_sds", 2, "z1", "-"),
+        ],
+        names=["category", "period", "name1", "name2"],
+    )
+    params = pd.DataFrame({"value": [0.2, 0.4, 0.6]}, index=idx)
+    pinned = pd.Series([False, True, False], index=idx)
+    constraints: list[om.constraints.Constraint] = [
+        om.EqualityConstraint(
+            selector=functools.partial(select_by_loc, loc=idx),
+        ),
+    ]
+    out = pool_equality_groups(params, constraints, keep_pinned_values=pinned)
+    assert list(out["value"]) == pytest.approx([0.4, 0.4, 0.4])

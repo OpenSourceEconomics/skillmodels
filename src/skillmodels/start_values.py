@@ -22,6 +22,7 @@ not identification.
 from collections.abc import Iterable, Mapping
 
 import numpy as np
+import optimagic as om
 import pandas as pd
 
 from skillmodels.model_spec import ModelSpec
@@ -154,6 +155,80 @@ def get_moment_based_start_params(
         processed_model=processed_model,
     )
 
+    return out
+
+
+def pool_equality_groups(  # noqa: C901
+    params: pd.DataFrame,
+    constraints: list[om.constraints.Constraint],
+    *,
+    keep_pinned_values: pd.Series | None = None,
+) -> pd.DataFrame:
+    """Pool param values within each `om.EqualityConstraint` group.
+
+    For each `om.EqualityConstraint` whose selector is the standard
+    `select_by_loc(loc=multi_index)` form, replace the values of all
+    members of the group with a single shared value so the equality
+    constraint holds at the start values. If a member is flagged as
+    "pinned" (via `keep_pinned_values=True` for that loc), the pinned
+    value is used for the whole group; otherwise the group is averaged.
+
+    Use after moment-based starting values: Spearman seeds each period
+    independently, which violates user equality constraints across
+    periods (e.g., loadings or meas_sds constant across periods).
+    Calling this with the user constraint list restores the equalities
+    while keeping the data-derived information (now pooled).
+
+    Args:
+        params: Params DataFrame with a `"value"` column and the
+            standard 4-level MultiIndex.
+        constraints: List of optimagic Constraint objects. Only
+            `om.EqualityConstraint` entries with a `select_by_loc`
+            partial as `selector` are honoured.
+        keep_pinned_values: Optional boolean Series indexed like
+            `params`. Entries where this is True keep their value;
+            the pooling logic copies that value to every other member
+            of the same equality group.
+
+    Return:
+        Modified copy of `params`.
+    """
+    out = params.copy()
+    for c in constraints:
+        if not isinstance(c, om.EqualityConstraint):
+            continue
+        selector = c.selector
+        keywords = getattr(selector, "keywords", None)
+        if not keywords or "loc" not in keywords:
+            continue
+        loc = keywords["loc"]
+        if not isinstance(loc, pd.MultiIndex) or len(loc) <= 1:
+            continue
+        members = [m for m in loc if m in out.index]
+        if len(members) <= 1:
+            continue
+        if keep_pinned_values is not None:
+            pinned = [
+                float(out.loc[m, "value"])
+                for m in members
+                if bool(keep_pinned_values.loc[m]) and pd.notna(out.loc[m, "value"])
+            ]
+        else:
+            pinned = []
+        if pinned:
+            target = pinned[0]
+        else:
+            raw = [
+                float(out.loc[m, "value"])
+                for m in members
+                if pd.notna(out.loc[m, "value"])
+            ]
+            if not raw:
+                continue
+            target = float(np.mean(raw))
+        for m in members:
+            if keep_pinned_values is None or not bool(keep_pinned_values.loc[m]):
+                out.loc[m, "value"] = target
     return out
 
 
