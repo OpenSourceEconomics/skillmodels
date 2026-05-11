@@ -1,0 +1,69 @@
+---
+# Conda/mamba environment for the skillmodels `af-estimator` branch.
+#
+# Installs every package needed to run the skillmodels test suite **and**
+# the two downstream research applications (`skane-struct-bw`,
+# `health-cognition`) -- minus the two applications themselves, which
+# are supplied separately by their respective project teams.
+#
+# CPU-only JAX. For an environment with CUDA-12 support use
+# `environment-cuda.yml` instead.
+#
+# Usage:
+#   mamba env create -f environment.yml
+#   mamba activate skillmodels-af
+name: skillmodels-af
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  # Python + core scientific stack
+  - python ~=3.14.0
+  - scipy >=1.16.0
+  - h5py >=3.16.0,<4
+  # Skillmodels conda deps
+  - filterpy *
+  - ipykernel >=6.29.5
+  - jupyterlab *
+  - nbformat >=5.10.4
+  - networkx *
+  - pybaum >=0.1.3
+  # Test / profiling tooling (skillmodels' tests-cpu feature)
+  - pytest >=8.4.1
+  - pytest-cov >=6.2.1
+  - pytest-xdist >=3.8.0
+  - pytest-memray *
+  - snakeviz *
+  - xlrd >=2
+  - prek *
+  # Downstream-only conda deps (not used by skillmodels itself; required
+  # to run skane-struct-bw / health-cognition pipelines):
+  - deepdiff >=8.5.0  # health-cognition + skane: snapshot / diff utilities
+  - memray >=1.17.2  # health-cognition + skane: memory profiling
+  - statsmodels >=0.14.5  # health-cognition + skane: regression diagnostics
+  - tabulate >=0.9.0  # health-cognition + skane: table formatting in reports
+  - seaborn *  # health-cognition: figure styling
+  - pip
+  - pip:
+      # Skillmodels project deps (PyPI)
+      - dags>=0.5.1
+      - jax>=0.9
+      - jupyter-book>=2
+      - kaleido>=1.2
+      - numpy>=2.4
+      - pandas>=3
+      - plotly>=6.6
+      - pytask>=0.5.8
+      - pytask-parallel>=0.5.2
+      - pdbp
+      # Pinned to the optimagic branch the AF estimator relies on
+      # (`probability-allow-fixed-entries`). The PyPI release does not
+      # yet carry the required `FixedConstraintWithValue` semantics.
+      # yamllint disable-line rule:line-length
+      - optimagic @ git+https://github.com/optimagic-dev/optimagic.git@probability-allow-fixed-entries
+      # Downstream-only PyPI deps (not used by skillmodels itself):
+      - fides>=0.7.8  # health-cognition + skane: optimagic algorithm
+      - statadict>=1.1.0  # health-cognition + skane: Stata variable labels
+      # The library itself, from the af-estimator branch.
+      # yamllint disable-line rule:line-length
+      - skillmodels @ git+https://github.com/OpenSourceEconomics/skillmodels.git@af-estimator

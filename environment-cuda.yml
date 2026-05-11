@@ -1,0 +1,66 @@
+---
+# Conda/mamba environment for the skillmodels `af-estimator` branch
+# **with CUDA 12 GPU support**.
+#
+# Same package set as `environment.yml`, except JAX is pulled in via the
+# `jax[cuda12]` PyPI extra and `cuda-nvcc` is added on the conda side.
+# Requires the host system to provide a CUDA 12 toolkit; see
+# https://jax.readthedocs.io/en/latest/installation.html for details.
+#
+# Usage:
+#   mamba env create -f environment-cuda.yml
+#   mamba activate skillmodels-af-cuda
+name: skillmodels-af-cuda
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  # CUDA toolchain (required for the cuda12 JAX wheel below)
+  - cuda-nvcc >=12
+  # Python + core scientific stack
+  - python ~=3.14.0
+  - scipy >=1.16.0
+  - h5py >=3.16.0,<4
+  # Skillmodels conda deps
+  - filterpy *
+  - ipykernel >=6.29.5
+  - jupyterlab *
+  - nbformat >=5.10.4
+  - networkx *
+  - pybaum >=0.1.3
+  # Test / profiling tooling
+  - pytest >=8.4.1
+  - pytest-cov >=6.2.1
+  - pytest-xdist >=3.8.0
+  - pytest-memray *
+  - snakeviz *
+  - xlrd >=2
+  - prek *
+  # Downstream-only conda deps (skane-struct-bw / health-cognition):
+  - deepdiff >=8.5.0
+  - memray >=1.17.2
+  - statsmodels >=0.14.5
+  - tabulate >=0.9.0
+  - seaborn *
+  - pip
+  - pip:
+      # Skillmodels project deps (PyPI), with CUDA-12 JAX wheel
+      - dags>=0.5.1
+      - jax[cuda12]>=0.9
+      - jupyter-book>=2
+      - kaleido>=1.2
+      - numpy>=2.4
+      - pandas>=3
+      - plotly>=6.6
+      - pytask>=0.5.8
+      - pytask-parallel>=0.5.2
+      - pdbp
+      # Pinned to the optimagic branch the AF estimator relies on.
+      # yamllint disable-line rule:line-length
+      - optimagic @ git+https://github.com/optimagic-dev/optimagic.git@probability-allow-fixed-entries
+      # Downstream-only PyPI deps:
+      - fides>=0.7.8
+      - statadict>=1.1.0
+      # Skillmodels itself, from the af-estimator branch.
+      # yamllint disable-line rule:line-length
+      - skillmodels @ git+https://github.com/OpenSourceEconomics/skillmodels.git@af-estimator
