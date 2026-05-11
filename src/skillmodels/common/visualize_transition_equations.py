@@ -3,7 +3,7 @@
 import itertools
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import jax.numpy as jnp
 import numpy as np
@@ -22,6 +22,10 @@ from skillmodels.common.process_data import process_data
 from skillmodels.common.process_model import process_model
 from skillmodels.common.types import ParsedParams, ProcessedModel
 from skillmodels.common.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
+
+if TYPE_CHECKING:
+    from skillmodels.af.types import AFEstimationResult
+    from skillmodels.amn.types import AMNEstimationResult
 
 
 def combine_transition_plots(
@@ -160,6 +164,8 @@ def get_transition_plots(  # noqa: C901, PLR0912
     layout_kwargs: dict[str, Any] | None = None,
     *,
     states: pd.DataFrame | None = None,
+    af_result: AFEstimationResult | None = None,
+    amn_result: AMNEstimationResult | None = None,
     include_correction_factors: bool = False,
 ) -> dict[tuple[str, str], go.Figure]:
     """Get dictionary with individual plots of transition equations for each factor.
@@ -198,6 +204,10 @@ def get_transition_plots(  # noqa: C901, PLR0912
             defined in the function will be used.
         states: Pre-computed filtered states DataFrame (with a `period`
             column). If provided, skip the internal `get_filtered_states` call.
+        af_result: Optional AF estimation result; routes the internal
+            filtered-states call through the AF posterior path.
+        amn_result: Optional AMN estimation result; routes through the
+            AMN mixture-Schur posterior path.
         include_correction_factors: Whether to include correction factors in the
             plots. Default False.
 
@@ -255,9 +265,15 @@ def get_transition_plots(  # noqa: C901, PLR0912
         if data is None:
             msg = "Either 'data' or 'states' must be provided."
             raise TypeError(msg)
-        states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
-            "anchored_states"
-        ]["states"]
+        filtered = get_filtered_states(
+            model_spec=model_spec,
+            data=data,
+            params=params,
+            af_result=af_result,
+            amn_result=amn_result,
+        )
+        states_root = filtered.get("anchored_states", filtered["unanchored_states"])
+        states = states_root["states"]
 
     states = _normalize_states_columns(
         states,

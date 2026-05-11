@@ -3,7 +3,7 @@
 import warnings
 from collections.abc import Mapping
 from copy import deepcopy
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -19,6 +19,29 @@ from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 from skillmodels.common.types import ProcessedModel
 from skillmodels.common.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
+
+if TYPE_CHECKING:
+    from skillmodels.af.types import AFEstimationResult
+    from skillmodels.amn.types import AMNEstimationResult
+
+
+def _filtered_states_for_viz(
+    model_spec: ModelSpec,
+    data: pd.DataFrame,
+    params: pd.DataFrame,
+    af_result: AFEstimationResult | None,
+    amn_result: AMNEstimationResult | None,
+) -> pd.DataFrame:
+    """Dispatch through `get_filtered_states`; prefer anchored states when available."""
+    out = get_filtered_states(
+        model_spec=model_spec,
+        data=data,
+        params=params,
+        af_result=af_result,
+        amn_result=amn_result,
+    )
+    root = out.get("anchored_states", out["unanchored_states"])
+    return root["states"]
 
 
 def combine_distribution_plots(
@@ -168,6 +191,8 @@ def univariate_densities(
     *,
     observed_factors: bool = False,
     states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame] | None = None,
+    af_result: AFEstimationResult | None = None,
+    amn_result: AMNEstimationResult | None = None,
     show_curve: bool = True,
     show_hist: bool = False,
     show_rug: bool = False,
@@ -193,6 +218,10 @@ def univariate_densities(
         states: Filtered or simulated states. Can be a single DataFrame, a list,
             or a dictionary of DataFrames. If None, retrieve filtered states using
             model and data. Used to estimate state ranges and factor distributions.
+        af_result: Optional AF estimation result; routes the internal
+            filtered-states call through the AF posterior path.
+        amn_result: Optional AMN estimation result; routes through the
+            AMN mixture-Schur posterior path.
         show_hist: Add histogram to the distplot.
         show_curve: Add density curve to the distplot.
         show_rug: Add rug to the distplot.
@@ -216,9 +245,9 @@ def univariate_densities(
 
     """
     if states is None:
-        states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
-            "anchored_states"
-        ]["states"]
+        states = _filtered_states_for_viz(
+            model_spec, data, params, af_result, amn_result
+        )
     processed_model = process_model(model_spec)
     factors = _get_factors(
         model=processed_model,
@@ -275,6 +304,8 @@ def bivariate_density_contours(
     *,
     observed_factors: bool = False,
     states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame] | None = None,
+    af_result: AFEstimationResult | None = None,
+    amn_result: AMNEstimationResult | None = None,
     n_points: int = 50,
     contour_kwargs: dict[str, Any] | None = None,
     layout_kwargs: dict[str, Any] | None = None,
@@ -300,6 +331,10 @@ def bivariate_density_contours(
         states: Filtered or simulated states. Can be a single DataFrame, a list,
             or a dictionary of DataFrames. If None, retrieve filtered states using
             model and data. Used to estimate state ranges and factor distributions.
+        af_result: Optional AF estimation result; routes the internal
+            filtered-states call through the AF posterior path.
+        amn_result: Optional AMN estimation result; routes through the
+            AMN mixture-Schur posterior path.
         n_points: Number of grid points used to create the mesh for calculation
             of kernel densities.
         contour_kwargs: Keyword arguments to set contour line properties
@@ -327,9 +362,9 @@ def bivariate_density_contours(
 
     """
     if states is None:
-        states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
-            "anchored_states"
-        ]["states"]
+        states = _filtered_states_for_viz(
+            model_spec, data, params, af_result, amn_result
+        )
     processed_model = process_model(model_spec)
     factors = _get_factors(
         model=processed_model,
@@ -401,6 +436,8 @@ def bivariate_density_surfaces(
     *,
     observed_factors: bool = False,
     states: pd.DataFrame | None = None,
+    af_result: AFEstimationResult | None = None,
+    amn_result: AMNEstimationResult | None = None,
     n_points: int = 50,
     layout_kwargs: dict[str, Any] | None = None,
     colorscale: str = "RdBu_r",
@@ -426,6 +463,10 @@ def bivariate_density_surfaces(
         states: Filtered or simulated states as a single DataFrame.
             If None, retrieve filtered states using model and data. Used to estimate
             state ranges and factor distributions.
+        af_result: Optional AF estimation result; routes the internal
+            filtered-states call through the AF posterior path.
+        amn_result: Optional AMN estimation result; routes through the
+            AMN mixture-Schur posterior path.
         n_points: Number of grid points used to create the mesh for calculation
             of kernel densities.
 
@@ -449,9 +490,9 @@ def bivariate_density_surfaces(
 
     """
     if states is None:
-        states = get_filtered_states(model_spec=model_spec, data=data, params=params)[
-            "anchored_states"
-        ]["states"]
+        states = _filtered_states_for_viz(
+            model_spec, data, params, af_result, amn_result
+        )
     elif not isinstance(states, pd.DataFrame):
         raise ValueError("3d plots are only supported if states is a DataFrame")
     processed_model = process_model(model_spec)

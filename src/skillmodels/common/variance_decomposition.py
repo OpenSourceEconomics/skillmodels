@@ -6,6 +6,7 @@ Section 4.2.2.
 """
 
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
@@ -13,11 +14,18 @@ from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
+if TYPE_CHECKING:
+    from skillmodels.af.types import AFEstimationResult
+    from skillmodels.amn.types import AMNEstimationResult
+
 
 def decompose_measurement_variance(
     model_spec: ModelSpec,
     params: pd.DataFrame,
     data: pd.DataFrame,
+    *,
+    af_result: AFEstimationResult | None = None,
+    amn_result: AMNEstimationResult | None = None,
 ) -> pd.DataFrame:
     """Decompose measurement variance into signal and noise components.
 
@@ -35,6 +43,10 @@ def decompose_measurement_variance(
         model_spec: The model specification.
         params: DataFrame with estimated model parameters.
         data: Empirical dataset used to estimate the model.
+        af_result: Optional AF estimation result; routes the filtered
+            states through the AF posterior path.
+        amn_result: Optional AMN estimation result; routes through the
+            AMN mixture-Schur posterior path.
 
     Returns:
         DataFrame indexed by (period, measurement, factor) with columns:
@@ -51,11 +63,20 @@ def decompose_measurement_variance(
         78(3), 883-931. https://doi.org/10.3982/ECTA6551
 
     """
-    # Get filtered states to compute factor variances
+    # Get filtered states to compute factor variances. CHS produces both
+    # anchored and unanchored states; AF / AMN produce unanchored only,
+    # so we fall back to unanchored states in that case.
     filtered_result = get_filtered_states(
-        model_spec=model_spec, data=data, params=params
+        model_spec=model_spec,
+        data=data,
+        params=params,
+        af_result=af_result,
+        amn_result=amn_result,
     )
-    filtered_states = filtered_result["anchored_states"]["states"]
+    states_root = filtered_result.get(
+        "anchored_states", filtered_result["unanchored_states"]
+    )
+    filtered_states = states_root["states"]
 
     processed_model = process_model(model_spec)
     return _compute_variance_decomposition(

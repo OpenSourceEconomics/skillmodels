@@ -15,6 +15,7 @@ from skillmodels.common.process_model import process_model
 
 if TYPE_CHECKING:
     from skillmodels.af.types import AFEstimationResult
+    from skillmodels.amn.types import AMNEstimationResult
 
 
 def get_filtered_states(
@@ -22,19 +23,25 @@ def get_filtered_states(
     data: pd.DataFrame,
     params: pd.DataFrame,
     af_result: AFEstimationResult | None = None,
+    amn_result: AMNEstimationResult | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Compute latent state estimates given data and estimated parameters.
 
     For CHS (Kalman filter) estimation, computes filtered states via the
     debug likelihood. For AF estimation, computes posterior means via
-    Halton quadrature.
+    Halton quadrature. For AMN estimation, computes mixture-Schur
+    conditional posteriors of the latent factors given the augmented
+    measure vector.
 
     Args:
         model_spec: Model specification.
         data: Dataset in long format with MultiIndex (id, period).
         params: Estimated parameter DataFrame.
         af_result: If provided, use AF posterior computation instead of
-            CHS Kalman filtering. Should be an `AFEstimationResult`.
+            CHS Kalman filtering.
+        amn_result: If provided, use AMN mixture-Schur posteriors
+            instead. Only one of `af_result` and `amn_result` may be
+            set.
 
     Return:
         Dict with "unanchored_states" (always present) and
@@ -42,6 +49,10 @@ def get_filtered_states(
         DataFrame and "state_ranges".
 
     """
+    if af_result is not None and amn_result is not None:
+        msg = "Pass only one of af_result / amn_result."
+        raise ValueError(msg)
+
     if af_result is not None:
         from skillmodels.af.posterior_states import (  # noqa: PLC0415
             get_af_posterior_states,
@@ -50,6 +61,16 @@ def get_filtered_states(
         return get_af_posterior_states(
             af_result=af_result,
             model_spec=model_spec,
+            data=data,
+        )
+
+    if amn_result is not None:
+        from skillmodels.amn.posterior_states import (  # noqa: PLC0415
+            get_amn_posterior_states,
+        )
+
+        return get_amn_posterior_states(
+            amn_result=amn_result,
             data=data,
         )
 
