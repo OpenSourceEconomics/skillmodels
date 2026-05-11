@@ -16,7 +16,7 @@ from itertools import chain
 
 import numpy as np
 import pandas as pd
-from sklearn.mixture import GaussianMixture  # ty: ignore[unresolved-import]
+from sklearn.mixture import GaussianMixture
 
 from skillmodels.amn.types import AugmentedMeasureLayout, MixtureFitResult
 from skillmodels.common.types import ProcessedModel
