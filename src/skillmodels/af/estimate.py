@@ -2,7 +2,6 @@
 
 import dataclasses
 import gc
-import warnings
 
 import jax
 import jax.numpy as jnp
@@ -89,54 +88,29 @@ def estimate_af(
     # skipped (AMN's values are already in the optimizer's starting
     # neighbourhood).
     if af_options.initialization_strategy == "amn":
-        try:
-            amn_result = estimate_amn(model_spec=model_spec, data=data)
-        except NotImplementedError as exc:
-            # AMN doesn't support every transition function (translog,
-            # user-registered, etc.). Fall back to the cheap per-period
-            # Spearman pre-pass so AF still benefits from data-driven
-            # seeds instead of static defaults.
-            warnings.warn(
-                f"AMN start values unavailable ({exc}); falling back to "
-                "Spearman cross-covariance seeding.",
-                RuntimeWarning,
-                stacklevel=2,
+        amn_result = estimate_amn(model_spec=model_spec, data=data)
+        amn_start = amn_result.all_params[["value"]]
+        if start_params is not None:
+            user_idx = start_params.index
+            amn_start = amn_start.drop(
+                index=amn_start.index.intersection(user_idx),
+                errors="ignore",
             )
-            af_options = AFEstimationOptions(
-                n_halton_points=af_options.n_halton_points,
-                n_halton_points_shock=af_options.n_halton_points_shock,
-                n_mixture_components=af_options.n_mixture_components,
-                optimizer_algorithm=af_options.optimizer_algorithm,
-                optimizer_options=dict(af_options.optimizer_options),
-                two_stage=af_options.two_stage,
-                coarse_fraction=af_options.coarse_fraction,
-                stability_floor=af_options.stability_floor,
-                n_obs_per_batch=af_options.n_obs_per_batch,
-                initialization_strategy="spearman",
-            )
+            start_params = pd.concat([amn_start, start_params]).sort_index()
         else:
-            amn_start = amn_result.all_params[["value"]]
-            if start_params is not None:
-                user_idx = start_params.index
-                amn_start = amn_start.drop(
-                    index=amn_start.index.intersection(user_idx),
-                    errors="ignore",
-                )
-                start_params = pd.concat([amn_start, start_params]).sort_index()
-            else:
-                start_params = amn_start
-            af_options = AFEstimationOptions(
-                n_halton_points=af_options.n_halton_points,
-                n_halton_points_shock=af_options.n_halton_points_shock,
-                n_mixture_components=af_options.n_mixture_components,
-                optimizer_algorithm=af_options.optimizer_algorithm,
-                optimizer_options=dict(af_options.optimizer_options),
-                two_stage=af_options.two_stage,
-                coarse_fraction=af_options.coarse_fraction,
-                stability_floor=af_options.stability_floor,
-                n_obs_per_batch=af_options.n_obs_per_batch,
-                initialization_strategy="constant",
-            )
+            start_params = amn_start
+        af_options = AFEstimationOptions(
+            n_halton_points=af_options.n_halton_points,
+            n_halton_points_shock=af_options.n_halton_points_shock,
+            n_mixture_components=af_options.n_mixture_components,
+            optimizer_algorithm=af_options.optimizer_algorithm,
+            optimizer_options=dict(af_options.optimizer_options),
+            two_stage=af_options.two_stage,
+            coarse_fraction=af_options.coarse_fraction,
+            stability_floor=af_options.stability_floor,
+            n_obs_per_batch=af_options.n_obs_per_batch,
+            initialization_strategy="constant",
+        )
 
     # Extract data arrays per period
     n_periods = processed_model.dimensions.n_periods

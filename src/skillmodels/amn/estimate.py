@@ -146,6 +146,7 @@ def estimate_amn(
     production = simulate_and_regress(
         structural,
         processed_model,
+        model_spec,
         mixture_weights=mixture.weights,
         n_draws=amn_options.n_simulation_draws,
         seed=amn_options.seed,

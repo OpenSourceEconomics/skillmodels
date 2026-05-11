@@ -1,7 +1,6 @@
 """Functions to create inputs for optimization of the log-likelihood."""
 
 import functools
-import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -219,32 +218,23 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             params_template=params_template,
         )
     elif strategy == "amn":
+        amn_result = estimate_amn(model_spec=model_spec, data=data)
         # First fill template via Spearman for entries AMN doesn't touch
         # (mixture weights, initial Cholesky diagonals not directly
-        # produced by AMN's three stages). Then try to overlay the AMN
-        # estimates; fall back silently to the Spearman fill if AMN
-        # can't handle the model (translog, user transitions, etc.).
+        # produced by AMN's three stages); then overlay AMN values onto
+        # the common index. Skip indices pre-pinned by
+        # `enforce_fixed_constraints`.
         pre_pinned = params_template["value"].notna()
         params_template = get_spearman_start_params(
             model_spec=model_spec,
             data=data,
             params_template=params_template,
         )
-        try:
-            amn_result = estimate_amn(model_spec=model_spec, data=data)
-        except NotImplementedError as exc:
-            warnings.warn(
-                f"AMN start values unavailable ({exc}); using "
-                "Spearman cross-covariance seeds instead.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-        else:
-            common = amn_result.all_params.index.intersection(params_template.index)
-            free_common = common[~pre_pinned.reindex(common, fill_value=False)]
-            params_template.loc[free_common, "value"] = amn_result.all_params.loc[
-                free_common, "value"
-            ]
+        common = amn_result.all_params.index.intersection(params_template.index)
+        free_common = common[~pre_pinned.reindex(common, fill_value=False)]
+        params_template.loc[free_common, "value"] = amn_result.all_params.loc[
+            free_common, "value"
+        ]
 
     return {
         "loglike": loglike,

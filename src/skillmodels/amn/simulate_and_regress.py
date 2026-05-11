@@ -2,14 +2,24 @@
 
 Draws a synthetic latent-factor panel from the structural mixture
 fitted in Stage 2 and recovers the per-period transition / investment
-parameters by least-squares regression (linear for linear transitions
-and the investment equation; Levenberg-Marquardt NLS for `log_ces` and
-`log_ces_with_constant`).
+parameters by least-squares regression.
 
-Mirrors the Stage 3 logic in
-`Monte Carlo Simulations/master_approx_simulationces2periodrho_5.R`.
+Specialised fitters: closed-form OLS for `linear`; softmax-constrained
+Levenberg-Marquardt for `log_ces` and `log_ces_with_constant` (keeps
+gammas on the simplex). Everything else (translog, robust_translog,
+linear_and_squares, log_ces_general, and any user
+`@register_params`-decorated transition) goes through a generic NLS
+path that calls the transition function directly via `jax.vmap`. This
+mirrors the per-factor NLS in
+`Monte Carlo Simulations/master_approx_simulationces2periodrho_5.R`
+but generalises beyond the paper's CES-only case.
 """
 
+import inspect
+from collections.abc import Callable
+
+import jax
+import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
@@ -18,6 +28,7 @@ from skillmodels.amn.types import (
     MinimumDistanceResult,
     ProductionFitResult,
 )
+from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.types import ProcessedModel
 
 
@@ -133,24 +144,184 @@ def _fit_log_ces(
     return out, sd
 
 
+def _make_user_transition_callable(
+    user_func: Callable,
+    factor_names: tuple[str, ...],
+    param_names: tuple[str, ...],
+) -> Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]:
+    """Wrap a `@register_params`-decorated user function as `(states, params)`.
+
+    Mirrors `skillmodels.af.transition_period._wrap_registered_transition_function`
+    so Stage 3 can pass user transitions through `jax.vmap` for NLS.
+    """
+    sig = inspect.signature(user_func)
+    arg_names = [name for name in sig.parameters if name != "params"]
+    arg_positions = tuple(factor_names.index(name) for name in arg_names)
+
+    def wrapped(states: jnp.ndarray, params_vec: jnp.ndarray) -> jnp.ndarray:
+        kwargs: dict[str, jnp.ndarray | dict[str, jnp.ndarray]] = {
+            name: states[pos]
+            for name, pos in zip(arg_names, arg_positions, strict=True)
+        }
+        kwargs["params"] = dict(zip(param_names, params_vec, strict=True))
+        return user_func(**kwargs)
+
+    return wrapped
+
+
+def _resolve_transition_callable(
+    transition_name: str,
+    factor: str,
+    processed_model: ProcessedModel,
+    model_spec: ModelSpec,
+) -> tuple[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray], tuple[str, ...]]:
+    """Return a ``(states, params) -> scalar`` callable plus param names.
+
+    For built-in transitions this is the function imported from
+    `skillmodels.common.transition_functions`; for user functions it is
+    `_make_user_transition_callable(...)` applied to the raw callable on
+    the model spec.
+    """
+    from skillmodels.common import transition_functions as tf  # noqa: PLC0415
+
+    builtin_names = {
+        "linear",
+        "translog",
+        "robust_translog",
+        "linear_and_squares",
+        "log_ces",
+        "log_ces_with_constant",
+        "log_ces_general",
+    }
+    factor_names = (
+        *processed_model.labels.latent_factors,
+        *processed_model.labels.observed_factors,
+    )
+    transition_info = processed_model.transition_info
+    if transition_info is None:
+        msg = "ProcessedModel has no transition_info; cannot run Stage 3."
+        raise ValueError(msg)
+    param_names = tuple(transition_info.param_names[factor])
+
+    if transition_name in builtin_names:
+        func = getattr(tf, transition_name)
+        return func, param_names
+
+    factor_spec = model_spec.factors.get(factor)
+    if factor_spec is None:
+        msg = (
+            f"Cannot resolve transition callable for factor '{factor}' "
+            f"(transition='{transition_name}'). Factor not found on "
+            "model_spec.factors."
+        )
+        raise KeyError(msg)
+    raw = factor_spec.transition_function
+    if not callable(raw):
+        msg = (
+            f"Factor '{factor}' has transition_function={raw!r} which is "
+            "neither a built-in name nor a callable."
+        )
+        raise TypeError(msg)
+    wrapped = _make_user_transition_callable(raw, factor_names, param_names)
+    return wrapped, param_names
+
+
+def _fit_generic_nls(
+    transition_func: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray],
+    param_names: tuple[str, ...],
+    y: np.ndarray,
+    states_panel: np.ndarray,
+    *,
+    init_overrides: dict[str, float] | None = None,
+) -> tuple[dict[str, float], float]:
+    """Generic Levenberg-Marquardt NLS via `jax.vmap` over the panel.
+
+    Works for any `(states, params) -> scalar` callable, including
+    translog, robust_translog, linear_and_squares, log_ces_general, and
+    user-registered transitions.
+
+    Args:
+        transition_func: callable taking a 1D state vector and a 1D
+            param vector and returning a scalar.
+        param_names: names of the parameters in the order accepted by
+            `transition_func`.
+        y: target vector, shape ``(n_obs,)``.
+        states_panel: state matrix, shape ``(n_obs, n_state_features)``.
+        init_overrides: optional ``{name: value}`` to seed specific
+            parameters before NLS. Useful for setting `phi != 0` on
+            log_ces-family functions.
+
+    """
+    init_overrides = init_overrides or {}
+
+    @jax.jit
+    def predict_batch(theta: jnp.ndarray, states: jnp.ndarray) -> jnp.ndarray:
+        return jax.vmap(transition_func, in_axes=(0, None))(states, theta)
+
+    states_jnp = jnp.asarray(states_panel)
+
+    def residuals(theta_np: np.ndarray) -> np.ndarray:
+        preds = predict_batch(jnp.asarray(theta_np), states_jnp)
+        return np.asarray(preds) - y
+
+    theta0 = np.zeros(len(param_names))
+    for name, val in init_overrides.items():
+        if name in param_names:
+            theta0[param_names.index(name)] = val
+    # phi-style elasticity defaults: any "phi", "rho", "sigma" param
+    # that doesn't otherwise have an override gets seeded at 0.5 so the
+    # CES / general-CES log expressions don't divide by zero.
+    for j, name in enumerate(param_names):
+        if name in {"phi", "rho", "sigma"} and name not in init_overrides:
+            theta0[j] = 0.5
+    # Simplex-style "gammas" (anything listed as a factor name in the
+    # param list) get a uniform initial share if the function looks
+    # CES-shaped (has a "phi"-like param).
+    has_elasticity = any(n in {"phi", "rho", "sigma"} for n in param_names)
+    if has_elasticity:
+        share_candidates = [
+            j
+            for j, n in enumerate(param_names)
+            if n not in {"phi", "rho", "sigma", "constant"}
+        ]
+        if share_candidates:
+            theta0[share_candidates] = 1.0 / len(share_candidates)
+
+    result = least_squares(residuals, theta0, method="lm", max_nfev=5000)
+    theta = result.x
+    resid = residuals(theta)
+    sd = float(np.sqrt(np.mean(resid**2)))
+    out = dict(zip(param_names, [float(v) for v in theta], strict=True))
+    return out, sd
+
+
 def _fit_transition(
     transition_name: str,
+    factor: str,
+    processed_model: ProcessedModel,
+    model_spec: ModelSpec,
     y: np.ndarray,
     x_design: np.ndarray,
     regressor_names: list[str],
 ) -> tuple[dict[str, float], float]:
+    """Dispatch to the right per-transition fitter.
+
+    `linear` and `log_ces`-family functions get specialised fitters for
+    speed / simplex constraints; everything else (translog,
+    robust_translog, linear_and_squares, log_ces_general, user) falls
+    through to a generic `jax.vmap`-based NLS.
+    """
     if transition_name == "linear":
         return _fit_linear(y, x_design, regressor_names)
     if transition_name == "log_ces":
         return _fit_log_ces(y, x_design, regressor_names, with_constant=False)
     if transition_name == "log_ces_with_constant":
         return _fit_log_ces(y, x_design, regressor_names, with_constant=True)
-    msg = (
-        f"AMN Stage 3 does not yet support transition function "
-        f"'{transition_name}'. Supported: linear, log_ces, "
-        f"log_ces_with_constant."
+
+    func, param_names = _resolve_transition_callable(
+        transition_name, factor, processed_model, model_spec
     )
-    raise NotImplementedError(msg)
+    return _fit_generic_nls(func, param_names, y, x_design)
 
 
 def _factors_at_period(processed_model: ProcessedModel) -> tuple[str, ...]:
@@ -164,6 +335,7 @@ def _factors_at_period(processed_model: ProcessedModel) -> tuple[str, ...]:
 def simulate_and_regress(  # noqa: C901
     structural: MinimumDistanceResult,
     processed_model: ProcessedModel,
+    model_spec: ModelSpec,
     mixture_weights: np.ndarray,
     *,
     n_draws: int = 100_000,
@@ -175,6 +347,8 @@ def simulate_and_regress(  # noqa: C901
     Args:
         structural: Stage 2 output (structural mixture, loadings, etc.).
         processed_model: Skillmodels processed model.
+        model_spec: Original model spec; used to look up raw transition
+            callables for user-registered `@register_params` functions.
         mixture_weights: Per-component mixture weights from Stage 1.
         n_draws: Synthetic-panel size.
         seed: RNG seed.
@@ -237,7 +411,13 @@ def simulate_and_regress(  # noqa: C901
                 investment_rows.append(("investment_sds", t, factor, "-", sd))
             else:
                 params, sd = _fit_transition(
-                    trans_name, y, x_design, present_factor_names
+                    trans_name,
+                    factor,
+                    processed_model,
+                    model_spec,
+                    y,
+                    x_design,
+                    present_factor_names,
                 )
                 for regname, value in params.items():
                     transition_rows.append(
