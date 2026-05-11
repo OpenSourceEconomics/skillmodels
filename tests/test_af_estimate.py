@@ -2077,3 +2077,73 @@ def test_af_log_ces_with_cross_factor_gamma_fixed_at_nonzero() -> None:
 
     assert gamma_fac3 == 0.2
     assert np.isclose(gamma_fac1 + gamma_fac2, 0.8, atol=1e-6)
+
+
+@pytest.mark.end_to_end
+def test_af_estimate_tolerates_nan_measurements() -> None:
+    """NaN entries in measurement columns must not poison AF gradients.
+
+    Real panels routinely have missing values; the AF likelihood masks
+    them out at the per-observation level so each observation contributes
+    only its non-missing measurements to the log-pdf sum.
+    """
+    rng = np.random.default_rng(2026)
+    n_obs, n_periods = 400, 2
+
+    z = rng.multivariate_normal(
+        mean=[0.0, 1.0],
+        cov=[[1.0, 0.35], [0.35, 0.25]],
+        size=n_obs,
+    )
+    theta = z[:, 0]
+    income = z[:, 1]
+
+    rows = []
+    for i in range(n_obs):
+        for t in range(n_periods):
+            row = {
+                "caseid": i,
+                "period": t,
+                "s1": theta[i] + rng.normal(0, 0.3),
+                "s2": 0.3 + 0.9 * theta[i] + rng.normal(0, 0.35),
+                "s3": -0.1 + 1.1 * theta[i] + rng.normal(0, 0.4),
+                "income": income[i],
+            }
+            # Sprinkle ~10% NaN into s2 across both periods.
+            if rng.random() < 0.10:
+                row["s2"] = np.nan
+            rows.append(row)
+    data = pd.DataFrame(rows).set_index(["caseid", "period"])
+    assert data["s2"].isna().any(), "test setup should inject NaN measurements"
+
+    model = ModelSpec(
+        factors={
+            "skill": FactorSpec(
+                measurements=(("s1", "s2", "s3"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"s1": 1},) * n_periods,
+                    intercepts=({"s1": 0},) * n_periods,
+                ),
+                transition_function="linear",
+            ),
+        },
+        observed_factors=("income",),
+        estimation_options=EstimationOptions(
+            robust_bounds=True, bounds_distance=0.001, n_mixtures=1
+        ),
+    )
+
+    result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=AFEstimationOptions(
+            n_halton_points=30,
+            n_halton_points_shock=15,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=True,
+        ),
+    )
+    for pr in result.period_results:
+        assert pr.success, f"Period {pr.period} failed with NaN measurements"
+        assert np.isfinite(pr.loglikelihood)

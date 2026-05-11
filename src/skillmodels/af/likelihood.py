@@ -279,14 +279,20 @@ def _initial_loglike_per_obs(
     full_loadings = jnp.zeros((n_measures, n_factors))
     full_loadings = full_loadings.at[loading_mask].set(loadings)
 
+    # NaN-safety: build per-obs measurement mask and replace NaN entries
+    # with 0 so residuals stay finite. The mask is used inside the
+    # integral to zero out missing-measurement contributions.
+    meas_mask = jnp.isfinite(measurements)
+    safe_measurements = jnp.where(meas_mask, measurements, 0.0)
+
     # Control contribution: (n_obs, n_measures)
     control_contrib = controls @ control_params.T
 
     # Residuals before factor contribution: (n_obs, n_measures)
-    residuals_base = measurements - control_contrib
+    residuals_base = safe_measurements - control_contrib
 
     @jax.checkpoint
-    def _single_obs_loglike(residual_base: Array) -> Array:
+    def _single_obs_loglike(residual_base: Array, mask_i: Array) -> Array:
         """Log-likelihood for a single observation, integrated over factors.
 
         `jax.checkpoint` keeps the forward pass small: the per-observation
@@ -296,6 +302,7 @@ def _initial_loglike_per_obs(
         """
         return _integrate_initial_single_obs(
             residual_base=residual_base,
+            meas_mask=mask_i,
             full_loadings=full_loadings,
             meas_sds=meas_sds,
             mixture_weights=mixture_weights,
@@ -307,7 +314,10 @@ def _initial_loglike_per_obs(
         )
 
     return _map_over_obs(
-        _single_obs_loglike, residuals_base, n_obs_per_batch=n_obs_per_batch
+        _single_obs_loglike,
+        residuals_base,
+        meas_mask,
+        n_obs_per_batch=n_obs_per_batch,
     )
 
 
@@ -350,14 +360,19 @@ def _initial_loglike_per_obs_conditional(
     full_loadings = jnp.zeros((n_measures, n_latent))
     full_loadings = full_loadings.at[loading_mask].set(loadings)
 
+    # NaN-safety for measurements (see `_initial_loglike_per_obs`).
+    meas_mask = jnp.isfinite(measurements)
+    safe_measurements = jnp.where(meas_mask, measurements, 0.0)
+
     control_contrib = controls @ control_params.T
-    residuals_base = measurements - control_contrib
+    residuals_base = safe_measurements - control_contrib
 
     @jax.checkpoint
-    def _single_obs_loglike(residual_base: Array, y_i: Array) -> Array:
+    def _single_obs_loglike(residual_base: Array, y_i: Array, mask_i: Array) -> Array:
         return _integrate_initial_single_obs_conditional(
             residual_base=residual_base,
             y_i=y_i,
+            meas_mask=mask_i,
             full_loadings=full_loadings,
             meas_sds=meas_sds,
             mixture_weights=mixture_weights,
@@ -373,6 +388,7 @@ def _initial_loglike_per_obs_conditional(
         _single_obs_loglike,
         residuals_base,
         observed_factor_values,
+        meas_mask,
         n_obs_per_batch=n_obs_per_batch,
     )
 
@@ -381,6 +397,7 @@ def _integrate_initial_single_obs_conditional(
     *,
     residual_base: Array,
     y_i: Array,
+    meas_mask: Array,
     full_loadings: Array,
     meas_sds: Array,
     mixture_weights: Array,
@@ -433,9 +450,8 @@ def _integrate_initial_single_obs_conditional(
         def _log_node(z_q: Array) -> Array:
             theta_q = cond_mean + cond_chol @ z_q
             residuals = residual_base - full_loadings @ theta_q
-            return jnp.sum(
-                _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
-            )
+            log_pdf = _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
+            return jnp.sum(jnp.where(meas_mask, log_pdf, 0.0))
 
         log_meas = jax.vmap(_log_node)(nodes)
         log_integral = jax.scipy.special.logsumexp(log_meas + jnp.log(weights))
@@ -462,6 +478,7 @@ def _log_mvn_pdf_chol(x: Array, mean: Array, chol: Array) -> Array:
 def _integrate_initial_single_obs(
     *,
     residual_base: Array,
+    meas_mask: Array,
     full_loadings: Array,
     meas_sds: Array,
     mixture_weights: Array,
@@ -508,10 +525,10 @@ def _integrate_initial_single_obs(
             # Measurement residuals: obs - control_contrib - loadings @ theta
             residuals = residual_base - full_loadings @ theta_q
 
-            # Log measurement density: sum of log N(residual_m, 0, sd_m)
-            log_meas_density = jnp.sum(
-                _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
-            )
+            # Log measurement density: sum of log N(residual_m, 0, sd_m),
+            # masking out missing measurements (NaN replaced by 0 upstream).
+            log_pdf = _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
+            log_meas_density = jnp.sum(jnp.where(meas_mask, log_pdf, 0.0))
 
             total = total + mixture_weights[l_idx] * jnp.exp(log_meas_density)
 
@@ -590,7 +607,10 @@ def af_per_obs_loglike_transition(
         prev_loadings_flat
     )
     prev_control_contrib = prev_controls @ prev_control_params.T
-    prev_residuals_base = prev_measurements - prev_control_contrib
+    # NaN-safety for prev-period measurements (see `_initial_loglike_per_obs`).
+    prev_meas_mask = jnp.isfinite(prev_measurements)
+    safe_prev_measurements = jnp.where(prev_meas_mask, prev_measurements, 0.0)
+    prev_residuals_base = safe_prev_measurements - prev_control_contrib
 
     return _transition_loglike_per_obs(
         transition_params=parsed["transition_params"],
@@ -604,6 +624,7 @@ def af_per_obs_loglike_transition(
         controls=controls,
         loading_mask=loading_mask,
         prev_residuals_base=prev_residuals_base,
+        prev_meas_mask=prev_meas_mask,
         prev_full_loadings=prev_full_loadings,
         prev_meas_sds=prev_meas_sds,
         prev_distribution=prev_distribution,
@@ -844,6 +865,7 @@ def _transition_loglike_per_obs(
     controls: Array,
     loading_mask: Array,
     prev_residuals_base: Array,
+    prev_meas_mask: Array,
     prev_full_loadings: Array,
     prev_meas_sds: Array,
     prev_distribution: dict[str, Array],
@@ -873,8 +895,12 @@ def _transition_loglike_per_obs(
     full_loadings = jnp.zeros((n_measures, n_loading_factors))
     full_loadings = full_loadings.at[loading_mask].set(loadings_flat)
 
+    # NaN-safety for current-period measurements (see `_initial_loglike_per_obs`).
+    meas_mask = jnp.isfinite(measurements)
+    safe_measurements = jnp.where(meas_mask, measurements, 0.0)
+
     control_contrib = controls @ control_params.T
-    residuals_base = measurements - control_contrib
+    residuals_base = safe_measurements - control_contrib
 
     cond_weights = prev_distribution["cond_weights"]
     cond_means = prev_distribution["cond_means"]
@@ -891,12 +917,16 @@ def _transition_loglike_per_obs(
         obs_factor_values: Array,
         obs_cond_means: Array,
         obs_factor_values_chain_i: Array,
+        meas_mask_i: Array,
+        prev_meas_mask_i: Array,
     ) -> Array:
         return _integrate_transition_single_obs(
             residual_base=residual_base,
+            meas_mask=meas_mask_i,
             full_loadings=full_loadings,
             meas_sds=meas_sds,
             prev_residual_base=prev_residual_base,
+            prev_meas_mask=prev_meas_mask_i,
             prev_full_loadings=prev_full_loadings,
             prev_meas_sds=prev_meas_sds,
             obs_cond_weights=obs_cond_weights,
@@ -928,6 +958,8 @@ def _transition_loglike_per_obs(
         observed_factor_values,
         cond_means_by_obs,
         obs_factor_values_chain,
+        meas_mask,
+        prev_meas_mask,
         n_obs_per_batch=n_obs_per_batch,
     )
 
@@ -1041,9 +1073,11 @@ def _rebuild_chain_at_period(
 def _integrate_transition_single_obs(
     *,
     residual_base: Array,
+    meas_mask: Array,
     full_loadings: Array,
     meas_sds: Array,
     prev_residual_base: Array,
+    prev_meas_mask: Array,
     prev_full_loadings: Array,
     prev_meas_sds: Array,
     obs_cond_weights: Array,
@@ -1166,13 +1200,12 @@ def _integrate_transition_single_obs(
             # a per-obs constant that is invariant under the parameters.
             prev_state_loadings = prev_full_loadings[:, state_factor_indices_in_latent]
             prev_residuals = prev_residual_base - prev_state_loadings @ theta_prev
-            log_prev_inv_meas = jnp.sum(
-                _log_normal_pdf(
-                    prev_residuals,
-                    jnp.zeros_like(prev_residuals),
-                    prev_meas_sds,
-                )
+            prev_log_pdf = _log_normal_pdf(
+                prev_residuals,
+                jnp.zeros_like(prev_residuals),
+                prev_meas_sds,
             )
+            log_prev_inv_meas = jnp.sum(jnp.where(prev_meas_mask, prev_log_pdf, 0.0))
 
             # Current-period measurement density. Shocks only apply to
             # factors with has_production_shock=True; scatter them into the
@@ -1188,9 +1221,8 @@ def _integrate_transition_single_obs(
             )
             all_factors_t = jnp.concatenate([theta_t, inv])
             residuals = residual_base - full_loadings @ all_factors_t
-            log_meas = jnp.sum(
-                _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
-            )
+            log_pdf = _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
+            log_meas = jnp.sum(jnp.where(meas_mask, log_pdf, 0.0))
 
             log_kernel = (
                 jnp.log(obs_cond_weights[l_idx] + stability_floor)
