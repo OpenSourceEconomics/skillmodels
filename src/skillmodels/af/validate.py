@@ -1,5 +1,7 @@
 """AF-specific ModelSpec validation."""
 
+import warnings
+
 from skillmodels.model_spec import FactorSpec, ModelSpec
 
 # Transition functions compatible with AF estimation (parametric, differentiable).
@@ -15,7 +17,15 @@ _AF_COMPATIBLE_TRANSITIONS = frozenset(
     }
 )
 
-_MIN_MEASURES_PER_FACTOR = 3
+# Hard minimum: 2 measurements + a loading normalization just-identify the
+# per-period measurement system (3 moments — Var(Z1), Var(Z2), Cov(Z1,Z2) —
+# vs 1 free loading + 2 sigma_meas) given Var(F) pinned by the chain.
+_MIN_MEASURES_PER_FACTOR = 2
+# Recommended minimum: the AF paper's identification arguments assume 3
+# indicators per factor per period (over-identified Spearman moments).
+# Below this, Stage-B Spearman is noisy and cross-period equality
+# constraints on loadings / sigma_meas become load-bearing for ID.
+_RECOMMENDED_MEASURES_PER_FACTOR = 3
 
 
 def validate_af_model(model_spec: ModelSpec) -> None:
@@ -45,7 +55,8 @@ def _validate_factor(factor_name: str, factor_spec: FactorSpec) -> list[str]:
     """Return a list of error messages for a single factor."""
     errors: list[str] = []
 
-    # Check measurements: need >= 3 per factor in each active period
+    # Check measurements: need >= 2 per factor in each active period; warn
+    # below 3 (the recommended count from the AF paper).
     for period, measures in enumerate(factor_spec.measurements):
         if len(measures) == 0:
             continue
@@ -53,6 +64,17 @@ def _validate_factor(factor_name: str, factor_spec: FactorSpec) -> list[str]:
             errors.append(
                 f"Factor '{factor_name}' period {period}: AF requires at least "
                 f"{_MIN_MEASURES_PER_FACTOR} measurements, got {len(measures)}."
+            )
+        elif len(measures) < _RECOMMENDED_MEASURES_PER_FACTOR:
+            warnings.warn(
+                f"Factor '{factor_name}' period {period}: only {len(measures)} "
+                f"measurements (AF paper assumes at least "
+                f"{_RECOMMENDED_MEASURES_PER_FACTOR}). Identification of "
+                f"loadings + sigma_meas at this period relies on "
+                f"cross-period equality constraints. Stage-B Spearman "
+                f"will be noisy here; consider `two_stage_measurement=False` "
+                f"or supplying explicit fixed_params for the loading.",
+                stacklevel=3,
             )
 
     # Check transition function is parametric
