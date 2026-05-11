@@ -16,7 +16,9 @@ from skillmodels.af.types import (
     AFEstimationOptions,
     AFEstimationResult,
     AFPeriodResult,
+    ChainLink,
     ConditionalDistribution,
+    MixtureComponent,
 )
 from skillmodels.af.validate import validate_af_model
 from skillmodels.model_spec import ModelSpec
@@ -162,15 +164,14 @@ def estimate_af(
     # Combine parameters from all periods
     all_params = pd.concat([r.params for r in period_results])
 
-    # Drop the large per-period importance samples before returning. They
-    # are used internally to build summary stats (`MixtureComponent.mean`,
-    # `chol_cov`) and the chain history; the likelihood rebuilds samples
-    # on-demand from `chain_links` at every step, so the materialised
-    # arrays are dead weight in the returned result -- and at realistic
-    # `n_halton * n_obs * n_state` they reliably OOM downstream pickling
-    # or GPU→CPU transfers.
+    # Materialise every JAX array in the result as a numpy array, and
+    # drop the large per-period importance-sample buffers. Downstream
+    # consumers (pickling, plotting, posterior_states) don't need GPU
+    # residency, and leaving the arrays as jax.Array forces materialisation
+    # at pickle time -- which routinely OOMs when JIT caches still occupy
+    # most of the device's memory.
     conditional_dists_compact = tuple(
-        _drop_samples_per_component(cd) for cd in conditional_dists
+        _to_numpy_conditional_distribution(cd) for cd in conditional_dists
     )
 
     return AFEstimationResult(
@@ -181,11 +182,48 @@ def estimate_af(
     )
 
 
-def _drop_samples_per_component(
+def _to_numpy(value: Array | np.ndarray | None) -> np.ndarray | None:
+    """Materialise a JAX array as numpy; pass `None` through."""
+    if value is None:
+        return None
+    return np.asarray(jax.device_get(value))
+
+
+def _to_numpy_chain_link(link: ChainLink) -> ChainLink:
+    """Convert every JAX field of a `ChainLink` to numpy."""
+    return dataclasses.replace(
+        link,
+        transition_params=_to_numpy(link.transition_params),
+        shock_sds=_to_numpy(link.shock_sds),
+        shock_factor_indices=_to_numpy(link.shock_factor_indices),
+        inv_eq_params=_to_numpy(link.inv_eq_params),
+        inv_sds=_to_numpy(link.inv_sds),
+        obs_factor_values=_to_numpy(link.obs_factor_values),
+    )
+
+
+def _to_numpy_conditional_distribution(
     cond_dist: ConditionalDistribution,
 ) -> ConditionalDistribution:
-    """Return a copy with `samples_per_component` cleared to free GPU memory."""
-    return dataclasses.replace(cond_dist, samples_per_component=())
+    """Convert all arrays to numpy and drop `samples_per_component`."""
+    new_components = tuple(
+        MixtureComponent(
+            mean=_to_numpy(c.mean),  # ty: ignore[invalid-argument-type]
+            chol_cov=_to_numpy(c.chol_cov),  # ty: ignore[invalid-argument-type]
+        )
+        for c in cond_dist.components
+    )
+    new_chain_links = tuple(_to_numpy_chain_link(cl) for cl in cond_dist.chain_links)
+    return dataclasses.replace(
+        cond_dist,
+        mixture_weights=_to_numpy(cond_dist.mixture_weights),
+        components=new_components,
+        samples_per_component=(),
+        conditional_weights=_to_numpy(cond_dist.conditional_weights),
+        cond_means=_to_numpy(cond_dist.cond_means),
+        cond_chols=_to_numpy(cond_dist.cond_chols),
+        chain_links=new_chain_links,
+    )
 
 
 def _extract_period_data(

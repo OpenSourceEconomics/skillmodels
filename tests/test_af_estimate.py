@@ -2200,14 +2200,22 @@ def test_af_estimate_with_register_params_user_transition() -> None:
         assert np.isfinite(pr.loglikelihood)
 
 
-def test_af_result_drops_samples_per_component() -> None:
-    """`estimate_af` strips the per-period importance samples before returning.
+def test_af_result_is_numpy_only_and_drops_samples_per_component() -> None:
+    """`estimate_af` returns a numpy-only, pickle-friendly result.
 
-    At realistic problem sizes (`n_halton * n_obs * n_state`) the samples
-    are multiple GB per period; carrying them through `AFEstimationResult`
-    causes downstream pickling to OOM on GPU→CPU transfer. They are an
-    internal scratch buffer -- the chain history (`chain_links`) and
-    summary stats (`components`) carry everything downstream needs.
+    Two related concerns:
+
+    * `samples_per_component` -- per-period (n_halton, n_obs, n_state)
+      importance buffers used only for internal chain construction --
+      must be cleared. At realistic problem sizes they are multiple GB
+      per period.
+    * Every other `jax.Array` in the result (`MixtureComponent.mean`,
+      `chol_cov`, `ConditionalDistribution.cond_means`, `cond_chols`,
+      `conditional_weights`, `mixture_weights`, and the arrays inside
+      every `ChainLink`) must be materialised as `np.ndarray`. JAX
+      arrays bind to GPU memory; if a user pickles the result while
+      JIT caches still occupy most of the device, `__reduce__` triggers
+      a GPU→host materialisation that OOMs.
     """
     rng = np.random.default_rng(2026)
     n_obs, n_periods = 200, 2
@@ -2256,7 +2264,28 @@ def test_af_result_drops_samples_per_component() -> None:
         ),
     )
 
+    def _assert_numpy(arr: object, label: str) -> None:
+        if arr is None:
+            return
+        assert isinstance(arr, np.ndarray), (
+            f"{label} should be a numpy ndarray, got {type(arr).__name__}"
+        )
+
     for cd in result.conditional_distributions:
         assert cd.samples_per_component == (), (
             "samples_per_component should be cleared before returning"
         )
+        _assert_numpy(cd.mixture_weights, "mixture_weights")
+        _assert_numpy(cd.conditional_weights, "conditional_weights")
+        _assert_numpy(cd.cond_means, "cond_means")
+        _assert_numpy(cd.cond_chols, "cond_chols")
+        for component in cd.components:
+            _assert_numpy(component.mean, "MixtureComponent.mean")
+            _assert_numpy(component.chol_cov, "MixtureComponent.chol_cov")
+        for cl in cd.chain_links:
+            _assert_numpy(cl.transition_params, "ChainLink.transition_params")
+            _assert_numpy(cl.shock_sds, "ChainLink.shock_sds")
+            _assert_numpy(cl.shock_factor_indices, "ChainLink.shock_factor_indices")
+            _assert_numpy(cl.inv_eq_params, "ChainLink.inv_eq_params")
+            _assert_numpy(cl.inv_sds, "ChainLink.inv_sds")
+            _assert_numpy(cl.obs_factor_values, "ChainLink.obs_factor_values")
