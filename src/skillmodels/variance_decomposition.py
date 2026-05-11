@@ -9,7 +9,7 @@ from collections.abc import Mapping
 
 import pandas as pd
 
-from skillmodels.filtered_states import get_filtered_states
+from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.model_spec import ModelSpec
 from skillmodels.process_model import process_model
 

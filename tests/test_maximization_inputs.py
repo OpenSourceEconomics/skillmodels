@@ -6,13 +6,13 @@ import optimagic as om
 import pandas as pd
 import pytest
 
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.constraints import FixedConstraintWithValue
-from skillmodels.maximization_inputs import (
+from skillmodels.chs.maximization_inputs import (
     _get_jnp_params_vec,
     _to_numpy,
     get_maximization_inputs,
 )
+from skillmodels.config import TEST_DATA_DIR
+from skillmodels.constraints import FixedConstraintWithValue
 from skillmodels.test_data.model2 import MODEL2
 from skillmodels.utilities import reduce_n_periods
 

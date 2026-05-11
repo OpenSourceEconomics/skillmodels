@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pandas as pd
 
+from skillmodels.chs.filtered_states import get_filtered_states
+from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.config import TEST_DATA_DIR
-from skillmodels.filtered_states import get_filtered_states
-from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.simulate_data import simulate_dataset
 from skillmodels.test_data.model2 import MODEL2
 from skillmodels.visualize_factor_distributions import (

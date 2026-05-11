@@ -10,7 +10,7 @@ import scipy
 from filterpy.kalman import JulierSigmaPoints, KalmanFilter
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.kalman_filters import (
+from skillmodels.chs.kalman_filters import (
     _calculate_sigma_points,
     calculate_sigma_scaling_factor_and_weights,
     kalman_predict,
@@ -18,7 +18,7 @@ from skillmodels.kalman_filters import (
     linear_kalman_predict,
     transform_sigma_points,
 )
-from skillmodels.kalman_filters_debug import kalman_update as kalman_update_debug
+from skillmodels.chs.kalman_filters_debug import kalman_update as kalman_update_debug
 
 jax.config.update("jax_enable_x64", True)
 

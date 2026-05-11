@@ -14,7 +14,7 @@ from numpy.typing import NDArray
 from plotly.subplots import make_subplots
 from scipy.stats import gaussian_kde
 
-from skillmodels.filtered_states import get_filtered_states
+from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.model_spec import ModelSpec
 from skillmodels.process_model import process_model
 from skillmodels.types import ProcessedModel

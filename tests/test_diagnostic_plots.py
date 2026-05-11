@@ -6,11 +6,11 @@ import pandas as pd
 import plotly.graph_objects as go
 import pytest
 
+from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.diagnostic_plots import (
     plot_likelihood_contributions,
     plot_residual_boxplots,
 )
-from skillmodels.maximization_inputs import get_maximization_inputs
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 

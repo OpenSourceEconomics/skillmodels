@@ -11,25 +11,25 @@ import pandas as pd
 from jax import Array
 from numpy.typing import NDArray
 
-import skillmodels.likelihood_function as lf
-import skillmodels.likelihood_function_debug as lfd
+import skillmodels.chs.likelihood as lf
+import skillmodels.chs.likelihood_debug as lfd
+from skillmodels.chs.kalman_filters import (
+    calculate_sigma_scaling_factor_and_weights,
+    is_all_linear,
+    kalman_predict,
+    linear_kalman_predict,
+)
+from skillmodels.chs.process_debug_data import process_debug_data
 from skillmodels.constraints import (
     FixedConstraintWithValue,
     add_bounds,
     enforce_fixed_constraints,
     get_constraints,
 )
-from skillmodels.kalman_filters import (
-    calculate_sigma_scaling_factor_and_weights,
-    is_all_linear,
-    kalman_predict,
-    linear_kalman_predict,
-)
 from skillmodels.model_spec import ModelSpec
 from skillmodels.params_index import get_params_index
 from skillmodels.parse_params import create_parsing_info
 from skillmodels.process_data import process_data
-from skillmodels.process_debug_data import process_debug_data
 from skillmodels.process_model import process_model
 from skillmodels.start_values import get_moment_based_start_params
 from skillmodels.types import ParsingInfo, ProcessedModel

@@ -40,7 +40,7 @@ import pandas as pd
 
 from skillmodels.af.measurement_first_stage import estimate_measurement_system
 from skillmodels.amn.types import AMNEstimationOptions, AMNEstimationResult
-from skillmodels.maximization_inputs import get_maximization_inputs
+from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.model_spec import ModelSpec
 from skillmodels.process_data import process_data
 from skillmodels.process_model import process_model

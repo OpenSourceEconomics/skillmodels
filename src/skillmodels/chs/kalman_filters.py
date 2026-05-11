@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
-from skillmodels.qr import qr_gpu
+from skillmodels.chs.qr import qr_gpu
 
 LINEAR_FUNCTION_NAMES = frozenset({"linear", "constant"})
 

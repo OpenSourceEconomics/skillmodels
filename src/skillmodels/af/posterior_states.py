@@ -17,8 +17,8 @@ from skillmodels.af.initial_period import _build_loading_mask, _get_ordered_meas
 from skillmodels.af.likelihood import _log_normal_pdf
 from skillmodels.af.params import get_measurements_per_factor
 from skillmodels.af.types import AFEstimationResult, ConditionalDistribution
+from skillmodels.chs.process_debug_data import create_state_ranges
 from skillmodels.model_spec import ModelSpec
-from skillmodels.process_debug_data import create_state_ranges
 
 
 def get_af_posterior_states(

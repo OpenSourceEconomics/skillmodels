@@ -7,9 +7,9 @@ import optimagic as om
 import pandas as pd
 import pytest
 
+from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.config import TEST_DATA_DIR
 from skillmodels.constraints import select_by_loc
-from skillmodels.maximization_inputs import get_maximization_inputs
 from skillmodels.model_spec import ModelSpec
 from skillmodels.start_values import (
     get_moment_based_start_params,

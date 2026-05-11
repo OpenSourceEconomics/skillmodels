@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from skillmodels.process_debug_data import (
+from skillmodels.chs.process_debug_data import (
     _create_post_update_states,
     _process_residuals,
     create_state_ranges,
