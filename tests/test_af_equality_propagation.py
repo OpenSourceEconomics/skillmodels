@@ -26,15 +26,15 @@ from skillmodels.af.estimate import (
     _propagate_equality_groups,
 )
 from skillmodels.af.types import AFPeriodResult
-from skillmodels.constraints import select_by_loc
-from skillmodels.model_spec import (
+from skillmodels.common.constraints import select_by_loc
+from skillmodels.common.model_spec import (
     EstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
 )
-from skillmodels.params_index import get_params_index
-from skillmodels.process_model import process_model
+from skillmodels.common.params_index import get_params_index
+from skillmodels.common.process_model import process_model
 
 jax.config.update("jax_enable_x64", True)
 

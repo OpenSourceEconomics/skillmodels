@@ -5,7 +5,7 @@ Factor fac2 is endogenous. Both factors use linear transition functions with two
 periods. Used for testing endogenous factor augmentation.
 """
 
-from skillmodels.model_spec import (
+from skillmodels.common.model_spec import (
     EstimationOptions,
     FactorSpec,
     ModelSpec,

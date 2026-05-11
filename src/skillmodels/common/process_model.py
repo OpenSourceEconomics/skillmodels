@@ -12,11 +12,11 @@ from dags.signature import rename_arguments
 from jax import Array, vmap
 from pandas import DataFrame
 
-import skillmodels.transition_functions as t_f_module
-from skillmodels.check_model import check_model, check_stagemap
-from skillmodels.decorators import extract_params, jax_array_output
-from skillmodels.model_spec import FactorSpec, ModelSpec
-from skillmodels.types import (
+import skillmodels.common.transition_functions as t_f_module
+from skillmodels.common.check_model import check_model, check_stagemap
+from skillmodels.common.decorators import extract_params, jax_array_output
+from skillmodels.common.model_spec import FactorSpec, ModelSpec
+from skillmodels.common.types import (
     Anchoring,
     Dimensions,
     EndogenousFactorsInfo,

@@ -2,7 +2,7 @@
 
 import warnings
 
-from skillmodels.model_spec import FactorSpec, ModelSpec
+from skillmodels.common.model_spec import FactorSpec, ModelSpec
 
 # Transition functions compatible with AF estimation (parametric, differentiable).
 _AF_COMPATIBLE_TRANSITIONS = frozenset(

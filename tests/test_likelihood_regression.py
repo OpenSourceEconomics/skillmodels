@@ -12,11 +12,11 @@ import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.decorators import register_params
-from skillmodels.model_spec import ModelSpec, Normalizations
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.decorators import register_params
+from skillmodels.common.model_spec import ModelSpec, Normalizations
+from skillmodels.common.utilities import reduce_n_periods
 from skillmodels.test_data.model2 import MODEL2
-from skillmodels.utilities import reduce_n_periods
 
 jax.config.update("jax_enable_x64", True)
 

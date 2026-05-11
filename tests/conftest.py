@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from skillmodels.config import TEST_DATA_DIR
+from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.test_data.model2 import MODEL2
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"

@@ -8,7 +8,7 @@ import pytest
 
 from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
-from skillmodels.config import TEST_DATA_DIR
+from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.test_data.model2 import MODEL2
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"

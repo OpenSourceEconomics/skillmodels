@@ -14,11 +14,11 @@ import pandas as pd
 import pytest
 from numpy.testing import assert_array_equal as aae
 
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.parse_params import create_parsing_info, parse_params
-from skillmodels.process_model import process_model
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.parse_params import create_parsing_info, parse_params
+from skillmodels.common.process_model import process_model
+from skillmodels.common.types import Anchoring
 from skillmodels.test_data.model2 import MODEL2
-from skillmodels.types import Anchoring
 
 
 @pytest.fixture

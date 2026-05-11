@@ -69,10 +69,10 @@ from skillmodels.af.types import (
     ChainLink,
     ConditionalDistribution,
 )
-from skillmodels.constraints import FixedConstraintWithValue
-from skillmodels.model_spec import ModelSpec
-from skillmodels.process_model import process_model
-from skillmodels.types import ProcessedModel
+from skillmodels.common.constraints import FixedConstraintWithValue
+from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.process_model import process_model
+from skillmodels.common.types import ProcessedModel
 
 
 @dataclass(frozen=True)

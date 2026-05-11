@@ -5,8 +5,8 @@ from types import MappingProxyType
 import pandas as pd
 import pytest
 
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.params_index import (
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.params_index import (
     get_control_params_index_tuples,
     get_initial_cholcovs_index_tuples,
     get_loadings_index_tuples,
@@ -17,9 +17,9 @@ from skillmodels.params_index import (
     get_transition_index_tuples,
     initial_mean_index_tuples,
 )
-from skillmodels.process_model import process_model
+from skillmodels.common.process_model import process_model
+from skillmodels.common.types import TransitionInfo
 from skillmodels.test_data.model2 import MODEL2
-from skillmodels.types import TransitionInfo
 
 
 @pytest.fixture

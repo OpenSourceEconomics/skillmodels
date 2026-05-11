@@ -3,7 +3,11 @@
 import jax.numpy as jnp
 import pytest
 
-from skillmodels.decorators import extract_params, jax_array_output, register_params
+from skillmodels.common.decorators import (
+    extract_params,
+    jax_array_output,
+    register_params,
+)
 
 
 def test_extract_params_decorator_only_key() -> None:

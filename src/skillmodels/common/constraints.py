@@ -10,8 +10,8 @@ import numpy as np
 import optimagic as om
 import pandas as pd
 
-import skillmodels.transition_functions as t_f_module
-from skillmodels.types import (
+import skillmodels.common.transition_functions as t_f_module
+from skillmodels.common.types import (
     Anchoring,
     Dimensions,
     EndogenousFactorsInfo,

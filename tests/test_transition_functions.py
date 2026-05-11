@@ -6,7 +6,7 @@ import optimagic as om
 import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.transition_functions import (
+from skillmodels.common.transition_functions import (
     constant,
     constraints_log_ces,
     identity_constraints_linear,

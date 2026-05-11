@@ -5,12 +5,12 @@ from pathlib import Path
 import pandas as pd
 
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.test_data.model2 import MODEL2
-from skillmodels.visualize_transition_equations import (
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.visualize_transition_equations import (
     combine_transition_plots,
     get_transition_plots,
 )
+from skillmodels.test_data.model2 import MODEL2
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 

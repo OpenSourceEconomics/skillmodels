@@ -19,9 +19,9 @@ from skillmodels.af.likelihood import _rebuild_chain_at_period, af_loglike_trans
 from skillmodels.af.types import ChainLink
 from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.decorators import register_params
-from skillmodels.model_spec import (
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.decorators import register_params
+from skillmodels.common.model_spec import (
     EstimationOptions,
     FactorSpec,
     ModelSpec,

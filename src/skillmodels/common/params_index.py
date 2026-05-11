@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from skillmodels.types import (
+from skillmodels.common.types import (
     Dimensions,
     EndogenousFactorsInfo,
     Labels,

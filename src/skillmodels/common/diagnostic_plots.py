@@ -7,8 +7,8 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
-from skillmodels.model_spec import ModelSpec
-from skillmodels.process_model import process_model
+from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.process_model import process_model
 
 
 def plot_residual_boxplots(

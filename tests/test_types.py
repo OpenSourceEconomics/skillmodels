@@ -5,7 +5,7 @@ from types import MappingProxyType
 
 import pytest
 
-from skillmodels.types import FactorInfo, _make_immutable
+from skillmodels.common.types import FactorInfo, _make_immutable
 
 
 def test_make_immutable_list_to_tuple() -> None:

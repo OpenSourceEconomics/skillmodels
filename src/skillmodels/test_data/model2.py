@@ -5,7 +5,7 @@ with CES, linear, and constant transition functions respectively. It includes
 anchoring of fac1 to outcome Q1 and a single control variable x1.
 """
 
-from skillmodels.model_spec import (
+from skillmodels.common.model_spec import (
     AnchoringSpec,
     EstimationOptions,
     FactorSpec,

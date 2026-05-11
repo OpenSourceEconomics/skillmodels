@@ -17,7 +17,7 @@ from skillmodels.af.inference import (
     compute_af_standard_errors,
 )
 from skillmodels.af.types import AFEstimationOptions
-from skillmodels.model_spec import (
+from skillmodels.common.model_spec import (
     EstimationOptions,
     FactorSpec,
     ModelSpec,

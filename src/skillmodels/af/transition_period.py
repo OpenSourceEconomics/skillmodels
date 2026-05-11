@@ -19,11 +19,6 @@ from skillmodels.af.batching import auto_n_obs_per_batch
 from skillmodels.af.halton import create_halton_nodes_and_weights
 from skillmodels.af.initial_period import _build_loading_mask, _get_ordered_measures
 from skillmodels.af.likelihood import af_loglike_transition, create_loglike_and_gradient
-from skillmodels.af.moment_init import (
-    SpearmanResult,
-    seed_beta_from_ols,
-    spearman_factor_moments,
-)
 from skillmodels.af.params import (
     apply_fixed_params,
     apply_start_params,
@@ -40,8 +35,13 @@ from skillmodels.af.types import (
     ConditionalDistribution,
     MixtureComponent,
 )
-from skillmodels.model_spec import ModelSpec
-from skillmodels.types import ProcessedModel, TransitionInfo
+from skillmodels.amn.moments import (
+    SpearmanResult,
+    seed_beta_from_ols,
+    spearman_factor_moments,
+)
+from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.types import ProcessedModel, TransitionInfo
 
 
 def estimate_transition_period(
@@ -479,7 +479,7 @@ def _collect_transition_constraints(
     Look for `constraints_{function_name}()` in `transition_functions.py`,
     mirroring how CHS collects them in `constraints.py`.
     """
-    import skillmodels.transition_functions as tf_mod  # noqa: PLC0415
+    import skillmodels.common.transition_functions as tf_mod  # noqa: PLC0415
 
     constraints: list[om.constraints.Constraint] = []
     for factor in factors:
@@ -598,7 +598,7 @@ def _get_raw_transition_functions(
     arguments plus a `params` dict, so they are wrapped here to convert
     from AF's packed representation.
     """
-    import skillmodels.transition_functions as tf_mod  # noqa: PLC0415
+    import skillmodels.common.transition_functions as tf_mod  # noqa: PLC0415
 
     funcs: list[Callable] = []
     for factor in factors:

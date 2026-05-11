@@ -19,7 +19,6 @@ from skillmodels.af.likelihood import (
     af_loglike_initial,
     create_loglike_and_gradient,
 )
-from skillmodels.af.moment_init import spearman_factor_moments
 from skillmodels.af.params import (
     apply_fixed_params,
     apply_start_params,
@@ -35,8 +34,9 @@ from skillmodels.af.types import (
     ConditionalDistribution,
     MixtureComponent,
 )
-from skillmodels.model_spec import ModelSpec
-from skillmodels.types import ProcessedModel
+from skillmodels.amn.moments import spearman_factor_moments
+from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.types import ProcessedModel
 
 
 def estimate_initial_period(

@@ -6,15 +6,15 @@ import pandas as pd
 
 from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.simulate_data import simulate_dataset
-from skillmodels.test_data.model2 import MODEL2
-from skillmodels.visualize_factor_distributions import (
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.simulate_data import simulate_dataset
+from skillmodels.common.visualize_factor_distributions import (
     bivariate_density_contours,
     bivariate_density_surfaces,
     combine_distribution_plots,
     univariate_densities,
 )
+from skillmodels.test_data.model2 import MODEL2
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 

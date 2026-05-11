@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.variance_decomposition import (
+from skillmodels.common.variance_decomposition import (
     _compute_variance_decomposition,
     summarize_measurement_reliability,
 )

@@ -15,10 +15,10 @@ from plotly.subplots import make_subplots
 from scipy.stats import gaussian_kde
 
 from skillmodels.chs.filtered_states import get_filtered_states
-from skillmodels.model_spec import ModelSpec
-from skillmodels.process_model import process_model
-from skillmodels.types import ProcessedModel
-from skillmodels.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
+from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.process_model import process_model
+from skillmodels.common.types import ProcessedModel
+from skillmodels.common.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
 
 
 def combine_distribution_plots(

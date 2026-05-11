@@ -2,8 +2,13 @@
 
 import pytest
 
-from skillmodels.model_spec import AnchoringSpec, FactorSpec, ModelSpec, Normalizations
-from skillmodels.types import EstimationOptions
+from skillmodels.common.model_spec import (
+    AnchoringSpec,
+    FactorSpec,
+    ModelSpec,
+    Normalizations,
+)
+from skillmodels.common.types import EstimationOptions
 
 
 def _minimal_dict():

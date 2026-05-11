@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from jax import Array
 
-from skillmodels.types import Anchoring, Labels
+from skillmodels.common.types import Anchoring, Labels
 
 
 def process_data(

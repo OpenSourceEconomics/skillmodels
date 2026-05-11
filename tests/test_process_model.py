@@ -8,11 +8,11 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.model_spec import FactorSpec
-from skillmodels.process_model import get_has_endogenous_factors, process_model
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.model_spec import FactorSpec
+from skillmodels.common.process_model import get_has_endogenous_factors, process_model
+from skillmodels.common.types import Normalizations, TransitionInfo
 from skillmodels.test_data.model2 import MODEL2
-from skillmodels.types import Normalizations, TransitionInfo
 
 
 @pytest.fixture

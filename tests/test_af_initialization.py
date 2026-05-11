@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from skillmodels.af.moment_init import spearman_factor_moments
 from skillmodels.af.types import AFEstimationOptions
+from skillmodels.amn.moments import spearman_factor_moments
 
 
 def test_default_initialization_strategy_is_moment_based():

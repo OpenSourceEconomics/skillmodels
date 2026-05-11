@@ -8,7 +8,7 @@ standard Spearman / factor-analysis identification.
 
 Used by both the AF estimator (chain-wide moment seeds in
 `af.initial_period` / `af.transition_period`) and the CHS estimator
-(via `skillmodels.start_values.get_moment_based_start_params`).
+(via `skillmodels.amn.start_values.get_moment_based_start_params`).
 
 This module is called once before optimization (no JAX dependency) and
 exposes single-pass, robust estimators with floor clamps for numerical

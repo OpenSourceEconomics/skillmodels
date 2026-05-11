@@ -10,8 +10,8 @@ from jax import Array
 
 from skillmodels.chs.clipping import soft_clipping
 from skillmodels.chs.kalman_filters_debug import kalman_update
-from skillmodels.parse_params import parse_params
-from skillmodels.types import (
+from skillmodels.common.parse_params import parse_params
+from skillmodels.common.types import (
     Dimensions,
     EstimationOptions,
     Labels,

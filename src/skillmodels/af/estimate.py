@@ -22,8 +22,8 @@ from skillmodels.af.types import (
     MixtureComponent,
 )
 from skillmodels.af.validate import validate_af_model
-from skillmodels.model_spec import ModelSpec
-from skillmodels.process_model import process_model
+from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.process_model import process_model
 
 
 def estimate_af(
@@ -59,7 +59,7 @@ def estimate_af(
             shocks (same convention as CHS augmented periods).
         constraints: Optional list of optimagic Constraint objects. Only
             `om.EqualityConstraint` entries that select via
-            `skillmodels.constraints.select_by_loc` are honoured: their
+            `skillmodels.common.constraints.select_by_loc` are honoured: their
             members are propagated forward through the chain — once any
             member of an equality group has been estimated, every other
             member (including those at not-yet-estimated periods) is
@@ -322,7 +322,7 @@ def _extract_equality_groups(
     """Pull cross-period equality groups out of an optimagic constraints list.
 
     Honours `om.EqualityConstraint` instances whose selector is built via
-    `functools.partial(skillmodels.constraints.select_by_loc, loc=...)`.
+    `functools.partial(skillmodels.common.constraints.select_by_loc, loc=...)`.
     The `loc` keyword carries the `pd.MultiIndex` of params that must be
     equal — those are the equality groups returned here.
     """

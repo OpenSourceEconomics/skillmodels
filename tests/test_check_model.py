@@ -2,14 +2,14 @@
 
 from types import SimpleNamespace
 
-from skillmodels.check_model import (
+from skillmodels.common.check_model import (
     _check_anchoring,
     _check_loadings_are_not_normalized_to_zero,
     _check_measurements,
     _check_normalized_variables_are_present,
     check_stagemap,
 )
-from skillmodels.model_spec import FactorSpec, ModelSpec, Normalizations
+from skillmodels.common.model_spec import FactorSpec, ModelSpec, Normalizations
 
 
 def test_invalid_stagemap_length() -> None:

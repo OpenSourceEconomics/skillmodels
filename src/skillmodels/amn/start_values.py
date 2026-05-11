@@ -25,15 +25,15 @@ import numpy as np
 import optimagic as om
 import pandas as pd
 
-from skillmodels.model_spec import ModelSpec
-from skillmodels.moment_init import (
+from skillmodels.amn.moments import (
     SpearmanResult,
     seed_beta_from_ols,
     spearman_factor_moments,
 )
-from skillmodels.process_data import process_data
-from skillmodels.process_model import process_model
-from skillmodels.types import Normalizations, ProcessedModel
+from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.process_data import process_data
+from skillmodels.common.process_model import process_model
+from skillmodels.common.types import Normalizations, ProcessedModel
 
 
 def get_moment_based_start_params(

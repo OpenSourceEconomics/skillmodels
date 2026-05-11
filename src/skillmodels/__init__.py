@@ -17,19 +17,19 @@ from skillmodels.chs import (
     get_filtered_states,
     get_maximization_inputs,
 )
-from skillmodels.diagnostic_plots import (
+from skillmodels.common.diagnostic_plots import (
     plot_likelihood_contributions,
     plot_residual_boxplots,
 )
-from skillmodels.model_spec import (
+from skillmodels.common.model_spec import (
     AnchoringSpec,
     EstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
 )
-from skillmodels.simulate_data import simulate_dataset, simulate_policy_effect
-from skillmodels.variance_decomposition import (
+from skillmodels.common.simulate_data import simulate_dataset, simulate_policy_effect
+from skillmodels.common.variance_decomposition import (
     decompose_measurement_variance,
     summarize_measurement_reliability,
 )

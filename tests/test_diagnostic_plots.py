@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import pytest
 
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
-from skillmodels.diagnostic_plots import (
+from skillmodels.common.diagnostic_plots import (
     plot_likelihood_contributions,
     plot_residual_boxplots,
 )

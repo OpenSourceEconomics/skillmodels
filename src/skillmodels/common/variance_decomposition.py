@@ -10,8 +10,8 @@ from collections.abc import Mapping
 import pandas as pd
 
 from skillmodels.chs.filtered_states import get_filtered_states
-from skillmodels.model_spec import ModelSpec
-from skillmodels.process_model import process_model
+from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.process_model import process_model
 
 
 def decompose_measurement_variance(

@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import pytest
 from pandas.testing import assert_frame_equal as afe
 
-from skillmodels.correlation_heatmap import (
+from skillmodels.common.correlation_heatmap import (
     _get_mask,
     _get_measurement_data_for_multiple_periods,
     _get_measurement_data_for_single_period,
@@ -21,7 +21,7 @@ from skillmodels.correlation_heatmap import (
     get_scores_corr,
     plot_correlation_heatmap,
 )
-from skillmodels.types import Labels
+from skillmodels.common.types import Labels
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 

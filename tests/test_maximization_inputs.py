@@ -11,10 +11,10 @@ from skillmodels.chs.maximization_inputs import (
     _to_numpy,
     get_maximization_inputs,
 )
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.constraints import FixedConstraintWithValue
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.constraints import FixedConstraintWithValue
+from skillmodels.common.utilities import reduce_n_periods
 from skillmodels.test_data.model2 import MODEL2
-from skillmodels.utilities import reduce_n_periods
 
 
 def test_to_numpy_with_dict() -> None:

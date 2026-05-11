@@ -4,8 +4,8 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from skillmodels.model_spec import ModelSpec
-from skillmodels.types import Anchoring, Dimensions, Labels
+from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.types import Anchoring, Dimensions, Labels
 
 
 def check_model(

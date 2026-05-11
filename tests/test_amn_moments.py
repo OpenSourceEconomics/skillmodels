@@ -1,9 +1,9 @@
-"""Unit tests for `skillmodels.af.moment_init` Spearman estimators."""
+"""Unit tests for `skillmodels.amn.moments` Spearman estimators."""
 
 import numpy as np
 import pytest
 
-from skillmodels.af.moment_init import (
+from skillmodels.amn.moments import (
     SpearmanResult,
     derive_unexplained_sd,
     seed_beta_from_ols,

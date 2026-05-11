@@ -9,10 +9,10 @@ import jax
 import pandas as pd
 from jax import Array
 
-from skillmodels.types import ensure_containers_are_immutable
+from skillmodels.common.types import ensure_containers_are_immutable
 
 if TYPE_CHECKING:
-    from skillmodels.model_spec import ModelSpec
+    from skillmodels.common.model_spec import ModelSpec
 
 
 @dataclass(frozen=True, init=False)

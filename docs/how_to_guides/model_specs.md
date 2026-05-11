@@ -114,7 +114,7 @@ Fine-tune the estimation:
 Define custom transition equations using the `@register_params` decorator:
 
 ```python
-from skillmodels.decorators import register_params
+from skillmodels.common.decorators import register_params
 
 @register_params(params=["lincoeff"])
 def my_linear(fac, params):

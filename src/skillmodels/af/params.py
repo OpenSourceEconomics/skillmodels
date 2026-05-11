@@ -7,8 +7,8 @@ import numpy as np
 import optimagic as om
 import pandas as pd
 
-from skillmodels.constraints import FixedConstraintWithValue
-from skillmodels.types import Normalizations, TransitionInfo
+from skillmodels.common.constraints import FixedConstraintWithValue
+from skillmodels.common.types import Normalizations, TransitionInfo
 
 
 def get_initial_period_params_index(

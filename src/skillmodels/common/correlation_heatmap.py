@@ -7,10 +7,10 @@ import pandas as pd
 from numpy.typing import NDArray
 from plotly import graph_objects as go
 
-from skillmodels.model_spec import ModelSpec
-from skillmodels.process_data import pre_process_data
-from skillmodels.process_model import process_model
-from skillmodels.types import ProcessedModel
+from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.process_data import pre_process_data
+from skillmodels.common.process_model import process_model
+from skillmodels.common.types import ProcessedModel
 
 
 def plot_correlation_heatmap(

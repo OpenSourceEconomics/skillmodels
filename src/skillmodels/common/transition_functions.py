@@ -37,7 +37,7 @@ import optimagic as om
 from jax import Array
 
 if TYPE_CHECKING:
-    from skillmodels.constraints import FixedConstraintWithValue
+    from skillmodels.common.constraints import FixedConstraintWithValue
 
 
 def select_by_loc(params: Any, loc: Any) -> Any:  # noqa: ANN401
@@ -63,7 +63,7 @@ def identity_constraints_linear(
     all_factors: tuple[str, ...],
 ) -> list[FixedConstraintWithValue]:
     """Identity constraints for linear transition function."""
-    from skillmodels.constraints import FixedConstraintWithValue  # noqa: PLC0415
+    from skillmodels.common.constraints import FixedConstraintWithValue  # noqa: PLC0415
 
     constraints: list[FixedConstraintWithValue] = []
     for regressor in params_linear(all_factors):
@@ -111,7 +111,7 @@ def identity_constraints_translog(
     all_factors: tuple[str, ...],
 ) -> list[FixedConstraintWithValue]:
     """Identity constraints for translog transition function."""
-    from skillmodels.constraints import FixedConstraintWithValue  # noqa: PLC0415
+    from skillmodels.common.constraints import FixedConstraintWithValue  # noqa: PLC0415
 
     constraints: list[FixedConstraintWithValue] = []
     for regressor in params_translog(all_factors):
@@ -284,7 +284,7 @@ def identity_constraints_linear_and_squares(
     all_factors: tuple[str, ...],
 ) -> list[FixedConstraintWithValue]:
     """Identity constraints for linear_and_squares transition function."""
-    from skillmodels.constraints import FixedConstraintWithValue  # noqa: PLC0415
+    from skillmodels.common.constraints import FixedConstraintWithValue  # noqa: PLC0415
 
     constraints: list[FixedConstraintWithValue] = []
     for regressor in params_linear_and_squares(all_factors):

@@ -10,10 +10,9 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal, assert_index_equal
 
-from skillmodels.model_spec import ModelSpec
-from skillmodels.process_model import process_model
-from skillmodels.test_data.model2 import MODEL2
-from skillmodels.utilities import (
+from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.process_model import process_model
+from skillmodels.common.utilities import (
     _extend_params,
     _get_params_index,
     extract_factors,
@@ -25,6 +24,7 @@ from skillmodels.utilities import (
     switch_translog_to_linear,
     update_parameter_values,
 )
+from skillmodels.test_data.model2 import MODEL2
 
 
 @pytest.fixture

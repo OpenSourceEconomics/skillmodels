@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-from skillmodels.constraints import (
+from skillmodels.common.constraints import (
     FixedConstraintWithValue,
     _get_anchoring_constraints,
     _get_constant_factors_constraints,
@@ -22,9 +22,9 @@ from skillmodels.constraints import (
     add_bounds,
     get_constraints,
 )
-from skillmodels.process_model import process_model
+from skillmodels.common.process_model import process_model
+from skillmodels.common.types import Anchoring, Labels, Normalizations
 from skillmodels.test_data.simplest_augmented_model import SIMPLEST_AUGMENTED_MODEL
-from skillmodels.types import Anchoring, Labels, Normalizations
 
 
 def _to_dict(c: om.constraints.Constraint) -> dict[str, Any]:

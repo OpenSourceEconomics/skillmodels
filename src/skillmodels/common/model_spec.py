@@ -11,7 +11,7 @@ from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Any, Self
 
-from skillmodels.types import (
+from skillmodels.common.types import (
     EstimationOptions,
     Normalizations,
     ensure_containers_are_immutable,

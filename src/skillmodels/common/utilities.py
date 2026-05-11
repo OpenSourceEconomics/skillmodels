@@ -6,13 +6,13 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 
-from skillmodels.model_spec import (
+from skillmodels.common.model_spec import (
     FactorSpec,
     ModelSpec,
     Normalizations,
 )
-from skillmodels.params_index import get_params_index
-from skillmodels.process_model import (
+from skillmodels.common.params_index import get_params_index
+from skillmodels.common.process_model import (
     get_dimensions,
     get_has_endogenous_factors,
     process_model,

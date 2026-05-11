@@ -7,7 +7,7 @@ import pandas as pd
 from jax import Array
 from numpy.typing import NDArray
 
-from skillmodels.types import ProcessedModel
+from skillmodels.common.types import ProcessedModel
 
 
 def process_debug_data(
