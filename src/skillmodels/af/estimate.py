@@ -1,5 +1,7 @@
 """Main driver for the AF estimation procedure."""
 
+import dataclasses
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -188,12 +190,30 @@ def estimate_af(
     # Combine parameters from all periods
     all_params = pd.concat([r.params for r in period_results])
 
+    # Drop the large per-period importance samples before returning. They
+    # are used internally to build summary stats (`MixtureComponent.mean`,
+    # `chol_cov`) and the chain history; the likelihood rebuilds samples
+    # on-demand from `chain_links` at every step, so the materialised
+    # arrays are dead weight in the returned result -- and at realistic
+    # `n_halton * n_obs * n_state` they reliably OOM downstream pickling
+    # or GPU→CPU transfers.
+    conditional_dists_compact = tuple(
+        _drop_samples_per_component(cd) for cd in conditional_dists
+    )
+
     return AFEstimationResult(
         period_results=tuple(period_results),
         all_params=all_params,
         model_spec=model_spec,
-        conditional_distributions=tuple(conditional_dists),
+        conditional_distributions=conditional_dists_compact,
     )
+
+
+def _drop_samples_per_component(
+    cond_dist: ConditionalDistribution,
+) -> ConditionalDistribution:
+    """Return a copy with `samples_per_component` cleared to free GPU memory."""
+    return dataclasses.replace(cond_dist, samples_per_component=())
 
 
 def _extract_period_data(

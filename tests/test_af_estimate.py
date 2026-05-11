@@ -2216,3 +2216,66 @@ def test_af_estimate_with_register_params_user_transition() -> None:
     for pr in result.period_results:
         assert pr.success, f"Period {pr.period} failed"
         assert np.isfinite(pr.loglikelihood)
+
+
+def test_af_result_drops_samples_per_component() -> None:
+    """`estimate_af` strips the per-period importance samples before returning.
+
+    At realistic problem sizes (`n_halton * n_obs * n_state`) the samples
+    are multiple GB per period; carrying them through `AFEstimationResult`
+    causes downstream pickling to OOM on GPU→CPU transfer. They are an
+    internal scratch buffer -- the chain history (`chain_links`) and
+    summary stats (`components`) carry everything downstream needs.
+    """
+    rng = np.random.default_rng(2026)
+    n_obs, n_periods = 200, 2
+    theta = rng.normal(0, 1, (n_obs, n_periods))
+    for t in range(1, n_periods):
+        theta[:, t] = 0.1 + 0.8 * theta[:, t - 1] + rng.normal(0, 0.4, n_obs)
+
+    rows = []
+    for i in range(n_obs):
+        for t in range(n_periods):
+            rows.append(
+                {
+                    "caseid": i,
+                    "period": t,
+                    "s1": theta[i, t] + rng.normal(0, 0.3),
+                    "s2": 0.3 + 0.9 * theta[i, t] + rng.normal(0, 0.35),
+                    "s3": -0.1 + 1.1 * theta[i, t] + rng.normal(0, 0.4),
+                }
+            )
+    data = pd.DataFrame(rows).set_index(["caseid", "period"])
+
+    model = ModelSpec(
+        factors={
+            "skill": FactorSpec(
+                measurements=(("s1", "s2", "s3"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"s1": 1},) * n_periods,
+                    intercepts=({"s1": 0},) * n_periods,
+                ),
+                transition_function="linear",
+            ),
+        },
+        estimation_options=EstimationOptions(
+            robust_bounds=True, bounds_distance=0.001, n_mixtures=1
+        ),
+    )
+
+    result = estimate_af(
+        model_spec=model,
+        data=data,
+        af_options=AFEstimationOptions(
+            n_halton_points=20,
+            n_halton_points_shock=10,
+            n_mixture_components=1,
+            optimizer_algorithm="scipy_lbfgsb",
+            two_stage_measurement=False,
+        ),
+    )
+
+    for cd in result.conditional_distributions:
+        assert cd.samples_per_component == (), (
+            "samples_per_component should be cleared before returning"
+        )
