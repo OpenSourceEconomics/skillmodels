@@ -24,6 +24,7 @@ jax>=0.9
 networkx
 filterpy
 pybaum>=0.1.3
+scikit-learn>=1.5  # AMN Stage 1 (mixture EM)
 statsmodels>=0.14.5  # downstream: regression diagnostics in skane / health-cognition
 seaborn  # downstream: figure styling in health-cognition
 

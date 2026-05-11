@@ -28,6 +28,7 @@ dependencies:
   - nbformat >=5.10.4
   - networkx *
   - pybaum >=0.1.3
+  - scikit-learn >=1.5  # AMN Stage 1 (mixture EM)
   # Test / profiling tooling
   - pytest >=8.4.1
   - pytest-cov >=6.2.1
