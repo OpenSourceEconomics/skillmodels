@@ -39,6 +39,7 @@ dependencies = [
   "plotly>=6.6",
   "pytask>=0.5.8",
   "pytask-parallel>=0.5.2",
+  "scikit-learn>=1.5",
 ]
 [[project.authors]]
 name = "Janoś Gabler"
@@ -167,6 +168,7 @@ networkx = "*"
 prek = "*"
 pybaum = "*"
 python = "~=3.14.0"
+scikit-learn = "*"
 scipy = "*"
 h5py = ">=3.16.0,<4"
 [tool.pixi.environments]
