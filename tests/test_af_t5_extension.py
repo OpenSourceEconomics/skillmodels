@@ -156,7 +156,6 @@ def test_af_chain_runs_for_t5() -> None:
         n_halton_points_shock=10,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
-        two_stage_measurement=False,
     )
 
     result = estimate_af(model_spec=model, data=data, af_options=af_options)

@@ -86,7 +86,6 @@ def fitted_result() -> tuple[AFInferenceResult, pd.DataFrame]:
         n_halton_points_shock=15,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
-        two_stage_measurement=False,
     )
     fit = estimate_af(model_spec=model, data=data, af_options=af_opts)
     inference = compute_af_standard_errors(fit, data, af_opts, n_boot=2000, seed=0)
@@ -225,7 +224,6 @@ def test_af_inference_se_shrinks_with_sample_size() -> None:
         n_halton_points_shock=15,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
-        two_stage_measurement=False,
     )
 
     data_small = _simulate_linear_data(n_obs=200, n_periods=2, seed=1)

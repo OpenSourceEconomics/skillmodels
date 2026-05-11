@@ -222,7 +222,6 @@ def test_estimate_af_enforces_equality_across_periods() -> None:
         n_halton_points_shock=10,
         n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
-        two_stage_measurement=False,
     )
 
     eq_loc = pd.MultiIndex.from_tuples(

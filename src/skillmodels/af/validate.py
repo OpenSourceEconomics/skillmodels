@@ -71,9 +71,8 @@ def _validate_factor(factor_name: str, factor_spec: FactorSpec) -> list[str]:
                 f"measurements (AF paper assumes at least "
                 f"{_RECOMMENDED_MEASURES_PER_FACTOR}). Identification of "
                 f"loadings + sigma_meas at this period relies on "
-                f"cross-period equality constraints. Stage-B Spearman "
-                f"will be noisy here; consider `two_stage_measurement=False` "
-                f"or supplying explicit fixed_params for the loading.",
+                f"cross-period equality constraints across the AF MLE chain; "
+                f"supply explicit `fixed_params` for the loading if needed.",
                 stacklevel=3,
             )
 

@@ -62,31 +62,6 @@ class AFEstimationOptions:
     testing and pre-fix reproducibility.
     """
 
-    two_stage_measurement: bool
-    """Estimate the measurement system in a Stage-1 pre-step.
-
-    When True, run `estimate_measurement_system` (Spearman /
-    multi-indicator factor-analysis identification) before AF Stage-2
-    optimization, and hold the recovered loadings and sigma_meas fixed
-    in Stage 2. This eliminates the sigma_inv / sigma_meas
-    constant-Var(I_meas) ridge that causes ~30-50% sigma_inv_0 boundary
-    collapse on translog-style DGPs.
-
-    Standard-error caveat: when True, the score bootstrap currently
-    holds Stage-1 outputs fixed across replicates and therefore
-    underestimates variance for Stage-2 parameters that covary with
-    sigma_meas. Users wanting fully-correct SEs should run a parametric
-    bootstrap (resample data, redo `estimate_af`) until the
-    per-replicate-Spearman bootstrap extension lands.
-
-    No default: users must make an explicit choice given this trade-off
-    between point-estimate robustness (favors True) and SE correctness
-    within the existing bootstrap (favors False). When False, sigma_meas
-    enters the AF MLE chain and the score bootstrap captures Spearman-
-    free SEs correctly; when True, point estimates are far more
-    reliable but SEs miss the Stage-1 contribution.
-    """
-
     def __init__(  # noqa: D107
         self,
         n_halton_points: int = 50,
@@ -95,7 +70,6 @@ class AFEstimationOptions:
         optimizer_algorithm: str = "fides",
         optimizer_options: Mapping[str, Any] | None = None,
         *,
-        two_stage_measurement: bool,
         two_stage: bool = False,
         coarse_fraction: float = 0.5,
         stability_floor: float = 1e-217,
@@ -116,7 +90,6 @@ class AFEstimationOptions:
         object.__setattr__(self, "stability_floor", stability_floor)
         object.__setattr__(self, "n_obs_per_batch", n_obs_per_batch)
         object.__setattr__(self, "initialization_strategy", initialization_strategy)
-        object.__setattr__(self, "two_stage_measurement", two_stage_measurement)
 
 
 @dataclass(frozen=True)

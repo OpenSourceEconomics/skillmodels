@@ -28,13 +28,6 @@ and take a one-step Newton update from the optimum. The empirical
 standard deviation of the resulting parameter draws is the bootstrap
 standard error.
 
-Phase B caveat: when ``af_options.two_stage_measurement=True`` the
-measurement system is estimated in a Stage-1 Spearman pre-step and
-held fixed in Stage 2. The current bootstrap freezes those Stage-1
-outputs across replicates, so reported SEs ignore Spearman sampling
-variance. A follow-up will re-run Spearman per replicate; until then
-users wanting fully-correct Phase B SEs should run a parametric
-bootstrap (resample data, redo ``estimate_af`` end-to-end).
 """
 
 from collections.abc import Callable, Mapping
@@ -160,13 +153,6 @@ def compute_af_standard_errors(
     For ``n_boot=10000`` and ``n_caseids=1500`` this typically takes
     seconds rather than days (no re-estimation per replicate).
 
-    Phase B caveat: when ``af_options.two_stage_measurement=True``
-    the Spearman-stage measurement system is currently held fixed
-    across replicates, so SEs ignore Stage-1 sampling variance. A
-    follow-up will re-run Spearman per replicate; until then run a
-    parametric bootstrap (resample data, redo ``estimate_af``) if
-    fully-correct Phase B SEs are required.
-
     Args:
         result: Output of ``estimate_af``.
         data: The dataset used for estimation; the caseid level of its
@@ -182,13 +168,7 @@ def compute_af_standard_errors(
 
     """
     if af_options is None:
-        msg = (
-            "compute_af_standard_errors requires an explicit `af_options` "
-            "argument because AFEstimationOptions has no default for "
-            "`two_stage_measurement`. Pass the same instance used at "
-            "estimation time."
-        )
-        raise TypeError(msg)
+        af_options = AFEstimationOptions()
 
     jax.config.update("jax_enable_x64", val=True)
 
