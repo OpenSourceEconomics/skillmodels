@@ -174,12 +174,26 @@ def estimate_af(
     jax.clear_caches()
     gc.collect()
 
-    # Materialise every JAX array in the result as a numpy array, and
-    # drop the large per-period importance-sample buffers. Downstream
-    # consumers (pickling, plotting, posterior_states) don't need GPU
-    # residency, and leaving the arrays as jax.Array would force
-    # materialisation at pickle time -- which on a busy device routinely
-    # OOMs inside `__reduce__`.
+    # Drop `samples_per_component` (the multi-GB per-period
+    # `(n_halton, n_obs, n_state)` importance buffer) from every
+    # conditional distribution BEFORE materialising anything else.
+    # Otherwise the next `_to_numpy(c.mean)` call has to fit a staging
+    # buffer alongside live `samples_per_component` device arrays and
+    # OOMs. Mutating the list in place and forcing a GC pass releases
+    # the underlying device buffers immediately; only the small
+    # summary stats and chain history remain on the GPU when conversion
+    # starts.
+    for idx, cd in enumerate(conditional_dists):
+        conditional_dists[idx] = dataclasses.replace(cd, samples_per_component=())
+    del cd
+    gc.collect()
+    jax.clear_caches()
+
+    # Materialise every remaining JAX array in the result as a numpy
+    # array. Downstream consumers (pickling, plotting, posterior_states)
+    # don't need GPU residency, and leaving the arrays as `jax.Array`
+    # would force materialisation at pickle time -- which on a busy
+    # device routinely OOMs inside `__reduce__`.
     conditional_dists_compact = tuple(
         _to_numpy_conditional_distribution(cd) for cd in conditional_dists
     )
