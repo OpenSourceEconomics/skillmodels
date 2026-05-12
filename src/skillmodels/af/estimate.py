@@ -60,13 +60,19 @@ def estimate_af(
             shocks (same convention as CHS augmented periods).
         constraints: Optional list of optimagic Constraint objects. Only
             `om.EqualityConstraint` entries that select via
-            `skillmodels.common.constraints.select_by_loc` are honoured: their
-            members are propagated forward through the chain — once any
-            member of an equality group has been estimated, every other
-            member (including those at not-yet-estimated periods) is
-            pinned to that value via `fixed_params`. Other constraint
-            types are ignored (AF's per-period MLE handles model-implied
-            within-period constraints internally).
+            `skillmodels.common.constraints.select_by_loc` are honoured.
+            Two regimes:
+            * **Cross-period**: members straddle multiple AF steps. Once
+              any member is estimated in an earlier step, every other
+              member (in not-yet-estimated periods) is pinned to that
+              value via `fixed_params`.
+            * **Within-step**: all members lie in the same step's
+              params index (e.g. `investment_sds` at period t-1 and
+              `meas_sds` at period t both live in step t). The constraint
+              is forwarded verbatim to that step's `om.minimize` so the
+              optimizer enforces equality during fitting.
+            Other constraint types are ignored (AF's per-period MLE
+            handles model-implied within-period constraints internally).
 
     Return:
         AFEstimationResult with per-period results and combined parameters.
@@ -150,6 +156,7 @@ def estimate_af(
         fixed_params=fixed_params,
         observed_factors=observed_factors,
         observed_factor_values=period_data[0].get("observed_factors"),
+        user_constraints=constraints,
     )
 
     period_results: list[AFPeriodResult] = [period_0_result]
@@ -186,6 +193,7 @@ def estimate_af(
             ),
             start_params=start_params,
             fixed_params=fixed_params,
+            user_constraints=constraints,
         )
         period_results.append(period_t_result)
         conditional_dists.append(cond_dist)

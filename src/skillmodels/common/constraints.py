@@ -26,6 +26,71 @@ def select_by_loc(params: pd.DataFrame, loc: Any) -> pd.DataFrame:  # noqa: ANN4
     return params.loc[loc]
 
 
+def filter_within_step_constraints(
+    user_constraints: list[om.constraints.Constraint] | None,
+    params_index: pd.Index,
+) -> list[om.constraints.Constraint]:
+    """Return user equality constraints fully contained in `params_index`.
+
+    Used by AF's per-step optimizers to forward only those user-supplied
+    `om.EqualityConstraint` objects whose `select_by_loc` `loc` MultiIndex
+    is a subset of the current step's params index. Cross-period
+    equalities (whose members straddle multiple steps) are handled
+    separately by `_propagate_equality_groups` in
+    `skillmodels.af.estimate`.
+    """
+    if not user_constraints:
+        return []
+    out: list[om.constraints.Constraint] = []
+    idx_set = set(params_index)
+    for c in user_constraints:
+        if not isinstance(c, om.EqualityConstraint):
+            continue
+        selector = c.selector
+        keywords = getattr(selector, "keywords", None)
+        if not keywords or "loc" not in keywords:
+            continue
+        loc = keywords["loc"]
+        if not isinstance(loc, pd.MultiIndex):
+            continue
+        if all(tup in idx_set for tup in loc):
+            out.append(c)
+    return out
+
+
+def reconcile_start_to_equality(
+    params: pd.DataFrame,
+    equality_constraints: list[om.constraints.Constraint],
+) -> pd.DataFrame:
+    """Average each equality group's `value` so the start point satisfies it.
+
+    `om.minimize` raises `InvalidParamsError` when an equality
+    constraint is violated at the starting point. For each constraint
+    in `equality_constraints` whose selector is
+    `functools.partial(select_by_loc, loc=...)`, set every member's
+    `value` to the mean of the group's current values. Returns a copy;
+    `params` is not modified.
+    """
+    if not equality_constraints:
+        return params
+    out = params.copy()
+    for c in equality_constraints:
+        if not isinstance(c, om.EqualityConstraint):
+            continue
+        selector = c.selector
+        keywords = getattr(selector, "keywords", None)
+        if not keywords or "loc" not in keywords:
+            continue
+        loc = keywords["loc"]
+        if not isinstance(loc, pd.MultiIndex):
+            continue
+        if not all(tup in out.index for tup in loc):
+            continue
+        avg = float(out.loc[loc, "value"].mean())
+        out.loc[loc, "value"] = avg
+    return out
+
+
 @dataclass(frozen=True)
 class FixedConstraintWithValue(om.FixedConstraint):
     """Fixed constraint that carries the target value and parameter location.

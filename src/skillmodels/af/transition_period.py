@@ -40,6 +40,10 @@ from skillmodels.amn.moments import (
     seed_beta_from_ols,
     spearman_factor_moments,
 )
+from skillmodels.common.constraints import (
+    filter_within_step_constraints,
+    reconcile_start_to_equality,
+)
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.types import ProcessedModel, TransitionInfo
 
@@ -60,6 +64,7 @@ def estimate_transition_period(
     observed_factor_data: Array | None = None,
     start_params: pd.DataFrame | None = None,
     fixed_params: pd.DataFrame | None = None,
+    user_constraints: list[om.constraints.Constraint] | None = None,
 ) -> tuple[AFPeriodResult, ConditionalDistribution]:
     """Estimate a transition period (Step t, t >= 1) of the AF procedure.
 
@@ -86,6 +91,10 @@ def estimate_transition_period(
             override heuristic defaults.
         fixed_params: Optional DataFrame with a "value" column pinning
             specified parameters (value + bounds both clamped to the value).
+        user_constraints: Optional optimagic constraint list forwarded
+            from `estimate_af(constraints=...)`. Entries whose members
+            all sit in this step's params index are appended to the
+            step's `om.minimize` call (within-step equalities).
 
     Return:
         Tuple of (AFPeriodResult, ConditionalDistribution) where the
@@ -293,6 +302,7 @@ def estimate_transition_period(
         af_options=af_options,
         transition_constraints=transition_constraints,
         fixed_params=fixed_params,
+        user_constraints=user_constraints,
     )
 
     # Build the next ChainLink from the just-fitted period parameters and
@@ -371,6 +381,7 @@ def _run_transition_optimization(
     af_options: AFEstimationOptions,
     transition_constraints: list[om.constraints.Constraint],
     fixed_params: pd.DataFrame | None,
+    user_constraints: list[om.constraints.Constraint] | None = None,
 ) -> tuple[pd.DataFrame, om.OptimizeResult]:
     """Build likelihood, run the optimizer, and return updated params.
 
@@ -447,7 +458,15 @@ def _run_transition_optimization(
         val, grad = loglike_and_grad(jnp.array(params_df["value"].to_numpy()))
         return float(val), np.array(grad)
 
-    combined_constraints = list(transition_constraints) + list(fixed_constraints)
+    within_step_constraints = filter_within_step_constraints(
+        user_constraints, full_params_df.index
+    )
+    combined_constraints = (
+        list(transition_constraints) + list(fixed_constraints) + within_step_constraints
+    )
+    full_params_df = reconcile_start_to_equality(
+        full_params_df, within_step_constraints
+    )
 
     opt_res = om.minimize(
         fun=fun,

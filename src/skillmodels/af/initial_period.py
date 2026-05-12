@@ -35,11 +35,15 @@ from skillmodels.af.types import (
     MixtureComponent,
 )
 from skillmodels.amn.moments import spearman_factor_moments
+from skillmodels.common.constraints import (
+    filter_within_step_constraints,
+    reconcile_start_to_equality,
+)
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.types import ProcessedModel
 
 
-def estimate_initial_period(
+def estimate_initial_period(  # noqa: PLR0915
     model_spec: ModelSpec,
     processed_model: ProcessedModel,
     measurements: Array,
@@ -50,6 +54,7 @@ def estimate_initial_period(
     fixed_params: pd.DataFrame | None = None,
     observed_factors: tuple[str, ...] = (),
     observed_factor_values: Array | None = None,
+    user_constraints: list[om.constraints.Constraint] | None = None,
 ) -> tuple[AFPeriodResult, ConditionalDistribution]:
     """Estimate the initial period (Step 0) of the AF procedure.
 
@@ -80,6 +85,10 @@ def estimate_initial_period(
         observed_factor_values: Shape (n_obs, n_observed_factors) array of
             observed factor values. Required iff `observed_factors` is
             non-empty.
+        user_constraints: Optional optimagic constraint list forwarded
+            from `estimate_af(constraints=...)`. Entries whose members
+            all sit in this step's params index are appended to the
+            step's `om.minimize` call (within-step equalities).
 
     Return:
         Tuple of (AFPeriodResult, ConditionalDistribution) where the
@@ -232,6 +241,14 @@ def estimate_initial_period(
         val, grad = loglike_and_grad(jnp.array(params_df["value"].to_numpy()))
         return float(val), np.array(grad)
 
+    within_step_constraints = filter_within_step_constraints(
+        user_constraints, full_params_df.index
+    )
+    combined_constraints = list(fixed_constraints) + within_step_constraints
+    full_params_df = reconcile_start_to_equality(
+        full_params_df, within_step_constraints
+    )
+
     opt_res = om.minimize(
         fun=fun,
         params=full_params_df[["value"]],
@@ -240,7 +257,7 @@ def estimate_initial_period(
             lower=full_params_df["lower_bound"],
             upper=full_params_df["upper_bound"],
         ),
-        constraints=list(fixed_constraints) or None,
+        constraints=combined_constraints or None,
         fun_and_jac=fun_and_jac,
         **dict(af_options.optimizer_options),
     )
