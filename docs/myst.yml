@@ -32,12 +32,14 @@ project:
     - title: How-to Guides
       children:
         - file: how_to_guides/model_specs.md
+        - file: how_to_guides/how_to_estimate_af.md
         - file: how_to_guides/how_to_simulate_dataset.ipynb
         - file: how_to_guides/how_to_visualize_transition_equations.ipynb
         - file: how_to_guides/how_to_visualize_pairwise_factor_distribution.ipynb
         - file: how_to_guides/how_to_visualize_correlations.ipynb
     - title: Explanations
       children:
+        - file: explanations/architecture.md
         - file: explanations/names_and_concepts.md
         - file: explanations/notes_on_factor_scales.md
         - file: explanations/linear_predict.md

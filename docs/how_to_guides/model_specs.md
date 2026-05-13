@@ -11,7 +11,6 @@ from skillmodels import (
     ModelSpec,
     Normalizations,
 )
-from skillmodels.chs import CHSEstimationOptions
 
 # Define factors
 fac1 = FactorSpec(
@@ -39,9 +38,27 @@ model = ModelSpec(
     ),
     controls=("x1", "x2"),
     stagemap=(0, 0, 1, 1, 2, 2, 3),
-    chs_estimation_options=CHSEstimationOptions(),
+    n_mixtures=2,
 )
 ```
+
+The `ModelSpec` is purely structural -- it describes the model, not how to
+estimate it. Estimator-specific tuning (number of Halton draws, mixture
+components in CHS Kalman, sigma-point scale, ...) lives on the relevant
+options class and is passed at the call site:
+
+```python
+from skillmodels.chs import CHSEstimationOptions, get_maximization_inputs
+
+max_inputs = get_maximization_inputs(
+    model_spec=model,
+    data=data,
+    chs_options=CHSEstimationOptions(bounds_distance=1e-4),
+)
+```
+
+See the [AF how-to](how_to_estimate_af.md) for the corresponding pattern with
+`estimate_af(model, data, af_options=...)`.
 
 ## Factor Specification
 
