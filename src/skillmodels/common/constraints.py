@@ -26,6 +26,22 @@ def select_by_loc(params: pd.DataFrame, loc: Any) -> pd.DataFrame:  # noqa: ANN4
     return params.loc[loc]
 
 
+def _equality_constraint_loc(c: om.constraints.Constraint) -> pd.MultiIndex | None:
+    """Return the `loc` MultiIndex of a `select_by_loc`-style EqualityConstraint.
+
+    Returns `None` for any other constraint type or selector shape, so
+    callers can `continue` past unrecognised entries without nested
+    guard clauses.
+    """
+    if not isinstance(c, om.EqualityConstraint):
+        return None
+    keywords = getattr(c.selector, "keywords", None)
+    if not keywords:
+        return None
+    loc = keywords.get("loc")
+    return loc if isinstance(loc, pd.MultiIndex) else None
+
+
 def filter_within_step_constraints(
     user_constraints: list[om.constraints.Constraint] | None,
     params_index: pd.Index,
@@ -41,19 +57,11 @@ def filter_within_step_constraints(
     """
     if not user_constraints:
         return []
-    out: list[om.constraints.Constraint] = []
     idx_set = set(params_index)
+    out: list[om.constraints.Constraint] = []
     for c in user_constraints:
-        if not isinstance(c, om.EqualityConstraint):
-            continue
-        selector = c.selector
-        keywords = getattr(selector, "keywords", None)
-        if not keywords or "loc" not in keywords:
-            continue
-        loc = keywords["loc"]
-        if not isinstance(loc, pd.MultiIndex):
-            continue
-        if all(tup in idx_set for tup in loc):
+        loc = _equality_constraint_loc(c)
+        if loc is not None and all(tup in idx_set for tup in loc):
             out.append(c)
     return out
 
@@ -75,19 +83,10 @@ def reconcile_start_to_equality(
         return params
     out = params.copy()
     for c in equality_constraints:
-        if not isinstance(c, om.EqualityConstraint):
+        loc = _equality_constraint_loc(c)
+        if loc is None or not all(tup in out.index for tup in loc):
             continue
-        selector = c.selector
-        keywords = getattr(selector, "keywords", None)
-        if not keywords or "loc" not in keywords:
-            continue
-        loc = keywords["loc"]
-        if not isinstance(loc, pd.MultiIndex):
-            continue
-        if not all(tup in out.index for tup in loc):
-            continue
-        avg = float(out.loc[loc, "value"].mean())
-        out.loc[loc, "value"] = avg
+        out.loc[loc, "value"] = float(out.loc[loc, "value"].mean())
     return out
 
 

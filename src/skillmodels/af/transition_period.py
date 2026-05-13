@@ -1214,16 +1214,13 @@ def _update_conditional_distribution(
                 state_shock_contrib
             )
 
-        # `prev_sample`'s leading axis carries however many summary
-        # Halton draws were retained (controlled by
-        # `AFEstimationOptions.n_halton_points_posterior_summary`, often
-        # << `n_halton`). Iterate over THAT axis — not the full joint
-        # Halton's leading dimension — so the rebuilt sample stays at
-        # the summary size. `joint_nodes[j_idx]` for j_idx in
-        # `[0, prev_sample.shape[0])` is well-defined as long as the
-        # summary count is bounded by the joint Halton size.
-        n_halton_summary = prev_sample.shape[0]
-        n_obs = prev_sample.shape[1]
+        # Iterate over `prev_sample`'s leading axis (the retained
+        # summary draws, controlled by
+        # `AFEstimationOptions.n_halton_points_posterior_summary`) so
+        # the rebuilt sample stays at the summary size. The summary
+        # count is bounded by the joint Halton size, so the
+        # `joint_nodes[j_idx]` indexing inside `_at_node` is valid.
+        n_halton_summary, n_obs = prev_sample.shape[0], prev_sample.shape[1]
         return jax.vmap(
             jax.vmap(_at_node, in_axes=(None, 0)),
             in_axes=(0, None),

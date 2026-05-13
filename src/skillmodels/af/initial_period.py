@@ -497,7 +497,7 @@ def _extract_conditional_distribution(  # noqa: PLR0915
     # full `n_halton_points`. Subsample the Halton design here so the
     # persistent `(n_summary, n_obs, n_state)` tensor stays small.
     n_full = int(nodes.shape[0])
-    n_summary = min(n_full, n_summary_halton) if n_summary_halton else n_full
+    n_summary = n_full if n_summary_halton is None else min(n_full, n_summary_halton)
     summary_nodes = nodes[:n_summary]
 
     components: list[MixtureComponent] = []
