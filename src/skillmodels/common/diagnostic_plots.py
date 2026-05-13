@@ -6,46 +6,44 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
 
 def plot_residual_boxplots(
     model_spec: ModelSpec,
-    data: pd.DataFrame,
-    params: pd.DataFrame,
-    period: int | None = None,
     *,
+    residuals: pd.DataFrame,
+    period: int | None = None,
     show_reference_line: bool = True,
     layout_kwargs: dict[str, Any] | None = None,
 ) -> go.Figure | dict[int, go.Figure]:
     """Create boxplots of measurement residuals by measurement variable.
 
-    Residuals are computed as the difference between observed measurements and
-    their predicted values based on filtered states.
+    Residuals are the difference between observed measurements and their
+    predicted values based on filtered latent states. The caller is
+    responsible for producing this DataFrame from their estimator's
+    debug output (e.g. CHS's
+    ``get_maximization_inputs(...)["debug_loglike"](params)["residuals"]``).
 
     Args:
-        model_spec: The model specification.
-        data: Empirical dataset used to estimate the model.
-        params: Estimated model parameters.
-        period: If provided, create a single figure for that period. If None,
-            returns a dictionary mapping periods to figures.
+        model_spec: The model specification, used to map ``aug_period``
+            back to user-facing ``period``.
+        residuals: DataFrame with at minimum the columns ``aug_period``,
+            ``measurement``, and ``residual``.
+        period: If provided, create a single figure for that period. If
+            ``None``, returns a dictionary mapping periods to figures.
         show_reference_line: Whether to show a horizontal reference line at zero.
         layout_kwargs: Dictionary of keyword arguments for Plotly layout.
 
-    Returns:
+    Return:
         If period is specified, returns a single go.Figure. Otherwise, returns
         a dictionary mapping period numbers to figures.
 
     """
-    max_inputs = get_maximization_inputs(model_spec=model_spec, data=data)
-    # debug_loglike already returns processed debug data
-    processed_debug = max_inputs["debug_loglike"](params)
-
     processed_model = process_model(model_spec)
 
-    residuals_df = processed_debug["residuals"]
+    residuals_df = residuals
     update_info = processed_model.update_info
 
     # Get period column name
@@ -137,34 +135,34 @@ def _create_residual_boxplot_for_period(
 
 def plot_likelihood_contributions(
     model_spec: ModelSpec,
-    data: pd.DataFrame,
-    params: pd.DataFrame,
-    period: int | None = None,
     *,
+    contributions: pd.DataFrame,
+    period: int | None = None,
     layout_kwargs: dict[str, Any] | None = None,
 ) -> go.Figure | dict[int, go.Figure]:
     """Create boxplots of log-likelihood contributions by measurement.
 
+    The caller is responsible for producing the contributions DataFrame
+    from their estimator's debug output (e.g. CHS's
+    ``get_maximization_inputs(...)["debug_loglike"](params)["all_contributions"]``).
+
     Args:
-        model_spec: The model specification.
-        data: Empirical dataset used to estimate the model.
-        params: Estimated model parameters.
-        period: If provided, create a single figure for that period. If None,
-            returns a dictionary mapping periods to figures.
+        model_spec: The model specification, used to map ``aug_period``
+            back to user-facing ``period``.
+        contributions: DataFrame with at minimum the columns
+            ``aug_period``, ``measurement``, and ``contribution``.
+        period: If provided, create a single figure for that period. If
+            ``None``, returns a dictionary mapping periods to figures.
         layout_kwargs: Dictionary of keyword arguments for Plotly layout.
 
-    Returns:
+    Return:
         If period is specified, returns a single go.Figure. Otherwise, returns
         a dictionary mapping period numbers to figures.
 
     """
-    max_inputs = get_maximization_inputs(model_spec=model_spec, data=data)
-    # debug_loglike already returns processed debug data
-    processed_debug = max_inputs["debug_loglike"](params)
-
     processed_model = process_model(model_spec)
 
-    contributions_df = processed_debug["all_contributions"]
+    contributions_df = contributions
     update_info = processed_model.update_info
 
     period_col = "aug_period"

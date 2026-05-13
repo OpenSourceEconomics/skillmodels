@@ -97,11 +97,17 @@ def test_get_filtered_states_rejects_both_af_and_amn_results(amn_fit):
 def test_decompose_measurement_variance_works_with_amn_result(amn_fit):
     fit, data = amn_fit
 
+    filtered = get_filtered_states(
+        model_spec=fit.model_spec,
+        data=data,
+        params=fit.all_params,
+        amn_result=fit,
+    )
+    states_root = filtered.get("anchored_states", filtered["unanchored_states"])
     decomp = decompose_measurement_variance(
         fit.model_spec,
         fit.all_params,
-        data,
-        amn_result=fit,
+        filtered_states=states_root["states"],
     )
 
     assert {"loading", "factor_variance", "meas_sd"} <= set(decomp.columns)

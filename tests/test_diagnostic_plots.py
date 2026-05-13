@@ -29,14 +29,18 @@ def model2_diag_params(model2, model2_data):
     return params
 
 
+@pytest.fixture
+def model2_debug(model2, model2_data, model2_diag_params):
+    """Run the CHS debug loglike once to feed the plot helpers."""
+    max_inputs = get_maximization_inputs(model_spec=model2, data=model2_data)
+    return max_inputs["debug_loglike"](model2_diag_params)
+
+
 @pytest.mark.integration
-def test_plot_residual_boxplots_single_period(
-    model2, model2_data, model2_diag_params
-) -> None:
+def test_plot_residual_boxplots_single_period(model2, model2_debug) -> None:
     fig = plot_residual_boxplots(
         model_spec=model2,
-        data=model2_data,
-        params=model2_diag_params,
+        residuals=model2_debug["residuals"],
         period=0,
     )
     assert isinstance(fig, go.Figure)
@@ -44,13 +48,10 @@ def test_plot_residual_boxplots_single_period(
 
 
 @pytest.mark.integration
-def test_plot_residual_boxplots_all_periods(
-    model2, model2_data, model2_diag_params
-) -> None:
+def test_plot_residual_boxplots_all_periods(model2, model2_debug) -> None:
     result = plot_residual_boxplots(
         model_spec=model2,
-        data=model2_data,
-        params=model2_diag_params,
+        residuals=model2_debug["residuals"],
         period=None,
     )
     assert isinstance(result, dict)
@@ -59,13 +60,10 @@ def test_plot_residual_boxplots_all_periods(
 
 
 @pytest.mark.integration
-def test_plot_residual_boxplots_no_reference_line(
-    model2, model2_data, model2_diag_params
-) -> None:
+def test_plot_residual_boxplots_no_reference_line(model2, model2_debug) -> None:
     fig = plot_residual_boxplots(
         model_spec=model2,
-        data=model2_data,
-        params=model2_diag_params,
+        residuals=model2_debug["residuals"],
         period=0,
         show_reference_line=False,
     )
@@ -73,13 +71,10 @@ def test_plot_residual_boxplots_no_reference_line(
 
 
 @pytest.mark.integration
-def test_plot_residual_boxplots_layout_kwargs(
-    model2, model2_data, model2_diag_params
-) -> None:
+def test_plot_residual_boxplots_layout_kwargs(model2, model2_debug) -> None:
     fig = plot_residual_boxplots(
         model_spec=model2,
-        data=model2_data,
-        params=model2_diag_params,
+        residuals=model2_debug["residuals"],
         period=0,
         layout_kwargs={"title": "Custom Title"},
     )
@@ -88,13 +83,10 @@ def test_plot_residual_boxplots_layout_kwargs(
 
 
 @pytest.mark.integration
-def test_plot_likelihood_contributions_single_period(
-    model2, model2_data, model2_diag_params
-) -> None:
+def test_plot_likelihood_contributions_single_period(model2, model2_debug) -> None:
     fig = plot_likelihood_contributions(
         model_spec=model2,
-        data=model2_data,
-        params=model2_diag_params,
+        contributions=model2_debug["all_contributions"],
         period=0,
     )
     assert isinstance(fig, go.Figure)
@@ -102,13 +94,10 @@ def test_plot_likelihood_contributions_single_period(
 
 
 @pytest.mark.integration
-def test_plot_likelihood_contributions_all_periods(
-    model2, model2_data, model2_diag_params
-) -> None:
+def test_plot_likelihood_contributions_all_periods(model2, model2_debug) -> None:
     result = plot_likelihood_contributions(
         model_spec=model2,
-        data=model2_data,
-        params=model2_diag_params,
+        contributions=model2_debug["all_contributions"],
         period=None,
     )
     assert isinstance(result, dict)
@@ -117,13 +106,10 @@ def test_plot_likelihood_contributions_all_periods(
 
 
 @pytest.mark.integration
-def test_plot_likelihood_contributions_layout_kwargs(
-    model2, model2_data, model2_diag_params
-) -> None:
+def test_plot_likelihood_contributions_layout_kwargs(model2, model2_debug) -> None:
     fig = plot_likelihood_contributions(
         model_spec=model2,
-        data=model2_data,
-        params=model2_diag_params,
+        contributions=model2_debug["all_contributions"],
         period=0,
         layout_kwargs={"title": "Custom LL Title"},
     )
