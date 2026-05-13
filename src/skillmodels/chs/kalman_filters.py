@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from jax import Array
 
 from skillmodels.chs.qr import qr_gpu
+from skillmodels.common.transitions import apply_anchored_transition
 
 LINEAR_FUNCTION_NAMES = frozenset({"linear", "constant"})
 
@@ -427,6 +428,14 @@ def transform_sigma_points(
 ) -> Array:
     """Anchor sigma points, transform them and unanchor the transformed sigma points.
 
+    Thin sigma-points-shape wrapper around
+    `skillmodels.common.transitions.apply_anchored_transition`: flattens
+    `(n_obs, n_mixtures, n_sigma, n_fac)` to `(N, n_fac)` for the
+    common-core anchor → transition → unanchor pipeline, then restores
+    the sigma-points layout for the UKF caller. Code paths that don't
+    care about sigma-points layout (e.g. `simulate_dataset`) should
+    call `apply_anchored_transition` directly.
+
     Args:
         sigma_points: Array of shape n_obs, n_mixtures, n_sigma, n_fac.
         transition_func: The transition function.
@@ -438,24 +447,19 @@ def transform_sigma_points(
             constants for anchoring. The first row corresponds to the input
             period, the second to the output period (i.e. input period + 1).
 
-    Returns:
+    Return:
         jax.numpy.array: Array of shape n_obs, n_mixtures, n_sigma, n_fac (where n_sigma
         equals 2 * n_fac + 1) with transformed sigma points.
 
     """
     n_obs, n_mixtures, n_sigma, n_fac = sigma_points.shape
 
-    flat_sigma_points = sigma_points.reshape(-1, n_fac)
+    transformed_unanchored = apply_anchored_transition(
+        states=sigma_points.reshape(-1, n_fac),
+        transition_func=transition_func,
+        trans_coeffs=trans_coeffs,
+        anchoring_scaling_factors=anchoring_scaling_factors,
+        anchoring_constants=anchoring_constants,
+    )
 
-    anchored = flat_sigma_points * anchoring_scaling_factors[0] + anchoring_constants[0]
-
-    transformed_anchored = transition_func(trans_coeffs, anchored)
-
-    n_observed = transformed_anchored.shape[-1]
-
-    transformed_unanchored = (
-        transformed_anchored - anchoring_constants[1][:n_observed]
-    ) / anchoring_scaling_factors[1][:n_observed]
-
-    out_shape = (n_obs, n_mixtures, n_sigma, -1)
-    return transformed_unanchored.reshape(out_shape)
+    return transformed_unanchored.reshape((n_obs, n_mixtures, n_sigma, -1))

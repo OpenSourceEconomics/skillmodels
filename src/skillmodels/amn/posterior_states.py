@@ -31,8 +31,8 @@ import pandas as pd
 
 from skillmodels.amn.mixture_em import build_augmented_measure_matrix
 from skillmodels.amn.types import AMNEstimationResult
-from skillmodels.chs.process_debug_data import create_state_ranges
 from skillmodels.common.process_model import process_model
+from skillmodels.common.state_ranges import create_state_ranges
 
 
 def get_amn_posterior_states(  # noqa: C901, PLR0912, PLR0915

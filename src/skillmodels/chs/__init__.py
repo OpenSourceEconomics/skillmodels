@@ -15,19 +15,16 @@ default skillmodels estimator:
   for UKF stability).
 
 The public top-level package re-exports the user-facing entry points
-(`get_maximization_inputs`, `get_filtered_states`, `create_state_ranges`)
-so most callers don't need to touch the `chs.` prefix.
+(`get_maximization_inputs`, `get_filtered_states`) so most callers
+don't need to touch the `chs.` prefix. The estimator-agnostic
+`create_state_ranges` lives under `skillmodels.common.state_ranges`.
 """
 
 from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
-from skillmodels.chs.process_debug_data import (
-    create_state_ranges,
-    process_debug_data,
-)
+from skillmodels.chs.process_debug_data import process_debug_data
 
 __all__ = [
-    "create_state_ranges",
     "get_filtered_states",
     "get_maximization_inputs",
     "process_debug_data",

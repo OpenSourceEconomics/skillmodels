@@ -14,12 +14,12 @@ from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 
 from skillmodels.chs.filtered_states import get_filtered_states
-from skillmodels.chs.process_debug_data import create_state_ranges
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.params_index import get_params_index
 from skillmodels.common.parse_params import create_parsing_info, parse_params
 from skillmodels.common.process_data import process_data
 from skillmodels.common.process_model import process_model
+from skillmodels.common.state_ranges import create_state_ranges
 from skillmodels.common.types import ParsedParams, ProcessedModel
 from skillmodels.common.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
 

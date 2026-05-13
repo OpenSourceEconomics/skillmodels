@@ -20,7 +20,6 @@ from skillmodels.amn import (
     estimate_amn,
 )
 from skillmodels.chs import (
-    create_state_ranges,
     get_filtered_states,
     get_maximization_inputs,
 )
@@ -36,6 +35,7 @@ from skillmodels.common.model_spec import (
     Normalizations,
 )
 from skillmodels.common.simulate_data import simulate_dataset, simulate_policy_effect
+from skillmodels.common.state_ranges import create_state_ranges
 from skillmodels.common.variance_decomposition import (
     decompose_measurement_variance,
     summarize_measurement_reliability,

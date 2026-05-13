@@ -7,8 +7,8 @@ import pytest
 from skillmodels.chs.process_debug_data import (
     _create_post_update_states,
     _process_residuals,
-    create_state_ranges,
 )
+from skillmodels.common.state_ranges import create_state_ranges
 
 
 def test_create_state_ranges_invalid_quantile_raises() -> None:

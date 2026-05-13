@@ -9,14 +9,14 @@ import pandas as pd
 from jax import Array
 from numpy.typing import NDArray
 
-from skillmodels.chs.filtered_states import anchor_states_df
-from skillmodels.chs.kalman_filters import transform_sigma_points
-from skillmodels.chs.process_debug_data import create_state_ranges
+from skillmodels.common.anchoring import anchor_states_df
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.params_index import get_params_index
 from skillmodels.common.parse_params import create_parsing_info, parse_params
 from skillmodels.common.process_data import process_data
 from skillmodels.common.process_model import process_model
+from skillmodels.common.state_ranges import create_state_ranges
+from skillmodels.common.transitions import apply_anchored_transition
 from skillmodels.common.types import (
     Dimensions,
     EndogenousFactorsInfo,
@@ -292,29 +292,27 @@ def _simulate_dataset(
         # get combined states and observed factors as jax array
         to_concat = [latent_states[t], observed_factors[t]]
         states = jnp.array(np.concatenate(to_concat, axis=-1))
-        # reshaping is just needed for transform sigma points
-        states = states.reshape(1, 1, *states.shape)
 
         # extract trans coeffs for the period
         trans_coeffs = {k: arr[t] for k, arr in transition_params.items()}
 
-        # get anchoring_scaling_factors for the period
+        # get anchoring scaling factors and constants for periods t, t+1
         anchoring_scaling_factors = parsed_params.anchoring_scaling_factors[
             jnp.array([t, t + 1])
         ]
-        # get anchoring constants for the period
         anchoring_constants = parsed_params.anchoring_constants[jnp.array([t, t + 1])]
 
-        # call transform_sigma_points and convert result to numpy
+        # apply the period-t transition; the common helper takes flat
+        # `(N, n_fac)` states directly so no sigma-points reshape is needed.
         next_states = np.array(
-            transform_sigma_points(
-                sigma_points=states,
+            apply_anchored_transition(
+                states=states,
                 transition_func=transition_info.func,
                 trans_coeffs=trans_coeffs,
                 anchoring_scaling_factors=anchoring_scaling_factors,
                 anchoring_constants=anchoring_constants,
             ),
-        ).reshape(n_obs, -1)
+        )
 
         errors = rng.multivariate_normal(
             mean=np.zeros(n_states),
