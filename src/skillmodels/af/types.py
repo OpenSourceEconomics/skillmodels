@@ -28,11 +28,38 @@ class AFEstimationOptions:
     n_mixture_components: int
     """Gaussian mixture components for initial distribution."""
 
+    optimizer_backend: Literal["optimagic", "jaxopt"]
+    """Optimizer backend.
+
+    `"optimagic"` (default) runs each period's MLE via
+    `optimagic.minimize` with the algorithm in `optimizer_algorithm`.
+    Supports the full set of optimagic constraint kinds
+    (`FixedConstraintWithValue`, `ProbabilityConstraint`,
+    `EqualityConstraint`).
+
+    `"jaxopt"` keeps the parameter vector on device throughout the
+    L-BFGS-B iterations via `jaxopt.LBFGSB`, eliminating the
+    host<->device transfer that occurs once per likelihood call when
+    optimagic is used. Supports only `FixedConstraintWithValue`
+    plus bounds; raises on probability or equality constraints
+    (i.e. models with log_ces transitions or cross-section
+    equalities must use `"optimagic"`).
+    """
+
     optimizer_algorithm: str
-    """Optimization algorithm for each period's MLE."""
+    """Optimization algorithm for each period's MLE.
+
+    Only consulted by the `"optimagic"` backend; ignored when
+    `optimizer_backend="jaxopt"` (jaxopt always uses L-BFGS-B).
+    """
 
     optimizer_options: MappingProxyType[str, Any]
-    """Additional options passed to optimagic."""
+    """Additional options passed to the optimizer.
+
+    Forwarded to `optimagic.minimize(**optimizer_options)` for the
+    `"optimagic"` backend or to `jaxopt.LBFGSB(**optimizer_options)`
+    for the `"jaxopt"` backend.
+    """
 
     two_stage: bool
     """Whether to use coarse-then-fine grid strategy."""
@@ -95,6 +122,7 @@ class AFEstimationOptions:
         n_halton_points: int = 50,
         n_halton_points_shock: int = 30,
         n_mixture_components: int = 2,
+        optimizer_backend: Literal["optimagic", "jaxopt"] = "optimagic",
         optimizer_algorithm: str = "fides",
         optimizer_options: Mapping[str, Any] | None = None,
         *,
@@ -112,9 +140,16 @@ class AFEstimationOptions:
                 f"got {n_halton_points_posterior_summary}."
             )
             raise ValueError(msg)
+        if optimizer_backend not in ("optimagic", "jaxopt"):
+            msg = (
+                'optimizer_backend must be "optimagic" or "jaxopt", '
+                f"got {optimizer_backend!r}."
+            )
+            raise ValueError(msg)
         object.__setattr__(self, "n_halton_points", n_halton_points)
         object.__setattr__(self, "n_halton_points_shock", n_halton_points_shock)
         object.__setattr__(self, "n_mixture_components", n_mixture_components)
+        object.__setattr__(self, "optimizer_backend", optimizer_backend)
         object.__setattr__(self, "optimizer_algorithm", optimizer_algorithm)
         object.__setattr__(
             self,

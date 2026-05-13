@@ -18,6 +18,7 @@ from jax import Array
 from skillmodels.af.batching import auto_n_obs_per_batch
 from skillmodels.af.halton import create_halton_nodes_and_weights
 from skillmodels.af.initial_period import _build_loading_mask, _get_ordered_measures
+from skillmodels.af.jaxopt_backend import JaxoptResult, minimize_with_jaxopt
 from skillmodels.af.likelihood import af_loglike_transition, create_loglike_and_gradient
 from skillmodels.af.params import (
     apply_fixed_params,
@@ -382,12 +383,13 @@ def _run_transition_optimization(
     transition_constraints: list[om.constraints.Constraint],
     fixed_params: pd.DataFrame | None,
     user_constraints: list[om.constraints.Constraint] | None = None,
-) -> tuple[pd.DataFrame, om.OptimizeResult]:
+) -> tuple[pd.DataFrame, om.OptimizeResult | JaxoptResult]:
     """Build likelihood, run the optimizer, and return updated params.
 
     Handle the mechanical optimization setup: construct the log-likelihood
     keyword arguments, create the jitted value-and-gradient function, build
-    the params DataFrame + constraint list, and call `om.minimize`.
+    the params DataFrame + constraint list, and call `om.minimize` (or
+    `jaxopt.LBFGSB` when `af_options.optimizer_backend == "jaxopt"`).
 
     Return:
         Tuple of (result_params DataFrame, OptimizeResult).
@@ -468,18 +470,26 @@ def _run_transition_optimization(
         full_params_df, within_step_constraints
     )
 
-    opt_res = om.minimize(
-        fun=fun,
-        params=full_params_df[["value"]],
-        algorithm=af_options.optimizer_algorithm,
-        bounds=om.Bounds(
-            lower=full_params_df["lower_bound"],
-            upper=full_params_df["upper_bound"],
-        ),
-        constraints=combined_constraints or None,
-        fun_and_jac=fun_and_jac,
-        **dict(af_options.optimizer_options),
-    )
+    if af_options.optimizer_backend == "jaxopt":
+        opt_res = minimize_with_jaxopt(
+            loglike_and_grad=loglike_and_grad,
+            full_params_df=full_params_df,
+            constraints=combined_constraints,
+            optimizer_options=dict(af_options.optimizer_options),
+        )
+    else:
+        opt_res = om.minimize(
+            fun=fun,
+            params=full_params_df[["value"]],
+            algorithm=af_options.optimizer_algorithm,
+            bounds=om.Bounds(
+                lower=full_params_df["lower_bound"],
+                upper=full_params_df["upper_bound"],
+            ),
+            constraints=combined_constraints or None,
+            fun_and_jac=fun_and_jac,
+            **dict(af_options.optimizer_options),
+        )
 
     result_params = params_template.copy()
     result_params["value"] = opt_res.params["value"].to_numpy()

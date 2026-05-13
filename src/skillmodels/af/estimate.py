@@ -109,6 +109,7 @@ def estimate_af(  # noqa: PLR0915
             n_halton_points=af_options.n_halton_points,
             n_halton_points_shock=af_options.n_halton_points_shock,
             n_mixture_components=af_options.n_mixture_components,
+            optimizer_backend=af_options.optimizer_backend,
             optimizer_algorithm=af_options.optimizer_algorithm,
             optimizer_options=dict(af_options.optimizer_options),
             two_stage=af_options.two_stage,
