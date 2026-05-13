@@ -402,6 +402,7 @@ def test_get_constraints_with_endogenous_factors(
         anchoring_info=simplest_augmented_model.anchoring,
         normalizations=simplest_augmented_model.normalizations,
         endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
+        bounds_distance=1e-8,
     )
     # Should contain augmented-period constraints
     assert any(
@@ -418,6 +419,7 @@ def test_get_constraints_returns_om_objects(simplest_augmented_model) -> None:
         anchoring_info=simplest_augmented_model.anchoring,
         normalizations=simplest_augmented_model.normalizations,
         endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
+        bounds_distance=1e-8,
     )
     assert len(constraints) > 0
     for c in constraints:
@@ -428,6 +430,7 @@ def test_get_constraints_for_augmented_periods(simplest_augmented_model) -> None
     calculated = _get_constraints_for_augmented_periods(
         labels=simplest_augmented_model.labels,
         endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
+        bounds_distance=1e-8,
     )
     as_dicts = [_to_dict(c) for c in calculated]
     # Only the non-final aug-period of each meas-type should produce

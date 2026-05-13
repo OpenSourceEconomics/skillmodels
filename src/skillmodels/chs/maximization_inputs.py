@@ -21,6 +21,7 @@ from skillmodels.chs.kalman_filters import (
     kalman_predict,
     linear_kalman_predict,
 )
+from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.chs.process_debug_data import process_debug_data
 from skillmodels.common.constraints import (
     FixedConstraintWithValue,
@@ -42,6 +43,8 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     model_spec: ModelSpec,
     data: pd.DataFrame,
     split_dataset: int = 1,
+    *,
+    chs_options: CHSEstimationOptions | None = None,
     fixed_params: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Create inputs for optimagic's maximize function.
@@ -51,6 +54,8 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         data: Dataset in long format.
         split_dataset: Controls into how many slices to split the dataset
             during the gradient computation.
+        chs_options: CHS-specific tuning parameters. Defaults to
+            ``CHSEstimationOptions()`` when not provided.
         fixed_params: Optional DataFrame with a ``"value"`` column pinning
             specified parameters to fixed values. Uses the same 4-level
             MultiIndex as the returned ``params_template``. Each matching
@@ -84,6 +89,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             endogenous factors, we double up the number of periods in order to add
 
     """
+    chs_options = chs_options or CHSEstimationOptions()
     processed_model = process_model(model_spec)
     p_index = get_params_index(
         update_info=processed_model.update_info,
@@ -111,7 +117,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
         n_states=processed_model.dimensions.n_latent_factors,
-        kappa=processed_model.chs_estimation_options.sigma_points_scale,
+        kappa=chs_options.sigma_points_scale,
     )
 
     partialed_get_jnp_params_vec = functools.partial(
@@ -134,6 +140,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             model=processed_model,
             sigma_weights=sigma_weights,
             sigma_scaling_factor=sigma_scaling_factor,
+            chs_options=chs_options,
         )
 
     _jitted_loglike = jax.jit(partialed_loglikes["ll"])
@@ -190,6 +197,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         update_info=processed_model.update_info,
         normalizations=processed_model.normalizations,
         endogenous_factors_info=processed_model.endogenous_factors_info,
+        bounds_distance=chs_options.bounds_distance,
     )
 
     if fixed_params is not None:
@@ -201,7 +209,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     params_template = pd.DataFrame(columns=["value"], index=p_index)
     params_template = add_bounds(
         params=params_template,
-        bounds_distance=processed_model.chs_estimation_options.bounds_distance,
+        bounds_distance=chs_options.bounds_distance,
     )
     params_template = enforce_fixed_constraints(
         params_template=params_template,
@@ -210,7 +218,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     if not params_template.index.equals(p_index):
         raise ValueError("params_template index is not equal to p_index")
 
-    strategy = processed_model.chs_estimation_options.start_params_strategy
+    strategy = chs_options.start_params_strategy
     if strategy == "spearman":
         params_template = get_spearman_start_params(
             model_spec=model_spec,
@@ -276,6 +284,7 @@ def _partial_some_log_likelihood(
     model: ProcessedModel,
     sigma_weights: Array,
     sigma_scaling_factor: Array,
+    chs_options: CHSEstimationOptions,
 ) -> Callable:
     update_info = model.update_info
     is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
@@ -324,7 +333,7 @@ def _partial_some_log_likelihood(
         sigma_weights=sigma_weights,
         dimensions=model.dimensions,
         labels=model.labels,
-        chs_estimation_options=model.chs_estimation_options,
+        chs_estimation_options=chs_options,
         is_measurement_iteration=is_measurement_iteration,
         is_predict_iteration=is_predict_iteration,
         iteration_to_period=iteration_to_period,

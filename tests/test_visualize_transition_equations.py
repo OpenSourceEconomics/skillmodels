@@ -10,7 +10,7 @@ from skillmodels.common.visualize_transition_equations import (
     combine_transition_plots,
     get_transition_plots,
 )
-from skillmodels.test_data.model2 import MODEL2
+from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
@@ -25,7 +25,7 @@ def test_visualize_transition_equations_runs() -> None:
     data = data.set_index(["caseid", "period"])
     data["ob1"] = 0
 
-    max_inputs = get_maximization_inputs(model, data)
+    max_inputs = get_maximization_inputs(model, data, chs_options=MODEL2_CHS_OPTIONS)
     full_index = max_inputs["params_template"].index
     params = params.reindex(full_index)
     params["value"] = params["value"].fillna(0)

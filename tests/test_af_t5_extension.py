@@ -16,7 +16,6 @@ import pytest
 
 from skillmodels.af import AFEstimationOptions, estimate_af
 from skillmodels.common.model_spec import (
-    CHSEstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -48,11 +47,6 @@ def _build_t5_model() -> ModelSpec:
                 transition_function="linear",
             ),
         },
-        chs_estimation_options=CHSEstimationOptions(
-            robust_bounds=True,
-            bounds_distance=0.001,
-            n_mixtures=1,
-        ),
     )
 
 

@@ -126,6 +126,7 @@ def get_constraints(
     update_info: pd.DataFrame,
     normalizations: Mapping[str, Normalizations],
     endogenous_factors_info: EndogenousFactorsInfo,
+    bounds_distance: float,
 ) -> list[om.constraints.Constraint]:
     """Generate constraints implied by the model specification.
 
@@ -140,6 +141,8 @@ def get_constraints(
         normalizations: Nested dictionary with information on normalized factor
             loadings and intercepts for each factor. See :ref:`normalizations`.
         endogenous_factors_info: Information about endogenous factors in the model.
+        bounds_distance: Distance from zero/one used for soft-pinning shock
+            standard deviations in carry-forward augmented periods.
 
     Returns:
         List of optimagic constraint objects.
@@ -171,6 +174,7 @@ def get_constraints(
         constraints += _get_constraints_for_augmented_periods(
             labels=labels,
             endogenous_factors_info=endogenous_factors_info,
+            bounds_distance=bounds_distance,
         )
 
     return constraints
@@ -454,6 +458,7 @@ def _get_anchoring_constraints(  # noqa: C901
 def _get_constraints_for_augmented_periods(
     labels: Labels,
     endogenous_factors_info: EndogenousFactorsInfo,
+    bounds_distance: float,
 ) -> list[om.constraints.Constraint]:
     """Constraints for augmented periods.
 
@@ -468,6 +473,8 @@ def _get_constraints_for_augmented_periods(
             factors, periods, controls, stagemap and stages. See :ref:`labels`
         endogenous_factors_info: Information about endogenous factors and their
             relationship to augmented periods.
+        bounds_distance: Value to pin shock standard deviations to in
+            carry-forward augmented periods.
 
     Returns:
         List of constraint objects.
@@ -514,7 +521,7 @@ def _get_constraints_for_augmented_periods(
             constraints.append(
                 FixedConstraintWithValue(
                     loc=loc,
-                    value=endogenous_factors_info.bounds_distance,
+                    value=bounds_distance,
                 )
             )
 

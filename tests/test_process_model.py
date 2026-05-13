@@ -3,7 +3,6 @@
 import inspect
 from dataclasses import replace
 
-import numpy as np
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
@@ -43,13 +42,6 @@ def test_labels(model2) -> None:
     assert res.periods == (0, 1, 2, 3, 4, 5, 6, 7)
     assert res.stagemap == (0, 0, 0, 0, 0, 0, 0)
     assert res.stages == (0,)
-
-
-def test_chs_estimation_options(model2) -> None:
-    res = process_model(model2).chs_estimation_options
-    assert res.sigma_points_scale == 2
-    assert res.robust_bounds
-    assert np.isclose(res.bounds_distance, 0.001)
 
 
 def test_anchoring(model2) -> None:
@@ -199,13 +191,6 @@ def test_with_endog_labels(model2_inv) -> None:
     assert res.periods == (0, 1, 2, 3, 4, 5, 6, 7)
     assert res.aug_stagemap == tuple(range(n_aug_periods - 2))
     assert res.aug_stages == tuple(range(n_aug_periods - 2))
-
-
-def test_with_endog_chs_estimation_options(model2_inv) -> None:
-    res = process_model(model2_inv).chs_estimation_options
-    assert res.sigma_points_scale == 2
-    assert res.robust_bounds
-    assert np.isclose(res.bounds_distance, 0.001)
 
 
 def test_with_endog_anchoring_is_empty(model2_inv) -> None:

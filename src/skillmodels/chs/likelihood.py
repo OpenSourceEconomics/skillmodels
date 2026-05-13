@@ -10,9 +10,9 @@ from jax import Array
 
 from skillmodels.chs.clipping import soft_clipping
 from skillmodels.chs.kalman_filters import kalman_update
+from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.parse_params import parse_params
 from skillmodels.common.types import (
-    CHSEstimationOptions,
     Dimensions,
     Labels,
     ParsedParams,

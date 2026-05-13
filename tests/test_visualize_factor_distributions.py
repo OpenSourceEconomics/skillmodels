@@ -14,7 +14,7 @@ from skillmodels.common.visualize_factor_distributions import (
     combine_distribution_plots,
     univariate_densities,
 )
-from skillmodels.test_data.model2 import MODEL2
+from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
@@ -28,7 +28,7 @@ def test_visualize_factor_distributions_runs_with_filtered_states() -> None:
     data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta")
     data = data.set_index(["caseid", "period"])
 
-    max_inputs = get_maximization_inputs(model, data)
+    max_inputs = get_maximization_inputs(model, data, chs_options=MODEL2_CHS_OPTIONS)
     params = params.loc[max_inputs["params_template"].index]
     kde = univariate_densities(
         data=data,
@@ -64,7 +64,7 @@ def test_visualize_factor_distributions_runs_with_simulated_states() -> None:
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
 
-    max_inputs = get_maximization_inputs(model, data)
+    max_inputs = get_maximization_inputs(model, data, chs_options=MODEL2_CHS_OPTIONS)
     params = params.loc[max_inputs["params_template"].index]
 
     latent_data = simulate_dataset(model, params, data=data, policies=None)[
@@ -106,7 +106,7 @@ def test_visualize_factor_distributions_with_period_indexed_states() -> None:
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
 
-    max_inputs = get_maximization_inputs(model, data)
+    max_inputs = get_maximization_inputs(model, data, chs_options=MODEL2_CHS_OPTIONS)
     params = params.loc[max_inputs["params_template"].index]
 
     # Get filtered states (already has period column) and set index
@@ -150,7 +150,7 @@ def test_visualize_factor_distributions_with_both_aug_period_and_period() -> Non
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
 
-    max_inputs = get_maximization_inputs(model, data)
+    max_inputs = get_maximization_inputs(model, data, chs_options=MODEL2_CHS_OPTIONS)
     params = params.loc[max_inputs["params_template"].index]
 
     # Get filtered states (already has period column) and set index

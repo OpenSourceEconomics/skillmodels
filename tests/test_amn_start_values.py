@@ -19,12 +19,12 @@ from skillmodels.amn.start_values import (
     pool_equality_groups,
 )
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
+from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.constraints import select_by_loc
 from skillmodels.common.model_spec import ModelSpec
-from skillmodels.common.types import CHSEstimationOptions
 from skillmodels.common.utilities import reduce_n_periods
-from skillmodels.test_data.model2 import MODEL2
+from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
 
 
 @pytest.fixture
@@ -50,10 +50,11 @@ def test_template_filled_with_spearman_strategy(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """`start_params_strategy="spearman"` returns a fully-populated template."""
-    spec = model2_short.with_chs_estimation_options(
-        CHSEstimationOptions(start_params_strategy="spearman")
+    inputs = get_maximization_inputs(
+        model2_short,
+        model2_data,
+        chs_options=CHSEstimationOptions(start_params_strategy="spearman"),
     )
-    inputs = get_maximization_inputs(spec, model2_data)
     template = inputs["params_template"]
     assert not template["value"].isna().any()
 
@@ -62,10 +63,11 @@ def test_strategy_none_leaves_nan(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """`start_params_strategy="none"` reproduces the legacy NaN behaviour."""
-    spec_none = model2_short.with_chs_estimation_options(
-        CHSEstimationOptions(start_params_strategy="none")
+    inputs = get_maximization_inputs(
+        model2_short,
+        model2_data,
+        chs_options=CHSEstimationOptions(start_params_strategy="none"),
     )
-    inputs = get_maximization_inputs(spec_none, model2_data)
     template = inputs["params_template"]
     assert template["value"].isna().any()
 
@@ -74,7 +76,9 @@ def test_filled_template_yields_finite_loglike(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """The moment-seeded template produces a finite log-likelihood."""
-    inputs = get_maximization_inputs(model2_short, model2_data)
+    inputs = get_maximization_inputs(
+        model2_short, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
     val = inputs["loglike"](inputs["params_template"])
     assert np.isfinite(val)
 
@@ -83,7 +87,9 @@ def test_loadings_seeded_from_data_not_constant(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """Loadings vary across measurements (Spearman seed, not flat 1.0)."""
-    inputs = get_maximization_inputs(model2_short, model2_data)
+    inputs = get_maximization_inputs(
+        model2_short, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
     template = inputs["params_template"]
     loadings = template.loc["loadings", "value"]
     free = (
@@ -99,7 +105,9 @@ def test_meas_sds_seeded_from_data_not_constant(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """Measurement SDs vary across indicators (residual SD seed, not 0.5)."""
-    inputs = get_maximization_inputs(model2_short, model2_data)
+    inputs = get_maximization_inputs(
+        model2_short, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
     template = inputs["params_template"]
     meas_sds = template.loc["meas_sds", "value"].to_numpy()
     assert (meas_sds != meas_sds[0]).any()
@@ -110,7 +118,9 @@ def test_initial_cholcovs_diagonal_is_positive(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """Initial-cov diagonals are positive (sqrt(latent_var))."""
-    inputs = get_maximization_inputs(model2_short, model2_data)
+    inputs = get_maximization_inputs(
+        model2_short, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
     template = inputs["params_template"]
     cholcov = template.loc["initial_cholcovs", "value"]
     diag_mask = pd.Series(
@@ -129,7 +139,9 @@ def test_fixed_params_pin_survives_moment_fill(
         names=["category", "period", "name1", "name2"],
     )
     fixed_df = pd.DataFrame({"value": [0.0, 0.0]}, index=fixed_idx)
-    inputs = get_maximization_inputs(model2_short, model2_data, fixed_params=fixed_df)
+    inputs = get_maximization_inputs(
+        model2_short, model2_data, chs_options=MODEL2_CHS_OPTIONS, fixed_params=fixed_df
+    )
     template = inputs["params_template"]
     assert template.loc[("transition", 0, "fac1", "fac3"), "value"] == 0.0
     assert template.loc[("transition", 1, "fac1", "fac3"), "value"] == 0.0
@@ -139,17 +151,19 @@ def test_explicit_strategy_argument_via_helper(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """The standalone helper produces the same fills as the wired-in spearman path."""
-    spec_none = model2_short.with_chs_estimation_options(
-        CHSEstimationOptions(start_params_strategy="none")
+    inputs_raw = get_maximization_inputs(
+        model2_short,
+        model2_data,
+        chs_options=CHSEstimationOptions(start_params_strategy="none"),
     )
-    inputs_raw = get_maximization_inputs(spec_none, model2_data)
     template_raw = inputs_raw["params_template"]
-    filled = get_spearman_start_params(spec_none, model2_data, template_raw)
+    filled = get_spearman_start_params(model2_short, model2_data, template_raw)
 
-    spec_spearman = model2_short.with_chs_estimation_options(
-        CHSEstimationOptions(start_params_strategy="spearman")
+    inputs_spearman = get_maximization_inputs(
+        model2_short,
+        model2_data,
+        chs_options=CHSEstimationOptions(start_params_strategy="spearman"),
     )
-    inputs_spearman = get_maximization_inputs(spec_spearman, model2_data)
     template_spearman = inputs_spearman["params_template"]
 
     pd.testing.assert_series_equal(filled["value"], template_spearman["value"])
@@ -159,14 +173,15 @@ def test_helper_does_not_overwrite_user_set_values(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """If the caller already set a non-NaN value, the helper preserves it."""
-    spec_none = model2_short.with_chs_estimation_options(
-        CHSEstimationOptions(start_params_strategy="none")
+    inputs = get_maximization_inputs(
+        model2_short,
+        model2_data,
+        chs_options=CHSEstimationOptions(start_params_strategy="none"),
     )
-    inputs = get_maximization_inputs(spec_none, model2_data)
     template = inputs["params_template"]
     sentinel_loc = template.index[template["value"].isna()][0]
     template.loc[sentinel_loc, "value"] = 999.0
-    filled = get_spearman_start_params(spec_none, model2_data, template)
+    filled = get_spearman_start_params(model2_short, model2_data, template)
     assert filled.loc[sentinel_loc, "value"] == 999.0
 
 
@@ -174,7 +189,9 @@ def test_transition_coefficients_seeded_via_ols(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """Free transition rows get AMN-style OLS seeds, not constant 0.5."""
-    inputs = get_maximization_inputs(model2_short, model2_data)
+    inputs = get_maximization_inputs(
+        model2_short, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
     template = inputs["params_template"]
     free_trans = template.loc["transition"]
     free_mask = free_trans["lower_bound"] != free_trans["upper_bound"]
@@ -186,7 +203,9 @@ def test_shock_sds_seeded_via_residual_variance(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """Free shock_sds rows get residual-variance seeds, not flat 0.5."""
-    inputs = get_maximization_inputs(model2_short, model2_data)
+    inputs = get_maximization_inputs(
+        model2_short, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
     template = inputs["params_template"]
     free_sds = template.loc["shock_sds"]
     free_mask = free_sds["lower_bound"] != free_sds["upper_bound"]

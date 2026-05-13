@@ -11,6 +11,7 @@ from skillmodels.common.diagnostic_plots import (
     plot_likelihood_contributions,
     plot_residual_boxplots,
 )
+from skillmodels.test_data.model2 import MODEL2_CHS_OPTIONS
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
@@ -20,7 +21,9 @@ def model2_diag_params(model2, model2_data):
     """Prepare params that match the expected index for diagnostic plots."""
     vault_params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     vault_params = vault_params.set_index(["category", "period", "name1", "name2"])
-    max_inputs = get_maximization_inputs(model_spec=model2, data=model2_data)
+    max_inputs = get_maximization_inputs(
+        model_spec=model2, data=model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
     params = max_inputs["params_template"].copy()
     # Fill in values from vault params where indices match
     common_idx = params.index.intersection(vault_params.index)
@@ -32,7 +35,9 @@ def model2_diag_params(model2, model2_data):
 @pytest.fixture
 def model2_debug(model2, model2_data, model2_diag_params):
     """Run the CHS debug loglike once to feed the plot helpers."""
-    max_inputs = get_maximization_inputs(model_spec=model2, data=model2_data)
+    max_inputs = get_maximization_inputs(
+        model_spec=model2, data=model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
     return max_inputs["debug_loglike"](model2_diag_params)
 
 

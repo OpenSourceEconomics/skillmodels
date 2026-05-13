@@ -22,8 +22,8 @@ don't need to touch the `chs.` prefix. The estimator-agnostic
 
 from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
+from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.chs.process_debug_data import process_debug_data
-from skillmodels.common.types import CHSEstimationOptions
 
 __all__ = [
     "CHSEstimationOptions",

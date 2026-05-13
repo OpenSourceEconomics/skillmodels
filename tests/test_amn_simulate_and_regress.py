@@ -11,7 +11,6 @@ from skillmodels.amn.simulate_and_regress import (
 )
 from skillmodels.amn.types import MinimumDistanceResult
 from skillmodels.common.model_spec import (
-    CHSEstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -31,9 +30,6 @@ def _linear_model() -> ModelSpec:
                 transition_function="linear",
             ),
         },
-        chs_estimation_options=CHSEstimationOptions(
-            robust_bounds=True, bounds_distance=0.001, n_mixtures=1
-        ),
     )
 
 
@@ -147,7 +143,6 @@ def test_simulate_and_regress_returns_linear_transition_for_simple_model():
 def test_simulate_and_regress_handles_translog():
     """Generic NLS path recovers translog params via the function callable."""
     from skillmodels.common.model_spec import (  # noqa: PLC0415
-        CHSEstimationOptions,
         FactorSpec,
         ModelSpec,
         Normalizations,
@@ -165,9 +160,6 @@ def test_simulate_and_regress_handles_translog():
                 transition_function="translog",
             ),
         },
-        chs_estimation_options=CHSEstimationOptions(
-            robust_bounds=True, bounds_distance=0.001, n_mixtures=1
-        ),
     )
     processed = process_model(model)
     slots = ((0, "skills"), (1, "skills"))

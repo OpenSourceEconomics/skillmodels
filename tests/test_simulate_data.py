@@ -8,7 +8,6 @@ import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
 from skillmodels.common.model_spec import (
-    CHSEstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -237,11 +236,6 @@ def test_simulate_dataset_no_data_with_nobs() -> None:
                 transition_function="linear",
             ),
         },
-        chs_estimation_options=CHSEstimationOptions(
-            robust_bounds=True,
-            bounds_distance=0.001,
-            n_mixtures=1,
-        ),
     )
 
     processed = process_model(model_no_controls)

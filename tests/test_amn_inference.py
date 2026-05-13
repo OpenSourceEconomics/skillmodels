@@ -6,7 +6,6 @@ import pandas as pd
 from skillmodels.amn import compute_amn_standard_errors, estimate_amn
 from skillmodels.amn.types import AMNEstimationOptions
 from skillmodels.common.model_spec import (
-    CHSEstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -25,9 +24,6 @@ def _tiny_model() -> ModelSpec:
                 transition_function="linear",
             ),
         },
-        chs_estimation_options=CHSEstimationOptions(
-            robust_bounds=True, bounds_distance=0.001, n_mixtures=1
-        ),
     )
 
 

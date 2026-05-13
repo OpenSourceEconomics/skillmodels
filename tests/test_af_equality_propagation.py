@@ -28,7 +28,6 @@ from skillmodels.af.estimate import (
 from skillmodels.af.types import AFPeriodResult
 from skillmodels.common.constraints import select_by_loc
 from skillmodels.common.model_spec import (
-    CHSEstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -144,11 +143,6 @@ def _build_t3_model() -> ModelSpec:
                 transition_function="linear",
             ),
         },
-        chs_estimation_options=CHSEstimationOptions(
-            robust_bounds=True,
-            bounds_distance=0.001,
-            n_mixtures=1,
-        ),
     )
 
 

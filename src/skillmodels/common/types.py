@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from types import MappingProxyType
-from typing import Any, Literal, NewType, cast
+from typing import Any, NewType, cast
 
 import pandas as pd
 from jax import Array
@@ -197,42 +197,6 @@ class Anchoring:
 
 
 @dataclass(frozen=True)
-class CHSEstimationOptions:
-    """Options for model estimation."""
-
-    robust_bounds: bool = True
-    """Whether to use robust bounds."""
-    bounds_distance: float = 1e-3
-    """Distance for bounds. Zeroed out if `robust_bounds` is False."""
-    n_mixtures: int = 1
-    """Number of mixture components."""
-    sigma_points_scale: float = 2
-    """Scaling factor for sigma points in unscented transform."""
-    clipping_lower_bound: float = -1e30
-    """Lower bound for soft clipping."""
-    clipping_upper_bound: float | None = None
-    """Upper bound for soft clipping (None for no upper bound)."""
-    clipping_lower_hardness: float = 1
-    """Hardness of lower clipping."""
-    clipping_upper_hardness: float = 1
-    """Hardness of upper clipping."""
-    start_params_strategy: Literal["none", "spearman", "amn"] = "amn"
-    """How to populate the `value` column of the `params_template`.
-
-    `"amn"` (default) runs the full Attanasio-Meghir-Nix (2020)
-    three-stage estimator and uses its parameter estimates as starting
-    values for the downstream MLE. `"spearman"` seeds free entries
-    from Spearman cross-covariance / Bartlett-OLS moments only (fast
-    but less accurate on non-Gaussian factor distributions). `"none"`
-    leaves free entries as `NaN` so the caller can fill them.
-    """
-
-    def __post_init__(self) -> None:  # noqa: D105
-        if not self.robust_bounds:
-            object.__setattr__(self, "bounds_distance", 0.0)
-
-
-@dataclass(frozen=True)
 class TransitionInfo:
     """Information about transition functions."""
 
@@ -304,8 +268,6 @@ class EndogenousFactorsInfo:
     aug_periods_to_aug_period_meas_types: MappingProxyType[int, MeasurementType]
     """Map each augmented period to whether it measures states or endogenous
     factors."""
-    bounds_distance: float
-    """Small value used as shock sd in carry-forward periods."""
     aug_periods_from_period: Callable[[int], list[int]]
     """Return the augmented period indices for a given original period."""
     factor_info: MappingProxyType[str, FactorInfo]
@@ -349,8 +311,6 @@ class ProcessedModel:
     """String identifiers for factors, periods, controls, and stages."""
     anchoring: Anchoring
     """Anchoring configuration."""
-    chs_estimation_options: CHSEstimationOptions
-    """Numerical estimation settings."""
     transition_info: TransitionInfo
     """Transition function details."""
     update_info: pd.DataFrame

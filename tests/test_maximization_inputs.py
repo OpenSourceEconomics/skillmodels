@@ -14,7 +14,7 @@ from skillmodels.chs.maximization_inputs import (
 from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.constraints import FixedConstraintWithValue
 from skillmodels.common.utilities import reduce_n_periods
-from skillmodels.test_data.model2 import MODEL2
+from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
 
 
 def test_to_numpy_with_dict() -> None:
@@ -100,7 +100,9 @@ def test_get_maximization_inputs_with_fixed_params_pins_cross_factor_gamma(
     )
     fixed_df = pd.DataFrame({"value": [0.0, 0.0]}, index=fixed_idx)
 
-    inputs = get_maximization_inputs(model2_short, model2_data, fixed_params=fixed_df)
+    inputs = get_maximization_inputs(
+        model2_short, model2_data, chs_options=MODEL2_CHS_OPTIONS, fixed_params=fixed_df
+    )
 
     template = inputs["params_template"]
     assert template.loc[("transition", 0, "fac1", "fac3"), "value"] == 0.0
@@ -140,7 +142,9 @@ def test_get_maximization_inputs_with_fixed_params_non_zero(
     )
     fixed_df = pd.DataFrame({"value": [0.2]}, index=fixed_idx)
 
-    inputs = get_maximization_inputs(model2_short, model2_data, fixed_params=fixed_df)
+    inputs = get_maximization_inputs(
+        model2_short, model2_data, chs_options=MODEL2_CHS_OPTIONS, fixed_params=fixed_df
+    )
 
     template = inputs["params_template"]
     assert template.loc[("transition", 0, "fac1", "fac3"), "value"] == 0.2
