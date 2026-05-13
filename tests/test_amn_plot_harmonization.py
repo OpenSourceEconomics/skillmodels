@@ -4,11 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from skillmodels import (
-    AMNEstimationOptions,
-    decompose_measurement_variance,
-    estimate_amn,
-)
+from skillmodels.amn import AMNEstimationOptions, estimate_amn
 from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.common.model_spec import (
     CHSEstimationOptions,
@@ -16,6 +12,7 @@ from skillmodels.common.model_spec import (
     ModelSpec,
     Normalizations,
 )
+from skillmodels.common.variance_decomposition import decompose_measurement_variance
 
 
 def _tiny_model() -> ModelSpec:

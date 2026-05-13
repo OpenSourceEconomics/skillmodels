@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from skillmodels import estimate_amn
+from skillmodels.amn import estimate_amn
 from skillmodels.amn.types import AMNEstimationOptions
 from skillmodels.common.model_spec import (
     CHSEstimationOptions,

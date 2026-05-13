@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from skillmodels import compute_amn_standard_errors, estimate_amn
+from skillmodels.amn import compute_amn_standard_errors, estimate_amn
 from skillmodels.amn.types import AMNEstimationOptions
 from skillmodels.common.model_spec import (
     CHSEstimationOptions,

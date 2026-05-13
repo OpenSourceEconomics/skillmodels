@@ -7,11 +7,11 @@ Models are specified using Python dataclasses.
 ```python
 from skillmodels import (
     AnchoringSpec,
-    EstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
 )
+from skillmodels.chs import CHSEstimationOptions
 
 # Define factors
 fac1 = FactorSpec(
@@ -39,7 +39,7 @@ model = ModelSpec(
     ),
     controls=("x1", "x2"),
     stagemap=(0, 0, 1, 1, 2, 2, 3),
-    estimation_options=EstimationOptions(),
+    chs_estimation_options=CHSEstimationOptions(),
 )
 ```
 
