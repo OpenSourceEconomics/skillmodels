@@ -45,8 +45,8 @@ def test_labels(model2) -> None:
     assert res.stages == (0,)
 
 
-def test_estimation_options(model2) -> None:
-    res = process_model(model2).estimation_options
+def test_chs_estimation_options(model2) -> None:
+    res = process_model(model2).chs_estimation_options
     assert res.sigma_points_scale == 2
     assert res.robust_bounds
     assert np.isclose(res.bounds_distance, 0.001)
@@ -201,8 +201,8 @@ def test_with_endog_labels(model2_inv) -> None:
     assert res.aug_stages == tuple(range(n_aug_periods - 2))
 
 
-def test_with_endog_estimation_options(model2_inv) -> None:
-    res = process_model(model2_inv).estimation_options
+def test_with_endog_chs_estimation_options(model2_inv) -> None:
+    res = process_model(model2_inv).chs_estimation_options
     assert res.sigma_points_scale == 2
     assert res.robust_bounds
     assert np.isclose(res.bounds_distance, 0.001)

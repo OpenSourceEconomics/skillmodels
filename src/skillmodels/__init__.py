@@ -29,7 +29,7 @@ from skillmodels.common.diagnostic_plots import (
 )
 from skillmodels.common.model_spec import (
     AnchoringSpec,
-    EstimationOptions,
+    CHSEstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -49,7 +49,7 @@ __all__ = [
     "AMNEstimationResult",
     "AMNInferenceResult",
     "AnchoringSpec",
-    "EstimationOptions",
+    "CHSEstimationOptions",
     "FactorSpec",
     "ModelSpec",
     "Normalizations",

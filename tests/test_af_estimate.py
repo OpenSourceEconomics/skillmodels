@@ -22,7 +22,7 @@ from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.decorators import register_params
 from skillmodels.common.model_spec import (
-    EstimationOptions,
+    CHSEstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -68,7 +68,7 @@ def model2_af():
             ),
         },
         controls=("x1",),
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True,
             bounds_distance=0.001,
             n_mixtures=1,
@@ -161,7 +161,7 @@ def test_af_estimate_single_factor() -> None:
                 transition_function="linear",
             ),
         },
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True,
             bounds_distance=0.001,
             n_mixtures=1,
@@ -261,7 +261,7 @@ def test_af_vs_chs_measurement_params_agree() -> None:
                 transition_function="linear",
             ),
         },
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True,
             bounds_distance=0.001,
             n_mixtures=1,
@@ -388,7 +388,7 @@ def _make_linear_transition_model(n_periods: int = 3) -> ModelSpec:
                 transition_function="linear",
             ),
         },
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True,
             bounds_distance=0.001,
             n_mixtures=1,
@@ -769,7 +769,7 @@ def test_af_estimate_with_endogenous_factor() -> None:
             ),
         },
         observed_factors=("income",),
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True,
             bounds_distance=0.001,
             n_mixtures=1,
@@ -1507,7 +1507,7 @@ def test_af_joint_halton_recovers_sigma_prod_with_chain_link() -> None:  # noqa:
             ),
         },
         observed_factors=("log_income",),
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True, bounds_distance=0.001, n_mixtures=2
         ),
     )
@@ -1652,7 +1652,7 @@ def test_af_estimate_with_translog() -> None:
                 transition_function="translog",
             ),
         },
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True,
             bounds_distance=0.001,
             n_mixtures=1,
@@ -1748,7 +1748,7 @@ def test_af_joint_initial_distribution_with_observed_factor() -> None:
             ),
         },
         observed_factors=("income",),
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True,
             bounds_distance=0.001,
             n_mixtures=1,
@@ -1849,7 +1849,7 @@ def test_af_fixed_params_pins_time_invariant_latent() -> None:
                 transition_function="linear",
             ),
         },
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True,
             bounds_distance=0.001,
             n_mixtures=1,
@@ -1970,7 +1970,7 @@ def _make_three_factor_log_ces_model(
                 transition_function="linear",
             ),
         },
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True,
             bounds_distance=0.001,
             n_mixtures=1,
@@ -2113,7 +2113,7 @@ def test_af_estimate_tolerates_nan_measurements() -> None:
             ),
         },
         observed_factors=("income",),
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True, bounds_distance=0.001, n_mixtures=1
         ),
     )
@@ -2180,7 +2180,7 @@ def test_af_estimate_with_register_params_user_transition() -> None:
                 transition_function=f_skill,
             ),
         },
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True, bounds_distance=0.001, n_mixtures=1
         ),
     )
@@ -2248,7 +2248,7 @@ def test_af_result_is_numpy_only_and_drops_samples_per_component() -> None:
                 transition_function="linear",
             ),
         },
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True, bounds_distance=0.001, n_mixtures=1
         ),
     )

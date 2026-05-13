@@ -197,7 +197,7 @@ class Anchoring:
 
 
 @dataclass(frozen=True)
-class EstimationOptions:
+class CHSEstimationOptions:
     """Options for model estimation."""
 
     robust_bounds: bool = True
@@ -349,7 +349,7 @@ class ProcessedModel:
     """String identifiers for factors, periods, controls, and stages."""
     anchoring: Anchoring
     """Anchoring configuration."""
-    estimation_options: EstimationOptions
+    chs_estimation_options: CHSEstimationOptions
     """Numerical estimation settings."""
     transition_info: TransitionInfo
     """Transition function details."""

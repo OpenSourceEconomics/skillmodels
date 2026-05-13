@@ -111,7 +111,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
 
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
         n_states=processed_model.dimensions.n_latent_factors,
-        kappa=processed_model.estimation_options.sigma_points_scale,
+        kappa=processed_model.chs_estimation_options.sigma_points_scale,
     )
 
     partialed_get_jnp_params_vec = functools.partial(
@@ -201,7 +201,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     params_template = pd.DataFrame(columns=["value"], index=p_index)
     params_template = add_bounds(
         params=params_template,
-        bounds_distance=processed_model.estimation_options.bounds_distance,
+        bounds_distance=processed_model.chs_estimation_options.bounds_distance,
     )
     params_template = enforce_fixed_constraints(
         params_template=params_template,
@@ -210,7 +210,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     if not params_template.index.equals(p_index):
         raise ValueError("params_template index is not equal to p_index")
 
-    strategy = processed_model.estimation_options.start_params_strategy
+    strategy = processed_model.chs_estimation_options.start_params_strategy
     if strategy == "spearman":
         params_template = get_spearman_start_params(
             model_spec=model_spec,
@@ -324,7 +324,7 @@ def _partial_some_log_likelihood(
         sigma_weights=sigma_weights,
         dimensions=model.dimensions,
         labels=model.labels,
-        estimation_options=model.estimation_options,
+        chs_estimation_options=model.chs_estimation_options,
         is_measurement_iteration=is_measurement_iteration,
         is_predict_iteration=is_predict_iteration,
         iteration_to_period=iteration_to_period,

@@ -10,7 +10,7 @@ from skillmodels.amn.mixture_em import (
     fit_mixture_em,
 )
 from skillmodels.common.model_spec import (
-    EstimationOptions,
+    CHSEstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -31,7 +31,7 @@ def _tiny_model() -> ModelSpec:
                 transition_function="linear",
             ),
         },
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True, bounds_distance=0.001, n_mixtures=1
         ),
     )

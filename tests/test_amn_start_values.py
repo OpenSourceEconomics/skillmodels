@@ -22,7 +22,7 @@ from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.constraints import select_by_loc
 from skillmodels.common.model_spec import ModelSpec
-from skillmodels.common.types import EstimationOptions
+from skillmodels.common.types import CHSEstimationOptions
 from skillmodels.common.utilities import reduce_n_periods
 from skillmodels.test_data.model2 import MODEL2
 
@@ -42,16 +42,16 @@ def model2_data() -> pd.DataFrame:
 
 
 def test_default_strategy_is_amn() -> None:
-    """`EstimationOptions().start_params_strategy` defaults to "amn"."""
-    assert EstimationOptions().start_params_strategy == "amn"
+    """`CHSEstimationOptions().start_params_strategy` defaults to "amn"."""
+    assert CHSEstimationOptions().start_params_strategy == "amn"
 
 
 def test_template_filled_with_spearman_strategy(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """`start_params_strategy="spearman"` returns a fully-populated template."""
-    spec = model2_short.with_estimation_options(
-        EstimationOptions(start_params_strategy="spearman")
+    spec = model2_short.with_chs_estimation_options(
+        CHSEstimationOptions(start_params_strategy="spearman")
     )
     inputs = get_maximization_inputs(spec, model2_data)
     template = inputs["params_template"]
@@ -62,8 +62,8 @@ def test_strategy_none_leaves_nan(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """`start_params_strategy="none"` reproduces the legacy NaN behaviour."""
-    spec_none = model2_short.with_estimation_options(
-        EstimationOptions(start_params_strategy="none")
+    spec_none = model2_short.with_chs_estimation_options(
+        CHSEstimationOptions(start_params_strategy="none")
     )
     inputs = get_maximization_inputs(spec_none, model2_data)
     template = inputs["params_template"]
@@ -139,15 +139,15 @@ def test_explicit_strategy_argument_via_helper(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """The standalone helper produces the same fills as the wired-in spearman path."""
-    spec_none = model2_short.with_estimation_options(
-        EstimationOptions(start_params_strategy="none")
+    spec_none = model2_short.with_chs_estimation_options(
+        CHSEstimationOptions(start_params_strategy="none")
     )
     inputs_raw = get_maximization_inputs(spec_none, model2_data)
     template_raw = inputs_raw["params_template"]
     filled = get_spearman_start_params(spec_none, model2_data, template_raw)
 
-    spec_spearman = model2_short.with_estimation_options(
-        EstimationOptions(start_params_strategy="spearman")
+    spec_spearman = model2_short.with_chs_estimation_options(
+        CHSEstimationOptions(start_params_strategy="spearman")
     )
     inputs_spearman = get_maximization_inputs(spec_spearman, model2_data)
     template_spearman = inputs_spearman["params_template"]
@@ -159,8 +159,8 @@ def test_helper_does_not_overwrite_user_set_values(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """If the caller already set a non-NaN value, the helper preserves it."""
-    spec_none = model2_short.with_estimation_options(
-        EstimationOptions(start_params_strategy="none")
+    spec_none = model2_short.with_chs_estimation_options(
+        CHSEstimationOptions(start_params_strategy="none")
     )
     inputs = get_maximization_inputs(spec_none, model2_data)
     template = inputs["params_template"]

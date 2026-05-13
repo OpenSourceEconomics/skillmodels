@@ -18,9 +18,9 @@ from skillmodels.common.decorators import extract_params, jax_array_output
 from skillmodels.common.model_spec import FactorSpec, ModelSpec
 from skillmodels.common.types import (
     Anchoring,
+    CHSEstimationOptions,
     Dimensions,
     EndogenousFactorsInfo,
-    EstimationOptions,
     FactorInfo,
     Labels,
     MeasurementType,
@@ -72,12 +72,14 @@ def process_model(model_spec: ModelSpec) -> ProcessedModel:
         )
     else:
         _model_spec_aug = model_spec
-    estimation_options = _model_spec_aug.estimation_options or EstimationOptions()
+    chs_estimation_options = (
+        _model_spec_aug.chs_estimation_options or CHSEstimationOptions()
+    )
     endogenous_factors_info = _get_endogenous_factors_info(
         has_endogenous_factors=has_endogenous_factors,
         model_spec=_model_spec_aug,
         labels=labels,
-        bounds_distance=estimation_options.bounds_distance,
+        bounds_distance=chs_estimation_options.bounds_distance,
     )
     check_model(
         model_spec=_model_spec_aug,
@@ -95,7 +97,7 @@ def process_model(model_spec: ModelSpec) -> ProcessedModel:
         dimensions=dims,
         labels=labels,
         anchoring=anchoring,
-        estimation_options=estimation_options,
+        chs_estimation_options=chs_estimation_options,
         transition_info=transition_info,
         update_info=_get_update_info(
             model_spec=_model_spec_aug,
@@ -153,7 +155,7 @@ def get_dimensions(
     all_n_periods = [len(fspec.measurements) for fspec in model_spec.factors.values()]
     n_periods = max(all_n_periods)
     n_aug_periods = 2 * n_periods if has_endogenous_factors else n_periods
-    est_opts = model_spec.estimation_options
+    est_opts = model_spec.chs_estimation_options
 
     return Dimensions(
         n_latent_factors=len(model_spec.factors),

@@ -7,7 +7,7 @@ anchoring of fac1 to outcome Q1 and a single control variable x1.
 
 from skillmodels.common.model_spec import (
     AnchoringSpec,
-    EstimationOptions,
+    CHSEstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -49,14 +49,14 @@ MODEL2 = ModelSpec(
     ),
     controls=("x1",),
     stagemap=(0, 0, 0, 0, 0, 0, 0),
-    estimation_options=EstimationOptions(
+    chs_estimation_options=CHSEstimationOptions(
         robust_bounds=True,
         bounds_distance=0.001,
         n_mixtures=1,
         # Tests using this fixture run `get_maximization_inputs` for
         # shape and value checks rather than full estimation; opt into
         # the cheap Spearman start-value path so the fixture stays fast.
-        # End-user defaults (EstimationOptions()) keep `"amn"`.
+        # End-user defaults (CHSEstimationOptions()) keep `"amn"`.
         start_params_strategy="spearman",
     ),
 )

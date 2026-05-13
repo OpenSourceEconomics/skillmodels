@@ -12,8 +12,8 @@ from skillmodels.chs.clipping import soft_clipping
 from skillmodels.chs.kalman_filters_debug import kalman_update
 from skillmodels.common.parse_params import parse_params
 from skillmodels.common.types import (
+    CHSEstimationOptions,
     Dimensions,
-    EstimationOptions,
     Labels,
     ParsedParams,
     ParsingInfo,
@@ -30,7 +30,7 @@ def log_likelihood(
     sigma_weights: Array,
     dimensions: Dimensions,
     labels: Labels,
-    estimation_options: EstimationOptions,
+    chs_estimation_options: CHSEstimationOptions,
     is_measurement_iteration: Array,
     is_predict_iteration: Array,
     iteration_to_period: Array,
@@ -56,7 +56,7 @@ def log_likelihood(
             n_mixtures.
         labels: Labels for the model quantities like factors, periods, controls,
             stagemap and stages.
-        estimation_options: Options for estimation including clipping bounds.
+        chs_estimation_options: Options for estimation including clipping bounds.
         is_measurement_iteration: Boolean array indicating which iterations are
             measurement updates.
         is_predict_iteration: Boolean array indicating which iterations are predict
@@ -111,10 +111,10 @@ def log_likelihood(
     # possible.
     clipped = soft_clipping(
         arr=static_out["loglikes"],
-        lower=estimation_options.clipping_lower_bound,
-        upper=estimation_options.clipping_upper_bound,
-        lower_hardness=estimation_options.clipping_lower_hardness,
-        upper_hardness=estimation_options.clipping_upper_hardness,
+        lower=chs_estimation_options.clipping_lower_bound,
+        upper=chs_estimation_options.clipping_upper_bound,
+        lower_hardness=chs_estimation_options.clipping_lower_hardness,
+        upper_hardness=chs_estimation_options.clipping_upper_hardness,
     )
 
     value = clipped.sum()

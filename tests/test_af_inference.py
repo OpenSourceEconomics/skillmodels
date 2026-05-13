@@ -18,7 +18,7 @@ from skillmodels.af.inference import (
 )
 from skillmodels.af.types import AFEstimationOptions
 from skillmodels.common.model_spec import (
-    EstimationOptions,
+    CHSEstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -68,7 +68,7 @@ def _make_linear_model(n_periods: int = 2) -> ModelSpec:
                 transition_function="linear",
             ),
         },
-        estimation_options=EstimationOptions(
+        chs_estimation_options=CHSEstimationOptions(
             robust_bounds=True,
             bounds_distance=0.001,
             n_mixtures=1,

@@ -6,7 +6,7 @@ periods. Used for testing endogenous factor augmentation.
 """
 
 from skillmodels.common.model_spec import (
-    EstimationOptions,
+    CHSEstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -33,7 +33,7 @@ SIMPLEST_AUGMENTED_MODEL = ModelSpec(
         ),
     },
     observed_factors=("of",),
-    estimation_options=EstimationOptions(
+    chs_estimation_options=CHSEstimationOptions(
         bounds_distance=1e-8,
         # Tests using this fixture exercise CHS plumbing rather than
         # full estimation; opt into the cheap Spearman start-value

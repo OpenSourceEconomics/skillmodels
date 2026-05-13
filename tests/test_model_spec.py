@@ -8,7 +8,7 @@ from skillmodels.common.model_spec import (
     ModelSpec,
     Normalizations,
 )
-from skillmodels.common.types import EstimationOptions
+from skillmodels.common.types import CHSEstimationOptions
 
 
 def _minimal_dict():
@@ -30,7 +30,7 @@ def test_from_dict_minimal() -> None:
     assert spec.factors["f1"].measurements == (("y1", "y2"), ("y1", "y2"))
     assert spec.factors["f1"].transition_function == "linear"
     assert spec.anchoring is None
-    assert spec.estimation_options is None
+    assert spec.chs_estimation_options is None
     assert spec.controls == ()
 
 
@@ -68,13 +68,13 @@ def test_from_dict_with_anchoring() -> None:
     assert spec.anchoring.free_controls is True
 
 
-def test_from_dict_with_estimation_options() -> None:
+def test_from_dict_with_chs_estimation_options() -> None:
     d = _minimal_dict()
-    d["estimation_options"] = {"n_mixtures": 2, "robust_bounds": False}
+    d["chs_estimation_options"] = {"n_mixtures": 2, "robust_bounds": False}
     spec = ModelSpec.from_dict(d)
-    assert spec.estimation_options is not None
-    assert spec.estimation_options.n_mixtures == 2
-    assert spec.estimation_options.robust_bounds is False
+    assert spec.chs_estimation_options is not None
+    assert spec.chs_estimation_options.n_mixtures == 2
+    assert spec.chs_estimation_options.robust_bounds is False
 
 
 def test_from_dict_with_stagemap() -> None:
@@ -99,11 +99,11 @@ def test_with_added_observed_factors(model2) -> None:
     assert result.observed_factors == ("obs1", "obs2")
 
 
-def test_with_estimation_options(model2) -> None:
-    opts = EstimationOptions(n_mixtures=3)
-    result = model2.with_estimation_options(opts)
-    assert result.estimation_options is not None
-    assert result.estimation_options.n_mixtures == 3
+def test_with_chs_estimation_options(model2) -> None:
+    opts = CHSEstimationOptions(n_mixtures=3)
+    result = model2.with_chs_estimation_options(opts)
+    assert result.chs_estimation_options is not None
+    assert result.chs_estimation_options.n_mixtures == 3
 
 
 def test_with_anchoring(model2) -> None:

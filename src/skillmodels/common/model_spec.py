@@ -12,7 +12,7 @@ from types import MappingProxyType
 from typing import Any, Self
 
 from skillmodels.common.types import (
-    EstimationOptions,
+    CHSEstimationOptions,
     Normalizations,
     ensure_containers_are_immutable,
 )
@@ -100,7 +100,7 @@ class ModelSpec:
     """Stage mapping for transition functions."""
     anchoring: AnchoringSpec | None = None
     """Anchoring specification."""
-    estimation_options: EstimationOptions | None = None
+    chs_estimation_options: CHSEstimationOptions | None = None
     """Estimation tuning parameters."""
 
     def __init__(
@@ -110,7 +110,7 @@ class ModelSpec:
         controls: tuple[str, ...] = (),
         stagemap: tuple[int, ...] | None = None,
         anchoring: AnchoringSpec | None = None,
-        estimation_options: EstimationOptions | None = None,
+        chs_estimation_options: CHSEstimationOptions | None = None,
     ) -> None:
         """Create ModelSpec, wrapping factors dict in MappingProxyType."""
         object.__setattr__(self, "_factors", ensure_containers_are_immutable(factors))
@@ -118,7 +118,7 @@ class ModelSpec:
         object.__setattr__(self, "controls", controls)
         object.__setattr__(self, "stagemap", stagemap)
         object.__setattr__(self, "anchoring", anchoring)
-        object.__setattr__(self, "estimation_options", estimation_options)
+        object.__setattr__(self, "chs_estimation_options", chs_estimation_options)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Self:
@@ -126,7 +126,7 @@ class ModelSpec:
 
         Args:
             d: A dictionary with keys like "factors", "observed_factors",
-                "controls", "stagemap", "anchoring", "estimation_options".
+                "controls", "stagemap", "anchoring", "chs_estimation_options".
 
         Returns:
             A ModelSpec instance.
@@ -159,8 +159,8 @@ class ModelSpec:
             anchoring = AnchoringSpec(**d["anchoring"])
 
         estimation = None
-        if "estimation_options" in d:
-            estimation = EstimationOptions(**d["estimation_options"])
+        if "chs_estimation_options" in d:
+            estimation = CHSEstimationOptions(**d["chs_estimation_options"])
 
         stagemap = d.get("stagemap")
 
@@ -170,7 +170,7 @@ class ModelSpec:
             controls=tuple(d.get("controls", [])),
             stagemap=tuple(stagemap) if stagemap is not None else None,
             anchoring=anchoring,
-            estimation_options=estimation,
+            chs_estimation_options=estimation,
         )
 
     @property
@@ -186,8 +186,8 @@ class ModelSpec:
             controls=changes.get("controls", self.controls),
             stagemap=changes.get("stagemap", self.stagemap),
             anchoring=changes.get("anchoring", self.anchoring),
-            estimation_options=changes.get(
-                "estimation_options", self.estimation_options
+            chs_estimation_options=changes.get(
+                "chs_estimation_options", self.chs_estimation_options
             ),
         )
 
@@ -257,20 +257,20 @@ class ModelSpec:
             observed_factors=self.observed_factors + names,
         )
 
-    def with_estimation_options(
+    def with_chs_estimation_options(
         self,
-        estimation_options: EstimationOptions,
+        chs_estimation_options: CHSEstimationOptions,
     ) -> Self:
         """Return a new ModelSpec with the given estimation options.
 
         Args:
-            estimation_options: New estimation options.
+            chs_estimation_options: New estimation options.
 
         Returns:
             New ModelSpec with the updated estimation options.
 
         """
-        return self._replace(estimation_options=estimation_options)
+        return self._replace(chs_estimation_options=chs_estimation_options)
 
     def with_anchoring(
         self,
