@@ -116,6 +116,10 @@ def estimate_af(  # noqa: PLR0915
             stability_floor=af_options.stability_floor,
             n_obs_per_batch=af_options.n_obs_per_batch,
             initialization_strategy="constant",
+            keep_conditional_distributions=(af_options.keep_conditional_distributions),
+            n_halton_points_posterior_summary=(
+                af_options.n_halton_points_posterior_summary
+            ),
         )
 
     # Extract data arrays per period

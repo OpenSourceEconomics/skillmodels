@@ -106,6 +106,12 @@ class AFEstimationOptions:
         keep_conditional_distributions: bool = True,
         n_halton_points_posterior_summary: int = 256,
     ) -> None:
+        if n_halton_points_posterior_summary < 1:
+            msg = (
+                "n_halton_points_posterior_summary must be >= 1, "
+                f"got {n_halton_points_posterior_summary}."
+            )
+            raise ValueError(msg)
         object.__setattr__(self, "n_halton_points", n_halton_points)
         object.__setattr__(self, "n_halton_points_shock", n_halton_points_shock)
         object.__setattr__(self, "n_mixture_components", n_mixture_components)
