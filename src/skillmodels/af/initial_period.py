@@ -277,6 +277,7 @@ def estimate_initial_period(  # noqa: PLR0915
         sf,
         nodes=nodes,
         observed_factor_values=obs_values,
+        n_summary_halton=af_options.n_halton_points_posterior_summary,
     )
 
     period_result = AFPeriodResult(
@@ -451,6 +452,7 @@ def _extract_conditional_distribution(  # noqa: PLR0915
     factors: tuple[str, ...],
     nodes: Array,
     observed_factor_values: Array,
+    n_summary_halton: int | None = None,
 ) -> ConditionalDistribution:
     """Extract the initial distribution and build the period-0 importance sample.
 
@@ -489,6 +491,15 @@ def _extract_conditional_distribution(  # noqa: PLR0915
         dtype=jnp.int32,
     )
 
+    # `samples_per_component` is only used for the posterior-state
+    # summary (mean / chol_cov per mixture component); the transition
+    # likelihood rebuilds the chain on-demand from `chain_links` at the
+    # full `n_halton_points`. Subsample the Halton design here so the
+    # persistent `(n_summary, n_obs, n_state)` tensor stays small.
+    n_full = int(nodes.shape[0])
+    n_summary = min(n_full, n_summary_halton) if n_summary_halton else n_full
+    summary_nodes = nodes[:n_summary]
+
     components: list[MixtureComponent] = []
     samples_per_component: list[Array] = []
     log_unnorm_weights_per_component: list[Array] = []
@@ -511,10 +522,10 @@ def _extract_conditional_distribution(  # noqa: PLR0915
         if n_obs_factors == 0:
             sub_mean = mu_theta
             sub_chol = jnp.linalg.cholesky(cov_tt + 1e-10 * jnp.eye(n_state))
-            z_for_state = nodes[:, :n_state]
+            z_for_state = summary_nodes[:, :n_state]
             per_node = sub_mean[None, :] + z_for_state @ sub_chol.T
             samples = jnp.broadcast_to(
-                per_node[:, None, :], (nodes.shape[0], n_obs, n_state)
+                per_node[:, None, :], (n_summary, n_obs, n_state)
             )
             log_unnorm = jnp.full((n_obs,), float(jnp.log(weights[m] + 1e-300)))
             # Per-obs cond_means broadcast (n_obs, n_state); shared chol.
@@ -543,7 +554,7 @@ def _extract_conditional_distribution(  # noqa: PLR0915
                 return cond_mean, log_marg_y
 
             cond_means, log_margs = jax.vmap(_per_obs)(observed_factor_values)
-            z_for_state = nodes[:, :n_state]
+            z_for_state = summary_nodes[:, :n_state]
             samples = cond_means[None, :, :] + (z_for_state @ cond_chol.T)[:, None, :]
             sub_mean = mu_theta
             sub_chol = cond_chol

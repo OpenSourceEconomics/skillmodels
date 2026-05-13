@@ -64,6 +64,32 @@ class AFEstimationOptions:
     regression testing and pre-fix reproducibility.
     """
 
+    keep_conditional_distributions: bool
+    """If True (default), the result's `conditional_distributions` field
+    holds the per-period filtered state distributions, materialised on
+    host as numpy. Set to False to skip the device→host transfer of
+    these arrays entirely and return an empty tuple; useful on small
+    GPUs (e.g. P100 12 GB) where the final materialisation OOMs even
+    after the per-period optimiser has finished.
+    """
+
+    n_halton_points_posterior_summary: int
+    """Halton draws kept per period for `samples_per_component`, the
+    posterior-state summary tensor.
+
+    `samples_per_component` is an `(n, n_obs, n_state)` array per mixture
+    component used only by `posterior_states.py` and the inference
+    sandwich to compute summary statistics; it is NOT consumed by the
+    transition likelihood (which rebuilds the chain on-demand from a
+    joint Halton via `_rebuild_chain_at_period`). The likelihood always
+    uses `n_halton_points`; this knob only controls the persistent
+    summary tensor's size.
+
+    Defaults to 256, which keeps the per-period summary tensor under
+    a few MB even at `n_obs = 50_000`. Bump higher (e.g. 2_000) if
+    posterior-state summary precision matters for downstream analysis.
+    """
+
     def __init__(  # noqa: D107
         self,
         n_halton_points: int = 50,
@@ -77,6 +103,8 @@ class AFEstimationOptions:
         stability_floor: float = 1e-217,
         n_obs_per_batch: int | None = None,
         initialization_strategy: Literal["constant", "spearman", "amn"] = "amn",
+        keep_conditional_distributions: bool = True,
+        n_halton_points_posterior_summary: int = 256,
     ) -> None:
         object.__setattr__(self, "n_halton_points", n_halton_points)
         object.__setattr__(self, "n_halton_points_shock", n_halton_points_shock)
@@ -92,6 +120,14 @@ class AFEstimationOptions:
         object.__setattr__(self, "stability_floor", stability_floor)
         object.__setattr__(self, "n_obs_per_batch", n_obs_per_batch)
         object.__setattr__(self, "initialization_strategy", initialization_strategy)
+        object.__setattr__(
+            self, "keep_conditional_distributions", keep_conditional_distributions
+        )
+        object.__setattr__(
+            self,
+            "n_halton_points_posterior_summary",
+            n_halton_points_posterior_summary,
+        )
 
 
 @dataclass(frozen=True)

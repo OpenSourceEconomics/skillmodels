@@ -1165,11 +1165,13 @@ def _update_conditional_distribution(
 
     n_per_inv_eq = 1 + n_state + n_observed_factors if n_endog > 0 else 0
 
-    n_halton = joint_nodes.shape[0]
-    # The joint Halton design now has a larger dimension than just the
+    # The joint Halton design has a larger dimension than just the
     # current step's shocks (it also covers the chain rebuild's z_state
     # and prior-step shocks; see `estimate_transition_period`). The
     # current-step shocks live in the LAST `n_shock + n_endog` columns.
+    # The chain rebuild below iterates only over `prev_sample.shape[0]`
+    # leading rows (the summary-halton subset), not over all
+    # `joint_nodes.shape[0]` rows.
     z_block_curr = n_shock + n_endog
 
     def _chain_one_component(prev_sample: Array) -> Array:
@@ -1212,11 +1214,20 @@ def _update_conditional_distribution(
                 state_shock_contrib
             )
 
+        # `prev_sample`'s leading axis carries however many summary
+        # Halton draws were retained (controlled by
+        # `AFEstimationOptions.n_halton_points_posterior_summary`, often
+        # << `n_halton`). Iterate over THAT axis — not the full joint
+        # Halton's leading dimension — so the rebuilt sample stays at
+        # the summary size. `joint_nodes[j_idx]` for j_idx in
+        # `[0, prev_sample.shape[0])` is well-defined as long as the
+        # summary count is bounded by the joint Halton size.
+        n_halton_summary = prev_sample.shape[0]
         n_obs = prev_sample.shape[1]
         return jax.vmap(
             jax.vmap(_at_node, in_axes=(None, 0)),
             in_axes=(0, None),
-        )(jnp.arange(n_halton), jnp.arange(n_obs))
+        )(jnp.arange(n_halton_summary), jnp.arange(n_obs))
 
     new_samples_per_component: list[Array] = []
     new_components: list[MixtureComponent] = []

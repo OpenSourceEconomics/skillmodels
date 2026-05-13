@@ -27,7 +27,7 @@ from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
 
-def estimate_af(
+def estimate_af(  # noqa: PLR0915
     model_spec: ModelSpec,
     data: pd.DataFrame,
     af_options: AFEstimationOptions | None = None,
@@ -235,9 +235,20 @@ def estimate_af(
     # don't need GPU residency, and leaving the arrays as `jax.Array`
     # would force materialisation at pickle time -- which on a busy
     # device routinely OOMs inside `__reduce__`.
-    conditional_dists_compact = tuple(
-        _to_numpy_conditional_distribution(cd) for cd in conditional_dists
-    )
+    #
+    # Skip this transfer entirely when the caller has opted out via
+    # `keep_conditional_distributions=False` (e.g. small-GPU runs on
+    # P100 12 GB where the per-component arrays alone exceed the
+    # remaining device free memory).
+    if af_options.keep_conditional_distributions:
+        conditional_dists_compact = tuple(
+            _to_numpy_conditional_distribution(cd) for cd in conditional_dists
+        )
+    else:
+        conditional_dists_compact = ()
+        del conditional_dists
+        gc.collect()
+        jax.clear_caches()
 
     return AFEstimationResult(
         period_results=tuple(period_results),
