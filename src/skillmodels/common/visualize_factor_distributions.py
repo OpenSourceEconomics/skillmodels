@@ -10,16 +10,19 @@ import pandas as pd
 import plotly.express as px
 import plotly.figure_factory as ff
 import plotly.graph_objects as go
+from beartype import beartype
 from numpy.typing import NDArray
 from plotly.subplots import make_subplots
 from scipy.stats import gaussian_kde
 
+from skillmodels._beartype_conf import DIAGNOSTICS_CONF
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 from skillmodels.common.types import ProcessedModel
 from skillmodels.common.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def combine_distribution_plots(
     kde_plots: dict[str, go.Figure],
     contour_plots: dict[tuple[str, str], go.Figure],
@@ -158,6 +161,7 @@ def combine_distribution_plots(
     return fig
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def univariate_densities(
     data: pd.DataFrame,
     model_spec: ModelSpec,
@@ -264,6 +268,7 @@ def univariate_densities(
     return plots_dict
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def bivariate_density_contours(
     data: pd.DataFrame,
     model_spec: ModelSpec,
@@ -384,6 +389,7 @@ def bivariate_density_contours(
     return plots_dict
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def bivariate_density_surfaces(
     data: pd.DataFrame,
     model_spec: ModelSpec,

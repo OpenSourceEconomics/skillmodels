@@ -4,15 +4,18 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from beartype import beartype
 from numpy.typing import NDArray
 from plotly import graph_objects as go
 
+from skillmodels._beartype_conf import DIAGNOSTICS_CONF
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_data import pre_process_data
 from skillmodels.common.process_model import process_model
 from skillmodels.common.types import ProcessedModel
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def plot_correlation_heatmap(
     corr: pd.DataFrame,
     heatmap_kwargs: dict[str, Any] | None = None,
@@ -132,6 +135,7 @@ def plot_correlation_heatmap(
     return fig
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def get_measurements_corr(
     data: pd.DataFrame,
     model_spec: ModelSpec,
@@ -175,6 +179,7 @@ def get_measurements_corr(
     return df.corr()
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def get_quasi_scores_corr(
     data: pd.DataFrame,
     model_spec: ModelSpec,
@@ -221,6 +226,7 @@ def get_quasi_scores_corr(
     return df.corr()
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def get_scores_corr(
     data: pd.DataFrame,
     params: pd.DataFrame,

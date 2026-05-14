@@ -12,7 +12,9 @@ params DataFrame.
 
 import optimagic as om
 import pandas as pd
+from beartype import beartype
 
+from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.amn.minimum_distance import solve_minimum_distance
 from skillmodels.amn.mixture_em import (
     build_augmented_measure_layout,
@@ -90,6 +92,7 @@ def _apply_overrides(
     return out.sort_index()
 
 
+@beartype(conf=ESTIMATION_CONF)
 def estimate_amn(
     model_spec: ModelSpec,
     data: pd.DataFrame,

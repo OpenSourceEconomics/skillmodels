@@ -11,12 +11,14 @@ from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Any, Self
 
+from skillmodels._beartype_conf import MODEL_SPEC_CONF, beartype_init
 from skillmodels.common.types import (
     Normalizations,
     ensure_containers_are_immutable,
 )
 
 
+@beartype_init(MODEL_SPEC_CONF)
 @dataclass(frozen=True)
 class FactorSpec:
     """Specification for a single latent factor."""
@@ -62,6 +64,7 @@ class FactorSpec:
         return replace(self, normalizations=normalizations)
 
 
+@beartype_init(MODEL_SPEC_CONF)
 @dataclass(frozen=True)
 class AnchoringSpec:
     """Specification for anchoring latent factors to outcomes."""
@@ -83,6 +86,7 @@ class AnchoringSpec:
         )
 
 
+@beartype_init(MODEL_SPEC_CONF)
 @dataclass(frozen=True, init=False)
 class ModelSpec:
     """Complete model specification.

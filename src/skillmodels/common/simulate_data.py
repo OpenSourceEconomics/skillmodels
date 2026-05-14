@@ -6,9 +6,11 @@ from collections.abc import Mapping
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+from beartype import beartype
 from jax import Array
 from numpy.typing import NDArray
 
+from skillmodels._beartype_conf import SIMULATION_CONF
 from skillmodels.common.anchoring import anchor_states_df
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.params_index import get_params_index
@@ -27,6 +29,7 @@ from skillmodels.common.types import (
 )
 
 
+@beartype(conf=SIMULATION_CONF)
 def simulate_dataset(
     model_spec: ModelSpec,
     params: pd.DataFrame,
@@ -523,6 +526,7 @@ def measurements_from_states(
     return states_part + control_part + epsilon
 
 
+@beartype(conf=SIMULATION_CONF)
 def simulate_policy_effect(
     model_spec: ModelSpec,
     params: pd.DataFrame,

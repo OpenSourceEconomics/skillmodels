@@ -24,7 +24,9 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from beartype import beartype
 
+from skillmodels._beartype_conf import INFERENCE_CONF
 from skillmodels.amn.estimate import estimate_amn
 from skillmodels.amn.types import (
     AMNEstimationOptions,
@@ -54,6 +56,7 @@ def _resample_by_caseid(data: pd.DataFrame, rng: np.random.Generator) -> pd.Data
     return pd.concat(pieces)
 
 
+@beartype(conf=INFERENCE_CONF)
 def compute_amn_standard_errors(
     result: AMNEstimationResult,
     data: pd.DataFrame,

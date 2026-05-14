@@ -10,6 +10,8 @@ from typing import Any, NewType, cast
 import pandas as pd
 from jax import Array
 
+from skillmodels._beartype_conf import MODEL_SPEC_CONF, beartype_init
+
 
 def _make_immutable(value: Any) -> Any:  # noqa: ANN401
     """Recursively convert a value to its immutable equivalent."""
@@ -274,6 +276,7 @@ class EndogenousFactorsInfo:
     """Mapping from factor name to its `FactorInfo`."""
 
 
+@beartype_init(MODEL_SPEC_CONF)
 @dataclass(frozen=True)
 class Normalizations:
     """Normalizations for factor identification."""

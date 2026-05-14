@@ -76,8 +76,21 @@ def test_get_filtered_states_dispatches_to_amn(amn_fit):
 
 
 def test_get_filtered_states_rejects_both_af_and_amn_results(amn_fit):
+    """Passing an AMN result to `af_result=` triggers the beartype perimeter.
+
+    Pre-beartype, the test passed `fit` (an `AMNEstimationResult`) to
+    both `af_result=` and `amn_result=` and the function body's
+    `only one of` `ValueError` fired. Beartype now intercepts first
+    because `AMNEstimationResult` is not assignable to
+    `AFEstimationResult | None`. The body-level guard remains in
+    place for the still-valid case of two real results of the right
+    type; that combination requires fitting both estimators, which
+    this fixture deliberately skips.
+    """
+    from skillmodels.exceptions import EstimationCallError  # noqa: PLC0415
+
     fit, data = amn_fit
-    with pytest.raises(ValueError, match="only one of"):
+    with pytest.raises(EstimationCallError, match="af_result"):
         get_filtered_states(
             model_spec=fit.model_spec,
             data=data,

@@ -15,12 +15,14 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 import pandas as pd
 
+from skillmodels._beartype_conf import OPTIONS_CONF, beartype_init
 from skillmodels.common.types import ensure_containers_are_immutable
 
 if TYPE_CHECKING:
     from skillmodels.common.model_spec import ModelSpec
 
 
+@beartype_init(OPTIONS_CONF)
 @dataclass(frozen=True, init=False)
 class AMNEstimationOptions:
     """Configuration options for the AMN estimator."""

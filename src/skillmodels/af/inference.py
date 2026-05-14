@@ -39,8 +39,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+from beartype import beartype
 from jax import Array
 
+from skillmodels._beartype_conf import INFERENCE_CONF
 from skillmodels.af.batching import auto_n_obs_per_batch
 from skillmodels.af.estimate import _extract_period_data
 from skillmodels.af.halton import create_halton_nodes_and_weights
@@ -119,6 +121,7 @@ class AFInferenceResult:
     """Number of bootstrap replicates drawn."""
 
 
+@beartype(conf=INFERENCE_CONF)
 def compute_af_standard_errors(
     result: AFEstimationResult,
     data: pd.DataFrame,

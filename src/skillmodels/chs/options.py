@@ -3,7 +3,10 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from skillmodels._beartype_conf import OPTIONS_CONF, beartype_init
 
+
+@beartype_init(OPTIONS_CONF)
 @dataclass(frozen=True)
 class CHSEstimationOptions:
     """Tuning parameters for the CHS Kalman-MLE estimator."""

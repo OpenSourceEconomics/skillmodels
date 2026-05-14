@@ -5,11 +5,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from beartype import beartype
 
+from skillmodels._beartype_conf import DIAGNOSTICS_CONF
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def plot_residual_boxplots(
     model_spec: ModelSpec,
     *,
@@ -133,6 +136,7 @@ def _create_residual_boxplot_for_period(
     return fig
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def plot_likelihood_contributions(
     model_spec: ModelSpec,
     *,

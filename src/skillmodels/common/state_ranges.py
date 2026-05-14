@@ -14,8 +14,12 @@ imported it across the subpackage boundary, which motivated the move.
 """
 
 import pandas as pd
+from beartype import beartype
+
+from skillmodels._beartype_conf import DIAGNOSTICS_CONF
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def create_state_ranges(
     filtered_states: pd.DataFrame,
     factors: tuple[str, ...] | list[str],

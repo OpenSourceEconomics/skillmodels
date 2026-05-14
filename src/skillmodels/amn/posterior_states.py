@@ -28,13 +28,16 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from beartype import beartype
 
+from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.amn.mixture_em import build_augmented_measure_matrix
 from skillmodels.amn.types import AMNEstimationResult
 from skillmodels.common.process_model import process_model
 from skillmodels.common.state_ranges import create_state_ranges
 
 
+@beartype(conf=ESTIMATION_CONF)
 def get_amn_posterior_states(  # noqa: C901, PLR0912, PLR0915
     amn_result: AMNEstimationResult,
     data: pd.DataFrame,

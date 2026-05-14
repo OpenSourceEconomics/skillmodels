@@ -1,20 +1,26 @@
 """Functions to compute and process filtered latent states."""
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pandas as pd
+from beartype import beartype
 
+from skillmodels._beartype_conf import ESTIMATION_CONF
+
+# Runtime imports (not `TYPE_CHECKING`-guarded) so that the beartype
+# perimeter at `get_filtered_states` can resolve the annotation
+# without a forward-ref string. The two `types` modules are
+# negligible-cost; AMN's already pulls sklearn lazily.
+from skillmodels.af.types import AFEstimationResult
+from skillmodels.amn.types import AMNEstimationResult
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.anchoring import anchor_states_df
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 from skillmodels.common.state_ranges import create_state_ranges
 
-if TYPE_CHECKING:
-    from skillmodels.af.types import AFEstimationResult
-    from skillmodels.amn.types import AMNEstimationResult
 
-
+@beartype(conf=ESTIMATION_CONF)
 def get_filtered_states(
     model_spec: ModelSpec,
     data: pd.DataFrame,

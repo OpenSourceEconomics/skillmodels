@@ -10,8 +10,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+from beartype import beartype
 from jax import Array
 
+from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.af.halton import create_halton_nodes_and_weights
 from skillmodels.af.initial_period import _build_loading_mask, _get_ordered_measures
 from skillmodels.af.likelihood import _log_normal_pdf
@@ -21,6 +23,7 @@ from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.state_ranges import create_state_ranges
 
 
+@beartype(conf=ESTIMATION_CONF)
 def get_af_posterior_states(
     af_result: AFEstimationResult,
     model_spec: ModelSpec,

@@ -8,11 +8,14 @@ Section 4.2.2.
 from collections.abc import Mapping
 
 import pandas as pd
+from beartype import beartype
 
+from skillmodels._beartype_conf import DIAGNOSTICS_CONF
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def decompose_measurement_variance(
     model_spec: ModelSpec,
     params: pd.DataFrame,
@@ -179,6 +182,7 @@ def _compute_variance_decomposition(
     ]
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def summarize_measurement_reliability(
     variance_decomposition: pd.DataFrame,
 ) -> pd.DataFrame:

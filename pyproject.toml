@@ -29,6 +29,7 @@ classifiers = [
 ]
 dynamic = [ "version" ]
 dependencies = [
+  "beartype>=0.22",
   "dags>=0.5.1",
   "jax>=0.9",
   "jaxopt>=0.8.5",

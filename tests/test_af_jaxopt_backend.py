@@ -73,8 +73,10 @@ def test_optimizer_backend_defaults_to_auto() -> None:
 
 
 def test_optimizer_backend_rejects_unknown_value() -> None:
-    """Typos in the backend name fail fast."""
-    with pytest.raises(ValueError, match="optimizer_backend"):
+    """Typos in the backend name fail fast via the beartype perimeter."""
+    from skillmodels.exceptions import OptionsInitializationError  # noqa: PLC0415
+
+    with pytest.raises(OptionsInitializationError, match="optimizer_backend"):
         AFEstimationOptions(optimizer_backend="lbfgsb")  # ty: ignore[invalid-argument-type]
 
 

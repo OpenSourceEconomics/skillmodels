@@ -2,10 +2,11 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from skillmodels.common.check_model import (
     _check_anchoring,
     _check_loadings_are_not_normalized_to_zero,
-    _check_measurements,
     _check_normalized_variables_are_present,
     check_stagemap,
 )
@@ -71,29 +72,26 @@ def test_invalid_anchoring_free_controls_type() -> None:
 
 
 def test_invalid_measurements_not_tuples() -> None:
-    spec = ModelSpec(
-        factors={
-            "f1": FactorSpec(
-                measurements=(["y1", "y2"],),  # ty: ignore[invalid-argument-type]
-            ),
-        },
-    )
-    result = _check_measurements(model_spec=spec, factors=("f1",))
-    assert any("tuples" in msg for msg in result)
+    """Bad measurements shape is caught at the FactorSpec beartype perimeter.
+
+    Pre-beartype, the spec built and the model-check aggregator
+    surfaced a soft error message. Now the construction itself
+    raises `ModelSpecInitializationError`. The soft-check arm of
+    `_check_measurements` is dead code (kept only for non-type
+    issues that beartype can't see).
+    """
+    from skillmodels.exceptions import ModelSpecInitializationError  # noqa: PLC0415
+
+    with pytest.raises(ModelSpecInitializationError, match="measurements"):
+        FactorSpec(measurements=(["y1", "y2"],))  # ty: ignore[invalid-argument-type]
 
 
 def test_invalid_measurement_type() -> None:
-    spec = ModelSpec(
-        factors={
-            "f1": FactorSpec(
-                measurements=((["nested_list"],),),  # ty: ignore[invalid-argument-type]
-            ),
-        },
-    )
-    result = _check_measurements(model_spec=spec, factors=("f1",))
-    assert any(
-        "column names" in msg.lower() or "tuples" in msg.lower() for msg in result
-    )
+    """Bad measurement element type fails at `FactorSpec.__init__` (beartype)."""
+    from skillmodels.exceptions import ModelSpecInitializationError  # noqa: PLC0415
+
+    with pytest.raises(ModelSpecInitializationError, match="measurements"):
+        FactorSpec(measurements=((["nested_list"],),))  # ty: ignore[invalid-argument-type]
 
 
 def test_normalized_variable_not_in_measurements() -> None:

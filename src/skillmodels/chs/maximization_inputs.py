@@ -8,11 +8,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+from beartype import beartype
 from jax import Array
 from numpy.typing import NDArray
 
 import skillmodels.chs.likelihood as lf
 import skillmodels.chs.likelihood_debug as lfd
+from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.amn.estimate import estimate_amn
 from skillmodels.amn.start_values import get_spearman_start_params
 from skillmodels.chs.kalman_filters import (
@@ -41,6 +43,7 @@ from skillmodels.common.types import ParsingInfo, ProcessedModel
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
 
+@beartype(conf=ESTIMATION_CONF)
 def get_maximization_inputs(  # noqa: C901, PLR0915
     model_spec: ModelSpec,
     data: pd.DataFrame,

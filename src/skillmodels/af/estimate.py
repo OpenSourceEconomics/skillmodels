@@ -9,8 +9,10 @@ import jax.numpy as jnp
 import numpy as np
 import optimagic as om
 import pandas as pd
+from beartype import beartype
 from jax import Array
 
+from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.af.initial_period import estimate_initial_period
 from skillmodels.af.params import get_measurements_per_factor
 from skillmodels.af.transition_period import estimate_transition_period
@@ -29,6 +31,7 @@ from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
 
+@beartype(conf=ESTIMATION_CONF)
 def estimate_af(  # noqa: PLR0915
     model_spec: ModelSpec,
     data: pd.DataFrame,

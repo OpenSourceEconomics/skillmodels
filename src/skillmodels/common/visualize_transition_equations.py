@@ -8,11 +8,13 @@ from typing import Any, Literal
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+from beartype import beartype
 from jax import Array
 from plotly import express as px
 from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 
+from skillmodels._beartype_conf import DIAGNOSTICS_CONF
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.params_index import get_params_index
 from skillmodels.common.parse_params import create_parsing_info, parse_params
@@ -23,6 +25,7 @@ from skillmodels.common.types import ParsedParams, ProcessedModel
 from skillmodels.common.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def combine_transition_plots(
     plots_dict: dict[tuple[str, str], go.Figure],
     column_order: list[str] | tuple[str, ...] | str | None = None,
@@ -139,6 +142,7 @@ def combine_transition_plots(
     return fig
 
 
+@beartype(conf=DIAGNOSTICS_CONF)
 def get_transition_plots(
     model_spec: ModelSpec,
     params: pd.DataFrame,

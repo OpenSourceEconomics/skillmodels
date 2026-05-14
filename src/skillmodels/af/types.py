@@ -9,12 +9,14 @@ import jax
 import pandas as pd
 from jax import Array
 
+from skillmodels._beartype_conf import OPTIONS_CONF, beartype_init
 from skillmodels.common.types import ensure_containers_are_immutable
 
 if TYPE_CHECKING:
     from skillmodels.common.model_spec import ModelSpec
 
 
+@beartype_init(OPTIONS_CONF)
 @dataclass(frozen=True, init=False)
 class AFEstimationOptions:
     """Configuration options for the AF estimator."""
