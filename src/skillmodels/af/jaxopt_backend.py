@@ -13,19 +13,34 @@ include log_ces transitions or cross-section equalities should use
 `optimizer_backend="optimagic"`.
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any, cast
+import os
+
+# Ensure x64 is on *before* `from jaxopt import LBFGSB` -- jaxopt's
+# module-level jit kernels resolve the default integer dtype at import
+# time. With x64 off, `jnp.argsort` inside `LBFGSB.update` emits int32
+# indices that scatter into the int64 operand the rest of the optimizer
+# builds, and XLA's permutation_sort_simplifier verifier rejects the
+# resulting mismatch on JAX >= 0.10. `skillmodels/__init__.py` sets the
+# same flag at package import; this is a belt-and-suspenders guard for
+# callers that import this module directly.
+os.environ.setdefault("JAX_ENABLE_X64", "1")
 
 import jax
-import jax.numpy as jnp
-import numpy as np
-import optimagic as om
-import pandas as pd
-from jax import Array
-from jaxopt import LBFGSB
 
-from skillmodels.common.constraints import FixedConstraintWithValue
+jax.config.update("jax_enable_x64", True)  # noqa: FBT003
+
+from collections.abc import Callable  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from typing import Any, cast  # noqa: E402
+
+import jax.numpy as jnp  # noqa: E402
+import numpy as np  # noqa: E402
+import optimagic as om  # noqa: E402
+import pandas as pd  # noqa: E402
+from jax import Array  # noqa: E402
+from jaxopt import LBFGSB  # noqa: E402
+
+from skillmodels.common.constraints import FixedConstraintWithValue  # noqa: E402
 
 
 @dataclass(frozen=True)
