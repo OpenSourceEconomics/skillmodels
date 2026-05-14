@@ -152,7 +152,9 @@ rules.unused-ignore-comment = "error"
 
 [tool.pytest]
 ini_options.addopts = [ "--pdbcls=pdbp:Pdb" ]
-ini_options.filterwarnings = []
+ini_options.filterwarnings = [
+  "ignore::pandas.errors.PerformanceWarning",
+]
 ini_options.markers = [
   "integration: integration tests requiring MODEL2 + data",
   "long_running: slow tests skipped in CI (run with -m long_running)",
@@ -172,6 +174,7 @@ python = "~=3.14.0"
 scikit-learn = "*"
 scipy = "*"
 h5py = ">=3.16.0,<4"
+xlrd = ">=2.0.2,<3"
 [tool.pixi.environments]
 cuda = { features = [ "cuda" ], solve-group = "cuda" }
 docs = { features = [ "docs" ], solve-group = "default" }

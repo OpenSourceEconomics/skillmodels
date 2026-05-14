@@ -60,10 +60,16 @@ def _linear_single_factor_data(n_obs: int = 200, seed: int = 42) -> pd.DataFrame
     return pd.DataFrame(rows).set_index(["caseid", "period"])
 
 
-def test_optimizer_backend_defaults_to_optimagic() -> None:
-    """The default backend keeps existing behaviour."""
+def test_optimizer_backend_defaults_to_auto() -> None:
+    """The default backend is `"auto"`; resolved inside `estimate_af`.
+
+    Resolution picks `"jaxopt"` when a JAX GPU is visible and the
+    model is jaxopt-compatible (no `log_ces*` transitions, no
+    user-supplied constraints); otherwise falls back to
+    `"optimagic"`. See ``af.estimate._resolve_optimizer_backend``.
+    """
     options = AFEstimationOptions()
-    assert options.optimizer_backend == "optimagic"
+    assert options.optimizer_backend == "auto"
 
 
 def test_optimizer_backend_rejects_unknown_value() -> None:

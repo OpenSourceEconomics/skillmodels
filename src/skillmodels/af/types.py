@@ -28,17 +28,25 @@ class AFEstimationOptions:
     n_mixture_components: int
     """Gaussian mixture components for initial distribution."""
 
-    optimizer_backend: Literal["optimagic", "jaxopt"]
+    optimizer_backend: Literal["auto", "optimagic", "jaxopt"]
     """Optimizer backend.
 
-    `"optimagic"` (default) runs each period's MLE via
+    `"auto"` (default) picks `"jaxopt"` when a JAX GPU is visible and
+    the model is jaxopt-compatible (no `log_ces` transitions that
+    would trigger `ProbabilityConstraint`s, no cross-section
+    `EqualityConstraint`s passed via `estimate_af(constraints=...)`).
+    Otherwise falls back to `"optimagic"`. The decision is taken
+    once at the start of `estimate_af` and the resolved value is
+    available on `AFEstimationResult.af_options.optimizer_backend`.
+
+    `"optimagic"` explicit: each period's MLE runs via
     `optimagic.minimize` with the algorithm in `optimizer_algorithm`.
     Supports the full set of optimagic constraint kinds
     (`FixedConstraintWithValue`, `ProbabilityConstraint`,
     `EqualityConstraint`).
 
-    `"jaxopt"` keeps the parameter vector on device throughout the
-    L-BFGS-B iterations via `jaxopt.LBFGSB`, eliminating the
+    `"jaxopt"` explicit: keeps the parameter vector on device through
+    the L-BFGS-B iterations via `jaxopt.LBFGSB`, eliminating the
     host<->device transfer that occurs once per likelihood call when
     optimagic is used. Supports only `FixedConstraintWithValue`
     plus bounds; raises on probability or equality constraints
@@ -122,7 +130,7 @@ class AFEstimationOptions:
         n_halton_points: int = 50,
         n_halton_points_shock: int = 30,
         n_mixture_components: int = 2,
-        optimizer_backend: Literal["optimagic", "jaxopt"] = "optimagic",
+        optimizer_backend: Literal["auto", "optimagic", "jaxopt"] = "auto",
         optimizer_algorithm: str = "fides",
         optimizer_options: Mapping[str, Any] | None = None,
         *,
@@ -140,9 +148,9 @@ class AFEstimationOptions:
                 f"got {n_halton_points_posterior_summary}."
             )
             raise ValueError(msg)
-        if optimizer_backend not in ("optimagic", "jaxopt"):
+        if optimizer_backend not in ("auto", "optimagic", "jaxopt"):
             msg = (
-                'optimizer_backend must be "optimagic" or "jaxopt", '
+                'optimizer_backend must be "auto", "optimagic", or "jaxopt", '
                 f"got {optimizer_backend!r}."
             )
             raise ValueError(msg)

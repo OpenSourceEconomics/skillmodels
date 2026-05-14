@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.visualize_transition_equations import (
@@ -29,19 +30,27 @@ def test_visualize_transition_equations_runs() -> None:
     full_index = max_inputs["params_template"].index
     params = params.reindex(full_index)
     params["value"] = params["value"].fillna(0)
+
+    states = get_filtered_states(model_spec=model, data=data, params=params)[
+        "anchored_states"
+    ]["states"]
+
     subplots = get_transition_plots(
         model_spec=model,
         params=params,
         period=0,
         quantiles_of_other_factors=[0.1, 0.25, 0.5, 0.75, 0.9],
+        filtered_states=states,
         data=data,
     )
     combine_transition_plots(subplots)
+
     subplots = get_transition_plots(
         model_spec=model,
         params=params,
         period=0,
         quantiles_of_other_factors=None,
+        filtered_states=states,
         data=data,
     )
     combine_transition_plots(subplots)

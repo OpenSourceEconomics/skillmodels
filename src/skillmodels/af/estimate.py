@@ -83,6 +83,8 @@ def estimate_af(  # noqa: PLR0915
     if af_options is None:
         af_options = AFEstimationOptions()
 
+    af_options = _resolve_optimizer_backend(af_options, model_spec, constraints)
+
     validate_af_model(model_spec)
     processed_model = process_model(model_spec)
 
@@ -260,6 +262,59 @@ def estimate_af(  # noqa: PLR0915
         all_params=all_params,
         model_spec=model_spec,
         conditional_distributions=conditional_dists_compact,
+    )
+
+
+_PROBABILITY_TRANSITIONS = frozenset(
+    {"log_ces", "log_ces_with_constant", "log_ces_general"}
+)
+
+
+def _resolve_optimizer_backend(
+    af_options: AFEstimationOptions,
+    model_spec: ModelSpec,
+    constraints: list[om.constraints.Constraint] | None,
+) -> AFEstimationOptions:
+    """Resolve `optimizer_backend="auto"` to "jaxopt" or "optimagic".
+
+    Pick `"jaxopt"` iff a JAX GPU is visible and the model is
+    jaxopt-compatible (no `log_ces*` transition -- which triggers a
+    `ProbabilityConstraint` jaxopt can't fold -- and no user-supplied
+    constraints, which would arrive as equality / probability
+    constraints that jaxopt also can't fold). Otherwise fall back to
+    `"optimagic"`.
+
+    Explicit `"jaxopt"` / `"optimagic"` requests are honoured as-is.
+    """
+    if af_options.optimizer_backend != "auto":
+        return af_options
+
+    has_gpu = any(d.platform == "gpu" for d in jax.devices())
+    uses_probability_transition = any(
+        spec.transition_function in _PROBABILITY_TRANSITIONS
+        for spec in model_spec.factors.values()
+    )
+    has_user_constraints = bool(constraints)
+
+    use_jaxopt = (
+        has_gpu and not uses_probability_transition and not has_user_constraints
+    )
+    resolved = "jaxopt" if use_jaxopt else "optimagic"
+
+    return AFEstimationOptions(
+        n_halton_points=af_options.n_halton_points,
+        n_halton_points_shock=af_options.n_halton_points_shock,
+        n_mixture_components=af_options.n_mixture_components,
+        optimizer_backend=resolved,
+        optimizer_algorithm=af_options.optimizer_algorithm,
+        optimizer_options=dict(af_options.optimizer_options),
+        two_stage=af_options.two_stage,
+        coarse_fraction=af_options.coarse_fraction,
+        stability_floor=af_options.stability_floor,
+        n_obs_per_batch=af_options.n_obs_per_batch,
+        initialization_strategy=af_options.initialization_strategy,
+        keep_conditional_distributions=af_options.keep_conditional_distributions,
+        n_halton_points_posterior_summary=af_options.n_halton_points_posterior_summary,
     )
 
 

@@ -3,7 +3,7 @@
 import itertools
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import jax.numpy as jnp
 import numpy as np
@@ -13,7 +13,6 @@ from plotly import express as px
 from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 
-from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.params_index import get_params_index
 from skillmodels.common.parse_params import create_parsing_info, parse_params
@@ -22,10 +21,6 @@ from skillmodels.common.process_model import process_model
 from skillmodels.common.state_ranges import create_state_ranges
 from skillmodels.common.types import ParsedParams, ProcessedModel
 from skillmodels.common.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
-
-if TYPE_CHECKING:
-    from skillmodels.af.types import AFEstimationResult
-    from skillmodels.amn.types import AMNEstimationResult
 
 
 def combine_transition_plots(
@@ -144,9 +139,11 @@ def combine_transition_plots(
     return fig
 
 
-def get_transition_plots(  # noqa: C901, PLR0912
+def get_transition_plots(
     model_spec: ModelSpec,
     params: pd.DataFrame,
+    *,
+    filtered_states: pd.DataFrame,
     data: pd.DataFrame | None = None,
     period: int | None = None,
     periods: Sequence[int] | None = None,
@@ -162,10 +159,6 @@ def get_transition_plots(  # noqa: C901, PLR0912
     colorscale: str | list[str] = "Magenta_r",
     state_range_quantile_cutoff: float | None = None,
     layout_kwargs: dict[str, Any] | None = None,
-    *,
-    states: pd.DataFrame | None = None,
-    af_result: AFEstimationResult | None = None,
-    amn_result: AMNEstimationResult | None = None,
     include_correction_factors: bool = False,
 ) -> dict[tuple[str, str], go.Figure]:
     """Get dictionary with individual plots of transition equations for each factor.
@@ -173,8 +166,15 @@ def get_transition_plots(  # noqa: C901, PLR0912
     Args:
         model_spec: The model specification. See: :ref:`model_specs`
         params: Model parameters.
-        data: Empirical dataset used to estimate the model. Required when `states`
-            is not provided or when the model has observed factors.
+        filtered_states: Pre-computed filtered states DataFrame (with a
+            ``period`` column and one column per latent factor). Produce
+            it via the estimator you used (CHS:
+            ``get_filtered_states(...)["anchored_states"]["states"]``;
+            AF: ``get_af_posterior_states(...)``; AMN:
+            ``get_amn_posterior_states(...)``).
+        data: Empirical dataset used to estimate the model. Required when
+            the model has observed factors (their realised values appear
+            in the plotted transitions).
         period: The start period of the transition equations that are plotted.
             Deprecated in favor of `periods`. If both are provided, `periods` is used.
         periods: List of periods to overlay on each plot. Each period gets a different
@@ -202,12 +202,6 @@ def get_transition_plots(  # noqa: C901, PLR0912
         layout_kwargs: Dictionary of key word arguments used to
             update layout of plotly image object. If None, the default kwargs
             defined in the function will be used.
-        states: Pre-computed filtered states DataFrame (with a `period`
-            column). If provided, skip the internal `get_filtered_states` call.
-        af_result: Optional AF estimation result; routes the internal
-            filtered-states call through the AF posterior path.
-        amn_result: Optional AMN estimation result; routes through the
-            AMN mixture-Schur posterior path.
         include_correction_factors: Whether to include correction factors in the
             plots. Default False.
 
@@ -216,6 +210,7 @@ def get_transition_plots(  # noqa: C901, PLR0912
             for each combination of input and output factors.
 
     """
+    states = filtered_states
     # Handle period/periods arguments
     if periods is not None:
         periods_list = list(periods)
@@ -261,19 +256,6 @@ def get_transition_plots(  # noqa: C901, PLR0912
             if not processed_model.endogenous_factors_info.factor_info[lf].is_correction
         ]
     all_factors = processed_model.labels.all_factors
-    if states is None:
-        if data is None:
-            msg = "Either 'data' or 'states' must be provided."
-            raise TypeError(msg)
-        filtered = get_filtered_states(
-            model_spec=model_spec,
-            data=data,
-            params=params,
-            af_result=af_result,
-            amn_result=amn_result,
-        )
-        states_root = filtered.get("anchored_states", filtered["unanchored_states"])
-        states = states_root["states"]
 
     states = _normalize_states_columns(
         states,

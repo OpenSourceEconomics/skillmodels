@@ -3,7 +3,7 @@
 import warnings
 from collections.abc import Mapping
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -14,34 +14,10 @@ from numpy.typing import NDArray
 from plotly.subplots import make_subplots
 from scipy.stats import gaussian_kde
 
-from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 from skillmodels.common.types import ProcessedModel
 from skillmodels.common.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
-
-if TYPE_CHECKING:
-    from skillmodels.af.types import AFEstimationResult
-    from skillmodels.amn.types import AMNEstimationResult
-
-
-def _filtered_states_for_viz(
-    model_spec: ModelSpec,
-    data: pd.DataFrame,
-    params: pd.DataFrame,
-    af_result: AFEstimationResult | None,
-    amn_result: AMNEstimationResult | None,
-) -> pd.DataFrame:
-    """Dispatch through `get_filtered_states`; prefer anchored states when available."""
-    out = get_filtered_states(
-        model_spec=model_spec,
-        data=data,
-        params=params,
-        af_result=af_result,
-        amn_result=amn_result,
-    )
-    root = out.get("anchored_states", out["unanchored_states"])
-    return root["states"]
 
 
 def combine_distribution_plots(
@@ -185,14 +161,11 @@ def combine_distribution_plots(
 def univariate_densities(
     data: pd.DataFrame,
     model_spec: ModelSpec,
-    params: pd.DataFrame,
     period: int,
-    factors: list[str] | tuple[str, ...] | None = None,
     *,
+    filtered_states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame],
+    factors: list[str] | tuple[str, ...] | None = None,
     observed_factors: bool = False,
-    states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame] | None = None,
-    af_result: AFEstimationResult | None = None,
-    amn_result: AMNEstimationResult | None = None,
     show_curve: bool = True,
     show_hist: bool = False,
     show_rug: bool = False,
@@ -208,20 +181,19 @@ def univariate_densities(
     with factor names as keys.
 
     Args:
-        data: Model estimation input data.
+        data: Model estimation input data (used for observed-factor columns).
         model_spec: The model specification. See: :ref:`model_specs`
-        params: Estimated parameter values.
         period: Model period for which to plot the distributions for.
+        filtered_states: Pre-computed filtered or simulated factor draws.
+            Can be a single DataFrame, a list (one per scenario), or a
+            dict mapping scenario label to DataFrame. Produce it via
+            the estimator you used (CHS:
+            ``get_filtered_states(...)["anchored_states"]["states"]``;
+            AF: ``get_af_posterior_states(...)``; AMN:
+            ``get_amn_posterior_states(...)``).
         factors: Factors for which to plot the densities.
-            If None, plot pairwise distributions for all latent factors.
+            If None, plot densities for all latent factors.
         observed_factors: If True, plot densities of observed factors too.
-        states: Filtered or simulated states. Can be a single DataFrame, a list,
-            or a dictionary of DataFrames. If None, retrieve filtered states using
-            model and data. Used to estimate state ranges and factor distributions.
-        af_result: Optional AF estimation result; routes the internal
-            filtered-states call through the AF posterior path.
-        amn_result: Optional AMN estimation result; routes through the
-            AMN mixture-Schur posterior path.
         show_hist: Add histogram to the distplot.
         show_curve: Add density curve to the distplot.
         show_rug: Add rug to the distplot.
@@ -244,10 +216,7 @@ def univariate_densities(
         plots_dict: Density plots keyed by factor name.
 
     """
-    if states is None:
-        states = _filtered_states_for_viz(
-            model_spec, data, params, af_result, amn_result
-        )
+    states = filtered_states
     processed_model = process_model(model_spec)
     factors = _get_factors(
         model=processed_model,
@@ -298,14 +267,11 @@ def univariate_densities(
 def bivariate_density_contours(
     data: pd.DataFrame,
     model_spec: ModelSpec,
-    params: pd.DataFrame,
     period: int,
-    factors: list[str] | tuple[str, ...] | None = None,
     *,
+    filtered_states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame],
+    factors: list[str] | tuple[str, ...] | None = None,
     observed_factors: bool = False,
-    states: pd.DataFrame | dict[str, pd.DataFrame] | list[pd.DataFrame] | None = None,
-    af_result: AFEstimationResult | None = None,
-    amn_result: AMNEstimationResult | None = None,
     n_points: int = 50,
     contour_kwargs: dict[str, Any] | None = None,
     layout_kwargs: dict[str, Any] | None = None,
@@ -315,26 +281,20 @@ def bivariate_density_contours(
     lines_colorscale: str = "D3",
     showcolorbar: bool = False,
 ) -> dict[tuple[str, str], go.Figure]:
-    """Get dictionary with pariwise density contour plots.
+    """Get dictionary with pairwise density contour plots.
 
     Plots pairwise bivariate density contours for latent factors
     and collects them in a dictionary with factor combinations as keys.
 
     Args:
-        data: Model estimation input data.
+        data: Model estimation input data (used for observed-factor columns).
         model_spec: The model specification. See: :ref:`model_specs`
-        params: Estimated parameter values.
         period: Model period for which to plot the distributions for.
+        filtered_states: Pre-computed filtered or simulated factor draws
+            (see :func:`univariate_densities` for shape requirements).
         factors: Factors for which to plot the densities.
             If None, plot pairwise distributions for all latent factors.
         observed_factors: If True, plot densities of observed factors too.
-        states: Filtered or simulated states. Can be a single DataFrame, a list,
-            or a dictionary of DataFrames. If None, retrieve filtered states using
-            model and data. Used to estimate state ranges and factor distributions.
-        af_result: Optional AF estimation result; routes the internal
-            filtered-states call through the AF posterior path.
-        amn_result: Optional AMN estimation result; routes through the
-            AMN mixture-Schur posterior path.
         n_points: Number of grid points used to create the mesh for calculation
             of kernel densities.
         contour_kwargs: Keyword arguments to set contour line properties
@@ -361,10 +321,7 @@ def bivariate_density_contours(
         plots_dict: Pairwise density contour plots keyed by factor combinations.
 
     """
-    if states is None:
-        states = _filtered_states_for_viz(
-            model_spec, data, params, af_result, amn_result
-        )
+    states = filtered_states
     processed_model = process_model(model_spec)
     factors = _get_factors(
         model=processed_model,
@@ -430,14 +387,11 @@ def bivariate_density_contours(
 def bivariate_density_surfaces(
     data: pd.DataFrame,
     model_spec: ModelSpec,
-    params: pd.DataFrame,
     period: int,
-    factors: list[str] | tuple[str, ...] | None = None,
     *,
+    filtered_states: pd.DataFrame,
+    factors: list[str] | tuple[str, ...] | None = None,
     observed_factors: bool = False,
-    states: pd.DataFrame | None = None,
-    af_result: AFEstimationResult | None = None,
-    amn_result: AMNEstimationResult | None = None,
     n_points: int = 50,
     layout_kwargs: dict[str, Any] | None = None,
     colorscale: str = "RdBu_r",
@@ -447,26 +401,22 @@ def bivariate_density_surfaces(
     showaxlines: bool = True,
     showlabels: bool = True,
 ) -> dict[tuple[str, str], go.Figure]:
-    """Get dictionary with pariwise 3d density surface plots.
+    """Get dictionary with pairwise 3d density surface plots.
 
     Plots pairwise 3d density surfaces for latent factors
     and collects them in a dictionary with factor name combinations keys.
 
     Args:
-        data: Model estimation input data.
+        data: Model estimation input data (used for observed-factor columns).
         model_spec: The model specification. See: :ref:`model_specs`
-        params: Estimated parameter values.
         period: Model period for which to plot the distributions for.
+        filtered_states: Pre-computed filtered or simulated factor draws
+            as a single DataFrame (see :func:`univariate_densities` for
+            production guidance). 3d plots do not support multi-scenario
+            inputs (dict or list) -- pass one DataFrame at a time.
         factors: Factors for which to plot the densities.
             If None, plot pairwise distributions for all latent factors.
         observed_factors: If True, plot densities of observed factors too.
-        states: Filtered or simulated states as a single DataFrame.
-            If None, retrieve filtered states using model and data. Used to estimate
-            state ranges and factor distributions.
-        af_result: Optional AF estimation result; routes the internal
-            filtered-states call through the AF posterior path.
-        amn_result: Optional AMN estimation result; routes through the
-            AMN mixture-Schur posterior path.
         n_points: Number of grid points used to create the mesh for calculation
             of kernel densities.
 
@@ -489,12 +439,9 @@ def bivariate_density_surfaces(
         plots_dict: Pairwise 3d density surface plots keyed by factor combinations.
 
     """
-    if states is None:
-        states = _filtered_states_for_viz(
-            model_spec, data, params, af_result, amn_result
-        )
-    elif not isinstance(states, pd.DataFrame):
-        raise ValueError("3d plots are only supported if states is a DataFrame")
+    if not isinstance(filtered_states, pd.DataFrame):
+        raise TypeError("3d plots are only supported if filtered_states is a DataFrame")
+    states = filtered_states
     processed_model = process_model(model_spec)
     factors = _get_factors(
         model=processed_model,
