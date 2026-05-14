@@ -4,7 +4,7 @@ All functions are JAX-compatible (jittable, differentiable via jax.grad).
 """
 
 import functools
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import jax
@@ -231,7 +231,7 @@ def _parse_initial_params(
 
 def _map_over_obs(
     f: Callable,
-    *xs: Array,
+    *xs: Array | np.ndarray,
     n_obs_per_batch: int | None,
 ) -> Array:
     """Map ``f`` over the leading axis of ``xs``, optionally in batches.
@@ -558,7 +558,7 @@ def af_per_obs_loglike_transition(
     prev_control_params: Array,
     prev_loadings_flat: Array,
     prev_meas_sds: Array,
-    prev_distribution: dict[str, Array],
+    prev_distribution: Mapping[str, Array | np.ndarray],
     chain_links: tuple[ChainLink, ...],
     obs_factor_values_chain: Array,
     joint_nodes: Array,
@@ -661,7 +661,7 @@ def af_loglike_transition(
     prev_control_params: Array,
     prev_loadings_flat: Array,
     prev_meas_sds: Array,
-    prev_distribution: dict[str, Array],
+    prev_distribution: Mapping[str, Array | np.ndarray],
     chain_links: tuple[ChainLink, ...],
     obs_factor_values_chain: Array,
     joint_nodes: Array,
@@ -869,7 +869,7 @@ def _transition_loglike_per_obs(
     prev_meas_mask: Array,
     prev_full_loadings: Array,
     prev_meas_sds: Array,
-    prev_distribution: dict[str, Array],
+    prev_distribution: Mapping[str, Array | np.ndarray],
     chain_links: tuple[ChainLink, ...],
     obs_factor_values_chain: Array,
     joint_nodes: Array,
@@ -1002,8 +1002,8 @@ def _rebuild_chain_at_period(
     z_state: Array,
     z_inv_per_step: Array,
     z_shock_per_step: Array,
-    initial_mean: Array,
-    initial_chol: Array,
+    initial_mean: Array | np.ndarray,
+    initial_chol: Array | np.ndarray,
     chain_links: tuple[ChainLink, ...],
     obs_factor_values_at_obs_per_step: Array,
     n_state_factors: int,
@@ -1044,7 +1044,7 @@ def _rebuild_chain_at_period(
         step), shape (n_state_factors,). When `chain_links` is empty,
         returns the period-0 state directly.
     """
-    theta = initial_mean + initial_chol @ z_state
+    theta = jnp.asarray(initial_mean + initial_chol @ z_state)
     for step_idx, link in enumerate(chain_links):
         z_inv = z_inv_per_step[step_idx]
         z_shock = z_shock_per_step[step_idx]
@@ -1081,9 +1081,9 @@ def _integrate_transition_single_obs(
     prev_meas_mask: Array,
     prev_full_loadings: Array,
     prev_meas_sds: Array,
-    obs_cond_weights: Array,
-    obs_cond_means: Array,
-    cond_chols: Array,
+    obs_cond_weights: Array | np.ndarray,
+    obs_cond_means: Array | np.ndarray,
+    cond_chols: Array | np.ndarray,
     chain_links: tuple[ChainLink, ...],
     obs_factor_values_chain: Array,
     joint_nodes: Array,
