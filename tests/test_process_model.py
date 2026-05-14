@@ -323,3 +323,40 @@ def test_get_has_endogenous_factors_and_correction() -> None:
         "c": _fspec(is_endogenous=True, is_correction=True),
     }
     assert get_has_endogenous_factors(factors)
+
+
+def test_augmented_factor_spec_forwards_optional_flags() -> None:
+    """Augmentation must propagate every `FactorSpec` flag, not just the obvious ones.
+
+    Regression: the augmented `FactorSpec` constructor previously omitted
+    `has_production_shock` and `has_initial_distribution`, both of which
+    default to `True`. Any model that set either flag to `False` saw the
+    flag silently reset to `True` once endogenous-period augmentation ran,
+    producing a different model than the user specified.
+    """
+    from skillmodels.common.process_model import (  # noqa: PLC0415
+        _augment_periods_for_endogenous_factors,
+        _get_labels,
+        get_dimensions,
+    )
+
+    fac3 = MODEL2.factors["fac3"]
+    custom_fac3 = replace(
+        fac3,
+        is_endogenous=True,
+        has_production_shock=False,
+        has_initial_distribution=False,
+    )
+    new_factors = dict(MODEL2.factors) | {"fac3": custom_fac3}
+    model = MODEL2._replace(factors=new_factors)._replace(stagemap=None)
+
+    dims = get_dimensions(model_spec=model, has_endogenous_factors=True)
+    labels = _get_labels(model_spec=model, has_endogenous_factors=True, dimensions=dims)
+    aug_spec = _augment_periods_for_endogenous_factors(
+        model_spec=model, dimensions=dims, labels=labels
+    )
+    aug_fac3 = aug_spec.factors["fac3"]
+    assert aug_fac3.has_production_shock is False
+    assert aug_fac3.has_initial_distribution is False
+    # Sanity: the explicitly-set is_endogenous survives too.
+    assert aug_fac3.is_endogenous is True

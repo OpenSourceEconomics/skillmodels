@@ -10,8 +10,6 @@ and merges the resulting parameter pieces into a single skillmodels
 params DataFrame.
 """
 
-from collections.abc import Hashable, Sequence
-
 import optimagic as om
 import pandas as pd
 
@@ -30,6 +28,7 @@ from skillmodels.amn.types import (
 )
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
+from skillmodels.common.selector import align_index_names
 
 
 def _measurement_params_dataframe(
@@ -79,38 +78,16 @@ def _apply_overrides(
     """
     out = params.copy()
     if start_params is not None and not start_params.empty:
-        aligned = _align_index_names(start_params, target_names=out.index.names)
+        aligned = align_index_names(start_params, target_names=out.index.names)
         merged = out.reindex(out.index.union(aligned.index))
         merged.loc[aligned.index, "value"] = aligned["value"]
         out = merged
     if fixed_params is not None and not fixed_params.empty:
-        aligned = _align_index_names(fixed_params, target_names=out.index.names)
+        aligned = align_index_names(fixed_params, target_names=out.index.names)
         merged = out.reindex(out.index.union(aligned.index))
         merged.loc[aligned.index, "value"] = aligned["value"]
         out = merged
     return out.sort_index()
-
-
-def _align_index_names(
-    overrides: pd.DataFrame, target_names: Sequence[Hashable]
-) -> pd.DataFrame:
-    """Return `overrides` with its MultiIndex level names matched to `target_names`.
-
-    Users supply `fixed_params` and `start_params` keyed by the public
-    `period` level name; AMN's combined `all_params` is keyed by
-    `aug_period`. `MultiIndex.union` silently strips any level whose
-    name differs across the two operands, which then collapses the
-    downstream index to anonymous levels and breaks `params.loc[...]`
-    in callers like `decompose_measurement_variance`. Re-stamping the
-    overrides with the target names keeps the tuples identical while
-    making the union name-preserving.
-    """
-    if list(overrides.index.names) == list(target_names):
-        return overrides
-    new_index = overrides.index.set_names(list(target_names))
-    out = overrides.copy()
-    out.index = new_index
-    return out
 
 
 def estimate_amn(

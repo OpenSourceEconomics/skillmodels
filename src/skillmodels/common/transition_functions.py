@@ -29,33 +29,17 @@ should not be jitted yet.
 
 import functools
 from itertools import combinations
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
 import optimagic as om
 from jax import Array
 
+from skillmodels.common.selector import select_by_loc
+
 if TYPE_CHECKING:
     from skillmodels.common.constraints import FixedConstraintWithValue
-
-
-def select_by_loc(params: Any, loc: Any) -> Any:  # noqa: ANN401
-    """Select parameters by location, restricted to the `value` column.
-
-    Mirrors `skillmodels.common.constraints.select_by_loc`. Kept as a
-    second definition here to avoid a circular import with
-    `constraints` (which imports this module to dispatch
-    `constraints_<transition>` builders).
-    """
-    import pandas as pd  # noqa: PLC0415
-
-    selected = params.loc[loc]
-    if isinstance(selected, pd.Series) and "value" in selected.index:
-        return selected["value"]
-    if isinstance(selected, pd.DataFrame) and "value" in selected.columns:
-        return selected["value"]
-    return selected
 
 
 def linear(states: Array, params: Array) -> Array:

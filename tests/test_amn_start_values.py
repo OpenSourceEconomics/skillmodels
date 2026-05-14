@@ -151,8 +151,8 @@ def test_explicit_strategy_argument_via_helper(
     model2_short: ModelSpec, model2_data: pd.DataFrame
 ) -> None:
     """The standalone helper produces the same fills as the wired-in spearman path."""
-    from skillmodels.chs.maximization_inputs import (  # noqa: PLC0415
-        _project_to_probability_constraints,
+    from skillmodels.common.constraints import (  # noqa: PLC0415
+        project_to_probability_constraints,
     )
 
     inputs_raw = get_maximization_inputs(
@@ -165,7 +165,7 @@ def test_explicit_strategy_argument_via_helper(
     # The wired-in path renormalizes free entries of every
     # ProbabilityConstraint to sum to one after the strategy step;
     # apply the same projection here so the two paths can be compared.
-    filled = _project_to_probability_constraints(
+    filled = project_to_probability_constraints(
         params_template=filled, constraints=inputs_raw["constraints"]
     )
 

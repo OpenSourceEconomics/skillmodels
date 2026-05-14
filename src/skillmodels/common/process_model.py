@@ -320,6 +320,8 @@ def _augment_periods_for_endogenous_factors(
             is_endogenous=fspec.is_endogenous,
             is_correction=fspec.is_correction,
             transition_function=fspec.transition_function,
+            has_production_shock=fspec.has_production_shock,
+            has_initial_distribution=fspec.has_initial_distribution,
         )
 
     return model_spec._replace(factors=new_factors)

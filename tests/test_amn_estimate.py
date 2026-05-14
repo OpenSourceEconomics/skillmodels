@@ -104,3 +104,39 @@ def test_estimate_amn_returns_success_flag():
         (0, "skills"),
         (1, "skills"),
     )
+
+
+def test_estimate_amn_honors_fixed_params_keyed_by_period():
+    """`fixed_params` keyed by `period` (the public level name) must pin.
+
+    AMN's combined `all_params` uses `aug_period` internally; users
+    supply overrides keyed by `period`. `align_index_names` should
+    rename the override's level so `MultiIndex.union` keeps the
+    level names intact and the pin survives. Regression for the
+    silent-strip behaviour that produced anonymous-level params
+    frames and broke `decompose_measurement_variance` downstream.
+    """
+    model = _tiny_model()
+    data = _tiny_data(n=1500)
+    options = AMNEstimationOptions(
+        n_mixture_components=2, n_simulation_draws=5000, seed=0
+    )
+
+    pin_loc = ("loadings", 1, "y2", "skills")
+    fixed = pd.DataFrame(
+        {"value": [0.42]},
+        index=pd.MultiIndex.from_tuples(
+            [pin_loc],
+            names=["category", "period", "name1", "name2"],
+        ),
+    )
+
+    result = estimate_amn(model, data, options, fixed_params=fixed)
+
+    assert list(result.all_params.index.names) == [
+        "category",
+        "aug_period",
+        "name1",
+        "name2",
+    ]
+    assert result.all_params.loc[pin_loc, "value"] == pytest.approx(0.42)

@@ -108,11 +108,8 @@ def estimate_transition_period(
     measurements_pt = get_measurements_per_factor(model_spec.factors, period=period)
     all_measures = _get_ordered_measures(measurements_pt)
 
-    # Get transition function info
-    # For now, use the first non-constant factor's transition for the combined function
     transition_info = processed_model.transition_info
 
-    # Separate state factors from endogenous for the parameter index
     state_factors = tuple(f for f in factors if f not in endogenous_factors)
     n_state = len(state_factors)
     n_endog = len(endogenous_factors)

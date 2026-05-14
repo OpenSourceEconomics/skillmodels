@@ -2,6 +2,7 @@
 
 import dataclasses
 import gc
+import warnings
 
 import jax
 import jax.numpy as jnp
@@ -23,6 +24,7 @@ from skillmodels.af.types import (
 )
 from skillmodels.af.validate import validate_af_model
 from skillmodels.amn.estimate import estimate_amn
+from skillmodels.common.constraints import FixedConstraintWithValue
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
@@ -150,6 +152,9 @@ def estimate_af(  # noqa: PLR0915
     )
 
     equality_groups = _extract_equality_groups(constraints)
+    step_constraints = _filter_step_constraints(
+        constraints, optimizer_backend=af_options.optimizer_backend
+    )
 
     # Step 0: Initial period
     period_0_result, cond_dist = estimate_initial_period(
@@ -163,7 +168,7 @@ def estimate_af(  # noqa: PLR0915
         fixed_params=fixed_params,
         observed_factors=observed_factors,
         observed_factor_values=period_data[0].get("observed_factors"),
-        user_constraints=constraints,
+        user_constraints=step_constraints,
     )
 
     period_results: list[AFPeriodResult] = [period_0_result]
@@ -200,7 +205,7 @@ def estimate_af(  # noqa: PLR0915
             ),
             start_params=start_params,
             fixed_params=fixed_params,
-            user_constraints=constraints,
+            user_constraints=step_constraints,
         )
         period_results.append(period_t_result)
         conditional_dists.append(cond_dist)
@@ -440,6 +445,40 @@ def _extract_observed_factors(
         for of in observed_factors
     ]
     return jnp.array(np.column_stack(obs_arrays))
+
+
+def _filter_step_constraints(
+    constraints: list[om.constraints.Constraint] | None,
+    *,
+    optimizer_backend: str,
+) -> list[om.constraints.Constraint] | None:
+    """Strip jaxopt-incompatible constraints from the per-step list.
+
+    Cross-period equality groups are still extracted upstream by
+    `_extract_equality_groups` and propagated via fixed-value pinning
+    in `_propagate_equality_groups`, so dropping the equality
+    constraints from the per-step optimizer's list does not silently
+    erase that channel. Within-step equality constraints, however,
+    have no jaxopt analogue and *are* lost; warn once so the user
+    knows the model becomes weaker under `optimizer_backend="jaxopt"`.
+    """
+    if optimizer_backend != "jaxopt" or not constraints:
+        return constraints
+    filtered: list[om.constraints.Constraint] = [
+        c for c in constraints if isinstance(c, FixedConstraintWithValue)
+    ]
+    if len(filtered) != len(constraints):
+        dropped = len(constraints) - len(filtered)
+        warnings.warn(
+            f"AF jaxopt backend cannot enforce {dropped} non-fixed user "
+            "constraint(s) (e.g. EqualityConstraint). Cross-period equality "
+            "groups are still propagated via fixed-value pinning, but "
+            "within-step equalities are dropped. Switch to "
+            "`optimizer_backend='optimagic'` if those are load-bearing.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+    return filtered
 
 
 def _extract_equality_groups(

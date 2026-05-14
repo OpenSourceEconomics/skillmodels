@@ -2,7 +2,7 @@
 
 import functools
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,6 +11,7 @@ import optimagic as om
 import pandas as pd
 
 import skillmodels.common.transition_functions as t_f_module
+from skillmodels.common.selector import align_index_names, select_by_loc
 from skillmodels.common.types import (
     Anchoring,
     Dimensions,
@@ -20,25 +21,18 @@ from skillmodels.common.types import (
     Normalizations,
 )
 
-
-def select_by_loc(params: pd.DataFrame, loc: Any) -> pd.DataFrame:  # noqa: ANN401
-    """Select parameters by location, restricted to the `value` column.
-
-    When optimagic flattens a constraint's selector output, it walks the
-    returned pandas object as a pytree. A row slice
-    `params.loc[single_tuple]` returns a Series whose index is the column
-    names (`value`, `lower_bound`, `upper_bound`); flattening that yields
-    all three values and the infinities collapse to integer sentinels
-    in `_fail_if_duplicates`. Always project down to the `value` column
-    so the selector returns exactly the parameter values regardless of
-    whether bounds columns are present.
-    """
-    selected = params.loc[loc]
-    if isinstance(selected, pd.Series) and "value" in selected.index:
-        return selected["value"]
-    if isinstance(selected, pd.DataFrame) and "value" in selected.columns:
-        return selected["value"]
-    return selected
+__all__ = [
+    "FixedConstraintWithValue",
+    "add_bounds",
+    "align_index_names",
+    "collect_fixed_locs",
+    "enforce_fixed_constraints",
+    "filter_within_step_constraints",
+    "get_constraints",
+    "project_to_probability_constraints",
+    "reconcile_start_to_equality",
+    "select_by_loc",
+]
 
 
 def _equality_constraint_loc(c: om.constraints.Constraint) -> pd.MultiIndex | None:
@@ -132,6 +126,89 @@ class FixedConstraintWithValue(om.FixedConstraint):
             "selector",
             functools.partial(select_by_loc, loc=self.loc),
         )
+
+
+def collect_fixed_locs(
+    constraints: Iterable[om.constraints.Constraint],
+) -> set[tuple[Any, ...]]:
+    """Flatten every `FixedConstraintWithValue.loc` into a single set of tuples.
+
+    Used by `project_to_probability_constraints` to decide which
+    entries of a `ProbabilityConstraint` group are already pinned by
+    an overlapping `FixedConstraintWithValue` and therefore must not
+    be touched by the rescaling step.
+
+    Handles every shape that `FixedConstraintWithValue.loc` permits
+    per its type annotation: a single 4-tuple (`("loadings", 0, ...)`),
+    a `tuple` / `list` of 4-tuples (used by the anchoring
+    constraints), and a `pd.MultiIndex` (the type annotation allows
+    it; the runtime needs to follow). String `loc`s (like
+    `"mixture_weights"`) are deliberately skipped: they refer to
+    a category prefix in the params index, not to a single
+    parameter, and never belong to a probability fold.
+    """
+    fixed_locs: set[tuple[Any, ...]] = set()
+    for c in constraints:
+        if not isinstance(c, FixedConstraintWithValue):
+            continue
+        loc = c.loc
+        if isinstance(loc, pd.MultiIndex):
+            fixed_locs.update(tuple(t) for t in loc)
+        elif isinstance(loc, tuple) and loc and not isinstance(loc[0], tuple):
+            fixed_locs.add(loc)
+        elif isinstance(loc, (list, tuple)):
+            fixed_locs.update(sub for sub in loc if isinstance(sub, tuple))
+    return fixed_locs
+
+
+def project_to_probability_constraints(
+    params_template: pd.DataFrame,
+    constraints: Iterable[om.constraints.Constraint],
+) -> pd.DataFrame:
+    """Project starting values onto each `ProbabilityConstraint`'s simplex.
+
+    Spearman / AMN seeding does not know about probability folds: the
+    seeded entries don't sum to one. Walk every `ProbabilityConstraint`
+    whose selector is the `select_by_loc(loc=list_of_tuples)` form and
+    rescale its free members so they sum to `1 - sum(fixed_values)`.
+    Entries also bound by a `FixedConstraintWithValue` keep their
+    pinned value; only the remaining (free) entries are rescaled.
+    Groups where the free entries sum to zero are left untouched --
+    the user is on the hook for supplying a feasible start in that
+    degenerate case.
+    """
+    fixed_locs = collect_fixed_locs(constraints)
+
+    out = params_template
+    for c in constraints:
+        if not isinstance(c, om.ProbabilityConstraint):
+            continue
+        keywords = getattr(c.selector, "keywords", None)
+        loc = keywords.get("loc") if keywords else None
+        if not isinstance(loc, list):
+            continue
+
+        free_loc = [tup for tup in loc if tup not in fixed_locs]
+        pinned_loc = [tup for tup in loc if tup in fixed_locs]
+        if not free_loc:
+            continue
+        try:
+            free_values = out.loc[free_loc, "value"]
+        except KeyError:
+            continue
+        free_total = float(free_values.sum())
+        if free_total <= 0 or not np.isfinite(free_total):
+            continue
+
+        pinned_total = float(out.loc[pinned_loc, "value"].sum()) if pinned_loc else 0.0
+        target = max(0.0, 1.0 - pinned_total)
+        if abs(free_total - target) < 1e-12:
+            continue
+
+        if out is params_template:
+            out = params_template.copy()
+        out.loc[free_loc, "value"] = free_values * (target / free_total)
+    return out
 
 
 def get_constraints(

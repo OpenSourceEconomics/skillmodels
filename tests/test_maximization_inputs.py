@@ -163,3 +163,37 @@ def test_get_maximization_inputs_with_fixed_params_non_zero(
 
     loglike_val = inputs["loglike"](params)
     assert np.isfinite(loglike_val)
+
+
+def test_get_maximization_inputs_accepts_fixed_params_keyed_by_period(
+    model2_short, model2_data
+) -> None:
+    """`fixed_params` keyed by `period` (the public name) must pin the entry.
+
+    `params_index` uses `aug_period` internally; `MultiIndex.intersection`
+    silently returns an empty set when level names differ across the
+    operands, so without name alignment the user's pin would vanish.
+    Regression for that silent-drop bug.
+    """
+    fixed_idx = pd.MultiIndex.from_tuples(
+        [("transition", 0, "fac1", "fac3")],
+        names=["category", "period", "name1", "name2"],  # public-facing name
+    )
+    fixed_df = pd.DataFrame({"value": [0.2]}, index=fixed_idx)
+
+    inputs = get_maximization_inputs(
+        model2_short, model2_data, chs_options=MODEL2_CHS_OPTIONS, fixed_params=fixed_df
+    )
+
+    template = inputs["params_template"]
+    assert template.loc[("transition", 0, "fac1", "fac3"), "value"] == pytest.approx(
+        0.2
+    )
+    fixed_constraints = [
+        c
+        for c in inputs["constraints"]
+        if isinstance(c, FixedConstraintWithValue)
+        and c.loc == ("transition", 0, "fac1", "fac3")
+    ]
+    assert len(fixed_constraints) == 1
+    assert fixed_constraints[0].value == pytest.approx(0.2)
