@@ -15,17 +15,25 @@ include log_ces transitions or cross-section equalities should use
 
 import os
 
-# Ensure x64 is on *before* `from jaxopt import LBFGSB` -- jaxopt's
-# module-level jit kernels resolve the default integer dtype at import
-# time. With x64 off, `jnp.argsort` inside `LBFGSB.update` emits int32
-# indices that scatter into the int64 operand the rest of the optimizer
-# builds, and XLA's permutation_sort_simplifier verifier rejects the
-# resulting mismatch on JAX >= 0.10. `skillmodels/__init__.py` sets the
-# same flag at package import; this is a belt-and-suspenders guard for
-# callers that import this module directly.
+# Belt-and-suspenders for callers that import this module directly without
+# going through `skillmodels/__init__.py`. Two things must be set before
+# `import jax` / `from jaxopt import LBFGSB`:
+#
+# 1. `JAX_ENABLE_X64=1` — the AF pipeline assumes float64 throughout.
+# 2. `XLA_FLAGS=--xla_disable_hlo_passes=permutation_sort_simplifier` —
+#    works around a JAX 0.10 bug where the `argsort` inside
+#    `LBFGSB.update` emits an s32 reduction accumulator into an s64
+#    scatter operand, and XLA's `permutation_sort_simplifier` pass
+#    rejects the mismatch. See `skillmodels/__init__.py` for the full
+#    explanation.
 os.environ.setdefault("JAX_ENABLE_X64", "1")
 
-import jax
+_xla_pass_disable = "--xla_disable_hlo_passes=permutation_sort_simplifier"  # noqa: S105
+_existing_xla_flags = os.environ.get("XLA_FLAGS", "")
+if _xla_pass_disable not in _existing_xla_flags:
+    os.environ["XLA_FLAGS"] = f"{_existing_xla_flags} {_xla_pass_disable}".strip()
+
+import jax  # noqa: E402
 
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 

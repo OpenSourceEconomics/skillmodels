@@ -1,21 +1,30 @@
 """Skillmodels: A Python package for estimating latent factor models."""
 
-# Enable 64-bit JAX before any skillmodels submodule -- and crucially before
-# any transitive `import jaxopt` -- so jaxopt's module-level jit/sort
-# kernels see int64 as the default integer type. Without this, jaxopt's
-# `argsort` inside `LBFGSB.update` emits an `s32` accumulator into an
-# `s64` scatter operand and XLA's permutation_sort_simplifier verifier
-# rejects it on JAX >= 0.10 / cuda13. The package has always assumed
-# x64 (every CHS / AF / AMN entry point sets it inside the function);
-# centralising it at import time fixes the jaxopt path too and is a
-# no-op for callers who already enable it.
+# Enable 64-bit JAX before any skillmodels submodule. Every CHS / AF / AMN
+# entry point already sets this inside its function body; centralising it
+# here makes the package behave consistently for direct callers.
 import os
 
 os.environ.setdefault("JAX_ENABLE_X64", "1")
 
-import contextlib
+# Workaround for a JAX 0.10 XLA bug surfaced by jaxopt's `LBFGSB.update`.
+# The `permutation_sort_simplifier` HLO pass mis-lowers the `argsort`
+# inside `update`: it emits an s32 reduction accumulator into the s64
+# scatter operand built by the rest of the optimizer, and the HLO
+# verifier rejects the resulting mismatch with `INVALID_ARGUMENT:
+# Reduction function's accumulator shape at index 0 differs from the
+# init_value shape: s32[] vs s64[]`. Disabling just that one pass via
+# `XLA_FLAGS` keeps every other XLA optimisation intact and is a no-op
+# on JAX < 0.10 (pre-0.10 lacks the pass). Must be set *before* `import
+# jax` because XLA reads `XLA_FLAGS` once at backend init.
+_xla_pass_disable = "--xla_disable_hlo_passes=permutation_sort_simplifier"  # noqa: S105
+_existing_xla_flags = os.environ.get("XLA_FLAGS", "")
+if _xla_pass_disable not in _existing_xla_flags:
+    os.environ["XLA_FLAGS"] = f"{_existing_xla_flags} {_xla_pass_disable}".strip()
 
-import jax
+import contextlib  # noqa: E402
+
+import jax  # noqa: E402
 
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
