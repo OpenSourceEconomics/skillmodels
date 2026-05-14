@@ -260,14 +260,15 @@ def test_identity_constraints_linear_and_squares() -> None:
         assert c.value == pytest.approx(0.0)
 
 
-def test_identity_constraints_log_ces_raises() -> None:
-    with pytest.raises(NotImplementedError, match=r"^$"):
-        identity_constraints_log_ces(("a", "b"), 0, ("a", "b"))
+def test_identity_constraints_log_ces_is_noop() -> None:
+    # log_ces carry-forward identity is a no-op (see docstring); the
+    # gammas are already pinned by the ProbabilityConstraint from
+    # `constraints_log_ces`.
+    assert identity_constraints_log_ces("a", 0, ("a", "b")) == []
 
 
-def test_identity_constraints_log_ces_general_raises() -> None:
-    with pytest.raises(NotImplementedError, match=r"^$"):
-        identity_constraints_log_ces_general(("a", "b"), 0, ("a", "b"))
+def test_identity_constraints_log_ces_general_is_noop() -> None:
+    assert identity_constraints_log_ces_general("a", 0, ("a", "b")) == []
 
 
 def test_constraints_log_ces() -> None:

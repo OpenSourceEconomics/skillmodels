@@ -244,6 +244,10 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             free_common, "value"
         ]
 
+    params_template = _project_to_probability_constraints(
+        params_template=params_template, constraints=constraints
+    )
+
     return {
         "loglike": loglike,
         "loglikeobs": loglikeobs,
@@ -252,6 +256,72 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         "constraints": constraints,
         "params_template": params_template,
     }
+
+
+def _collect_fixed_locs(constraints: list[Any]) -> set[Any]:
+    """Flatten every `FixedConstraintWithValue.loc` into a single set of tuples."""
+    fixed_locs: set[Any] = set()
+    for c in constraints:
+        if not isinstance(c, FixedConstraintWithValue):
+            continue
+        loc = c.loc
+        if isinstance(loc, tuple) and loc and not isinstance(loc[0], tuple):
+            fixed_locs.add(loc)
+        elif isinstance(loc, (list, tuple)):
+            fixed_locs.update(sub for sub in loc if isinstance(sub, tuple))
+    return fixed_locs
+
+
+def _project_to_probability_constraints(
+    params_template: pd.DataFrame,
+    constraints: list[Any],
+) -> pd.DataFrame:
+    """Project starting values onto each `ProbabilityConstraint`'s simplex.
+
+    Spearman / AMN seeding does not know about probability folds: the
+    seeded entries don't sum to one. Walk every `ProbabilityConstraint`
+    whose selector is the `select_by_loc(loc=list_of_tuples)` form and
+    rescale its free members so they sum to `1 - sum(fixed_values)`.
+    Entries also bound by a `FixedConstraintWithValue` keep their
+    pinned value; only the remaining (free) entries are rescaled.
+    Groups where the free entries sum to zero are left untouched --
+    the user is on the hook for supplying a feasible start in that
+    degenerate case.
+    """
+    import optimagic as om  # noqa: PLC0415
+
+    fixed_locs = _collect_fixed_locs(constraints)
+
+    out = params_template
+    for c in constraints:
+        if not isinstance(c, om.ProbabilityConstraint):
+            continue
+        keywords = getattr(c.selector, "keywords", None)
+        loc = keywords.get("loc") if keywords else None
+        if not isinstance(loc, list):
+            continue
+
+        free_loc = [tup for tup in loc if tup not in fixed_locs]
+        pinned_loc = [tup for tup in loc if tup in fixed_locs]
+        if not free_loc:
+            continue
+        try:
+            free_values = out.loc[free_loc, "value"]
+        except KeyError:
+            continue
+        free_total = float(free_values.sum())
+        if free_total <= 0 or not np.isfinite(free_total):
+            continue
+
+        pinned_total = float(out.loc[pinned_loc, "value"].sum()) if pinned_loc else 0.0
+        target = max(0.0, 1.0 - pinned_total)
+        if abs(free_total - target) < 1e-12:
+            continue
+
+        if out is params_template:
+            out = params_template.copy()
+        out.loc[free_loc, "value"] = free_values * (target / free_total)
+    return out
 
 
 def _build_fixed_constraints_from_params(

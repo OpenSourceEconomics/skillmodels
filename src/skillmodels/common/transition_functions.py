@@ -41,8 +41,21 @@ if TYPE_CHECKING:
 
 
 def select_by_loc(params: Any, loc: Any) -> Any:  # noqa: ANN401
-    """Select parameters by location."""
-    return params.loc[loc]
+    """Select parameters by location, restricted to the `value` column.
+
+    Mirrors `skillmodels.common.constraints.select_by_loc`. Kept as a
+    second definition here to avoid a circular import with
+    `constraints` (which imports this module to dispatch
+    `constraints_<transition>` builders).
+    """
+    import pandas as pd  # noqa: PLC0415
+
+    selected = params.loc[loc]
+    if isinstance(selected, pd.Series) and "value" in selected.index:
+        return selected["value"]
+    if isinstance(selected, pd.DataFrame) and "value" in selected.columns:
+        return selected["value"]
+    return selected
 
 
 def linear(states: Array, params: Array) -> Array:
@@ -158,12 +171,24 @@ def constraints_log_ces(
 
 
 def identity_constraints_log_ces(
-    factors: tuple[str, ...],
-    aug_period: int,
-    all_factors: tuple[str, ...],
+    factor: str,  # noqa: ARG001
+    aug_period: int,  # noqa: ARG001
+    all_factors: tuple[str, ...],  # noqa: ARG001
 ) -> list[om.constraints.Constraint]:
-    """Identity constraints for log_ces."""
-    raise NotImplementedError
+    """Identity constraints for log_ces in carry-forward aug periods.
+
+    Returns an empty list. `log_ces` factors carry their own
+    `ProbabilityConstraint` on the gammas (`constraints_log_ces`),
+    which already pins the simplex. The carry-forward identity
+    constraints used for `linear` / `translog` would conflict with
+    that probability fold, so we no-op here -- the natural carry-
+    forward in aug periods comes from the upstream model setup
+    (e.g. `has_production_shock=False` for time-invariant factors).
+
+    The signature matches `identity_constraints_linear` so callers
+    can dispatch by name without case-splitting.
+    """
+    return []
 
 
 def log_ces_with_constant(states: Array, params: Array) -> Array:
@@ -210,12 +235,15 @@ def constraints_log_ces_with_constant(
 
 
 def identity_constraints_log_ces_with_constant(
-    factors: tuple[str, ...],
-    aug_period: int,
-    all_factors: tuple[str, ...],
+    factor: str,  # noqa: ARG001
+    aug_period: int,  # noqa: ARG001
+    all_factors: tuple[str, ...],  # noqa: ARG001
 ) -> list[om.constraints.Constraint]:
-    """Identity constraints for ``log_ces_with_constant``."""
-    raise NotImplementedError
+    """Identity constraints for ``log_ces_with_constant`` -- no-op.
+
+    See :func:`identity_constraints_log_ces` for the rationale.
+    """
+    return []
 
 
 def constant(state: Array, params: Array) -> Array:  # noqa: ARG001
@@ -316,9 +344,12 @@ def params_log_ces_general(factors: tuple[str, ...]) -> list[str]:
 
 
 def identity_constraints_log_ces_general(
-    factors: tuple[str, ...],
-    aug_period: int,
-    all_factors: tuple[str, ...],
+    factor: str,  # noqa: ARG001
+    aug_period: int,  # noqa: ARG001
+    all_factors: tuple[str, ...],  # noqa: ARG001
 ) -> list[om.constraints.Constraint]:
-    """Identity constraints for log_ces_general."""
-    raise NotImplementedError
+    """Identity constraints for log_ces_general -- no-op.
+
+    See :func:`identity_constraints_log_ces` for the rationale.
+    """
+    return []

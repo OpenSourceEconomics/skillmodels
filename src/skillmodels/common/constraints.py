@@ -22,8 +22,23 @@ from skillmodels.common.types import (
 
 
 def select_by_loc(params: pd.DataFrame, loc: Any) -> pd.DataFrame:  # noqa: ANN401
-    """Select parameters by location."""
-    return params.loc[loc]
+    """Select parameters by location, restricted to the `value` column.
+
+    When optimagic flattens a constraint's selector output, it walks the
+    returned pandas object as a pytree. A row slice
+    `params.loc[single_tuple]` returns a Series whose index is the column
+    names (`value`, `lower_bound`, `upper_bound`); flattening that yields
+    all three values and the infinities collapse to integer sentinels
+    in `_fail_if_duplicates`. Always project down to the `value` column
+    so the selector returns exactly the parameter values regardless of
+    whether bounds columns are present.
+    """
+    selected = params.loc[loc]
+    if isinstance(selected, pd.Series) and "value" in selected.index:
+        return selected["value"]
+    if isinstance(selected, pd.DataFrame) and "value" in selected.columns:
+        return selected["value"]
+    return selected
 
 
 def _equality_constraint_loc(c: om.constraints.Constraint) -> pd.MultiIndex | None:

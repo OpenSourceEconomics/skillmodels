@@ -114,11 +114,19 @@ def _compute_variance_decomposition(
         var_name="factor", value_name="factor_variance", ignore_index=False
     ).reset_index(names="aug_period")
 
-    # Extract loadings (non-zero only)
+    # Extract loadings (non-zero only). The params index uses either
+    # `aug_period` (CHS, internal) or `period` (AF / AMN, public) as the
+    # second level name; normalize both to `aug_period` so the merge
+    # below is symmetric across estimators.
     loadings_df = params.loc["loadings"].reset_index()
     loadings_df = loadings_df[loadings_df["value"] != 0].copy()
     loadings_df = loadings_df.rename(
-        columns={"name1": "measurement", "name2": "factor", "value": "loading"}
+        columns={
+            "name1": "measurement",
+            "name2": "factor",
+            "value": "loading",
+            "period": "aug_period",
+        }
     )
 
     # Merge loadings with factor variances
@@ -130,7 +138,7 @@ def _compute_variance_decomposition(
     # Extract measurement standard deviations
     meas_sds_df = params.loc["meas_sds"].reset_index()
     meas_sds_df = meas_sds_df.rename(
-        columns={"name1": "measurement", "value": "meas_sd"}
+        columns={"name1": "measurement", "value": "meas_sd", "period": "aug_period"}
     )
     meas_sds_df = meas_sds_df[["aug_period", "measurement", "meas_sd"]]
 

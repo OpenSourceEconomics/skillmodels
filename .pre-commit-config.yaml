@@ -65,6 +65,9 @@ repos:
     rev: 0.9.1
     hooks:
       - id: nbstripout
+        # The getting-started tutorial ships pre-rendered (`execute: false` in
+        # myst.yml); stripping its outputs would leave the docs site empty.
+        exclude: ^docs/getting_started/tutorial\.ipynb$
         args:
           - --extra-keys
           - metadata.kernelspec metadata.language_info.version metadata.vscode
