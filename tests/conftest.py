@@ -1,13 +1,40 @@
-"""Shared test fixtures and helpers."""
+"""Shared test fixtures and helpers.
 
-from dataclasses import replace
-from pathlib import Path
+Tests opt in to whole-package beartype via `beartype.claw.beartype_package`
+here so that annotation drift on *internal* helpers surfaces as a
+`BeartypeCallHintParamViolation` during the test run. The perimeter
+decorators (`skillmodels._beartype_conf`) keep raising project-specific
+exception classes for *user-facing* parameter violations; the claw-installed
+checks below are for everything in between.
 
-import pandas as pd
-import pytest
+`skillmodels.chs.qr` is skipped because it relies on JAX's `@custom_jvp`
+decorator, which beartype.claw wraps in a way that strips the
+`.defjvp` attribute that the second-stage `@qr_gpu.defjvp` decoration
+needs. No annotations in that module are user-facing.
+"""
 
-from skillmodels.common.config import TEST_DATA_DIR
-from skillmodels.test_data.model2 import MODEL2
+from beartype import BeartypeConf
+from beartype.claw import beartype_package
+
+# Mirror the perimeter conf's PEP-484 numeric tower so `int` satisfies
+# `float`-typed parameters. Without this every `value=1` call site
+# (e.g. `FixedConstraintWithValue(value=1)`) trips the claw checker.
+beartype_package(
+    "skillmodels",
+    conf=BeartypeConf(
+        is_pep484_tower=True,
+        claw_skip_package_names=("skillmodels.chs.qr",),
+    ),
+)
+
+from dataclasses import replace  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import pandas as pd  # noqa: E402
+import pytest  # noqa: E402
+
+from skillmodels.common.config import TEST_DATA_DIR  # noqa: E402
+from skillmodels.test_data.model2 import MODEL2  # noqa: E402
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 

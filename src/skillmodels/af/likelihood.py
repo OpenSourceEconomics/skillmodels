@@ -9,6 +9,7 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
 
 from skillmodels.af.types import ChainLink
@@ -967,8 +968,8 @@ def _transition_loglike_per_obs(
 def _compute_investment(
     theta_prev: Array,
     obs_factor_values: Array,
-    inv_eq_params: Array,
-    inv_sds: Array,
+    inv_eq_params: Array | np.ndarray,
+    inv_sds: Array | np.ndarray,
     eps_i: Array,
     n_endogenous_factors: int,
     n_state_factors: int,

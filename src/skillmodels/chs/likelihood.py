@@ -6,6 +6,7 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
 
 from skillmodels.chs.clipping import soft_clipping
@@ -23,18 +24,18 @@ from skillmodels.common.types import (
 def log_likelihood(
     params: Array,
     parsing_info: ParsingInfo,
-    measurements: Array,
+    measurements: Array | np.ndarray,
     controls: Array,
     predict_func: Callable,
-    sigma_scaling_factor: float,
+    sigma_scaling_factor: float | Array,
     sigma_weights: Array,
     dimensions: Dimensions,
     labels: Labels,
     chs_estimation_options: CHSEstimationOptions,
-    is_measurement_iteration: Array,
-    is_predict_iteration: Array,
-    iteration_to_period: Array,
-    observed_factors: Array,
+    is_measurement_iteration: Array | np.ndarray,
+    is_predict_iteration: Array | np.ndarray,
+    iteration_to_period: Array | np.ndarray,
+    observed_factors: Array | np.ndarray,
 ) -> Array:
     """Aggregated log likelihood of a skill formation model.
 
@@ -91,18 +92,18 @@ def log_likelihood(
 def log_likelihood_obs(
     params: Array,
     parsing_info: ParsingInfo,
-    measurements: Array,
+    measurements: Array | np.ndarray,
     controls: Array,
     predict_func: Callable,
-    sigma_scaling_factor: float,
+    sigma_scaling_factor: float | Array,
     sigma_weights: Array,
     dimensions: Dimensions,
     labels: Labels,
     chs_estimation_options: CHSEstimationOptions,
-    is_measurement_iteration: Array,
-    is_predict_iteration: Array,
-    iteration_to_period: Array,
-    observed_factors: Array,
+    is_measurement_iteration: Array | np.ndarray,
+    is_predict_iteration: Array | np.ndarray,
+    iteration_to_period: Array | np.ndarray,
+    observed_factors: Array | np.ndarray,
 ) -> Array:
     """Log likelihood of a skill formation model.
 
@@ -200,10 +201,10 @@ def _scan_body(
     loop_args: dict[str, Array],
     controls: Array,
     parsed_params: ParsedParams,
-    sigma_scaling_factor: float,
+    sigma_scaling_factor: float | Array,
     sigma_weights: Array,
     predict_func: Callable,
-    observed_factors: Array,
+    observed_factors: Array | np.ndarray,
 ) -> tuple[dict[str, Array], dict[str, Array]]:
     # ==================================================================================
     # create arguments needed for update

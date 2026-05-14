@@ -29,17 +29,14 @@ should not be jitted yet.
 
 import functools
 from itertools import combinations
-from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
 import optimagic as om
 from jax import Array
 
+from skillmodels.common.fixed_constraint import FixedConstraintWithValue
 from skillmodels.common.selector import select_by_loc
-
-if TYPE_CHECKING:
-    from skillmodels.common.constraints import FixedConstraintWithValue
 
 
 def linear(states: Array, params: Array) -> Array:
@@ -60,8 +57,6 @@ def identity_constraints_linear(
     all_factors: tuple[str, ...],
 ) -> list[FixedConstraintWithValue]:
     """Identity constraints for linear transition function."""
-    from skillmodels.common.constraints import FixedConstraintWithValue  # noqa: PLC0415
-
     constraints: list[FixedConstraintWithValue] = []
     for regressor in params_linear(all_factors):
         val = 1.0 if factor == regressor else 0.0
@@ -108,8 +103,6 @@ def identity_constraints_translog(
     all_factors: tuple[str, ...],
 ) -> list[FixedConstraintWithValue]:
     """Identity constraints for translog transition function."""
-    from skillmodels.common.constraints import FixedConstraintWithValue  # noqa: PLC0415
-
     constraints: list[FixedConstraintWithValue] = []
     for regressor in params_translog(all_factors):
         val = 1.0 if factor == regressor else 0.0
@@ -296,8 +289,6 @@ def identity_constraints_linear_and_squares(
     all_factors: tuple[str, ...],
 ) -> list[FixedConstraintWithValue]:
     """Identity constraints for linear_and_squares transition function."""
-    from skillmodels.common.constraints import FixedConstraintWithValue  # noqa: PLC0415
-
     constraints: list[FixedConstraintWithValue] = []
     for regressor in params_linear_and_squares(all_factors):
         val = 1.0 if factor == regressor else 0.0

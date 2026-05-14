@@ -10,16 +10,14 @@ production-function regression); each stage's output is held in
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 
 from skillmodels._beartype_conf import OPTIONS_CONF, beartype_init
+from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.types import ensure_containers_are_immutable
-
-if TYPE_CHECKING:
-    from skillmodels.common.model_spec import ModelSpec
 
 
 @beartype_init(OPTIONS_CONF)

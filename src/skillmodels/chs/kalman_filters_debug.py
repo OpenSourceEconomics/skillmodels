@@ -14,7 +14,7 @@ def kalman_update(
     upper_chols: Array,
     loadings: Array,
     control_params: Array,
-    meas_sd: float,
+    meas_sd: float | Array,
     measurements: Array,
     controls: Array,
     log_mixture_weights: Array,

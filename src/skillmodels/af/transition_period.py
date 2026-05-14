@@ -366,7 +366,7 @@ def _run_transition_optimization(
     prev_measurements: Array,
     prev_controls: Array,
     loading_mask: np.ndarray,
-    prev_dist_arrays: dict[str, Array],
+    prev_dist_arrays: dict[str, Array | np.ndarray],
     chain_links: tuple[ChainLink, ...],
     obs_factor_values_chain: Array,
     joint_nodes: Array,
@@ -685,7 +685,7 @@ def _prepare_transition_inputs(
     transition_info: TransitionInfo,
     factors: tuple[str, ...],
     n_obs: int,
-) -> tuple[dict[str, Array], int]:
+) -> tuple[dict[str, Array | np.ndarray], int]:
     """Pack the period-0 conditional distribution payload for the likelihood.
 
     Returns a dict the transition likelihood reads to seed its on-demand
@@ -1181,10 +1181,10 @@ def _update_conditional_distribution(
     # `joint_nodes.shape[0]` rows.
     z_block_curr = n_shock + n_endog
 
-    def _chain_one_component(prev_sample: Array) -> Array:
+    def _chain_one_component(prev_sample: Array | np.ndarray) -> Array:
         """Map (j, i) -> theta_t given prev_sample (n_halton, n_obs, n_state)."""
 
-        def _at_node(j_idx: int, i_idx: int) -> Array:
+        def _at_node(j_idx: int | Array, i_idx: int | Array) -> Array:
             theta_prev = prev_sample[j_idx, i_idx]
             obs_y = (
                 observed_factor_values[i_idx]

@@ -3,17 +3,16 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import jax
+import numpy as np
 import pandas as pd
 from jax import Array
 
 from skillmodels._beartype_conf import OPTIONS_CONF, beartype_init
+from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.types import ensure_containers_are_immutable
-
-if TYPE_CHECKING:
-    from skillmodels.common.model_spec import ModelSpec
 
 
 @beartype_init(OPTIONS_CONF)
@@ -185,10 +184,10 @@ class AFEstimationOptions:
 class MixtureComponent:
     """Single component of a Gaussian mixture distribution."""
 
-    mean: Array
+    mean: Array | np.ndarray
     """Mean vector, shape (n_factors,)."""
 
-    chol_cov: Array
+    chol_cov: Array | np.ndarray
     """Lower-triangular Cholesky factor of covariance, shape (n_factors, n_factors)."""
 
 
@@ -210,30 +209,30 @@ class ChainLink:
     transition_func: Callable
     """Combined per-factor transition function f(full_states, params)."""
 
-    transition_params: Array
+    transition_params: Array | np.ndarray
     """Flat transition parameter vector for this period, shape
     ``(total_n_transition_params,)``."""
 
-    shock_sds: Array
+    shock_sds: Array | np.ndarray
     """Production shock SDs for shock-bearing state factors, shape
     ``(n_shock_factors,)``."""
 
-    shock_factor_indices: Array
+    shock_factor_indices: Array | np.ndarray
     """Mapping each shock slot to its position in the state-factor
     ordering, shape ``(n_shock_factors,)`` int."""
 
-    inv_eq_params: Array
+    inv_eq_params: Array | np.ndarray
     """Flat investment-equation parameters, shape
     ``(n_endogenous * n_inv_eq_params_per,)``."""
 
-    inv_sds: Array
+    inv_sds: Array | np.ndarray
     """Investment shock SDs, shape ``(n_endogenous,)``."""
 
     n_inv_eq_params_per: int
     """Investment equation parameters per endogenous factor (1 + n_state +
     n_observed_factors when n_endogenous > 0; 0 otherwise)."""
 
-    obs_factor_values: Array
+    obs_factor_values: Array | np.ndarray
     """Observed factor values at this link's source period (i.e. period -
     1), shape ``(n_obs, n_observed_factors)``. Used in the chain rebuild
     for the inv equation and the transition function."""
@@ -282,7 +281,7 @@ class ConditionalDistribution:
     inside the transition likelihood (which rebuilds the chain on-demand).
     """
 
-    mixture_weights: Array
+    mixture_weights: Array | np.ndarray
     """Mixture weights, shape (n_components,)."""
 
     components: tuple[MixtureComponent, ...]
@@ -290,27 +289,27 @@ class ConditionalDistribution:
     importance sample. Used by `posterior_states` and `inference`; not used
     in the transition likelihood itself."""
 
-    samples_per_component: tuple[Array, ...]
+    samples_per_component: tuple[Array | np.ndarray, ...]
     """One importance-sample array per mixture component, each shape
     ``(n_halton, n_obs, n_state)``. Retained for posterior-state summary
     statistics; not consumed by the transition likelihood (which rebuilds
     the chain on-demand from a joint Halton). May use a smaller Halton
     count than the likelihood's `n_halton_points`."""
 
-    conditional_weights: Array | None = None
+    conditional_weights: Array | np.ndarray | None = None
     """Individual-specific conditional mixture weights, shape (n_obs, n_components).
 
     When not None, these override `mixture_weights` for each observation (computed
     from Bayes' rule using data from previous periods).
     """
 
-    cond_means: Array | None = None
+    cond_means: Array | np.ndarray | None = None
     """Per-obs Schur-conditional means of the latent state given observed
     factors at period 0, shape ``(n_components, n_obs, n_state)``. Built
     by the initial period only. None for transition-period distributions.
     """
 
-    cond_chols: Array | None = None
+    cond_chols: Array | np.ndarray | None = None
     """Per-component Schur-conditional Cholesky factors at period 0, shape
     ``(n_components, n_state, n_state)``. Shared across observations
     because the conditional covariance does not depend on Y_i (it's the

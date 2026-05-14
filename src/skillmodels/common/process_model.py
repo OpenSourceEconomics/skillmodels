@@ -130,7 +130,7 @@ def get_has_endogenous_factors(factors: Mapping[str, FactorSpec]) -> bool:
             "A factor cannot be a correction and not endogenous, got:\n"
             f"{endogenous_factors}"
         )
-    return endogenous_factors["is_endogenous"].any()  # ty: ignore[invalid-return-type]
+    return bool(endogenous_factors["is_endogenous"].any())
 
 
 def get_dimensions(
@@ -173,7 +173,7 @@ def _get_aug_periods_to_periods(
 
 
 def _aug_periods_from_period(
-    period: int, aug_periods_to_periods: dict[int, int]
+    period: int, aug_periods_to_periods: Mapping[int, int]
 ) -> list[int]:
     """The inverse of the the aug_periods_to_periods mapper."""
     return [ap for ap, p in aug_periods_to_periods.items() if p == period]
@@ -389,7 +389,7 @@ def _get_transition_info(model_spec: ModelSpec, labels: Labels) -> TransitionInf
     return TransitionInfo(
         func=transition_function,
         param_names=MappingProxyType(
-            dict(zip(latent_factors, param_names, strict=False))
+            dict(zip(latent_factors, (tuple(p) for p in param_names), strict=False))
         ),
         individual_functions=MappingProxyType(individual_functions),
         function_names=MappingProxyType(

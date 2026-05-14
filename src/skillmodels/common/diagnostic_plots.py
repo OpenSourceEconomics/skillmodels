@@ -93,7 +93,7 @@ def plot_residual_boxplots(
 
 def _create_residual_boxplot_for_period(
     residuals_df: pd.DataFrame,
-    period: int,
+    period: int | np.integer,
     period_col: str,
     *,
     show_reference_line: bool,
@@ -210,7 +210,7 @@ def plot_likelihood_contributions(
 
 def _create_likelihood_boxplot_for_period(
     contributions_df: pd.DataFrame,
-    period: int,
+    period: int | np.integer,
     period_col: str,
     layout_kwargs: dict[str, Any] | None,
 ) -> go.Figure:

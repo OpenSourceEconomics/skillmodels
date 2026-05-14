@@ -581,7 +581,7 @@ def _process_distplot_kwargs(
     show_rug: bool,
     curve_type: str,
     bin_size: float,
-    scenarios: NDArray[Any],
+    scenarios: NDArray[Any] | pd.api.extensions.ExtensionArray,
     colorscale: str,
     distplot_kwargs: dict[str, Any] | None,
 ) -> dict[str, Any]:
@@ -604,9 +604,7 @@ def _calculate_kde_for_3d(
     data: pd.DataFrame,
     factors: tuple[str, str],
     n_points: int,
-) -> tuple[
-    NDArray[np.floating[Any]], NDArray[np.floating[Any]], NDArray[np.floating[Any]]
-]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """Create grid mesh and calculate Gaussian kernel over the grid."""
     x = data[factors[0]]
     y = data[factors[1]]

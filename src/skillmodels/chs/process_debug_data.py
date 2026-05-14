@@ -110,7 +110,7 @@ def process_debug_data(
 
 
 def _create_post_update_states(
-    filtered_states: Array,
+    filtered_states: Array | np.ndarray,
     factors: tuple[str, ...],
     update_info: pd.DataFrame,
 ) -> pd.DataFrame:
@@ -129,7 +129,7 @@ def _create_post_update_states(
 
 
 def _convert_state_array_to_df(
-    arr: NDArray[np.floating[Any]],
+    arr: NDArray[np.float64],
     factor_names: tuple[str, ...],
 ) -> pd.DataFrame:
     """Convert a 3d state array into a 2d DataFrame.
@@ -145,8 +145,8 @@ def _convert_state_array_to_df(
 
 
 def _create_filtered_states(
-    filtered_states: Array,
-    log_mixture_weights: Array,
+    filtered_states: Array | np.ndarray,
+    log_mixture_weights: Array | np.ndarray,
     update_info: pd.DataFrame,
     factors: tuple[str, ...],
 ) -> pd.DataFrame:
@@ -176,7 +176,7 @@ def _create_filtered_states(
 
 
 def _process_residuals(
-    residuals: Array,
+    residuals: Array | np.ndarray | list,
     update_info: pd.DataFrame,
 ) -> pd.DataFrame:
     to_concat = []
@@ -192,14 +192,14 @@ def _process_residuals(
 
 
 def _process_residual_sds(
-    residual_sds: Array,
+    residual_sds: Array | np.ndarray,
     update_info: pd.DataFrame,
 ) -> pd.DataFrame:
     return _process_residuals(residuals=residual_sds, update_info=update_info)
 
 
 def _process_all_contributions(
-    all_contributions: Array,
+    all_contributions: Array | np.ndarray,
     update_info: pd.DataFrame,
 ) -> pd.DataFrame:
     to_concat = []

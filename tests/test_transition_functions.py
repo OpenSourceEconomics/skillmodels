@@ -99,7 +99,9 @@ def test_where_all_but_one_gammas_are_zero() -> None:
 
 
 def test_constant() -> None:
-    assert constant("bla", "blubb") == "bla"  # ty: ignore[invalid-argument-type]
+    state = jnp.array([1.0, 2.0, 3.0])
+    params = jnp.array([])
+    aaae(constant(state, params), state)
 
 
 def test_robust_translog() -> None:

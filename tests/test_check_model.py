@@ -31,7 +31,7 @@ def test_invalid_anchoring_non_bool() -> None:
         free_constant=False,
         free_loadings=False,
     )
-    result = _check_anchoring(anchoring)  # ty: ignore[invalid-argument-type]
+    result = _check_anchoring(anchoring)
     assert any("bool" in msg for msg in result)
 
 
@@ -43,7 +43,7 @@ def test_invalid_anchoring_non_mapping_outcomes() -> None:
         free_constant=False,
         free_loadings=False,
     )
-    result = _check_anchoring(anchoring)  # ty: ignore[invalid-argument-type]
+    result = _check_anchoring(anchoring)
     assert any("Mapping" in msg for msg in result)
 
 
@@ -55,7 +55,7 @@ def test_invalid_anchoring_outcome_type() -> None:
         free_constant=False,
         free_loadings=False,
     )
-    result = _check_anchoring(anchoring)  # ty: ignore[invalid-argument-type]
+    result = _check_anchoring(anchoring)
     assert any("variable" in msg.lower() for msg in result)
 
 
@@ -67,7 +67,7 @@ def test_invalid_anchoring_free_controls_type() -> None:
         free_constant=False,
         free_loadings=False,
     )
-    result = _check_anchoring(anchoring)  # ty: ignore[invalid-argument-type]
+    result = _check_anchoring(anchoring)
     assert any("free_controls" in msg for msg in result)
 
 
@@ -122,7 +122,7 @@ def test_invalid_anchoring_free_constant_type() -> None:
         free_constant="yes",
         free_loadings=False,
     )
-    result = _check_anchoring(anchoring)  # ty: ignore[invalid-argument-type]
+    result = _check_anchoring(anchoring)
     assert any("free_constant" in msg for msg in result)
 
 
@@ -134,7 +134,7 @@ def test_invalid_anchoring_free_loadings_type() -> None:
         free_constant=False,
         free_loadings="yes",
     )
-    result = _check_anchoring(anchoring)  # ty: ignore[invalid-argument-type]
+    result = _check_anchoring(anchoring)
     assert any("free_loadings" in msg for msg in result)
 
 

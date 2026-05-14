@@ -29,7 +29,7 @@ def kalman_update(
     upper_chols: Array,
     loadings: Array,
     control_params: Array,
-    meas_sd: Array,
+    meas_sd: float | Array,
     measurements: Array,
     controls: Array,
     log_mixture_weights: Array,
@@ -168,7 +168,7 @@ def kalman_predict(
     transition_func: Callable,
     states: Array,
     upper_chols: Array,
-    sigma_scaling_factor: float,
+    sigma_scaling_factor: float | Array,
     sigma_weights: Array,
     trans_coeffs: dict[str, Array],
     shock_sds: Array,
@@ -241,7 +241,7 @@ def linear_kalman_predict(
     transition_func: Callable | None,  # noqa: ARG001
     states: Array,
     upper_chols: Array,
-    sigma_scaling_factor: float,  # noqa: ARG001
+    sigma_scaling_factor: float | Array,  # noqa: ARG001
     sigma_weights: Array,  # noqa: ARG001
     trans_coeffs: dict[str, Array],
     shock_sds: Array,
@@ -375,7 +375,7 @@ def _build_f_and_c(
 def _calculate_sigma_points(
     states: Array,
     upper_chols: Array,
-    scaling_factor: float,
+    scaling_factor: float | Array,
     observed_factors: Array,
 ) -> Array:
     """Calculate the array of sigma_points for the unscented transform.

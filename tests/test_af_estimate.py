@@ -1022,7 +1022,7 @@ def test_rebuild_chain_at_period_matches_python_forward_pass() -> None:
         )
         inv = jnp.array([inv_val])
         full = jnp.concatenate([theta_0, inv, obs_y])
-        theta_next_det = transition_func(full, link.transition_params)
+        theta_next_det = transition_func(full, link.transition_params)  # ty: ignore[invalid-argument-type]
         theta_0 = theta_next_det + jnp.array([link.shock_sds[0] * z_shock[0]])
     expected = theta_0  # θ at the last link's target period
 

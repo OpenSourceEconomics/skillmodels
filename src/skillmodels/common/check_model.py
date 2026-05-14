@@ -1,6 +1,7 @@
 """Functions to validate model specifications."""
 
 from collections.abc import Mapping
+from typing import Any
 
 import numpy as np
 
@@ -90,7 +91,12 @@ def check_stagemap(
     return report
 
 
-def _check_anchoring(anchoring: Anchoring) -> list[str]:
+def _check_anchoring(anchoring: Any) -> list[str]:  # noqa: ANN401
+    """Validate anchoring attributes.
+
+    Runtime-typed because callers may pass duck-typed namespaces or
+    partially-built objects.
+    """
     report = []
     if not isinstance(anchoring.anchoring, bool):
         report.append("anchoring.anchoring must be a bool.")

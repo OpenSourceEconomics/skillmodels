@@ -111,7 +111,7 @@ def simulate_dataset(
     params = params.reindex(params_index)
 
     parsing_info = create_parsing_info(
-        params_index=params.index,  # ty: ignore[invalid-argument-type]
+        params_index=params_index,
         update_info=processed_model.update_info,
         labels=processed_model.labels,
         anchoring=processed_model.anchoring,
@@ -147,7 +147,7 @@ def simulate_dataset(
         update_info=processed_model.update_info,
         control_data=control_data,
         observed_factors=observed_factors,
-        policies=policies,  # ty: ignore[invalid-argument-type]
+        policies=policies,
         transition_info=processed_model.transition_info,
         rng=rng,
     )
@@ -206,7 +206,7 @@ def _simulate_dataset(
     update_info: pd.DataFrame,
     control_data: Array,
     observed_factors: Array,
-    policies: list[dict],
+    policies: list[dict] | None,
     transition_info: TransitionInfo,
     rng: np.random.Generator,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -332,8 +332,8 @@ def _simulate_dataset(
         meas = pd.DataFrame(
             data=measurements_from_states(
                 rng=rng,
-                states=latent_states[t],  # ty: ignore[invalid-argument-type]
-                controls=control_data[t],  # ty: ignore[invalid-argument-type]
+                states=latent_states[t],
+                controls=control_data[t],
                 loadings=loadings_df.loc[t].to_numpy(),
                 control_params=control_params_df.loc[t].to_numpy(),
                 sds=meas_sds.loc[t].to_numpy().flatten(),
@@ -433,7 +433,7 @@ def _get_shock(
     mean: float,
     sd: float,
     size: int,
-) -> NDArray[np.floating]:
+) -> NDArray[np.floating] | Array:
     """Add stochastic effect to a factor of length n_obs.
 
     Args:
@@ -460,8 +460,8 @@ def generate_start_states(
     n_obs: int,
     dimensions: Dimensions,
     dist_args: list[dict],
-    weights: NDArray[np.floating],
-) -> NDArray[np.floating]:
+    weights: NDArray[np.floating] | Array,
+) -> NDArray[np.floating] | Array:
     """Draw initial states and control variables from a (mixture of) normals.
 
     Args:
@@ -492,12 +492,12 @@ def generate_start_states(
 
 def measurements_from_states(
     rng: np.random.Generator,
-    states: NDArray[np.floating],
-    controls: NDArray[np.floating],
-    loadings: NDArray[np.floating],
-    control_params: NDArray[np.floating],
-    sds: NDArray[np.floating],
-) -> NDArray[np.floating]:
+    states: NDArray[np.floating] | Array,
+    controls: NDArray[np.floating] | Array,
+    loadings: NDArray[np.floating] | Array,
+    control_params: NDArray[np.floating] | Array,
+    sds: NDArray[np.floating] | Array,
+) -> NDArray[np.floating] | Array:
     """Generate the variables that would be observed in practice.
 
     This generates the data for only one period. Let n_meas be the number

@@ -792,10 +792,15 @@ def _get_factor_scores_data_for_multiple_periods(
 
 
 def _process_factors(
-    model: ProcessedModel,
+    model: Any,  # noqa: ANN401
     factors: list[str] | tuple[str, ...] | str | None,
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Process factors to get a tuple of tuples."""
+    """Process factors to get a tuple of tuples.
+
+    `model` is annotated `Any` because tests pass minimal duck-typed
+    namespaces that only expose `.labels.latent_factors` /
+    `.labels.observed_factors`. Production callers pass a `ProcessedModel`.
+    """
     if not factors:
         latent_factors = model.labels.latent_factors
         observed_factors = model.labels.observed_factors

@@ -3,7 +3,6 @@
 import functools
 import warnings
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -11,6 +10,7 @@ import optimagic as om
 import pandas as pd
 
 import skillmodels.common.transition_functions as t_f_module
+from skillmodels.common.fixed_constraint import FixedConstraintWithValue
 from skillmodels.common.selector import align_index_names, select_by_loc
 from skillmodels.common.types import (
     Anchoring,
@@ -97,35 +97,6 @@ def reconcile_start_to_equality(
             continue
         out.loc[loc, "value"] = float(out.loc[loc, "value"].mean())
     return out
-
-
-@dataclass(frozen=True)
-class FixedConstraintWithValue(om.FixedConstraint):
-    """Fixed constraint that carries the target value and parameter location.
-
-    `om.FixedConstraint` fixes parameters at their start values but does not carry a
-    target value. This wrapper adds `loc` (the parameter location in the params
-    DataFrame) and `value` (the value to set before optimization).
-    """
-
-    loc: pd.MultiIndex | tuple | str | None = None
-    """Parameter location in the params DataFrame."""
-    value: float | None = None
-    """Value to enforce on the parameter."""
-
-    def __post_init__(self) -> None:
-        """Validate that `loc` and `value` are not None and derive `selector`."""
-        if self.loc is None:
-            msg = "loc must not be None"
-            raise TypeError(msg)
-        if self.value is None:
-            msg = "value must not be None"
-            raise TypeError(msg)
-        object.__setattr__(
-            self,
-            "selector",
-            functools.partial(select_by_loc, loc=self.loc),
-        )
 
 
 def collect_fixed_locs(
@@ -308,7 +279,7 @@ def add_bounds(params: pd.DataFrame, bounds_distance: float) -> pd.DataFrame:
     return df
 
 
-def _is_diagonal_entry(ind_tup: tuple[str, ...]) -> bool:
+def _is_diagonal_entry(ind_tup: tuple[Any, ...]) -> bool:
     name2 = ind_tup[-1]
     middle_pos = int(len(name2) // 2)
     if (
