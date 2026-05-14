@@ -86,8 +86,10 @@ extend-ignore = [
   "TRY003",  # Long messages outside exception class
 ]
 per-file-ignores."**/*.ipynb" = [
+  "ANN",    # Missing type annotations on tutorial helpers.
   "B018",   # Found useless expression
   "INP001", # File is part of an implicit namespace package
+  "PD010",  # `.pivot_table` preferred -- presentation tables read fine without it.
   "T201",   # print found
 ]
 per-file-ignores."tests/*" = [
