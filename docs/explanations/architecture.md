@@ -13,7 +13,9 @@ src/skillmodels/
 │   ├── process_data.py        long-format data -> internal arrays
 │   ├── params_index.py        4-level MultiIndex used by all estimators
 │   ├── parse_params.py        flat vector <-> structured params
-│   ├── constraints.py         get_constraints, FixedConstraintWithValue, ...
+│   ├── constraints.py         get_constraints, FixedConstraintWithValue,
+│   │                          collect_fixed_locs, project_to_probability_constraints
+│   ├── selector.py            select_by_loc, align_index_names
 │   ├── transition_functions.py  linear / translog / log_ces / ...
 │   ├── transitions.py         apply_anchored_transition (sigma-points-agnostic)
 │   ├── anchoring.py           anchor / unanchor states

@@ -76,12 +76,47 @@ of factors are arbitrary).
 
 ## Estimation Options
 
-The `EstimationOptions` dataclass controls numerical aspects:
+Each estimator has its own options dataclass, passed at call time rather than
+embedded in `ModelSpec`. The three classes share no fields — what counts as a
+tuning knob differs between estimators.
+
+`CHSEstimationOptions` (from `skillmodels.chs`) controls the Kalman MLE:
 
 - **robust_bounds**: Tightens parameter bounds to avoid numerical issues
 - **bounds_distance**: How much stricter to make bounds (zeroed if robust_bounds is
   false)
-- **n_mixtures**: Number of mixture components in the distribution
 - **sigma_points_scale**: Controls spread of sigma points in unscented Kalman filter
 - **clipping_\***: Parameters for soft-clipping the log-likelihood to prevent
   infinities
+- **start_params_strategy**: How to seed the `params_template`. `"amn"` (default)
+  runs the full AMN three-stage estimator and uses its parameters as the start;
+  `"spearman"` uses moment-based start values; `"none"` leaves entries as NaN
+  for the caller to fill in.
+
+`AFEstimationOptions` (from `skillmodels.af`) controls the sequential MLE:
+
+- **n_halton_points**, **n_halton_points_shock**: quadrature counts.
+- **n_mixture_components**: number of components in the latent-factor mixture.
+- **optimizer_backend**: `"auto"` (default), `"optimagic"`, or `"jaxopt"`. Auto
+  picks `"jaxopt"` if a JAX GPU is visible and the model has no probability or
+  equality constraints; otherwise `"optimagic"`.
+- **optimizer_algorithm**: the optimagic algorithm name used when the backend
+  is `"optimagic"`. Ignored under `"jaxopt"`.
+- **initialization_strategy**: `"amn"`, `"spearman"`, or `"constant"`. Same
+  meaning as in CHS.
+
+`AMNEstimationOptions` (from `skillmodels.amn`) controls the three-stage
+pipeline:
+
+- **n_mixture_components**: Stage-1 EM components.
+- **em_max_iter**, **em_tol**, **em_n_init**, **em_reg_covar**: Stage-1 EM
+  numerical knobs.
+- **n_simulation_draws**: Stage-3 synthetic-panel size.
+- **minimum_distance_weighting**: Stage-2 weighting; `"identity"` (default) or
+  `"optimal"`.
+- **investment_endogeneity**: include the control-function residual in Stage 3
+  for endogenous-investment models.
+
+The shared structural field — number of mixture components in the latent
+distribution — lives directly on `ModelSpec.n_mixtures`, since it changes the
+model itself rather than the optimizer.

@@ -33,6 +33,8 @@ project:
       children:
         - file: how_to_guides/model_specs.md
         - file: how_to_guides/how_to_estimate_af.md
+        - file: how_to_guides/how_to_estimate_amn.md
+        - file: how_to_guides/how_to_compare_estimators.md
         - file: how_to_guides/how_to_simulate_dataset.ipynb
         - file: how_to_guides/how_to_visualize_transition_equations.ipynb
         - file: how_to_guides/how_to_visualize_pairwise_factor_distribution.ipynb

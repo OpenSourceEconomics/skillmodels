@@ -3,6 +3,11 @@
 Transition functions describe how latent factors evolve over time. skillmodels provides
 several pre-built functions and supports custom functions.
 
+The same transition functions work for all three estimators (CHS, AF, AMN) — they live
+in `skillmodels.common.transition_functions` and are dispatched by name through each
+estimator's pipeline. AMN's Stage 3 currently supports the pre-built set listed below;
+custom `@register_params` transitions work with CHS and AF but not yet with AMN.
+
 ## Pre-built Transition Functions
 
 ### linear

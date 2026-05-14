@@ -1,0 +1,206 @@
+# Compare CHS, AF, and AMN with Confidence Intervals
+
+The getting-started tutorial shows the same `ModelSpec` estimated by all three
+estimators on CNLSY data. This guide picks up where the tutorial leaves off and
+quantifies the uncertainty around each estimator's point estimates:
+
+1. **CHS**: analytic sandwich standard errors from `estimagic.estimate_ml`.
+2. **AF**: score-resampling cluster bootstrap (`compute_af_standard_errors`).
+3. **AMN**: nonparametric cluster bootstrap (`compute_amn_standard_errors`).
+
+The end of the guide overlays the three posterior factor trajectories on a
+single panel so you can read off whether the estimators agree on the latent
+factor path, not just on the parameter estimates.
+
+The guide assumes the three estimation results from the tutorial are in scope:
+`chs_result`, `af_result`, and `amn_result`. The corresponding model and data
+fixtures (`model`, `data`) are the same across all three.
+
+## Why each estimator gets a different inference
+
+Each estimator computes the same point estimate of the same model, but the
+sampling-distribution machinery differs:
+
+| Estimator | Inference                                            | Why this and not bootstrap (CHS) / not sandwich (AF, AMN) |
+| --------- | ---------------------------------------------------- | --------------------------------------------------------- |
+| CHS       | Analytic sandwich (`estimate_ml`'s Fisher + outer)   | Closed-form is valid; bootstrap is just slower.           |
+| AF        | Score-resampling bootstrap                           | The closed-form variance ignores estimation error in period-$t-1$ nuisance params, biasing every period-$t \geq 1$ SE down. The score bootstrap captures the propagation. |
+| AMN       | Full re-estimation cluster bootstrap                 | The three-stage estimator has no clean sandwich form; each stage's residual variance compounds.  |
+
+## CHS: analytic standard errors
+
+`get_maximization_inputs` returns the jitted log-likelihood and gradient that
+`estimagic.estimate_ml` consumes directly. Its result carries the analytic
+sandwich variance.
+
+```python
+from estimagic import estimate_ml
+
+chs_inference = estimate_ml(
+    loglike=max_inputs["loglikeobs"],
+    params=chs_result.params,
+    optimize_options=False,
+    constraints=max_inputs["constraints"],
+    loglike_kwargs={},
+)
+chs_inference.summary()
+```
+
+`optimize_options=False` skips re-optimisation: `estimagic` evaluates the
+likelihood and its derivatives at `chs_result.params` and assembles the
+robust sandwich. The output's `params` column has 95% confidence intervals
+ready to plot.
+
+## AF: score-resampling bootstrap
+
+`compute_af_standard_errors` precomputes the per-observation scores at the
+optimum once, then for each of `n_boot` replicates resamples caseids,
+averages the resampled scores, and applies a one-step Newton update from the
+point estimate. No per-replicate re-estimation, so 10 000 replicates run in
+seconds.
+
+```python
+from skillmodels.af import compute_af_standard_errors
+
+af_inference = compute_af_standard_errors(
+    af_result,
+    data,
+    af_options,
+    n_boot=10_000,
+    seed=0,
+)
+af_inference.standard_errors.head()
+af_inference.vcov  # (n_params, n_params) DataFrame indexed by all_params.index
+af_inference.replicate_params  # (n_boot, n_params)
+```
+
+The `replicate_params` DataFrame is the right object for plotting 95%
+intervals: take the 2.5%/97.5% empirical quantiles per parameter rather than
+$\hat{\theta} \pm 1.96 \cdot \mathrm{SE}$, since the per-replicate one-step
+shifts can be visibly skewed.
+
+## AMN: cluster bootstrap
+
+AMN's three-stage pipeline (EM → minimum distance → simulate-and-regress) has
+no analytic sandwich, so inference is a full cluster bootstrap: resample
+caseids with replacement, re-run all three stages, repeat. Per-replicate cost
+is dominated by the Stage 1 EM (~seconds for $n \approx 2000$, $K = 2$,
+$\approx 40$ augmented measures).
+
+```python
+from skillmodels.amn import compute_amn_standard_errors
+
+amn_inference = compute_amn_standard_errors(
+    amn_result,
+    data,
+    amn_options,
+    n_boot=200,
+    seed=0,
+)
+amn_inference.standard_errors.head()
+amn_inference.replicate_params  # (n_boot, n_params) -- includes failed replicates as NaN rows
+```
+
+Bumping `n_boot` to 1000 is reasonable on a multi-core machine; the paper's
+original AMN application uses 100.
+
+## Overlaying CES production-function CIs
+
+Side-by-side $\phi$ estimates with 95% CIs:
+
+```python
+import pandas as pd
+
+def _ci(replicate_params, param_loc, q=0.025):
+    samples = replicate_params[param_loc].dropna()
+    return samples.quantile(q), samples.quantile(1 - q)
+
+rows = []
+for period in (0, 1):
+    phi_loc = ("transition", period, "skills", "phi")
+    rows.append({
+        "period": period,
+        "estimator": "CHS",
+        "estimate": chs_result.params.loc[phi_loc, "value"],
+        "lower": chs_inference.summary().loc[phi_loc, "ci_lower"],
+        "upper": chs_inference.summary().loc[phi_loc, "ci_upper"],
+    })
+    rows.append({
+        "period": period,
+        "estimator": "AF",
+        "estimate": af_result.all_params.loc[phi_loc, "value"],
+        "lower": _ci(af_inference.replicate_params, phi_loc)[0],
+        "upper": _ci(af_inference.replicate_params, phi_loc)[1],
+    })
+    rows.append({
+        "period": period,
+        "estimator": "AMN",
+        "estimate": amn_result.all_params.loc[phi_loc, "value"],
+        "lower": _ci(amn_inference.replicate_params, phi_loc)[0],
+        "upper": _ci(amn_inference.replicate_params, phi_loc)[1],
+    })
+
+phi_comparison = pd.DataFrame(rows)
+```
+
+## Posterior factor trajectories
+
+The three estimators produce different posterior beliefs about the latent
+factor paths. `chs_states`, `af_states`, `amn_states` (built in the tutorial
+via `get_filtered_states`, `get_af_posterior_states`,
+`get_amn_posterior_states`) all share a `period` column and one column per
+factor, so a single melt + facet plot covers the comparison:
+
+```python
+import plotly.express as px
+
+states = pd.concat(
+    [
+        chs_states.assign(estimator="CHS"),
+        af_states.assign(estimator="AF"),
+        amn_states.assign(estimator="AMN"),
+    ]
+)
+trajectories = states.groupby(["estimator", "period"])["skills"].mean().reset_index()
+
+fig = px.line(
+    trajectories,
+    x="period",
+    y="skills",
+    color="estimator",
+    title="Mean posterior skill across estimators",
+    template="plotly_white",
+)
+fig.show()
+```
+
+For a stronger visual comparison, plot the cross-individual variance band
+($q_{0.1}$, $q_{0.5}$, $q_{0.9}$) per estimator side-by-side; agreement on the
+median path with disagreement on the band is a useful diagnostic about how
+the estimator treats the tail of the latent distribution.
+
+## When the estimators disagree
+
+If CHS, AF, and AMN disagree by more than the bootstrap CIs predict, the
+candidate explanations are:
+
+- **Non-Gaussian latent factors.** CHS assumes Gaussian-mixture latents; AF and
+  AMN are more flexible about the mixture. Run `decompose_measurement_variance`
+  on each (the tutorial does this) and check whether the signal fractions
+  diverge — that's the leading indicator.
+- **Misspecified transition function.** `log_ces` enforces a CES form via the
+  simplex constraint on the $\gamma$ weights; if the data prefers a linear
+  technology with a free constant, the CHS optimum can land in a different
+  basin than the AF/AMN sequential estimates that escape the constraint via
+  their integration weights.
+- **Endogenous investment misalignment.** If `investment` is meant to be
+  endogenous (`is_endogenous=True`), CHS uses augmented periods internally
+  while AF treats it as a regular state per calendar period. The two answers
+  should still agree, but the augmented-period plumbing has historically been
+  the source of subtle bugs — start the diagnosis here if the disagreement is
+  concentrated around investment.
+
+See [How to estimate AF](how_to_estimate_af.md) and
+[How to estimate AMN](how_to_estimate_amn.md) for the estimator-specific tuning
+that matters when the headline disagreement turns out to be numerical, not
+substantive.
