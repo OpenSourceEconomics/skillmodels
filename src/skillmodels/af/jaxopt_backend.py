@@ -144,24 +144,64 @@ def minimize_with_jaxopt(
         val, grad = loglike_and_grad(full_vec)
         return val, grad[free_idx]
 
+    # Match scipy_lbfgsb's stopping rule: stop when EITHER
+    #   * max|projected_grad| < gtol_abs  ("gtol channel"), OR
+    #   * (f_k - f_{k+1}) / max(|f_k|, |f_{k+1}|, 1) < ftol_rel
+    #     ("ftol channel"; this is the criterion that typically fires in
+    #      practice for skill-formation likelihoods that go locally flat
+    #      before the gradient does).
+    # Accept the canonical scipy keys so the same `optimizer_options`
+    # dict works for both backends; fall back to historical jaxopt
+    # names for compatibility.
+    gtol_abs = float(options.pop("convergence_gtol_abs", options.pop("tol", 1e-5)))
+    ftol_rel = float(options.pop("convergence_ftol_rel", 2.22e-9))
+    maxiter = int(options.pop("stopping_maxiter", options.pop("maxiter", 15_000)))
+    history_size = int(options.pop("history_size", 10))
+
     solver = LBFGSB(
         fun=objective_and_grad,
         value_and_grad=True,
-        maxiter=int(options.pop("maxiter", 500)),
-        tol=float(options.pop("tol", 1e-6)),
-        history_size=int(options.pop("history_size", 10)),
+        # `maxiter` here is jaxopt's *internal* fail-safe cap; the outer
+        # Python loop below drives stopping. Set huge so jaxopt never
+        # interrupts us mid-iteration.
+        maxiter=maxiter,
+        tol=gtol_abs,
+        history_size=history_size,
         **options,
     )
-    opt_step = solver.run(free_initial, bounds=(free_lower, free_upper))
 
-    final_full = full_template.at[free_idx].set(opt_step.params)  # noqa: PD008
+    bounds = (free_lower, free_upper)
+    state = solver.init_state(free_initial, bounds=bounds)
+    params = free_initial
+    prev_val = jnp.inf
+    stopped_on = "maxiter"
+    n_iter = 0
+    # fallback if `maxiter == 0` and the loop body never executes.
+    for n_iter in range(1, maxiter + 1):  # noqa: B007
+        params, state = solver.update(params, state, bounds=bounds)
+        cur_val = state.value
+        # gtol channel
+        if bool(state.error < gtol_abs):
+            stopped_on = "gtol"
+            break
+        # ftol channel (skip first iteration where prev_val == inf)
+        denom = jnp.maximum(
+            jnp.maximum(jnp.abs(prev_val), jnp.abs(cur_val)),
+            1.0,
+        )
+        rel_drop = jnp.abs(prev_val - cur_val) / denom
+        if bool(jnp.isfinite(prev_val)) and bool(rel_drop < ftol_rel):
+            stopped_on = "ftol"
+            break
+        prev_val = cur_val
+
+    final_full = full_template.at[free_idx].set(params)  # noqa: PD008
     result_df = full_params_df.copy()
     result_df["value"] = np.asarray(jax.device_get(final_full))
 
-    n_iter = int(opt_step.state.iter_num)
     return JaxoptResult(
         params=result_df,
-        fun=float(jax.device_get(opt_step.state.value)),
-        success=n_iter < solver.maxiter,
+        fun=float(jax.device_get(state.value)),
+        success=stopped_on != "maxiter",
         n_iter=n_iter,
     )
