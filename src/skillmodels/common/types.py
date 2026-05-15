@@ -50,6 +50,29 @@ def ensure_containers_are_immutable[K, V](
     return cast("MappingProxyType[K, V]", _make_immutable(value))
 
 
+def _to_plain(value: Any) -> Any:  # noqa: ANN401
+    """Inverse of `_make_immutable`: recursively unwrap to mutable Python.
+
+    Used at boundaries where a downstream library (e.g. optimagic's
+    `om.minimize(algo_options=...)`) does a strict `isinstance(..., dict)`
+    check that rejects `MappingProxyType`.
+    """
+    if isinstance(value, MappingProxyType | Mapping):
+        return {k: _to_plain(v) for k, v in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_to_plain(v) for v in value]
+    if isinstance(value, frozenset | set):
+        return {_to_plain(v) for v in value}
+    return value
+
+
+def to_plain_dict[K, V](
+    mp: Mapping[K, V],
+) -> dict[K, V]:
+    """Recursively unwrap a `MappingProxyType` tree into plain `dict`."""
+    return cast("dict[K, V]", _to_plain(mp))
+
+
 def _reduce_mapping_proxy(mp: MappingProxyType) -> tuple:
     return ensure_containers_are_immutable, (dict(mp),)
 

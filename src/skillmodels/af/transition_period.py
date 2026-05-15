@@ -46,7 +46,7 @@ from skillmodels.common.constraints import (
     reconcile_start_to_equality,
 )
 from skillmodels.common.model_spec import ModelSpec
-from skillmodels.common.types import ProcessedModel, TransitionInfo
+from skillmodels.common.types import ProcessedModel, TransitionInfo, to_plain_dict
 
 
 def estimate_transition_period(
@@ -485,7 +485,7 @@ def _run_transition_optimization(
             ),
             constraints=combined_constraints or None,
             fun_and_jac=fun_and_jac,
-            **dict(af_options.optimizer_options),
+            **to_plain_dict(af_options.optimizer_options),
         )
 
     result_params = params_template.copy()

@@ -41,7 +41,7 @@ from skillmodels.common.constraints import (
     reconcile_start_to_equality,
 )
 from skillmodels.common.model_spec import ModelSpec
-from skillmodels.common.types import ProcessedModel
+from skillmodels.common.types import ProcessedModel, to_plain_dict
 
 
 def estimate_initial_period(  # noqa: PLR0915
@@ -268,7 +268,7 @@ def estimate_initial_period(  # noqa: PLR0915
             ),
             constraints=combined_constraints or None,
             fun_and_jac=fun_and_jac,
-            **dict(af_options.optimizer_options),
+            **to_plain_dict(af_options.optimizer_options),
         )
 
     # Write optimized values back into full template
