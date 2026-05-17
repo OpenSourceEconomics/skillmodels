@@ -1,7 +1,5 @@
 """Main driver for the AF estimation procedure."""
 
-import dataclasses
-import gc
 import warnings
 
 import jax
@@ -20,9 +18,7 @@ from skillmodels.af.types import (
     AFEstimationOptions,
     AFEstimationResult,
     AFPeriodResult,
-    ChainLink,
     ConditionalDistribution,
-    MixtureComponent,
 )
 from skillmodels.af.validate import validate_af_model
 from skillmodels.amn.estimate import estimate_amn
@@ -32,7 +28,7 @@ from skillmodels.common.process_model import process_model
 
 
 @beartype(conf=ESTIMATION_CONF)
-def estimate_af(  # noqa: PLR0915
+def estimate_af(
     model_spec: ModelSpec,
     data: pd.DataFrame,
     af_options: AFEstimationOptions | None = None,
@@ -221,55 +217,22 @@ def estimate_af(  # noqa: PLR0915
     # Combine parameters from all periods
     all_params = pd.concat([r.params for r in period_results])
 
-    # Free the XLA compilation cache + any unreferenced device buffers
-    # before materialising the result. The per-period likelihoods and
-    # gradients leave hundreds of MB of compiled executables and stale
-    # intermediates on the device; without this the GPU→host copy in
-    # `_to_numpy(...)` has been observed to OOM on a host-side staging
-    # allocation, even though the arrays themselves are small.
-    jax.clear_caches()
-    gc.collect()
-
-    # Drop `samples_per_component` (the multi-GB per-period
-    # `(n_halton, n_obs, n_state)` importance buffer) from every
-    # conditional distribution BEFORE materialising anything else.
-    # Otherwise the next `_to_numpy(c.mean)` call has to fit a staging
-    # buffer alongside live `samples_per_component` device arrays and
-    # OOMs. Mutating the list in place and forcing a GC pass releases
-    # the underlying device buffers immediately; only the small
-    # summary stats and chain history remain on the GPU when conversion
-    # starts.
-    for idx, cd in enumerate(conditional_dists):
-        conditional_dists[idx] = dataclasses.replace(cd, samples_per_component=())
-    del cd
-    gc.collect()
-    jax.clear_caches()
-
-    # Materialise every remaining JAX array in the result as a numpy
-    # array. Downstream consumers (pickling, plotting, posterior_states)
-    # don't need GPU residency, and leaving the arrays as `jax.Array`
-    # would force materialisation at pickle time -- which on a busy
-    # device routinely OOMs inside `__reduce__`.
-    #
-    # Skip this transfer entirely when the caller has opted out via
-    # `keep_conditional_distributions=False` (e.g. small-GPU runs on
-    # P100 12 GB where the per-component arrays alone exceed the
-    # remaining device free memory).
+    # Return arrays on-device so a subsequent call to `estimate_af` can
+    # reuse the JAX/XLA compilation cache (otherwise every sim in a
+    # sweep recompiles every per-period likelihood + gradient + jaxopt
+    # update). Callers that need host residency (pickling, plotting,
+    # sending across processes) should call `result.to_numpy()`, which
+    # drops `samples_per_component` and clears caches as a side effect.
     if af_options.keep_conditional_distributions:
-        conditional_dists_compact = tuple(
-            _to_numpy_conditional_distribution(cd) for cd in conditional_dists
-        )
+        conditional_dists_out = tuple(conditional_dists)
     else:
-        conditional_dists_compact = ()
-        del conditional_dists
-        gc.collect()
-        jax.clear_caches()
+        conditional_dists_out = ()
 
     return AFEstimationResult(
         period_results=tuple(period_results),
         all_params=all_params,
         model_spec=model_spec,
-        conditional_distributions=conditional_dists_compact,
+        conditional_distributions=conditional_dists_out,
     )
 
 
@@ -323,50 +286,6 @@ def _resolve_optimizer_backend(
         initialization_strategy=af_options.initialization_strategy,
         keep_conditional_distributions=af_options.keep_conditional_distributions,
         n_halton_points_posterior_summary=af_options.n_halton_points_posterior_summary,
-    )
-
-
-def _to_numpy(value: Array | np.ndarray | None) -> np.ndarray | None:
-    """Materialise a JAX array as numpy; pass `None` through."""
-    if value is None:
-        return None
-    return np.asarray(jax.device_get(value))
-
-
-def _to_numpy_chain_link(link: ChainLink) -> ChainLink:
-    """Convert every JAX field of a `ChainLink` to numpy."""
-    return dataclasses.replace(
-        link,
-        transition_params=_to_numpy(link.transition_params),
-        shock_sds=_to_numpy(link.shock_sds),
-        shock_factor_indices=_to_numpy(link.shock_factor_indices),
-        inv_eq_params=_to_numpy(link.inv_eq_params),
-        inv_sds=_to_numpy(link.inv_sds),
-        obs_factor_values=_to_numpy(link.obs_factor_values),
-    )
-
-
-def _to_numpy_conditional_distribution(
-    cond_dist: ConditionalDistribution,
-) -> ConditionalDistribution:
-    """Convert all arrays to numpy and drop `samples_per_component`."""
-    new_components = tuple(
-        MixtureComponent(
-            mean=_to_numpy(c.mean),  # ty: ignore[invalid-argument-type]
-            chol_cov=_to_numpy(c.chol_cov),  # ty: ignore[invalid-argument-type]
-        )
-        for c in cond_dist.components
-    )
-    new_chain_links = tuple(_to_numpy_chain_link(cl) for cl in cond_dist.chain_links)
-    return dataclasses.replace(
-        cond_dist,
-        mixture_weights=_to_numpy(cond_dist.mixture_weights),
-        components=new_components,
-        samples_per_component=(),
-        conditional_weights=_to_numpy(cond_dist.conditional_weights),
-        cond_means=_to_numpy(cond_dist.cond_means),
-        cond_chols=_to_numpy(cond_dist.cond_chols),
-        chain_links=new_chain_links,
     )
 
 

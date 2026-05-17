@@ -2147,22 +2147,25 @@ def test_af_estimate_with_register_params_user_transition() -> None:
         assert np.isfinite(pr.loglikelihood)
 
 
-def test_af_result_is_numpy_only_and_drops_samples_per_component() -> None:
-    """`estimate_af` returns a numpy-only, pickle-friendly result.
+def test_af_result_to_numpy_materialises_and_drops_samples_per_component() -> None:
+    """`AFEstimationResult.to_numpy()` produces a numpy-only, pickle-friendly copy.
 
-    Two related concerns:
+    `estimate_af` itself leaves arrays on-device so the JAX/XLA
+    compilation cache can be reused across repeated calls (e.g. inside
+    a Monte Carlo sweep). Callers that need host residency -- pickling,
+    plotting, sending across processes -- must invoke `to_numpy()`,
+    which:
 
-    * `samples_per_component` -- per-period (n_halton, n_obs, n_state)
-      importance buffers used only for internal chain construction --
-      must be cleared. At realistic problem sizes they are multiple GB
-      per period.
-    * Every other `jax.Array` in the result (`MixtureComponent.mean`,
-      `chol_cov`, `ConditionalDistribution.cond_means`, `cond_chols`,
+    * drops `samples_per_component` (per-period `(n_halton, n_obs,
+      n_state)` importance buffers, multi-GB at realistic sizes), and
+    * materialises every `jax.Array` in the result
+      (`MixtureComponent.mean`, `chol_cov`,
+      `ConditionalDistribution.cond_means`, `cond_chols`,
       `conditional_weights`, `mixture_weights`, and the arrays inside
-      every `ChainLink`) must be materialised as `np.ndarray`. JAX
-      arrays bind to GPU memory; if a user pickles the result while
-      JIT caches still occupy most of the device, `__reduce__` triggers
-      a GPU→host materialisation that OOMs.
+      every `ChainLink`) as `np.ndarray`. JAX arrays bind to GPU
+      memory; without `to_numpy()`, pickling the result triggers a
+      GPU→host materialisation inside `__reduce__` that routinely OOMs
+      on a device still holding JIT caches.
     """
     rng = np.random.default_rng(2026)
     n_obs, n_periods = 200, 2
@@ -2206,7 +2209,7 @@ def test_af_result_is_numpy_only_and_drops_samples_per_component() -> None:
             n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
-    )
+    ).to_numpy()
 
     def _assert_numpy(arr: object, label: str) -> None:
         if arr is None:

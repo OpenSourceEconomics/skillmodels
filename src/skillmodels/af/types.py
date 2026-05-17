@@ -1,5 +1,7 @@
 """Frozen dataclass definitions for the AF estimator."""
 
+import dataclasses
+import gc
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -359,3 +361,70 @@ class AFEstimationResult:
 
     conditional_distributions: tuple[ConditionalDistribution, ...]
     """Estimated conditional distributions per period (for filtered states)."""
+
+    def to_numpy(self) -> AFEstimationResult:
+        """Return a copy with all device arrays materialised as numpy.
+
+        Drops `samples_per_component` (per-period
+        `(n_halton, n_obs, n_state)` importance buffers, typically
+        multi-GB) and replaces every `jax.Array` inside the conditional
+        distributions with a host-side `np.ndarray`.
+
+        Call this before pickling the result or when device memory needs
+        to be released. `estimate_af` itself returns arrays on-device so
+        repeated calls can reuse the JAX/XLA compilation cache; that
+        cache is freed here (the side effect is necessary because the
+        host-staging buffer for the GPU→host copy must fit, and on a
+        device loaded with compiled per-period likelihoods + gradients
+        it routinely OOMs without this).
+        """
+        # Free compiled executables + unreferenced device buffers so the
+        # host staging copy below has room.
+        jax.clear_caches()
+        gc.collect()
+        new_cds = tuple(
+            _conditional_distribution_to_numpy(cd)
+            for cd in self.conditional_distributions
+        )
+        return dataclasses.replace(self, conditional_distributions=new_cds)
+
+
+def _array_to_numpy(value: Array | np.ndarray | None) -> np.ndarray | None:
+    if value is None:
+        return None
+    return np.asarray(jax.device_get(value))
+
+
+def _chain_link_to_numpy(link: ChainLink) -> ChainLink:
+    return dataclasses.replace(
+        link,
+        transition_params=_array_to_numpy(link.transition_params),
+        shock_sds=_array_to_numpy(link.shock_sds),
+        shock_factor_indices=_array_to_numpy(link.shock_factor_indices),
+        inv_eq_params=_array_to_numpy(link.inv_eq_params),
+        inv_sds=_array_to_numpy(link.inv_sds),
+        obs_factor_values=_array_to_numpy(link.obs_factor_values),
+    )
+
+
+def _conditional_distribution_to_numpy(
+    cond_dist: ConditionalDistribution,
+) -> ConditionalDistribution:
+    new_components = tuple(
+        MixtureComponent(
+            mean=_array_to_numpy(c.mean),  # ty: ignore[invalid-argument-type]
+            chol_cov=_array_to_numpy(c.chol_cov),  # ty: ignore[invalid-argument-type]
+        )
+        for c in cond_dist.components
+    )
+    new_chain_links = tuple(_chain_link_to_numpy(cl) for cl in cond_dist.chain_links)
+    return dataclasses.replace(
+        cond_dist,
+        mixture_weights=_array_to_numpy(cond_dist.mixture_weights),
+        components=new_components,
+        samples_per_component=(),
+        conditional_weights=_array_to_numpy(cond_dist.conditional_weights),
+        cond_means=_array_to_numpy(cond_dist.cond_means),
+        cond_chols=_array_to_numpy(cond_dist.cond_chols),
+        chain_links=new_chain_links,
+    )
