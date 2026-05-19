@@ -51,47 +51,39 @@ inference = compute_af_standard_errors(
 inference.standard_errors
 ```
 
-## Optimizer backends
+## Optimizer
 
-By default each period's MLE runs through `optimagic.minimize`. The parameter
-vector crosses host↔device once per iteration:
+Each period's MLE runs through `optimagic.minimize` with the algorithm in
+`AFEstimationOptions.optimizer_algorithm` (default `"fides"`; pass
+`"scipy_lbfgsb"` for Monte Carlo sweeps where a deterministic stopping
+rule matters). The parameter vector crosses host↔device once per
+iteration:
 
-1. optimagic hands a pandas DataFrame to the user-supplied `fun`/`fun_and_jac`.
+1. optimagic hands a pandas DataFrame to the user-supplied `fun` / `fun_and_jac`.
 1. The wrapper extracts the `"value"` column, pushes it to device, runs the
    jitted log-likelihood, and copies the scalar + gradient back to numpy.
 
-For models without probability or equality constraints, an on-device backend
-can replace this. Set `optimizer_backend="jaxopt"` to run `jaxopt.LBFGSB`
-directly on the device-resident parameter vector:
+Pass scipy_lbfgsb stopping options through `optimizer_options`:
 
 ```python
 af_options = AFEstimationOptions(
     n_halton_points=200,
     n_halton_points_shock=50,
-    optimizer_backend="jaxopt",
-    optimizer_options={"maxiter": 500, "tol": 1e-7, "history_size": 10},
+    optimizer_algorithm="scipy_lbfgsb",
+    optimizer_options={
+        "algo_options": {
+            "convergence_gtol_abs": 1e-5,
+            "convergence_ftol_rel": 2.22e-9,
+            "stopping_maxiter": 15_000,
+        },
+    },
 )
 ```
 
-The trade-offs:
-
-- **Supported**: pinned values from normalisations, user-supplied
-  `fixed_params`, and parameter bounds.
-- **Not supported**: probability constraints (raised by `log_ces` transitions
-  whose `gamma` weights live on a simplex) and equality constraints (within-
-  step and cross-period equalities passed through `estimate_af(constraints=)`).
-  The jaxopt backend raises `NotImplementedError` with a clear hint to fall
-  back to `optimizer_backend="optimagic"`.
-- The `optimizer_algorithm` field is ignored; jaxopt always uses L-BFGS-B.
-
-When to pick which:
-
-| Situation                                              | Backend       |
-| ------------------------------------------------------ | ------------- |
-| Any `log_ces` transition                               | `"optimagic"` |
-| Within-step / cross-period equality constraints        | `"optimagic"` |
-| Linear / translog model with many iterations on GPU    | `"jaxopt"`    |
-| Small CPU run, debuggability matters                   | `"optimagic"` |
+All optimagic constraint kinds are supported: `FixedConstraintWithValue`
+(from normalisations / `fixed_params`), `ProbabilityConstraint` (from
+`log_ces` `gamma` simplex), and `EqualityConstraint` (within-step and
+cross-period equalities passed through `estimate_af(constraints=...)`).
 
 ## Initialization strategy
 

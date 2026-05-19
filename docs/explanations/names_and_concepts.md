@@ -97,11 +97,9 @@ tuning knob differs between estimators.
 
 - **n_halton_points**, **n_halton_points_shock**: quadrature counts.
 - **n_mixture_components**: number of components in the latent-factor mixture.
-- **optimizer_backend**: `"auto"` (default), `"optimagic"`, or `"jaxopt"`. Auto
-  picks `"jaxopt"` if a JAX GPU is visible and the model has no probability or
-  equality constraints; otherwise `"optimagic"`.
-- **optimizer_algorithm**: the optimagic algorithm name used when the backend
-  is `"optimagic"`. Ignored under `"jaxopt"`.
+- **optimizer_algorithm**: the optimagic algorithm name passed to
+  `optimagic.minimize(algorithm=...)` (default `"fides"`; use
+  `"scipy_lbfgsb"` for MC sweeps).
 - **initialization_strategy**: `"amn"`, `"spearman"`, or `"constant"`. Same
   meaning as in CHS.
 

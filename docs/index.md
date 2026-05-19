@@ -20,9 +20,6 @@ nonlinear latent-factor model. Key features:
 - **Strongly-typed, immutable model spec**: frozen dataclasses with
   `MappingProxyType` containers throughout.
 - **JAX everywhere**: jitted likelihoods, autodiff gradients, optional GPU.
-- **Optional on-device optimizer for AF**: `optimizer_backend="jaxopt"` runs
-  `jaxopt.LBFGSB` on the device-resident params vector, eliminating the
-  host↔device transfer that `optimagic` incurs once per likelihood call.
 
 ## Public API
 

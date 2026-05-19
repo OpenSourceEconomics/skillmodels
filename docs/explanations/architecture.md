@@ -40,8 +40,7 @@ src/skillmodels/
 │   ├── halton.py              quadrature nodes / weights
 │   ├── batching.py            obs-batching for the autodiff chunking
 │   ├── posterior_states.py    conditional-distribution materialisation
-│   ├── inference.py           compute_af_standard_errors (cluster bootstrap)
-│   └── jaxopt_backend.py      on-device L-BFGS-B alternative
+│   └── inference.py           compute_af_standard_errors (cluster bootstrap)
 └── amn/                     Attanasio-Meghir-Nix 2020 (three-stage)
     ├── types.py               AMNEstimationOptions, ...
     ├── estimate.py            estimate_amn(...) -- top-level orchestration
