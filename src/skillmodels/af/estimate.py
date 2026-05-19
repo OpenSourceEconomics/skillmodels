@@ -1,7 +1,5 @@
 """Main driver for the AF estimation procedure."""
 
-import warnings
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -22,7 +20,6 @@ from skillmodels.af.types import (
 )
 from skillmodels.af.validate import validate_af_model
 from skillmodels.amn.estimate import estimate_amn
-from skillmodels.common.constraints import FixedConstraintWithValue
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
@@ -84,8 +81,6 @@ def estimate_af(
     if af_options is None:
         af_options = AFEstimationOptions()
 
-    af_options = _resolve_optimizer_backend(af_options, model_spec, constraints)
-
     validate_af_model(model_spec)
     processed_model = process_model(model_spec)
 
@@ -112,7 +107,6 @@ def estimate_af(
             n_halton_points=af_options.n_halton_points,
             n_halton_points_shock=af_options.n_halton_points_shock,
             n_mixture_components=af_options.n_mixture_components,
-            optimizer_backend=af_options.optimizer_backend,
             optimizer_algorithm=af_options.optimizer_algorithm,
             optimizer_options=dict(af_options.optimizer_options),
             two_stage=af_options.two_stage,
@@ -151,9 +145,7 @@ def estimate_af(
     )
 
     equality_groups = _extract_equality_groups(constraints)
-    step_constraints = _filter_step_constraints(
-        constraints, optimizer_backend=af_options.optimizer_backend
-    )
+    step_constraints = constraints
 
     # Step 0: Initial period
     period_0_result, cond_dist = estimate_initial_period(
@@ -219,10 +211,10 @@ def estimate_af(
 
     # Return arrays on-device so a subsequent call to `estimate_af` can
     # reuse the JAX/XLA compilation cache (otherwise every sim in a
-    # sweep recompiles every per-period likelihood + gradient + jaxopt
-    # update). Callers that need host residency (pickling, plotting,
-    # sending across processes) should call `result.to_numpy()`, which
-    # drops `samples_per_component` and clears caches as a side effect.
+    # sweep recompiles every per-period likelihood + gradient).
+    # Callers that need host residency (pickling, plotting, sending
+    # across processes) should call `result.to_numpy()`, which drops
+    # `samples_per_component` and clears caches as a side effect.
     if af_options.keep_conditional_distributions:
         conditional_dists_out = tuple(conditional_dists)
     else:
@@ -233,59 +225,6 @@ def estimate_af(
         all_params=all_params,
         model_spec=model_spec,
         conditional_distributions=conditional_dists_out,
-    )
-
-
-_PROBABILITY_TRANSITIONS = frozenset(
-    {"log_ces", "log_ces_with_constant", "log_ces_general"}
-)
-
-
-def _resolve_optimizer_backend(
-    af_options: AFEstimationOptions,
-    model_spec: ModelSpec,
-    constraints: list[om.constraints.Constraint] | None,
-) -> AFEstimationOptions:
-    """Resolve `optimizer_backend="auto"` to "jaxopt" or "optimagic".
-
-    Pick `"jaxopt"` iff a JAX GPU is visible and the model is
-    jaxopt-compatible (no `log_ces*` transition -- which triggers a
-    `ProbabilityConstraint` jaxopt can't fold -- and no user-supplied
-    constraints, which would arrive as equality / probability
-    constraints that jaxopt also can't fold). Otherwise fall back to
-    `"optimagic"`.
-
-    Explicit `"jaxopt"` / `"optimagic"` requests are honoured as-is.
-    """
-    if af_options.optimizer_backend != "auto":
-        return af_options
-
-    has_gpu = any(d.platform == "gpu" for d in jax.devices())
-    uses_probability_transition = any(
-        spec.transition_function in _PROBABILITY_TRANSITIONS
-        for spec in model_spec.factors.values()
-    )
-    has_user_constraints = bool(constraints)
-
-    use_jaxopt = (
-        has_gpu and not uses_probability_transition and not has_user_constraints
-    )
-    resolved = "jaxopt" if use_jaxopt else "optimagic"
-
-    return AFEstimationOptions(
-        n_halton_points=af_options.n_halton_points,
-        n_halton_points_shock=af_options.n_halton_points_shock,
-        n_mixture_components=af_options.n_mixture_components,
-        optimizer_backend=resolved,
-        optimizer_algorithm=af_options.optimizer_algorithm,
-        optimizer_options=dict(af_options.optimizer_options),
-        two_stage=af_options.two_stage,
-        coarse_fraction=af_options.coarse_fraction,
-        stability_floor=af_options.stability_floor,
-        n_obs_per_batch=af_options.n_obs_per_batch,
-        initialization_strategy=af_options.initialization_strategy,
-        keep_conditional_distributions=af_options.keep_conditional_distributions,
-        n_halton_points_posterior_summary=af_options.n_halton_points_posterior_summary,
     )
 
 
@@ -367,40 +306,6 @@ def _extract_observed_factors(
         for of in observed_factors
     ]
     return jnp.array(np.column_stack(obs_arrays))
-
-
-def _filter_step_constraints(
-    constraints: list[om.constraints.Constraint] | None,
-    *,
-    optimizer_backend: str,
-) -> list[om.constraints.Constraint] | None:
-    """Strip jaxopt-incompatible constraints from the per-step list.
-
-    Cross-period equality groups are still extracted upstream by
-    `_extract_equality_groups` and propagated via fixed-value pinning
-    in `_propagate_equality_groups`, so dropping the equality
-    constraints from the per-step optimizer's list does not silently
-    erase that channel. Within-step equality constraints, however,
-    have no jaxopt analogue and *are* lost; warn once so the user
-    knows the model becomes weaker under `optimizer_backend="jaxopt"`.
-    """
-    if optimizer_backend != "jaxopt" or not constraints:
-        return constraints
-    filtered: list[om.constraints.Constraint] = [
-        c for c in constraints if isinstance(c, FixedConstraintWithValue)
-    ]
-    if len(filtered) != len(constraints):
-        dropped = len(constraints) - len(filtered)
-        warnings.warn(
-            f"AF jaxopt backend cannot enforce {dropped} non-fixed user "
-            "constraint(s) (e.g. EqualityConstraint). Cross-period equality "
-            "groups are still propagated via fixed-value pinning, but "
-            "within-step equalities are dropped. Switch to "
-            "`optimizer_backend='optimagic'` if those are load-bearing.",
-            RuntimeWarning,
-            stacklevel=3,
-        )
-    return filtered
 
 
 def _extract_equality_groups(

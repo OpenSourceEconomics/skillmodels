@@ -14,7 +14,6 @@ from jax import Array
 
 from skillmodels.af.batching import auto_n_obs_per_batch
 from skillmodels.af.halton import create_halton_nodes_and_weights
-from skillmodels.af.jaxopt_backend import minimize_with_jaxopt
 from skillmodels.af.likelihood import (
     _log_mvn_pdf_chol,
     af_loglike_initial,
@@ -250,26 +249,18 @@ def estimate_initial_period(  # noqa: PLR0915
         full_params_df, within_step_constraints
     )
 
-    if af_options.optimizer_backend == "jaxopt":
-        opt_res = minimize_with_jaxopt(
-            loglike_and_grad=loglike_and_grad,
-            full_params_df=full_params_df,
-            constraints=combined_constraints,
-            optimizer_options=dict(af_options.optimizer_options),
-        )
-    else:
-        opt_res = om.minimize(
-            fun=fun,
-            params=full_params_df[["value"]],
-            algorithm=af_options.optimizer_algorithm,
-            bounds=om.Bounds(
-                lower=full_params_df["lower_bound"],
-                upper=full_params_df["upper_bound"],
-            ),
-            constraints=combined_constraints or None,
-            fun_and_jac=fun_and_jac,
-            **to_plain_dict(af_options.optimizer_options),
-        )
+    opt_res = om.minimize(
+        fun=fun,
+        params=full_params_df[["value"]],
+        algorithm=af_options.optimizer_algorithm,
+        bounds=om.Bounds(
+            lower=full_params_df["lower_bound"],
+            upper=full_params_df["upper_bound"],
+        ),
+        constraints=combined_constraints or None,
+        fun_and_jac=fun_and_jac,
+        **to_plain_dict(af_options.optimizer_options),
+    )
 
     # Write optimized values back into full template
     result_params = params_template.copy()
