@@ -1,5 +1,7 @@
 """Tests for `skillmodels.amn.mixture_em` (AMN Stage 1)."""
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -219,13 +221,35 @@ def test_fit_mixture_em_drops_incomplete_rows():
     augmented = rng.normal(size=(200, 4))
     augmented[:50, 2] = np.nan  # 50 rows incomplete
 
-    result = fit_mixture_em(augmented, n_components=2, n_init=2, seed=3)
+    with pytest.warns(RuntimeWarning, match=r"50/200"):
+        result = fit_mixture_em(augmented, n_components=2, n_init=2, seed=3)
 
     # n_complete = 150; loglikelihood should be ~150 * per-row mean.
     # The check we actually want is that it runs without error and the
     # iteration count is sensible.
     assert result.n_iter >= 1
     assert result.weights.shape == (2,)
+
+
+def test_fit_mixture_em_warns_on_complete_case_drop():
+    rng = np.random.default_rng(7)
+    augmented = rng.normal(size=(200, 4))
+    augmented[:30, 2] = np.nan  # 30 incomplete rows -> 170 complete
+
+    with pytest.warns(RuntimeWarning, match=r"30/200"):
+        result = fit_mixture_em(augmented, n_components=2, n_init=2, seed=7)
+
+    assert result.weights.shape == (2,)
+
+
+def test_fit_mixture_em_no_warning_when_complete():
+    rng = np.random.default_rng(8)
+    augmented = rng.normal(size=(200, 4))  # no NaNs
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        # Must not raise: no complete-case rows dropped.
+        fit_mixture_em(augmented, n_components=2, n_init=2, seed=8)
 
 
 def test_fit_mixture_em_raises_when_too_few_complete_rows():

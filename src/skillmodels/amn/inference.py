@@ -20,6 +20,7 @@ fit's params (resampling is i.i.d.; no need to recompute the point
 estimate).
 """
 
+import dataclasses
 import warnings
 
 import numpy as np
@@ -93,14 +94,26 @@ def compute_amn_standard_errors(
     replicate_rows: list[pd.Series] = []
     n_failed = 0
     for b in range(n_boot):
+        replicate_seed = int(rng.integers(0, 2**32 - 1))
         boot_data = _resample_by_caseid(data, rng)
+        boot_options = dataclasses.replace(amn_options, seed=replicate_seed)
         try:
             boot_result = estimate_amn(
                 result.model_spec,
                 boot_data,
-                amn_options,
+                boot_options,
             )
-            row = boot_result.all_params.reindex(base_index)["value"]
+            if not boot_result.success:
+                n_failed += 1
+                warnings.warn(
+                    f"AMN bootstrap replicate {b} did not converge; "
+                    "excluding it from the bootstrap distribution.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                row = pd.Series(np.nan, index=base_index)
+            else:
+                row = boot_result.all_params.reindex(base_index)["value"]
         except (np.linalg.LinAlgError, ValueError, RuntimeError) as exc:
             n_failed += 1
             warnings.warn(

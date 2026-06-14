@@ -181,6 +181,112 @@ def test_solve_minimum_distance_rejects_unknown_weighting():
         solve_minimum_distance(mixture, processed, weighting="bogus")
 
 
+def _observed_factor_model() -> ModelSpec:
+    """One latent factor (2 measurements, 1 period) plus an observed factor."""
+    return ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2"),),
+                normalizations=Normalizations(
+                    loadings=({"y1": 1},),
+                    intercepts=({"y1": 0},),
+                ),
+                transition_function="linear",
+            ),
+        },
+        observed_factors=("inv",),
+        controls=("momed",),
+    )
+
+
+def test_build_structure_pins_observed_and_control_intercepts():
+    model = _observed_factor_model()
+    processed = process_model(model)
+    layout = build_augmented_measure_layout(processed)
+
+    struct = _build_structure(layout, processed)
+
+    # Observed-factor and control slots must have pinned (not free) zero
+    # intercepts; this is the direct guard against the regression.
+    for idx in (*layout.observed_factor_slots, *layout.control_slots):
+        assert struct.intercept_free_mask[idx] == np.False_
+        assert struct.intercept_value[idx] == 0.0
+
+    # A latent measurement slot with a non-normalized intercept (y2) is
+    # still free, confirming we only pinned the observed/control slots.
+    y2_slot = next(
+        slot
+        for slot, meta in zip(
+            layout.measurement_slots, layout.measurement_meta, strict=True
+        )
+        if meta[2] == "y2"
+    )
+    assert struct.intercept_free_mask[y2_slot] == np.True_
+
+
+def test_minimum_distance_recovers_observed_factor_level():
+    model = ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2"),),
+                normalizations=Normalizations(
+                    loadings=({"y1": 1},),
+                    intercepts=({"y1": 0},),
+                ),
+                transition_function="linear",
+            ),
+        },
+        observed_factors=("inv",),
+    )
+    processed = process_model(model)
+    layout = build_augmented_measure_layout(processed)
+
+    # Augmented vector columns: y1, y2, obs_factor inv.
+    # Factor-period slots: (0, skills), (0, inv).
+    n_aug = 3
+    n_components = 2
+    truth_lambda = np.zeros((n_aug, 2))
+    truth_lambda[0, 0] = 1.0  # y1 loads on skills, normalized.
+    truth_lambda[1, 0] = 0.8  # y2 loads on skills, free.
+    truth_lambda[2, 1] = 1.0  # obs_factor inv loads on its own slot.
+    truth_intercept = np.array([0.0, 0.1, 0.0])
+    truth_sigma2 = np.array([0.3, 0.25, 0.0]) ** 2
+
+    pi = np.array([1.3, 2.1])  # true per-component reduced-form level of inv.
+    truth_mu = np.zeros((n_components, 2))
+    truth_mu[0, 0] = -0.6  # skills period-0 mean-zero (weights 0.5/0.5).
+    truth_mu[1, 0] = 0.6
+    truth_mu[:, 1] = pi
+    truth_omega = np.array(
+        [
+            [[1.0, 0.0], [0.0, 0.5]],
+            [[0.9, 0.0], [0.0, 0.4]],
+        ]
+    )
+
+    means = np.empty((n_components, n_aug))
+    covs = np.empty((n_components, n_aug, n_aug))
+    for m in range(n_components):
+        means[m] = truth_intercept + truth_lambda @ truth_mu[m]
+        covs[m] = truth_lambda @ truth_omega[m] @ truth_lambda.T + np.diag(truth_sigma2)
+
+    mixture = MixtureFitResult(
+        weights=np.array([0.5, 0.5]),
+        means=means,
+        covariances=covs,
+        loglikelihood=-1.0,
+        n_iter=1,
+        converged=True,
+        layout=layout,
+    )
+
+    result = solve_minimum_distance(mixture, processed)
+
+    inv_col = result.factor_period_slots.index((0, "inv"))
+    np.testing.assert_allclose(result.factor_mixture_means[:, inv_col], pi, atol=1e-3)
+    assert result.objective_value < 1e-3
+
+
 def test_solve_minimum_distance_runs_on_fitted_mixture():
     """End-to-end: simulate 1-component data, fit, then recover Lambda."""
     model = _tiny_model()
@@ -215,3 +321,69 @@ def test_solve_minimum_distance_runs_on_fitted_mixture():
     # Just verifying it runs and produces a finite objective.
     assert np.isfinite(result.objective_value)
     assert result.loadings.shape[0] == 6
+
+
+def _ces_model(*, loadings: tuple, intercepts: tuple) -> ModelSpec:
+    """CES (`log_ces`) model with 3 measurements over 2 periods."""
+    return ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2", "y3"), ("y1", "y2", "y3")),
+                normalizations=Normalizations(
+                    loadings=loadings,
+                    intercepts=intercepts,
+                ),
+                transition_function="log_ces",
+            ),
+        },
+    )
+
+
+def test_solve_minimum_distance_rejects_ces_overnormalization():
+    model = _ces_model(
+        loadings=({"y1": 1, "y2": 1}, {"y1": 1}),
+        intercepts=({"y1": 0}, {}),
+    )
+    processed = process_model(model)
+    layout = build_augmented_measure_layout(processed)
+    mixture, _ = _build_oracle_mixture(layout=layout)
+
+    with pytest.raises(ValueError, match="loading normalizations"):
+        solve_minimum_distance(mixture, processed)
+
+
+def test_solve_minimum_distance_allows_ces_overnormalization_when_opted_in():
+    model = _ces_model(
+        loadings=({"y1": 1, "y2": 1}, {"y1": 1}),
+        intercepts=({"y1": 0}, {}),
+    )
+    processed = process_model(model)
+    layout = build_augmented_measure_layout(processed)
+    mixture, _ = _build_oracle_mixture(layout=layout)
+
+    result = solve_minimum_distance(mixture, processed, allow_overnormalization=True)
+
+    assert np.isfinite(result.objective_value)
+
+
+def test_solve_minimum_distance_rejects_ces_missing_normalization():
+    model = _ces_model(
+        loadings=({"y1": 1}, {}),
+        intercepts=({"y1": 0}, {}),
+    )
+    processed = process_model(model)
+    layout = build_augmented_measure_layout(processed)
+    mixture, _ = _build_oracle_mixture(layout=layout)
+
+    with pytest.raises(ValueError, match="no loading normalization"):
+        solve_minimum_distance(mixture, processed)
+
+
+def test_solve_minimum_distance_rejects_documented_optimal():
+    model = _tiny_model()
+    processed = process_model(model)
+    layout = build_augmented_measure_layout(processed)
+    mixture, _ = _build_oracle_mixture(layout=layout)
+
+    with pytest.raises(NotImplementedError, match="not yet implemented"):
+        solve_minimum_distance(mixture, processed, weighting="optimal")

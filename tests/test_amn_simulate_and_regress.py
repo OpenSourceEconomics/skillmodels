@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from skillmodels.amn.simulate_and_regress import (
     _draw_factor_panel,
@@ -16,6 +17,45 @@ from skillmodels.common.model_spec import (
     Normalizations,
 )
 from skillmodels.common.process_model import process_model
+
+
+def _endogenous_model() -> ModelSpec:
+    """2-period model with an endogenous investment factor and a state factor."""
+    return ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2"), ("y1", "y2")),
+                normalizations=Normalizations(
+                    loadings=({"y1": 1}, {"y1": 1}),
+                    intercepts=({"y1": 0}, {}),
+                ),
+                transition_function="linear",
+            ),
+            "investment": FactorSpec(
+                measurements=(("i1", "i2"), ("i1", "i2")),
+                normalizations=Normalizations(
+                    loadings=({"i1": 1}, {"i1": 1}),
+                    intercepts=({"i1": 0}, {}),
+                ),
+                transition_function="linear",
+                is_endogenous=True,
+            ),
+        },
+    )
+
+
+def _endogenous_structural() -> MinimumDistanceResult:
+    """Structural mixture covering the endogenous model's (period, factor) slots."""
+    slots = (
+        (0, "skills"),
+        (0, "investment"),
+        (1, "skills"),
+        (1, "investment"),
+    )
+    n = len(slots)
+    means = np.zeros((1, n))
+    covs = np.array([np.eye(n) + 0.3 * (np.ones((n, n)) - np.eye(n))])
+    return _make_structural(means, covs, slots)
 
 
 def _linear_model() -> ModelSpec:
@@ -197,3 +237,45 @@ def test_simulate_and_regress_handles_translog():
         params.loc[("transition", 0, "skills", "skills"), "value"]  # ty: ignore[invalid-argument-type]
     )
     assert slope == _pytest_approx(0.6, abs_tol=0.1)
+
+
+def test_simulate_and_regress_raises_for_unimplemented_control_function():
+    model = _endogenous_model()
+    processed = process_model(model)
+    structural = _endogenous_structural()
+
+    with pytest.raises(NotImplementedError, match="control-function"):
+        simulate_and_regress(
+            structural,
+            processed,
+            model,
+            mixture_weights=np.array([1.0]),
+            n_draws=200,
+            seed=0,
+            investment_endogeneity=True,
+        )
+
+
+def test_simulate_and_regress_no_investment_eq_category():
+    model = _endogenous_model()
+    processed = process_model(model)
+    structural = _endogenous_structural()
+
+    result = simulate_and_regress(
+        structural,
+        processed,
+        model,
+        mixture_weights=np.array([1.0]),
+        n_draws=3000,
+        seed=0,
+        investment_endogeneity=False,
+    )
+
+    # Production params are produced; the misleading 'investment_eq' rows
+    # are gone and investment_params is empty.
+    assert not result.production_params.empty
+    assert len(result.investment_params) == 0
+    categories = set(result.production_params.index.get_level_values("category")) | set(
+        result.investment_params.index.get_level_values("category")
+    )
+    assert "investment_eq" not in categories

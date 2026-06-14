@@ -44,13 +44,25 @@ class AMNEstimationOptions:
     """Synthetic latent-factor panel size for Stage 3."""
 
     minimum_distance_weighting: Literal["identity", "optimal"]
-    """Stage 2 weighting matrix. `"optimal"` uses a 2-step Avar estimate;
-    `"identity"` is faster and the paper's default."""
+    """Stage 2 minimum-distance weighting. `"identity"` (the paper's default
+    and currently the only implemented option) is an unweighted identity metric
+    over per-component means and full covariance matrices. `"optimal"` is
+    reserved for a future 2-step Avar-weighted criterion and currently raises
+    `NotImplementedError`."""
 
     investment_endogeneity: bool
-    """If True, Stage 3 includes the control-function residual in the
-    production-function regression (AMN eq. 8). Ignored when the model has
-    no endogenous (investment) factors."""
+    """The AMN eq.-8 control-function correction is NOT yet implemented.
+    Defaults to False (estimate production/transition parameters without the
+    correction). For a model with endogenous (investment) factors, passing
+    True makes Stage 3 raise NotImplementedError -- it is an explicit opt-in to
+    the (currently unavailable) correction, not the default. Ignored when the
+    model has no endogenous (investment) factors. Note: `estimate_af` calls
+    `estimate_amn` for start values and relies on this default being False."""
+
+    allow_ces_overnormalization: bool
+    """Opt out of the CES minimal-normalization guard. When True, extra
+    normalized CES loadings are treated as a deliberate fixed-loadings
+    analysis rather than a (Freyberger-adaptation-defeating) error."""
 
     optimizer_algorithm: str
     """optimagic algorithm name for Stage 2 minimum-distance optimization."""
@@ -77,7 +89,8 @@ class AMNEstimationOptions:
         optimizer_algorithm: str = "scipy_lbfgsb",
         optimizer_options: Mapping[str, Any] | None = None,
         *,
-        investment_endogeneity: bool = True,
+        investment_endogeneity: bool = False,
+        allow_ces_overnormalization: bool = False,
         keep_synthetic_panel: bool = False,
         seed: int = 0,
     ) -> None:
@@ -91,6 +104,9 @@ class AMNEstimationOptions:
             self, "minimum_distance_weighting", minimum_distance_weighting
         )
         object.__setattr__(self, "investment_endogeneity", investment_endogeneity)
+        object.__setattr__(
+            self, "allow_ces_overnormalization", allow_ces_overnormalization
+        )
         object.__setattr__(self, "optimizer_algorithm", optimizer_algorithm)
         object.__setattr__(
             self,
@@ -226,8 +242,9 @@ class ProductionFitResult:
     params-DataFrame format (4-level MultiIndex)."""
 
     investment_params: pd.DataFrame
-    """Investment-equation parameters (eq. 7), 4-level MultiIndex. Empty
-    if the model has no endogenous factors."""
+    """Investment-equation parameters (eq. 7), 4-level MultiIndex. Currently
+    always empty: the AMN eq.-8 control-function correction is not yet
+    implemented, so no investment-equation parameters are produced."""
 
     n_draws: int
     """Number of simulated latent-factor trajectories used."""

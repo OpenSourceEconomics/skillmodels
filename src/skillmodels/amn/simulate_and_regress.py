@@ -332,7 +332,7 @@ def _factors_at_period(processed_model: ProcessedModel) -> tuple[str, ...]:
     )
 
 
-def simulate_and_regress(  # noqa: C901
+def simulate_and_regress(
     structural: MinimumDistanceResult,
     processed_model: ProcessedModel,
     model_spec: ModelSpec,
@@ -352,21 +352,36 @@ def simulate_and_regress(  # noqa: C901
         mixture_weights: Per-component mixture weights from Stage 1.
         n_draws: Synthetic-panel size.
         seed: RNG seed.
-        investment_endogeneity: Reserved for future control-function
-            extension; currently the investment equation is fit with
-            plain OLS regardless.
+        investment_endogeneity: The AMN eq.-8 control-function correction is
+            NOT yet implemented. For a model with endogenous (investment)
+            factors, passing True raises NotImplementedError; pass False to
+            estimate production/transition parameters without the correction.
+            For models without endogenous factors this flag is a no-op.
 
     Return:
         ProductionFitResult with production-function and investment-equation
         parameter DataFrames.
 
     """
-    del investment_endogeneity  # placeholder; control function is v2
+    if (
+        investment_endogeneity
+        and processed_model.endogenous_factors_info.has_endogenous_factors
+    ):
+        msg = (
+            "AMN Stage 3 does not implement the investment control-function "
+            "correction (AMN 2020 eq. 8): the contemporaneous investment "
+            "equation I_t ~ theta_t (+ Y_t) and its residual eta_{I,t} are "
+            "not constructed, and the residual is not added to the production "
+            "regression. Re-run with investment_endogeneity=False to estimate "
+            "production/transition parameters WITHOUT the endogeneity "
+            "correction, or implement the control-function pass before using "
+            "investment_endogeneity=True."
+        )
+        raise NotImplementedError(msg)
 
     panel = _draw_factor_panel(structural, mixture_weights, n_draws=n_draws, seed=seed)
 
     periods = processed_model.labels.periods
-    endog_info = processed_model.endogenous_factors_info
     transition_info = processed_model.transition_info
     factor_to_function_name = (
         dict(transition_info.function_names) if transition_info is not None else {}
@@ -391,10 +406,6 @@ def simulate_and_regress(  # noqa: C901
         x_design = panel[[c for _, c in present_pairs]].to_numpy()
 
         for factor in processed_model.labels.latent_factors:
-            is_endog = (
-                factor in endog_info.factor_info
-                and endog_info.factor_info[factor].is_endogenous
-            )
             target_col = _slot_column(t_next, factor)
             if target_col not in panel.columns:
                 continue
@@ -402,28 +413,18 @@ def simulate_and_regress(  # noqa: C901
             trans_name = factor_to_function_name.get(factor, "linear")
             if trans_name == "constant":
                 continue
-            if is_endog:
-                params, sd = _fit_linear(y, x_design, present_factor_names)
-                for regname, value in params.items():
-                    investment_rows.append(
-                        ("investment_eq", t, factor, regname, float(value))
-                    )
-                investment_rows.append(("investment_sds", t, factor, "-", sd))
-            else:
-                params, sd = _fit_transition(
-                    trans_name,
-                    factor,
-                    processed_model,
-                    model_spec,
-                    y,
-                    x_design,
-                    present_factor_names,
-                )
-                for regname, value in params.items():
-                    transition_rows.append(
-                        ("transition", t, factor, regname, float(value))
-                    )
-                transition_rows.append(("shock_sds", t, factor, "-", sd))
+            params, sd = _fit_transition(
+                trans_name,
+                factor,
+                processed_model,
+                model_spec,
+                y,
+                x_design,
+                present_factor_names,
+            )
+            for regname, value in params.items():
+                transition_rows.append(("transition", t, factor, regname, float(value)))
+            transition_rows.append(("shock_sds", t, factor, "-", sd))
 
     def _rows_to_df(
         rows: list[tuple[str, int, str, str, float]],

@@ -11,6 +11,7 @@ The fitted mixture is the reduced-form input to Stage 2's structural
 minimum-distance recovery (`skillmodels.amn.minimum_distance`).
 """
 
+import warnings
 from collections.abc import Mapping
 from itertools import chain
 
@@ -209,9 +210,18 @@ def fit_mixture_em(
     """Fit a Gaussian mixture to the augmented measure matrix via EM.
 
     Uses `sklearn.mixture.GaussianMixture` under the hood with k-means
-    initialization and multiple restarts. Rows containing any NaN are
-    dropped before fitting (listwise complete-case); a future revision
-    will integrate over missing dimensions in the E-step.
+    initialization and multiple restarts.
+
+    Scope: this estimator is COMPLETE-CASE ONLY. Rows containing any NaN
+    in the augmented measure vector are dropped before fitting (listwise
+    deletion). The fitted mixture therefore targets the population
+    reduced-form distribution F_{M,X} (and hence the downstream Stage 2
+    `Pi_k`, `Psi_k` and all structural parameters) only under a complete-
+    data or MCAR (missing-completely-at-random) assumption. Under an
+    unbalanced panel or MAR/MNAR missingness the target shifts and the
+    recovered parameters can be biased. A `RuntimeWarning` is emitted
+    whenever any rows are dropped. A future revision will integrate over
+    missing dimensions in the E-step (observed-data EM) to relax this.
 
     Args:
         augmented: ``(n_obs, n_aug)`` augmented measure matrix from
@@ -251,6 +261,18 @@ def fit_mixture_em(
             f"{n_components}-component mixture."
         )
         raise ValueError(msg)
+    n_total = int(augmented.shape[0])
+    n_dropped = n_total - n_complete
+    if n_dropped > 0:
+        msg = (
+            f"AMN Stage 1 mixture EM is complete-case only: dropped "
+            f"{n_dropped}/{n_total} rows with missing augmented "
+            f"measurements before fitting. The recovered reduced-form "
+            f"mixture targets the population distribution only under a "
+            f"complete-data or MCAR assumption; under an unbalanced panel "
+            f"or non-MCAR missingness the estimates may be biased."
+        )
+        warnings.warn(msg, RuntimeWarning, stacklevel=2)
     fit_data = augmented[complete_mask]
 
     gm = GaussianMixture(

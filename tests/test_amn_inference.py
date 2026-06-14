@@ -1,8 +1,12 @@
 """Tests for `skillmodels.amn.inference.compute_amn_standard_errors`."""
 
+import dataclasses
+
 import numpy as np
 import pandas as pd
+import pytest
 
+import skillmodels.amn.inference as inf
 from skillmodels.amn import compute_amn_standard_errors, estimate_amn
 from skillmodels.amn.types import AMNEstimationOptions
 from skillmodels.common.model_spec import (
@@ -81,3 +85,69 @@ def test_bootstrap_standard_errors_non_negative_and_finite_where_replicates_fini
             se = inference.standard_errors[col]
             assert np.isfinite(se)
             assert se >= 0.0
+
+
+def test_bootstrap_uses_distinct_reproducible_replicate_seeds(monkeypatch):
+    model = _tiny_model()
+    data = _tiny_data(n=500, seed=0)
+    options = AMNEstimationOptions(
+        n_mixture_components=2, n_simulation_draws=1000, seed=0
+    )
+    fit = estimate_amn(model, data, options)
+
+    real = inf.estimate_amn
+
+    def make_spy(record: list[int]):
+        def spy(model_spec, boot_data, amn_options):
+            record.append(amn_options.seed)
+            return real(model_spec, boot_data, amn_options)
+
+        return spy
+
+    seen_seeds: list[int] = []
+    monkeypatch.setattr(inf, "estimate_amn", make_spy(seen_seeds))
+    compute_amn_standard_errors(fit, data, options, n_boot=4, seed=7)
+
+    # All four replicate seeds are distinct (independent random streams).
+    assert len(seen_seeds) == 4
+    assert len(set(seen_seeds)) == 4
+
+    # Same top-level seed reproduces the exact same replicate seeds.
+    seen_again: list[int] = []
+    monkeypatch.setattr(inf, "estimate_amn", make_spy(seen_again))
+    compute_amn_standard_errors(fit, data, options, n_boot=4, seed=7)
+    assert seen_again == seen_seeds
+
+
+def test_bootstrap_excludes_nonconverged_replicate(monkeypatch):
+    model = _tiny_model()
+    data = _tiny_data(n=500, seed=0)
+    options = AMNEstimationOptions(
+        n_mixture_components=2, n_simulation_draws=1000, seed=0
+    )
+    fit = estimate_amn(model, data, options)
+
+    real = inf.estimate_amn
+    sentinel = -999.0
+    call_counter = {"n": 0}
+
+    def spy(model_spec, boot_data, amn_options):
+        idx = call_counter["n"]
+        call_counter["n"] += 1
+        real_fit = real(model_spec, boot_data, amn_options)
+        if idx == 1:
+            # 2nd replicate: nonconverged with a recognizable sentinel value.
+            bad_params = real_fit.all_params.copy()
+            bad_params["value"] = sentinel
+            return dataclasses.replace(real_fit, all_params=bad_params, success=False)
+        return real_fit
+
+    monkeypatch.setattr(inf, "estimate_amn", spy)
+
+    with pytest.warns(RuntimeWarning, match="did not converge"):
+        inference = compute_amn_standard_errors(fit, data, options, n_boot=4, seed=3)
+
+    # The nonconverged replicate's row is all NaN, not stored.
+    assert inference.replicate_params.iloc[1].isna().all()
+    # The sentinel params never leak into the bootstrap distribution.
+    assert not (inference.replicate_params == sentinel).to_numpy().any()

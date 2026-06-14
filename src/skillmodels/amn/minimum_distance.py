@@ -27,6 +27,68 @@ from skillmodels.amn.types import (
 )
 from skillmodels.common.types import ProcessedModel
 
+_CES_TRANSITION_NAMES = frozenset(
+    {"log_ces", "log_ces_with_constant", "log_ces_general"}
+)
+
+
+def _validate_ces_normalizations(
+    processed_model: ProcessedModel,
+    layout: AugmentedMeasureLayout,
+    *,
+    allow_overnormalization: bool,
+) -> None:
+    """Enforce the Freyberger-minimal CES loading-normalization set.
+
+    For a CES-family transition, exactly one loading normalization per
+    factor-period pins the scale; CES identifies the remaining loadings.
+    More than one normalized loading silently fixes an identified loading
+    to an arbitrary value (defeating the Freyberger adaptation); zero
+    leaves the scale unidentified. Raise unless the user opts in to a
+    fixed-loadings analysis via `allow_overnormalization`.
+    """
+    labels = processed_model.labels
+    transition_info = processed_model.transition_info
+    if transition_info is None:
+        return
+    func_names = transition_info.function_names
+    normalizations = processed_model.normalizations
+    aug_to_period = labels.aug_periods_to_periods
+    for factor in labels.latent_factors:
+        if func_names.get(factor) not in _CES_TRANSITION_NAMES:
+            continue
+        norm = normalizations.get(factor)
+        for period in labels.periods:
+            has_meas = any(
+                p == int(period) and f == factor
+                for (p, f, _m) in layout.measurement_meta
+            )
+            if not has_meas:
+                continue
+            aug_periods = [a for a, p in aug_to_period.items() if int(p) == int(period)]
+            n_norm = 0
+            if norm is not None:
+                for a in aug_periods:
+                    n_norm += len(norm.loadings[a])
+            if n_norm == 0:
+                msg = (
+                    f"CES factor '{factor}' has no loading normalization in "
+                    f"period {period}; the CES scale is unidentified. Pin "
+                    "exactly one measurement loading per period."
+                )
+                raise ValueError(msg)
+            if n_norm > 1 and not allow_overnormalization:
+                msg = (
+                    f"CES factor '{factor}' has {n_norm} loading normalizations "
+                    f"in period {period}, but CES identifies all but one "
+                    "loading. Extra normalizations silently fix identified "
+                    "loadings to arbitrary values and defeat the Freyberger "
+                    "adaptation. Pin exactly one loading per period, or pass "
+                    "allow_ces_overnormalization=True for a deliberate "
+                    "fixed-loadings analysis."
+                )
+                raise ValueError(msg)
+
 
 @dataclass(frozen=True)
 class _Structure:
@@ -152,21 +214,28 @@ def _build_structure(  # noqa: C901, PLR0912, PLR0915
             intercept_free_mask[aug_idx] = True
 
     # Observed-factor slots: load on their own column with lambda=1,
-    # sigma=0 (perfectly observed); intercept is free (the mixture mean
-    # shifts the slot).
+    # sigma=0 (perfectly observed); intercept pinned to zero so the
+    # factor mean carries the observed level.
     for aug_idx, (period, of_name) in zip(
         layout.observed_factor_slots, layout.observed_factor_meta, strict=True
     ):
         col = slot_index[(period, of_name)]
         lambda_value[aug_idx, col] = 1.0
         # sigma2 stays False (pinned to zero by construction).
-        intercept_free_mask[aug_idx] = True
+        # Intercept pinned to zero: with lambda=1 and sigma2=0 the slot's
+        # reduced-form level Pi_k = intercept + mu_k is otherwise split
+        # arbitrarily between the (free) intercept and the (free) factor
+        # mean mu_k. Pin intercept=0 so the factor mean carries the full
+        # observed level -- the level Stage 3 draws and the posterior uses.
+        intercept_value[aug_idx] = 0.0
 
     # Control slots: same pattern as observed factors (lambda=1, sigma=0).
     for aug_idx, ctrl in zip(layout.control_slots, layout.control_meta, strict=True):
         col = slot_index[(-1, ctrl)]
         lambda_value[aug_idx, col] = 1.0
-        intercept_free_mask[aug_idx] = True
+        # Intercept pinned to zero (see observed-factor block): the
+        # control's factor-mean slot carries its full observed level.
+        intercept_value[aug_idx] = 0.0
 
     del observed_factor_names
 
@@ -339,6 +408,17 @@ def _objective(
     pred_means, pred_covs = _model_implied_moments(sigma2, omegas, mu, lam, inter)
     diff_mean = pred_means - target_means
     diff_cov = pred_covs - target_covs
+    # Identity-metric minimum-distance criterion (AMN 2020 step 2 default).
+    # NOTE: this is an UNWEIGHTED sum of squares over per-component means and
+    # the FULL covariance matrices. Off-diagonal covariance moments are thus
+    # implicitly weighted twice (the matrices are symmetric) and every mixture
+    # component is weighted equally irrespective of its weight tau_k. This is
+    # consistent under correct specification and full identification (the
+    # criterion is minimised at zero moment discrepancy) but is not the
+    # efficient / optimal-weighted or tau-weighted MD criterion and selects a
+    # different pseudo-true value under misspecification. A vech-packed and/or
+    # tau-/Avar-weighted variant is intentionally NOT applied here to preserve
+    # the existing estimand; it should be added as a separate opt-in weighting.
     return float(np.sum(diff_mean**2) + np.sum(diff_cov**2))
 
 
@@ -404,6 +484,7 @@ def solve_minimum_distance(
     *,
     weighting: str = "identity",
     algorithm: str = "scipy_lbfgsb",
+    allow_overnormalization: bool = False,
 ) -> MinimumDistanceResult:
     """Recover structural parameters from the reduced-form mixture.
 
@@ -411,9 +492,17 @@ def solve_minimum_distance(
         mixture: Stage 1 fit (reduced-form Pi, Psi per component).
         processed_model: Skillmodels processed model (provides normalization
             and constraint structure).
-        weighting: ``"identity"`` (default, fast) or ``"optimal"``
-            (uses an Avar estimate of the EM moments).
+        weighting: ``"identity"`` (default; the AMN paper's choice). This is
+            an unweighted identity-metric criterion over per-component means
+            and the full covariance matrices, so off-diagonal moments are
+            implicitly counted twice and components are weighted equally
+            regardless of tau_k. ``"optimal"`` is reserved for a future
+            Avar-weighted criterion and currently raises
+            ``NotImplementedError``.
         algorithm: optimagic algorithm name (default ``scipy_lbfgsb``).
+        allow_overnormalization: Opt out of the CES minimal-normalization
+            guard. When True, extra normalized CES loadings are treated as a
+            deliberate fixed-loadings analysis instead of an error.
 
     Return:
         MinimumDistanceResult with structural Lambda, A, Sigma, and the
@@ -424,13 +513,20 @@ def solve_minimum_distance(
         msg = f"Unknown weighting '{weighting}'."
         raise ValueError(msg)
     if weighting == "optimal":
-        msg = "Optimal weighting not yet implemented; use 'identity'."
+        msg = (
+            "weighting='optimal' is documented but not yet implemented; "
+            "only weighting='identity' is currently supported."
+        )
         raise NotImplementedError(msg)
 
     layout = mixture.layout
     if not layout.measurement_slots and not layout.observed_factor_slots:
         msg = "Mixture layout has no slots; cannot run minimum distance."
         raise ValueError(msg)
+
+    _validate_ces_normalizations(
+        processed_model, layout, allow_overnormalization=allow_overnormalization
+    )
 
     struct = _build_structure(layout, processed_model)
     n_components = mixture.weights.shape[0]
