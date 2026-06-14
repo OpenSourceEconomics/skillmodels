@@ -124,6 +124,28 @@ def af_loglike_initial(
     Sigma_{theta|Y,l}) via the Schur complement, and pi_{l|Y_i} are the
     posterior component weights given Y_i.
 
+    Estimand and assumption (observed factors present):
+        With observed factors this objective is the JOINT maximum
+        likelihood of (Z_theta,0, Y_0) under a single finite Gaussian
+        mixture for the joint (theta_0, Y_0). Concretely::
+
+            L_i = sum_l pi_l N(Y_i | mu_Y,l, Sigma_YY,l)
+                  * integral p(Z_i | theta) p(theta | Y_i, l) dtheta
+                = p(Z_i, Y_i).
+
+        This is NOT the conditional likelihood f(Z_theta,0 | Y_0); the two
+        differ by the additive term log p(Y_i) = log sum_l pi_l
+        N(Y_i | mu_Y,l, Sigma_YY,l). The joint formulation requires the
+        stronger (and here deliberate) assumption that the mixture also
+        models the MARGINAL distribution of Y correctly. This is
+        intentional: the marginal-Y parameters (mu_Y, Sigma_YY,
+        Sigma_theta,Y) it identifies are reused to build the
+        Schur-complement conditional f(theta_0 | Y_0) and posterior
+        weights p(l | Y_i) that are propagated forward by the transition
+        step. Switching to a conditional MLE (subtracting log p(Y_i))
+        would leave those parameters under-identified and is therefore not
+        done here.
+
     Args:
         params: Full parameter vector in template order. Fixed entries are
             held constant by optimagic `FixedConstraint`s attached outside.
@@ -356,6 +378,11 @@ def _initial_loglike_per_obs_conditional(
     the measurement density gives an equivalent formulation where each
     component's contribution is weighted by pi_l * N(Y_i | mu_Y_l, Sigma_YY_l).
 
+    The `N(Y_i | mu_Y_l, Sigma_YY_l)` factor is an intentional JOINT-density
+    term: the objective is the joint MLE of (Z_theta,0, Y_0), not the
+    conditional f(Z|Y). See `af_loglike_initial` for the assumption this
+    encodes.
+
     """
     n_measures = loading_mask.shape[0]
     full_loadings = jnp.zeros((n_measures, n_latent))
@@ -434,7 +461,10 @@ def _integrate_initial_single_obs_conditional(
         cov_ty = cov_full[:n_latent, n_latent:]
         cov_yy = cov_full[n_latent:, n_latent:]
 
-        # Marginal density of Y_i under component l
+        # Marginal density of Y_i under component l.
+        # `log_marg_y` is an intentional JOINT-density term: the objective is
+        # the joint MLE of (Z_theta,0, Y_0), not the conditional f(Z|Y).
+        # See `af_loglike_initial` for the assumption this encodes.
         chol_yy = jnp.linalg.cholesky(cov_yy)
         log_marg_y = _log_mvn_pdf_chol(y_i, mu_y, chol_yy)
 
@@ -891,6 +921,16 @@ def _transition_loglike_per_obs(
     z_shock_chain, z_inv_t, z_shock_t). The chained sample θ_0 → θ_{t-1}
     is rebuilt on-demand inside the integrand from this single joint
     Halton, mirroring MATLAB's ``create_nodes_weights_01/12``.
+
+    Scope / Assumptions:
+        Production shocks (eta_theta,t) and investment shocks (eta_I,t)
+        are integrated as INDEPENDENT Halton coordinate blocks
+        (z_shock_curr and z_inv_shock). This implements the
+        exogenous-investment special case kappa_t = 0 of the
+        control-function decomposition eta_theta,t = kappa_t * eta_I,t
+        + eps_C,t (Antweiler-Freyberger Assumption 1(g)): production and
+        investment shocks are uncorrelated, cov(eta_theta,t, eta_I,t)=0.
+        A nonzero kappa_t (endogenous investment) is NOT implemented.
     """
     n_measures, n_loading_factors = loading_mask.shape
     full_loadings = jnp.zeros((n_measures, n_loading_factors))
@@ -1162,6 +1202,10 @@ def _integrate_transition_single_obs(
             z_shock_chain = jnp.zeros((0, n_shock_factors))
             z_inv_chain = jnp.zeros((0, n_endogenous_factors))
         # Current step shocks at the tail.
+        # Exogenous-investment case (kappa_t = 0): the production shock
+        # z_shock_curr and the investment shock z_inv_shock are independent
+        # Halton coordinates; theta_t receives only shock_sds * z_shock_curr
+        # (see _compute_investment for z_inv_shock). cov(eta_theta, eta_I)=0.
         z_shock_curr = z_at_j[chain_block_end : chain_block_end + n_shock_factors]
         z_inv_shock = z_at_j[chain_block_end + n_shock_factors :]
 

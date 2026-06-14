@@ -15,8 +15,13 @@ import pandas as pd
 import pytest
 
 from skillmodels.af import AFEstimationOptions, estimate_af
-from skillmodels.af.likelihood import _rebuild_chain_at_period, af_loglike_transition
-from skillmodels.af.types import ChainLink
+from skillmodels.af.likelihood import (
+    _rebuild_chain_at_period,
+    af_loglike_transition,
+    af_per_obs_loglike_initial,
+)
+from skillmodels.af.transition_period import _update_conditional_distribution
+from skillmodels.af.types import ChainLink, ConditionalDistribution, MixtureComponent
 from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.config import TEST_DATA_DIR
@@ -2236,3 +2241,227 @@ def test_af_result_to_numpy_materialises_and_drops_samples_per_component() -> No
             _assert_numpy(cl.inv_eq_params, "ChainLink.inv_eq_params")
             _assert_numpy(cl.inv_sds, "ChainLink.inv_sds")
             _assert_numpy(cl.obs_factor_values, "ChainLink.obs_factor_values")
+
+
+def test_af_initial_loglike_is_joint_density_of_measurements_and_observed_factors() -> (  # noqa: PLR0915
+    None
+):
+    """Pin the joint estimand f(Z_theta,0, Y_0), not the conditional f(Z|Y).
+
+    With observed factors present, the initial-period per-obs log-likelihood
+    must equal `log p(Y_i) + log_integral` (the JOINT density). If a future
+    change subtracts `log p(Y_i)` to switch to the conditional MLE, the first
+    assertion fails. Cross-checked against a plain-numpy single-component
+    computation of the marginal-Y density and the quadrature integral.
+    """
+    n_factors = 2  # 1 latent + 1 observed
+    n_latent = 1
+    n_mixture_components = 1
+    n_measures = 2
+    n_controls = 1
+
+    # Mixture mean (mu_theta, mu_y) and lower-tri Cholesky of the 2x2 joint
+    # covariance in tril order [L00, L10, L11].
+    mu_theta, mu_y = 0.5, -0.3
+    chol_l00, chol_l10, chol_l11 = 1.2, 0.4, 0.9
+
+    control_params = [0.1, -0.2]  # (n_measures, n_controls) flat
+    loadings = [1.0, 0.8]  # both measures load on the single latent factor
+    meas_sds = [0.5, 0.6]
+
+    params = jnp.array(
+        [
+            1.0,  # mixture_weights
+            mu_theta,  # mixture_means
+            mu_y,
+            chol_l00,  # mixture_chol_covs (tril)
+            chol_l10,
+            chol_l11,
+            *control_params,
+            *loadings,
+            *meas_sds,
+        ]
+    )
+
+    # Both measurements load on the single latent factor.
+    loading_mask = jnp.array([[True], [True]])
+
+    n_obs = 3
+    rng = np.random.default_rng(404)
+    measurements = jnp.asarray(rng.normal(0, 1, (n_obs, n_measures)))
+    controls = jnp.asarray(rng.normal(0, 1, (n_obs, n_controls)))
+    observed_factor_values = jnp.asarray(rng.normal(0, 1, (n_obs, 1)))
+
+    # A handful of 1d standard-normal quadrature nodes with weights summing
+    # to 1 (the conditional latent dimension is 1).
+    raw_nodes = np.array([-1.5, -0.5, 0.5, 1.5])
+    node_w = np.exp(-0.5 * raw_nodes**2)
+    node_w = node_w / node_w.sum()
+    nodes = jnp.asarray(raw_nodes.reshape(-1, 1))
+    weights = jnp.asarray(node_w)
+
+    per_obs = np.asarray(
+        af_per_obs_loglike_initial(
+            params,
+            n_factors=n_factors,
+            n_mixture_components=n_mixture_components,
+            n_measures=n_measures,
+            n_controls=n_controls,
+            measurements=measurements,
+            controls=controls,
+            loading_mask=loading_mask,
+            nodes=nodes,
+            weights=weights,
+            stability_floor=0.0,
+            n_latent_factors=n_latent,
+            observed_factor_values=observed_factor_values,
+        )
+    )
+
+    # Independent plain-numpy reference for the single mixture component.
+    chol_full = np.array([[chol_l00, 0.0], [chol_l10, chol_l11]])
+    cov_full = chol_full @ chol_full.T
+    cov_tt = cov_full[:n_latent, :n_latent]
+    cov_ty = cov_full[:n_latent, n_latent:]
+    cov_yy = cov_full[n_latent:, n_latent:]
+
+    full_loadings = np.array(loadings).reshape(n_measures, n_latent)
+    control_arr = np.array(control_params).reshape(n_measures, n_controls)
+    meas_sd_arr = np.array(meas_sds)
+    nodes_np = np.asarray(nodes)
+    weights_np = np.asarray(weights)
+
+    def _log_norm(x: np.ndarray, mean: float, sd: np.ndarray) -> np.ndarray:
+        return -0.5 * np.log(2 * np.pi) - np.log(sd) - 0.5 * ((x - mean) / sd) ** 2
+
+    for i in range(n_obs):
+        y_i = np.asarray(observed_factor_values[i])
+        z_i = np.asarray(measurements[i])
+        ctrl_i = np.asarray(controls[i])
+        residual_base = z_i - control_arr @ ctrl_i
+
+        # Marginal density of Y_i.
+        log_marg = -0.5 * np.log(2 * np.pi * cov_yy[0, 0]) - 0.5 * (
+            (y_i[0] - mu_y) ** 2 / cov_yy[0, 0]
+        )
+
+        # Schur-complement conditional of theta | Y_i.
+        cond_mean = mu_theta + (cov_ty[0, 0] / cov_yy[0, 0]) * (y_i[0] - mu_y)
+        cond_cov = cov_tt[0, 0] - cov_ty[0, 0] ** 2 / cov_yy[0, 0]
+        cond_cov = cond_cov + 1e-10  # matches the code's jitter
+        cond_chol = np.sqrt(cond_cov)
+
+        log_nodes = []
+        for q in range(nodes_np.shape[0]):
+            theta_q = cond_mean + cond_chol * nodes_np[q, 0]
+            resid = residual_base - full_loadings[:, 0] * theta_q
+            log_nodes.append(np.sum(_log_norm(resid, 0.0, meas_sd_arr)))
+        log_nodes = np.array(log_nodes)
+        log_integral = np.log(np.sum(np.exp(log_nodes) * weights_np))
+
+        # The returned per-obs log-likelihood is the JOINT density.
+        np.testing.assert_allclose(per_obs[i], log_marg + log_integral, atol=1e-8)
+        # And it is NOT the conditional integral alone (p(Y_i) term present).
+        assert not np.allclose(per_obs[i], log_integral)
+
+
+def test_update_conditional_distribution_does_not_recondition_on_later_income() -> None:
+    """Pin that later-period income does NOT re-condition the carried state.
+
+    `_update_conditional_distribution` propagates the chained sample through
+    the just-fitted transition/investment equations, but the conditioning
+    payload (`cond_means`, `cond_chols`, `conditional_weights`,
+    `chain_links`) is carried forward UNCHANGED -- the state distribution
+    stays conditioned on period-0 income only. Income at t > 0 flows solely
+    through the transition function (so the chained `components` legitimately
+    change), never through a re-conditioning update.
+    """
+    n_state = 1
+    n_endog = 0
+    n_observed_factors = 1
+    n_components = 1
+    n_halton = 6
+    n_obs = 4
+
+    rng = np.random.default_rng(202)
+    prev_sample = jnp.asarray(rng.normal(0, 1, (n_halton, n_obs, n_state)))
+    cond_means = jnp.asarray(rng.normal(0, 1, (n_components, n_obs, n_state)))
+    cond_chols = jnp.asarray(
+        np.tile(np.eye(n_state), (n_components, 1, 1)).astype(float)
+    )
+    conditional_weights = jnp.ones((n_obs, n_components))
+
+    prev_distribution = ConditionalDistribution(
+        mixture_weights=jnp.array([1.0]),
+        components=(
+            MixtureComponent(mean=jnp.zeros(n_state), chol_cov=jnp.eye(n_state)),
+        ),
+        samples_per_component=(prev_sample,),
+        conditional_weights=conditional_weights,
+        cond_means=cond_means,
+        cond_chols=cond_chols,
+        chain_links=(),
+    )
+
+    # Linear transition over (state, income): theta_t = 0.7 * theta + 0.3 * Y.
+    def combined_transition(
+        full_prev_with_obs: jax.Array, params: jax.Array
+    ) -> jax.Array:
+        return jnp.array(
+            [params[0] * full_prev_with_obs[0] + params[1] * full_prev_with_obs[1]]
+        )
+
+    idx = pd.MultiIndex.from_tuples(
+        [
+            ("transition", 1, "skill", "skill"),
+            ("transition", 1, "skill", "income"),
+            ("shock_sds", 1, "skill", "-"),
+        ],
+        names=["category", "period", "name1", "name2"],
+    )
+    result_params = pd.DataFrame({"value": [0.7, 0.3, 0.4]}, index=idx)
+
+    # Two different later-period income inputs.
+    income_a = jnp.asarray(rng.normal(0, 1, (n_obs, n_observed_factors)))
+    income_b = income_a + 5.0
+
+    joint_nodes = jnp.asarray(rng.normal(0, 1, (n_halton, 1)))  # n_shock = 1 column
+
+    def _update(observed_factor_values: jax.Array) -> ConditionalDistribution:
+        return _update_conditional_distribution(
+            prev_distribution=prev_distribution,
+            result_params=result_params,
+            combined_transition=combined_transition,
+            joint_nodes=joint_nodes,
+            n_state=n_state,
+            n_endog=n_endog,
+            n_shock=1,
+            shock_factor_indices=jnp.array([0]),
+            observed_factor_values=observed_factor_values,
+            n_observed_factors=n_observed_factors,
+        )
+
+    out_a = _update(income_a)
+    out_b = _update(income_b)
+
+    # The conditioning payload is byte-identical to the input and across the
+    # two income values: income at t > 0 leaves it untouched.
+    for out in (out_a, out_b):
+        np.testing.assert_array_equal(
+            np.asarray(out.cond_means), np.asarray(prev_distribution.cond_means)
+        )
+        np.testing.assert_array_equal(
+            np.asarray(out.cond_chols), np.asarray(prev_distribution.cond_chols)
+        )
+        np.testing.assert_array_equal(
+            np.asarray(out.conditional_weights),
+            np.asarray(prev_distribution.conditional_weights),
+        )
+        assert out.chain_links == prev_distribution.chain_links
+
+    # The chained sample summary DOES change with income (the single allowed
+    # channel: income flows through the transition function).
+    assert not np.allclose(
+        np.asarray(out_a.components[0].mean),
+        np.asarray(out_b.components[0].mean),
+    )

@@ -14,7 +14,6 @@ from beartype import beartype
 from jax import Array
 
 from skillmodels._beartype_conf import ESTIMATION_CONF
-from skillmodels.af.halton import create_halton_nodes_and_weights
 from skillmodels.af.initial_period import _build_loading_mask, _get_ordered_measures
 from skillmodels.af.likelihood import _log_normal_pdf
 from skillmodels.af.params import get_measurements_per_factor
@@ -28,24 +27,29 @@ def get_af_posterior_states(
     af_result: AFEstimationResult,
     model_spec: ModelSpec,
     data: pd.DataFrame,
-    n_halton_points: int = 100,
+    n_halton_points: int = 100,  # noqa: ARG001
 ) -> dict[str, dict[str, Any]]:
     """Compute posterior state means from AF estimation results.
 
-    For each individual i and period t, compute::
-
-        E[theta_t | Z_t,i] = sum_q w_q theta_q p(Z_t,i | theta_q)
-                              / sum_q w_q p(Z_t,i | theta_q)
-
-    where theta_q are quadrature nodes from the estimated conditional
-    distribution at period t, and p(Z_t,i | theta_q) is the measurement
-    density.
+    For each individual i and period t, compute the posterior mean
+    E[theta_t | Z_{0:t,i}] against the per-observation, income-conditioned
+    chained importance sample carried by the estimator
+    (`ConditionalDistribution.samples_per_component`). Each stored sample is
+    a prior draw already encoding the period-0 income conditioning; it is
+    weighted by the per-observation prior mixture weights
+    (`conditional_weights`) and reweighted by the current-period measurement
+    likelihood, then the posterior mean is the weighted average of the
+    samples.
 
     Args:
-        af_result: Result from `estimate_af()`.
+        af_result: Result from `estimate_af()`. Must NOT have gone through
+            `to_numpy()`, which drops the per-obs chained sample this
+            computation needs.
         model_spec: Model specification.
         data: Dataset in long format with MultiIndex (id, period).
-        n_halton_points: Quadrature points for posterior computation.
+        n_halton_points: Retained for API/backward compatibility only; no
+            longer used (posterior means are computed from the carried
+            chained sample, not from freshly drawn Halton nodes).
 
     Return:
         Dict with "unanchored_states" containing "states" DataFrame
@@ -106,16 +110,12 @@ def get_af_posterior_states(
         controls = jnp.array(np.column_stack(ctrl_arrays))
         control_contrib = controls @ meas_info["control_params"].T
 
-        nodes, weights = create_halton_nodes_and_weights(n_halton_points, n_state)
-
         posterior_means = _compute_posterior_means(
             cond_dist=cond_dist,
             measurements=measurements,
             control_contrib=control_contrib,
             full_loadings=meas_info["full_loadings"],
             meas_sds=meas_info["meas_sds"],
-            nodes=nodes,
-            weights=weights,
         )
 
         for idx_i, obs_id in enumerate(ids):
@@ -207,56 +207,60 @@ def _compute_posterior_means(
     full_loadings: Array,
     control_contrib: Array,
     meas_sds: Array,
-    nodes: Array,
-    weights: Array,
 ) -> Array:
     """Compute posterior means for all individuals at one period.
 
+    Use the per-observation, income-conditioned chained importance sample
+    (`samples_per_component`) carried by the estimator, weighted by the
+    per-observation prior mixture weights (`conditional_weights`), and
+    reweight each sample by the current-period measurement likelihood.
+
     Return shape (n_obs, n_factors).
     """
-    n_components = len(cond_dist.components)
-    means = jnp.stack([c.mean for c in cond_dist.components])
-    chol_covs = jnp.stack([c.chol_cov for c in cond_dist.components])
-    mix_weights = cond_dist.mixture_weights
+    if not cond_dist.samples_per_component:
+        msg = (
+            "get_af_posterior_states needs the per-observation chained "
+            "importance sample (`samples_per_component`). It is dropped by "
+            "AFEstimationResult.to_numpy(); call get_af_posterior_states on "
+            "the estimation result BEFORE to_numpy()."
+        )
+        raise ValueError(msg)
 
-    residuals_base = measurements - control_contrib
+    # Stack to shape n_components by n_summary by n_obs by n_state.
+    samples = jnp.stack([jnp.asarray(s) for s in cond_dist.samples_per_component])
+    n_components, n_summary, n_obs = (
+        samples.shape[0],
+        samples.shape[1],
+        samples.shape[2],
+    )
 
-    def _single_obs(residual_base: Array) -> Array:
-        """Posterior mean for one individual."""
+    if cond_dist.conditional_weights is not None:
+        cond_weights = jnp.asarray(cond_dist.conditional_weights)
+    else:
+        cond_weights = jnp.broadcast_to(
+            jnp.asarray(cond_dist.mixture_weights)[None, :], (n_obs, n_components)
+        )
 
-        def _node_kernel(z_q: Array) -> tuple[Array, Array]:
-            """Return (log_weight, weighted_theta) for one quadrature node."""
-            log_component_vals = []
-            theta_components = []
-            for l_idx in range(n_components):
-                theta = means[l_idx] + chol_covs[l_idx] @ z_q
-                residuals = residual_base - full_loadings @ theta
-                log_lik = jnp.sum(
-                    _log_normal_pdf(
-                        residuals,
-                        jnp.zeros_like(residuals),
-                        meas_sds,
-                    )
-                )
-                log_component_vals.append(
-                    jnp.log(mix_weights[l_idx] + 1e-300) + log_lik
-                )
-                theta_components.append(theta)
+    residuals_base = measurements - control_contrib  # (n_obs, n_meas)
+    # obs-major samples for vmap: (n_obs, n_components, n_summary, n_state)
+    samples_obs_major = jnp.transpose(samples, (2, 0, 1, 3))
 
-            log_w = jax.scipy.special.logsumexp(jnp.array(log_component_vals))
-            # Weighted theta across mixture components
-            comp_weights = jax.nn.softmax(jnp.array(log_component_vals))
-            avg_theta = jnp.zeros_like(theta_components[0])
-            for cw, tv in zip(comp_weights, theta_components, strict=True):
-                avg_theta = avg_theta + cw * tv
-            return log_w, avg_theta
+    def _single_obs(
+        residual_base: Array,  # (n_meas,)
+        obs_samples: Array,  # (n_components, n_summary, n_state)
+        obs_weights: Array,  # (n_components,)
+    ) -> Array:
+        def _per_sample(theta: Array) -> Array:  # (n_state,) -> scalar
+            residuals = residual_base - full_loadings @ theta
+            return jnp.sum(
+                _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
+            )
 
-        log_ws, thetas = jax.vmap(_node_kernel)(nodes)
+        log_lik = jax.vmap(jax.vmap(_per_sample))(obs_samples)  # (n_comp, n_summary)
+        log_prior = jnp.log(obs_weights + 1e-300)[:, None] - jnp.log(n_summary)
+        log_post = (log_prior + log_lik).reshape(-1)
+        post_weights = jax.nn.softmax(log_post)
+        flat_theta = obs_samples.reshape(-1, obs_samples.shape[-1])
+        return jnp.sum(post_weights[:, None] * flat_theta, axis=0)
 
-        # Posterior weights: softmax of log_ws + log(quadrature_weights)
-        log_posterior = log_ws + jnp.log(weights)
-        posterior_weights = jax.nn.softmax(log_posterior)
-
-        return jnp.sum(posterior_weights[:, None] * thetas, axis=0)
-
-    return jax.vmap(_single_obs)(residuals_base)
+    return jax.vmap(_single_obs)(residuals_base, samples_obs_major, cond_weights)

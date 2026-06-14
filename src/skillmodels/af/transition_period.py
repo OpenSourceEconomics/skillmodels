@@ -3,6 +3,13 @@
 Estimate transition function parameters and measurement system parameters
 using Halton quadrature over the latent factor distribution from the
 previous period.
+
+Assumption (income non-informativeness): the carried state distribution is
+conditioned on period-0 observed factors (income) Y_0 only. Later-period
+income Y_t (t > 0) enters the investment and transition equations but does
+NOT re-condition the state distribution -- there is no filtering update for
+f(theta_t | Y_{0:t}). This is valid iff Y_t adds no information about
+theta_t once Y_0 and the modeled transition history are conditioned on.
 """
 
 import inspect
@@ -97,8 +104,20 @@ def estimate_transition_period(
             step's `om.minimize` call (within-step equalities).
 
     Return:
-        Tuple of (AFPeriodResult, ConditionalDistribution) where the
-        distribution represents f(theta_t | data_{0:t}).
+        Tuple of (AFPeriodResult, ConditionalDistribution). The returned
+        distribution is the conditional state distribution
+        f(theta_t | Z_{0:t}, Y_0), i.e. conditioned on all measurements
+        through period t and on the *period-0* observed factors (income)
+        Y_0 via the Schur complement carried from the initial period. It
+        is NOT conditioned on later-period income Y_1, ..., Y_t: those
+        enter only the investment and transition equations, never a
+        re-conditioning/filtering update of the state distribution.
+        Treating this as the correct period-t state distribution requires
+        the assumption that, given Y_0 and the modeled transition history,
+        Y_t carries no further information about theta_t (sequential
+        non-informativeness of income). The Monte Carlo designs with
+        Y_t == Y_0 satisfy this by construction; with serially varying,
+        skill-correlated income it is a substantive restriction.
 
     """
     factors = processed_model.labels.latent_factors

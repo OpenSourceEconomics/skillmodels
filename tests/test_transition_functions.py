@@ -18,16 +18,20 @@ from skillmodels.common.transition_functions import (
     linear,
     linear_and_squares,
     log_ces,
+    log_ces_af,
     log_ces_general,
     params_constant,
     params_linear,
     params_linear_and_squares,
     params_log_ces,
+    params_log_ces_af,
     params_log_ces_general,
     params_robust_translog,
     params_translog,
+    params_translog_af,
     robust_translog,
     translog,
+    translog_af,
 )
 
 jax.config.update("jax_enable_x64", True)
@@ -79,6 +83,31 @@ def test_translog() -> None:
     for states, expected in zip(all_states, expected_translog, strict=False):
         calculated = translog(jnp.asarray(states), params)
         aaae(calculated, expected)
+
+
+def test_translog_af_has_no_square_terms() -> None:
+    # States are skill and investment.
+    states = jnp.array([2.0, 3.0])
+
+    # params layout for translog_af: [b_skill, b_inv, d_interaction, constant]
+    b_s, b_i, d, c = 0.2, 0.1, 0.05, 0.04
+    params = jnp.array([b_s, b_i, d, c])
+
+    # Parameter names: exactly linear + single interaction + constant, NO '** 2'.
+    names = params_translog_af(("skills", "investment"))
+    assert names == ["skills", "investment", "skills * investment", "constant"]
+
+    expected = b_s * 2.0 + b_i * 3.0 + d * 2.0 * 3.0 + c
+    aaae(translog_af(states, params), expected)
+
+
+def test_log_ces_af_matches_log_ces() -> None:
+    states = jnp.array([3.0, 7.5])
+    params = jnp.array([0.4, 0.6, 2.0])
+    aaae(log_ces_af(states, params), log_ces(states, params))
+    assert params_log_ces_af(("skills", "investment")) == params_log_ces(
+        ("skills", "investment")
+    )
 
 
 def test_log_ces() -> None:

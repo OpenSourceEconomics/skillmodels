@@ -18,7 +18,10 @@ from skillmodels.af.types import (
     AFPeriodResult,
     ConditionalDistribution,
 )
-from skillmodels.af.validate import validate_af_model
+from skillmodels.af.validate import (
+    fail_if_unsupported_kappa_params,
+    validate_af_model,
+)
 from skillmodels.amn.estimate import estimate_amn
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
@@ -75,6 +78,14 @@ def estimate_af(
     Return:
         AFEstimationResult with per-period results and combined parameters.
 
+    Scope:
+        The investment equation is supported, but production shocks are
+        assumed independent of investment shocks (kappa_t = 0 in the
+        control-function form eta_theta,t = kappa_t*eta_I,t + eps_C,t).
+        Endogenous investment (kappa_t != 0) is not implemented; passing
+        parameters in a "kappa"/"kappa_t" category raises
+        NotImplementedError.
+
     """
     jax.config.update("jax_enable_x64", val=True)
 
@@ -82,6 +93,7 @@ def estimate_af(
         af_options = AFEstimationOptions()
 
     validate_af_model(model_spec)
+    fail_if_unsupported_kappa_params(start_params, fixed_params, constraints)
     processed_model = process_model(model_spec)
 
     # If AMN-based starts are requested, run the full AMN three-stage

@@ -72,6 +72,13 @@ def translog(states: Array, params: Array) -> Array:
     is better described as a linear in parameters transition function with squares and
     interaction terms of the states.
 
+    This is the general-library specification: parameters are enumerated over ALL
+    factors in `all_factors` (latent AND observed). Observed factors (e.g. income)
+    therefore enter the production function with their own free linear, square and
+    interaction coefficients. This is by design for the CHS estimator. For an AF
+    production function that matches the paper's equation (6) (skill + investment
+    only, NO squares), use `translog_af` and pass only the production factors.
+
     """
     nfac = len(states)
     constant = params[-1]
@@ -111,6 +118,52 @@ def identity_constraints_translog(
     return constraints
 
 
+def translog_af(states: Array, params: Array) -> Array:
+    """AF (2020) production translog, equation (6): NO square terms.
+
+    Implements `a_t + sum_i beta_i * states_i + sum_{i<j} delta_ij * states_i
+    * states_j`, i.e. linear terms plus pairwise interactions only. Unlike the
+    general-library `translog`, it omits the squared-factor terms, matching AF
+    eq. (6) `a_t + g1 ln theta + g2 ln I + g3 ln theta ln I` for
+    (skill, investment).
+
+    Pass ONLY the production factors (skill + investment) as `states`; observed
+    factors such as income must not enter the production function.
+    """
+    nfac = len(states)
+    constant = params[-1]
+    lin_beta = params[:nfac]
+    inter_beta = params[nfac:-1]
+    res = jnp.dot(states, lin_beta)
+    for p, (a, b) in zip(inter_beta, combinations(range(nfac), 2), strict=False):
+        res += p * states[a] * states[b]
+    res += constant
+    return res
+
+
+def params_translog_af(factors: tuple[str, ...]) -> list[str]:
+    """Index tuples for `translog_af` (linear + interactions + constant)."""
+    return (
+        list(factors)
+        + [f"{a} * {b}" for a, b in combinations(factors, 2)]
+        + ["constant"]
+    )
+
+
+def identity_constraints_translog_af(
+    factor: str,
+    aug_period: int,
+    all_factors: tuple[str, ...],
+) -> list[FixedConstraintWithValue]:
+    """Identity constraints for `translog_af` (carry-forward aug periods)."""
+    constraints: list[FixedConstraintWithValue] = []
+    for regressor in params_translog_af(all_factors):
+        val = 1.0 if factor == regressor else 0.0
+        loc = ("transition", aug_period, factor, regressor)
+        constraints.append(FixedConstraintWithValue(loc=loc, value=val))
+    return constraints
+
+
 def log_ces(states: Array, params: Array) -> Array:
     """Log CES production function (KLS version).
 
@@ -119,6 +172,14 @@ def log_ces(states: Array, params: Array) -> Array:
     forward pass and the gradient finite when some ``gamma_i = 0``; the
     naive ``logsumexp(log(gamma) + states * phi)`` has a 1 / gamma term in
     the gradient that produces NaN at ``gamma_i = 0``.
+
+    This is the general-library specification: the CES weights `gamma_i` are
+    enumerated over ALL factors in `all_factors` (latent AND observed), so
+    observed factors (e.g. income) receive a share of the probability simplex
+    and enter the production aggregate. This is by design for the CHS
+    estimator. For an AF production CES over the production factors only
+    (skill + investment, matching the paper's equation (7)), use `log_ces_af`
+    and pass only the production factors.
     """
     phi = params[-1]
     gammas = params[:-1]
@@ -166,6 +227,44 @@ def identity_constraints_log_ces(
     can dispatch by name without case-splitting.
     """
     return []
+
+
+def log_ces_af(states: Array, params: Array) -> Array:
+    """AF (2020) production CES, equation (7): CES over production factors only.
+
+    Identical math to `log_ces`; named separately so AF models can declare a
+    production-only CES (skill + investment) without observed factors leaking
+    in. Pass ONLY the production factors as `states`.
+    """
+    return log_ces(states, params)
+
+
+def params_log_ces_af(factors: tuple[str, ...]) -> list[str]:
+    """Index tuples for the `log_ces_af` production function."""
+    return params_log_ces(factors)
+
+
+def constraints_log_ces_af(
+    factor: str,
+    factors: tuple[str, ...],
+    aug_period: int,
+) -> om.constraints.Constraint:
+    """Constraints for `log_ces_af` production function (gammas on simplex)."""
+    return constraints_log_ces(factor=factor, factors=factors, aug_period=aug_period)
+
+
+def identity_constraints_log_ces_af(
+    factor: str,
+    aug_period: int,
+    all_factors: tuple[str, ...],
+) -> list[om.constraints.Constraint]:
+    """Identity constraints for `log_ces_af` -- no-op.
+
+    See :func:`identity_constraints_log_ces` for the rationale.
+    """
+    return identity_constraints_log_ces(
+        factor=factor, aug_period=aug_period, all_factors=all_factors
+    )
 
 
 def log_ces_with_constant(states: Array, params: Array) -> Array:

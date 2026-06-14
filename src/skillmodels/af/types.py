@@ -235,8 +235,15 @@ class ConditionalDistribution:
     For the period-0 distribution: per-obs `cond_means` / `cond_chols`
     encode the Schur conditional of latent factors given observed factors
     (`Y_0`); `conditional_weights` are the Bayes posterior mixture weights
-    given `Y_0`. For later periods these are unused (chain replays from
-    period 0).
+    given `Y_0`. These period-0 quantities are carried forward UNCHANGED
+    across every transition step (the chain replays from period 0), so the
+    state distribution at any later period is conditioned on `Y_0` only.
+    Later-period observed factors (income `Y_t`, t > 0) enter solely the
+    investment and transition equations; they never re-condition the state
+    distribution. Interpreting the carried distribution as the period-t
+    conditional state density therefore rests on a sequential
+    non-informativeness assumption for income (given `Y_0` and the modeled
+    transition history, `Y_t` adds no information about `theta_t`).
 
     Note: `samples_per_component` is retained for backward compatibility
     and posterior-state-summary computation, but is no longer load-bearing

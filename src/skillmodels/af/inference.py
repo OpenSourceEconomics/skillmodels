@@ -21,12 +21,17 @@ this directly:
 
 This module exposes a single inference entry point,
 :func:`compute_af_standard_errors`, which implements that score
-bootstrap. It avoids re-estimating the model B times: per-observation
-scores are computed once at the optimum, then for each of ``n_boot``
-replicates we resample caseids with replacement, average their scores,
-and take a one-step Newton update from the optimum. The empirical
-standard deviation of the resulting parameter draws is the bootstrap
-standard error.
+bootstrap. It avoids re-estimating the model B times: a single
+per-observation influence matrix is computed once at the optimum (each
+period block is a one-step Newton update of the period's full-chain
+score that also carries the earlier periods' influence via the
+cross-period blocks of the full-chain Hessian), then for each of
+``n_boot`` replicates we draw ONE shared caseid index, resample the rows
+of that influence matrix with it, and shift the estimate by the negated
+resample mean. The shared index makes the cross-period covariances in
+the bootstrap distribution non-zero and correct. The empirical standard
+deviation of the resulting parameter draws is the bootstrap standard
+error.
 
 """
 
@@ -133,25 +138,30 @@ def compute_af_standard_errors(
     """Score-resampling cluster bootstrap for the AF estimator.
 
     Implements Antweiler & Freyberger (2025) §4.2 (Armstrong-Bertanha-Hong
-    score bootstrap). Per-observation scores are computed once at the
-    optimum; for each of ``n_boot`` replicates we resample caseids with
-    replacement, average the resampled scores, and apply a one-step
-    Newton update from the optimum:
+    score bootstrap) in its sequential-estimator INFLUENCE-FUNCTION form.
+    A single per-observation influence matrix ``PSI`` (shape
+    ``(n_obs, P_free)``) is computed once at the optimum by
+    :func:`_build_influence_matrix`: each period block is a one-step
+    Newton update of the period's full-chain score that ALSO carries the
+    earlier periods' influence via the cross-period blocks of the
+    full-chain Hessian,
 
-        theta_b = theta_hat - A_t^{-1} * bar_g_b
+        psi_t,i = A_t^{-1}(s_t,i + sum_{r<t} B_{t,r} psi_r,i),
 
-    where ``A_t`` is the period-``t`` information matrix and
-    ``bar_g_b`` is the bootstrap-averaged per-obs score restricted to
-    period-``t`` free parameters. Periods are resampled independently
-    — joint resampling would couple periods through the
-    block-diagonal information matrix the same way separate draws do,
-    so we report own-block bootstrap SEs.
+    where ``A_t`` is the period-``t`` own information block and
+    ``B_{t,r}`` the cross-period coupling. For each of ``n_boot``
+    replicates we draw ONE shared caseid index, resample the ROWS of
+    ``PSI`` with it, and shift the estimate by ``-mean(PSI[idx])``. Because
+    every period block of ``PSI`` is resampled with the same index, the
+    bootstrap distribution has the correct, NON-ZERO cross-period
+    covariances (the propagated uncertainty), unlike an own-block /
+    independent-period resample.
 
     The analytical Newey-McFadden sandwich is **not** provided: as AF
     §4.2 notes, the closed-form variance ignores estimation error in
     the previous-period nuisance parameters tau_{t-1}, ..., tau_1, so
-    it is incorrect for any t >= 1. The score bootstrap captures this
-    propagation.
+    it is incorrect for any t >= 1. The influence-function score
+    bootstrap captures this propagation.
 
     For ``n_boot=10000`` and ``n_caseids=1500`` this typically takes
     seconds rather than days (no re-estimation per replicate).
@@ -209,11 +219,6 @@ def compute_af_standard_errors(
         endogenous_factors=endogenous_factors,
     )
 
-    # Precompute per-period score and information matrices at the
-    # optimum. The bootstrap then resamples score rows (caseids) and
-    # applies a one-step Newton update; no re-estimation per replicate.
-    period_score_info = _compute_block_diagonal_sandwich(result, metas)
-
     rng = np.random.default_rng(seed)
     all_params = result.all_params
     replicate_values = np.tile(all_params["value"].to_numpy()[None, :], (n_boot, 1))
@@ -222,22 +227,19 @@ def compute_af_standard_errors(
 
     n_clusters = int(metas[0].loglike_kwargs["measurements"].shape[0])
 
-    for period_res in period_score_info:
-        score = np.array(period_res.score_matrix)  # (n, n_free_own)
-        info = np.array(period_res.information_matrix)
-        # Use pinv for the same null-space-tolerant reasons as
-        # ``_block_diagonal_sandwich_single``.
-        a_inv = np.linalg.pinv(info)
+    # Per-obs influence matrix PSI (n_obs, P_free), computed ONCE at the
+    # optimum. PSI propagates earlier-period estimation uncertainty into
+    # each period's influence via the cross-period blocks of the full-chain
+    # Hessian (AF §4.2). The bootstrap then resamples caseid ROWS of PSI
+    # with a single SHARED index per replicate, so cross-period covariances
+    # in the resulting vcov are non-zero and correct.
+    psi, free_global_cols = _build_influence_matrix(result, metas, pos_lookup)
+    psi = np.asarray(psi)
+    free_global_cols_arr = np.asarray(free_global_cols, dtype=np.int64)
 
-        idx = rng.integers(0, n_clusters, size=(n_boot, n_clusters))
-        mean_score = score[idx].mean(axis=1)  # (n_boot, n_free_own)
-        delta = -mean_score @ a_inv.T  # (n_boot, n_free_own); one-step shift
-
-        global_cols = np.array(
-            [pos_lookup[loc] for loc in period_res.free_param_locs],
-            dtype=np.int64,
-        )
-        replicate_values[:, global_cols] += delta
+    idx = rng.integers(0, n_clusters, size=(n_boot, n_clusters))
+    delta = -psi[idx].mean(axis=1)  # (n_boot, P_free); one-step shift
+    replicate_values[:, free_global_cols_arr] += delta
 
     replicate_params = pd.DataFrame(replicate_values, columns=all_params.index)
     standard_errors = pd.Series(
@@ -1054,6 +1056,78 @@ def _period_t_per_obs_loglike_full(
     kwargs["prev_control_params"] = prev_meas["control_params"]
     kwargs["prev_meas_sds"] = prev_meas["meas_sds"]
     return af_per_obs_loglike_transition(flat_params_t, **kwargs)
+
+
+def _build_influence_matrix(
+    result: AFEstimationResult,
+    metas: tuple[_PeriodMeta, ...],
+    pos_lookup: Mapping[tuple[Any, ...], int],
+) -> tuple[np.ndarray, list[int]]:
+    """Build the per-observation influence matrix PSI for the AF score bootstrap.
+
+    Implements the sequential-estimator influence-function form of the AF
+    (2025) §4.2 score bootstrap. Partition the free parameters into period
+    blocks tau_0, ..., tau_{T-1}. Evaluate once at the optimum:
+
+    * ``s_t``: per-obs score of the period-``t`` FULL-CHAIN loglike w.r.t. all
+      free params, via ``jax.jacfwd(_period_t_per_obs_loglike_full)``;
+    * ``H_t``: hessian of the neg-mean full-chain period-``t`` loglike
+      restricted to free columns, whose own block ``H_t[own, own] = A_t`` and
+      earlier-block columns ``H_t[own, own_r] = -B_{t,r}`` for ``r < t``.
+
+    The per-obs influence matrix is built by forward substitution over
+    periods:
+
+        psi_own_0,i = A_0^{-1} s_0,i[own_0]
+        psi_own_t,i = A_t^{-1}(s_t,i[own_t] + sum_{r<t} B_{t,r} @ psi_own_r,i)
+
+    so each period's influence carries the earlier-period estimation
+    uncertainty. Cost is O(T) JAX passes, not O(n_boot). Returns
+    ``(psi, free_global_cols)`` where ``psi`` is ``(n_obs, P_free)`` and
+    ``free_global_cols`` maps each free column to its global position in
+    ``all_params``.
+    """
+    flat_super = jnp.asarray(result.all_params["value"].to_numpy())
+
+    free_positions: list[int] = []
+    free_locs: list[tuple[Any, ...]] = []
+    period_own_cols: list[np.ndarray] = []
+    for meta in metas:
+        pos, locs = _free_positions_for_period(meta.params_df)
+        own = list(range(len(free_positions), len(free_positions) + len(pos)))
+        period_own_cols.append(np.array(own, dtype=np.int64))
+        free_positions.extend(meta.slice_start + p for p in pos)
+        free_locs.extend(locs)
+
+    free_positions_arr = jnp.array(free_positions, dtype=jnp.int32)
+    p_free = int(free_positions_arr.shape[0])
+    n_obs = int(metas[0].loglike_kwargs["measurements"].shape[0])
+    psi = np.zeros((n_obs, p_free))
+
+    for t, _meta in enumerate(metas):
+
+        def per_obs(fs: Array, _t: int = t) -> Array:
+            return _period_t_per_obs_loglike_full(fs, _t, metas)
+
+        jac = np.asarray(jax.jacfwd(per_obs)(flat_super)[:, free_positions_arr])
+
+        def neg_mean(fs: Array, _t: int = t) -> Array:
+            return -jnp.mean(_period_t_per_obs_loglike_full(fs, _t, metas))
+
+        hess_full = jax.hessian(neg_mean)(flat_super)
+        hess = np.asarray(hess_full[free_positions_arr][:, free_positions_arr])
+
+        own = period_own_cols[t]
+        a_inv = np.linalg.pinv(hess[np.ix_(own, own)])  # A_t^{-1}
+        rhs = jac[:, own]  # s_t own block, (n_obs, |own|)
+        for r in range(t):
+            own_r = period_own_cols[r]
+            b_tr = -hess[np.ix_(own, own_r)]  # B_{t,r}
+            rhs = rhs + psi[:, own_r] @ b_tr.T
+        psi[:, own] = rhs @ a_inv.T
+
+    free_global_cols = [pos_lookup[loc] for loc in free_locs]
+    return psi, free_global_cols
 
 
 __all__ = [
