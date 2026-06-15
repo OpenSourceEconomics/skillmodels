@@ -302,6 +302,24 @@ class ModelSpec:
             observed_factors=self.observed_factors + names,
         )
 
+    def without_correction(self) -> Self:
+        """Return a new ModelSpec with every `FactorSpec.correction` removed.
+
+        Useful to run an estimator that does not implement the control-function
+        correction (e.g. AF) on a spec authored for CHS.
+
+        Returns:
+            New ModelSpec with no control-function corrections.
+
+        """
+        new_factors = {
+            name: replace(spec, correction=None)
+            if spec.correction is not None
+            else spec
+            for name, spec in self.factors.items()
+        }
+        return self._replace(factors=new_factors)
+
     def with_anchoring(
         self,
         anchoring: AnchoringSpec,

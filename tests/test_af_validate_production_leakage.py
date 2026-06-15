@@ -18,6 +18,7 @@ import pytest
 
 from skillmodels.af.validate import validate_af_model
 from skillmodels.common.model_spec import (
+    CorrectionSpec,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -83,3 +84,29 @@ def test_validate_af_model_no_warning_with_translog_af() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
         assert validate_af_model(model) is None
+
+
+def test_validate_af_model_raises_on_correction_spec() -> None:
+    # AF implements only the kappa=0 (exogenous-investment) special case, so a
+    # CorrectionSpec must raise loudly rather than silently estimate a different
+    # estimand than CHS on the identical spec.
+    model = _build_model(
+        skills_transition="translog_af",
+        observed_factors=("income",),
+    )
+    investment = FactorSpec(
+        measurements=(("z1", "z2", "z3"),) * 2,
+        normalizations=Normalizations(
+            loadings=({"z1": 1},) * 2,
+            intercepts=({"z1": 0},) * 2,
+        ),
+        transition_function="linear",
+        is_endogenous=True,
+        correction=CorrectionSpec(instruments=("income",)),
+    )
+    model = ModelSpec(
+        factors={"skills": model.factors["skills"], "investment": investment},
+        observed_factors=("income",),
+    )
+    with pytest.raises(NotImplementedError, match="control-function correction"):
+        validate_af_model(model)

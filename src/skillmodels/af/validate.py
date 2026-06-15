@@ -74,8 +74,23 @@ def validate_af_model(model_spec: ModelSpec) -> None:
 
     Raise:
         ValueError: If validation fails, with a detailed error message.
+        NotImplementedError: If the model declares a control-function correction
+            (`FactorSpec.correction`), which AF does not implement.
 
     """
+    corrected = [
+        name for name, spec in model_spec.factors.items() if spec.correction is not None
+    ]
+    if corrected:
+        msg = (
+            "AF estimation does not implement the control-function correction "
+            f"(kappa != 0) declared by FactorSpec.correction on {corrected}. AF "
+            "covers only the kappa=0 (exogenous-investment) special case. Use "
+            "estimate_chs for the correction, or strip it with "
+            "ModelSpec.without_correction()."
+        )
+        raise NotImplementedError(msg)
+
     errors: list[str] = []
     for factor_name, factor_spec in model_spec.factors.items():
         errors.extend(_validate_factor(factor_name, factor_spec))

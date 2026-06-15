@@ -169,6 +169,23 @@ def test_with_stagemap(model2) -> None:
     assert result.stagemap == (0, 1, 2, 3, 4, 5, 6)
 
 
+def test_without_correction_strips_correction_from_all_factors() -> None:
+    corrected = FactorSpec(
+        measurements=(("ln_inv",),),
+        is_endogenous=True,
+        correction=CorrectionSpec(instruments=("z1",), targets=("skills",)),
+    )
+    plain = FactorSpec(measurements=(("y1",),))
+    model = ModelSpec(factors={"skills": plain, "investment": corrected})
+
+    stripped = model.without_correction()
+
+    assert all(f.correction is None for f in stripped.factors.values())
+    # The rest of the spec is preserved.
+    assert stripped.factors["investment"].is_endogenous is True
+    assert tuple(stripped.factors) == ("skills", "investment")
+
+
 def test_with_transition_functions_valid(model2) -> None:
     funcs = {"fac1": "linear", "fac2": "translog", "fac3": "constant"}
     result = model2.with_transition_functions(funcs)
