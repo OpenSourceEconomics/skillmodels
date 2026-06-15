@@ -48,16 +48,18 @@ def _tiny_model() -> ModelSpec:
 @pytest.mark.parametrize("cls", RESULT_CLASSES)
 def test_result_class_declares_common_result_fields(cls):
     names = {f.name for f in dataclasses.fields(cls)}
-    assert REQUIRED_RESULT_FIELDS <= names
+    assert names >= REQUIRED_RESULT_FIELDS
 
 
 @pytest.mark.parametrize("cls", OPTION_CLASSES)
 def test_options_class_declares_common_option_fields(cls):
     names = {f.name for f in dataclasses.fields(cls)}
-    assert REQUIRED_OPTION_FIELDS <= names
+    assert names >= REQUIRED_OPTION_FIELDS
 
 
-@pytest.mark.parametrize("options", [AFEstimationOptions(), AMNEstimationOptions(), CHSEstimationOptions()])
+@pytest.mark.parametrize(
+    "options", [AFEstimationOptions(), AMNEstimationOptions(), CHSEstimationOptions()]
+)
 def test_options_instances_satisfy_common_options_protocol(options):
     assert isinstance(options, CommonEstimationOptions)
 

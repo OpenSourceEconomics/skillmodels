@@ -22,8 +22,7 @@ def model2_data():
 
 
 def test_estimate_chs_returns_conforming_result(model2_data):
-    """`estimate_chs` converges from the known optimum and returns a
-    `CHSEstimationResult` with a finite log-likelihood.
+    """Converge from the known optimum to a conforming `CHSEstimationResult`.
 
     Starting at the regression-vault optimum keeps the run cheap: the
     optimiser terminates almost immediately. `start_params_strategy="none"`
