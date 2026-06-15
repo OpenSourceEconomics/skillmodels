@@ -114,6 +114,7 @@ def test_correction_spec_stores_fields_and_makes_kappa_terms_immutable() -> None
     assert cf.state_predictors == ("health_mom", "health_kid")
     assert cf.instruments == ("sum_inv_paid_log", "sum_inv_private_log")
     assert cf.targets == ("health_mom", "health_kid")
+    assert cf.kappa_terms is not None
     assert cf.kappa_terms["health_kid"] == ("cf", "cf ** 2")
     # kappa_terms must be converted to an immutable mapping.
     with pytest.raises(TypeError):

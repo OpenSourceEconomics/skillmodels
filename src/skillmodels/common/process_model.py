@@ -1,5 +1,6 @@
 """Functions to process model specifications from user-friendly to internal form."""
 
+import inspect
 from collections.abc import Callable, KeysView, Mapping
 from dataclasses import replace
 from functools import partial
@@ -551,6 +552,25 @@ def _resolve_control_function(model_spec: ModelSpec) -> ControlFunctionInfo | No
             "least one non-endogenous state factor as a target."
         )
         raise ValueError(msg)
+
+    # Built-in production transitions enumerate (and the constraint machinery pins
+    # to 0) an instrument coefficient, but a custom transition could consume an
+    # instrument as an input with no pinnable coefficient. Instruments are
+    # first-stage-only, so reject that loudly.
+    instruments = set(spec.instruments)
+    for fac, fspec in model_spec.factors.items():
+        tfunc = fspec.transition_function
+        if fac == investment_factor or not callable(tfunc):
+            continue
+        consumed = set(inspect.signature(tfunc).parameters) - {"params"}
+        if leaked := sorted(consumed & instruments):
+            msg = (
+                f"The custom transition for {fac!r} consumes control-function "
+                f"instrument(s) {leaked}. Instruments are first-stage-only and must "
+                "not enter a production transition."
+            )
+            raise ValueError(msg)
+
     if spec.kappa_terms is not None:
         kappa_terms = {t: spec.kappa_terms.get(t, ("cf",)) for t in targets}
     else:

@@ -14,6 +14,7 @@ from skillmodels.common.fixed_constraint import FixedConstraintWithValue
 from skillmodels.common.selector import align_index_names, select_by_loc
 from skillmodels.common.types import (
     Anchoring,
+    ControlFunctionInfo,
     Dimensions,
     EndogenousFactorsInfo,
     Labels,
@@ -518,6 +519,55 @@ def _get_anchoring_constraints(  # noqa: C901
     return constraints
 
 
+def _factors_in_param_name(name: str) -> set[str]:
+    """Return the factor tokens referenced by a built-in transition param name.
+
+    `"inv_z"` -> `{"inv_z"}`, `"inv_z ** 2"` -> `{"inv_z"}`,
+    `"fac1 * inv_z"` -> `{"fac1", "inv_z"}`, `"constant"` -> `{"constant"}`.
+    """
+    return {part.strip() for part in name.replace(" ** 2", "").split(" * ")}
+
+
+def _get_instrument_exclusion_constraints(
+    labels: Labels,
+    control_function: ControlFunctionInfo,
+    aug_period_meas_types: Mapping[int, MeasurementType],
+) -> list[FixedConstraintWithValue]:
+    """Pin built-in production coefficients on first-stage-only instruments to 0.
+
+    A built-in transition enumerates a free coefficient for every observed factor
+    (incl. the excluded instruments), which would leak the instrument into
+    production. Pin those coefficients to 0 on the production (ENDOGENOUS) aug
+    periods; on the carry-forward aug periods they are already 0 via the identity
+    constraints. Custom transitions are validated separately.
+    """
+    constraints: list[FixedConstraintWithValue] = []
+    production_aug_periods = [
+        k
+        for k, v in aug_period_meas_types.items()
+        if v == MeasurementType.ENDOGENOUS_FACTORS
+    ][:-1]
+    instruments = set(control_function.instruments)
+    for target in control_function.targets:
+        tname = labels.transition_names[labels.latent_factors.index(target)]
+        if not isinstance(tname, str) or tname == "constant":
+            continue
+        leak_names = [
+            name
+            for name in getattr(t_f_module, f"params_{tname}")(labels.all_factors)
+            if instruments & _factors_in_param_name(name)
+        ]
+        constraints.extend(
+            FixedConstraintWithValue(
+                loc=("transition", aug_period, target, name2),
+                value=0.0,
+            )
+            for aug_period in production_aug_periods
+            for name2 in leak_names
+        )
+    return constraints
+
+
 def _get_constraints_for_augmented_periods(
     labels: Labels,
     endogenous_factors_info: EndogenousFactorsInfo,
@@ -611,6 +661,14 @@ def _get_constraints_for_augmented_periods(
                             value=0.0,
                         )
                     )
+
+        constraints.extend(
+            _get_instrument_exclusion_constraints(
+                labels=labels,
+                control_function=control_function,
+                aug_period_meas_types=aug_period_meas_types,
+            )
+        )
 
     return constraints
 

@@ -362,6 +362,7 @@ def test_resolve_control_function_expands_kappa_degree() -> None:
         CorrectionSpec(instruments=("sum_inv_paid_log",), kappa_degree=2)
     )
     info = _resolve_control_function(model)
+    assert info is not None
     expected = generate_kappa_terms(("health_mom", "health_kid"), max_degree=2)
     assert "cf ** 2" in expected
     assert info.kappa_terms["health_mom"] == expected
@@ -443,6 +444,31 @@ def test_resolve_control_function_rejects_model_with_no_state_factors() -> None:
     }
     model = ModelSpec(factors=factors, observed_factors=("z1",))
     with pytest.raises(ValueError, match="no state factors"):
+        _resolve_control_function(model)
+
+
+def test_resolve_control_function_rejects_instrument_in_custom_production() -> None:
+    from skillmodels.common.decorators import register_params  # noqa: PLC0415
+
+    @register_params(params=["constant", "health_mom", "sum_inv_paid_log"])
+    def f_leaky(health_mom: object, sum_inv_paid_log: object, params: dict) -> object:
+        return (
+            params["constant"]
+            + params["health_mom"] * health_mom
+            + params["sum_inv_paid_log"] * sum_inv_paid_log
+        )
+
+    factors = {
+        "health_mom": _fspec(transition_function=f_leaky),
+        "health_kid": _fspec(transition_function="linear"),
+        "ln_inv": _fspec(
+            is_endogenous=True,
+            transition_function="linear",
+            correction=CorrectionSpec(instruments=("sum_inv_paid_log",)),
+        ),
+    }
+    model = ModelSpec(factors=factors, observed_factors=("sum_inv_paid_log",))
+    with pytest.raises(ValueError, match="instrument"):
         _resolve_control_function(model)
 
 

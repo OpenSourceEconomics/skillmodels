@@ -80,6 +80,39 @@ def test_get_constraints_pins_kappa_to_zero_on_carry_forward_periods() -> None:
         assert meas_types[aug_period] == MeasurementType.STATES
 
 
+def test_get_constraints_pins_instrument_out_of_production() -> None:
+    # Built-in production transitions enumerate a free coefficient for every
+    # observed factor, including the excluded instrument; that coefficient must be
+    # pinned to 0 on the production (ENDOGENOUS) aug periods so the instrument
+    # cannot leak into production.
+    processed = _corr_model_processed()
+    constraints = get_constraints(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        anchoring_info=processed.anchoring,
+        normalizations=processed.normalizations,
+        endogenous_factors_info=processed.endogenous_factors_info,
+        bounds_distance=1e-8,
+    )
+    meas_types = processed.endogenous_factors_info.aug_periods_to_aug_period_meas_types
+    inst_pins = [
+        c
+        for c in constraints
+        if isinstance(c, FixedConstraintWithValue)
+        and isinstance(c.loc, tuple)
+        and c.loc[0] == "transition"
+        and "inv_z" in c.loc[3]
+        and meas_types[c.loc[1]] == MeasurementType.ENDOGENOUS_FACTORS
+    ]
+    assert inst_pins, "instrument coeffs must be pinned to 0 on production periods"
+    assert all(c.value == 0.0 for c in inst_pins)
+    for c in inst_pins:
+        assert isinstance(c.loc, tuple)
+        _category, _aug_period, target, _name2 = c.loc
+        assert target in ("fac1", "fac2")
+
+
 def _to_dict(c: om.constraints.Constraint) -> dict[str, Any]:
     """Convert a constraint object to a comparable dict for testing."""
     if isinstance(c, FixedConstraintWithValue):
