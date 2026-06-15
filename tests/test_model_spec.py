@@ -81,26 +81,33 @@ def test_from_dict_with_stagemap() -> None:
     assert spec.stagemap == (0,)
 
 
-def test_from_dict_correction_block_not_yet_supported() -> None:
-    d = _minimal_dict()
-    d["factors"]["f1"]["is_endogenous"] = True
-    d["factors"]["f1"]["correction"] = {"instruments": ["z1"]}
-    with pytest.raises(NotImplementedError, match="correction"):
-        ModelSpec.from_dict(d)
-
-
-def test_correction_spec_defaults_are_empty() -> None:
-    cf = CorrectionSpec()
+def test_correction_spec_defaults() -> None:
+    cf = CorrectionSpec(instruments=("z1",))
+    assert cf.instruments == ("z1",)
     assert cf.state_predictors == ()
-    assert cf.instruments == ()
     assert cf.targets == ()
-    assert dict(cf.kappa_terms) == {}
+    assert cf.kappa_degree is None  # None resolves to degree 1 downstream
+    assert cf.kappa_terms is None
+
+
+def test_correction_spec_requires_nonempty_instruments() -> None:
+    with pytest.raises(ValueError, match="instrument"):
+        CorrectionSpec(instruments=())
+
+
+def test_correction_spec_rejects_both_kappa_degree_and_kappa_terms() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        CorrectionSpec(
+            instruments=("z1",),
+            kappa_degree=2,
+            kappa_terms={"health_mom": ("cf",)},
+        )
 
 
 def test_correction_spec_stores_fields_and_makes_kappa_terms_immutable() -> None:
     cf = CorrectionSpec(
-        state_predictors=("health_mom", "health_kid"),
         instruments=("sum_inv_paid_log", "sum_inv_private_log"),
+        state_predictors=("health_mom", "health_kid"),
         targets=("health_mom", "health_kid"),
         kappa_terms={"health_mom": ("cf",), "health_kid": ("cf", "cf ** 2")},
     )
@@ -114,7 +121,7 @@ def test_correction_spec_stores_fields_and_makes_kappa_terms_immutable() -> None
 
 
 def test_correction_spec_is_frozen() -> None:
-    cf = CorrectionSpec()
+    cf = CorrectionSpec(instruments=("z1",))
     with pytest.raises(AttributeError):
         cf.targets = ("health_mom",)  # ty: ignore[invalid-assignment]
 
@@ -135,6 +142,43 @@ def test_factor_spec_accepts_correction() -> None:
         correction=cf,
     )
     assert spec.correction is cf
+
+
+def test_from_dict_with_correction_parses_and_auto_registers_instruments() -> None:
+    d = {
+        "factors": {
+            "skills": {"measurements": [["y1"]], "transition_function": "linear"},
+            "investment": {
+                "measurements": [["ln_inv"]],
+                "is_endogenous": True,
+                "transition_function": "linear",
+                "correction": {"instruments": ["iv1", "iv2"], "kappa_degree": 2},
+            },
+        },
+    }
+    model = ModelSpec.from_dict(d)
+    corr = model.factors["investment"].correction
+    assert corr is not None
+    assert corr.instruments == ("iv1", "iv2")
+    assert corr.kappa_degree == 2
+    # Instruments are auto-registered as observed factors.
+    assert model.observed_factors == ("iv1", "iv2")
+
+
+def test_with_correction_attaches_and_auto_registers_instruments() -> None:
+    plain = FactorSpec(measurements=(("y1",),))
+    inv = FactorSpec(measurements=(("ln_inv",),), is_endogenous=True)
+    model = ModelSpec(
+        factors={"skills": plain, "investment": inv},
+        observed_factors=("income",),
+    )
+    cf = CorrectionSpec(instruments=("income", "iv2"))
+
+    result = model.with_correction("investment", cf)
+
+    assert result.factors["investment"].correction is cf
+    # Instruments are auto-registered as observed factors, deduped against existing.
+    assert result.observed_factors == ("income", "iv2")
 
 
 def test_with_added_factor(model2) -> None:

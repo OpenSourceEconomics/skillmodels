@@ -8,6 +8,7 @@ import pytest
 from pandas.testing import assert_frame_equal
 
 from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.control_function import generate_kappa_terms
 from skillmodels.common.model_spec import CorrectionSpec, FactorSpec, ModelSpec
 from skillmodels.common.process_model import (
     _resolve_control_function,
@@ -356,6 +357,17 @@ def test_resolve_control_function_resolves_defaults() -> None:
     assert info.kappa_terms["health_kid"] == ("cf",)
 
 
+def test_resolve_control_function_expands_kappa_degree() -> None:
+    model = _corr_model(
+        CorrectionSpec(instruments=("sum_inv_paid_log",), kappa_degree=2)
+    )
+    info = _resolve_control_function(model)
+    expected = generate_kappa_terms(("health_mom", "health_kid"), max_degree=2)
+    assert "cf ** 2" in expected
+    assert info.kappa_terms["health_mom"] == expected
+    assert info.kappa_terms["health_kid"] == expected
+
+
 def test_resolve_control_function_preserves_explicit_fields() -> None:
     model = _corr_model(
         CorrectionSpec(
@@ -431,20 +443,6 @@ def test_resolve_control_function_rejects_model_with_no_state_factors() -> None:
     }
     model = ModelSpec(factors=factors, observed_factors=("z1",))
     with pytest.raises(ValueError, match="no state factors"):
-        _resolve_control_function(model)
-
-
-def test_resolve_control_function_requires_at_least_one_instrument() -> None:
-    factors = {
-        "health_mom": _fspec(transition_function="linear"),
-        "ln_inv": _fspec(
-            is_endogenous=True,
-            transition_function="linear",
-            correction=CorrectionSpec(),  # no instruments
-        ),
-    }
-    model = ModelSpec(factors=factors)
-    with pytest.raises(ValueError, match="instrument"):
         _resolve_control_function(model)
 
 

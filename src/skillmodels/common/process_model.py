@@ -19,6 +19,7 @@ from skillmodels.common.control_function import (
     build_kappa_addition_node,
     build_kappa_term_evaluators,
     build_prediction_node,
+    generate_kappa_terms,
 )
 from skillmodels.common.decorators import extract_params, jax_array_output
 from skillmodels.common.model_spec import FactorSpec, ModelSpec
@@ -527,13 +528,6 @@ def _resolve_control_function(model_spec: ModelSpec) -> ControlFunctionInfo | No
         )
         raise ValueError(msg)
 
-    if not spec.instruments:
-        msg = (
-            f"The correction on {investment_factor!r} needs at least one excluded "
-            "observed instrument; otherwise the control-function residual is "
-            "collinear with the production inputs and kappa is unidentified."
-        )
-        raise ValueError(msg)
     not_observed = tuple(
         i for i in spec.instruments if i not in model_spec.observed_factors
     )
@@ -557,7 +551,12 @@ def _resolve_control_function(model_spec: ModelSpec) -> ControlFunctionInfo | No
             "least one non-endogenous state factor as a target."
         )
         raise ValueError(msg)
-    kappa_terms = {target: spec.kappa_terms.get(target, ("cf",)) for target in targets}
+    if spec.kappa_terms is not None:
+        kappa_terms = {t: spec.kappa_terms.get(t, ("cf",)) for t in targets}
+    else:
+        degree = spec.kappa_degree if spec.kappa_degree is not None else 1
+        basis = generate_kappa_terms(state_factors, max_degree=degree)
+        kappa_terms = dict.fromkeys(targets, basis)
 
     return ControlFunctionInfo(
         investment_factor=investment_factor,

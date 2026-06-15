@@ -34,25 +34,40 @@ class CorrectionSpec:
     exactly one place regardless of which estimator runs.
     """
 
+    instruments: tuple[str, ...]
+    """Excluded observed factors entering the first-stage equation only and never
+    a production (target) equation, identifying `kappa`. Required (at least one);
+    auto-registered as observed factors by `ModelSpec.with_correction`."""
     state_predictors: tuple[str, ...] = ()
     """State factors entering the first-stage investment equation. Empty means
     all state factors; per-period presence is then handled downstream."""
-    instruments: tuple[str, ...] = ()
-    """Excluded observed factors. They enter the first-stage equation only and
-    never the production (target) equations, identifying `kappa`."""
     targets: tuple[str, ...] = ()
     """State factors whose production equation receives the additive `kappa *
     cf` term. Empty means all state factors."""
-    kappa_terms: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
-    """Per-target `cf` regressor names (e.g. `("cf",)` or
-    `("cf", "cf ** 2", "cf * health_mom")`). A target with no entry defaults to
-    `("cf",)`; interaction terms (for translog targets) must be listed
-    explicitly."""
+    kappa_degree: int | None = None
+    """Degree of the `cf`-interaction polynomial applied to every target (1 =
+    linear `cf`, 2 = the translog basis). `None` resolves to degree 1. Mutually
+    exclusive with `kappa_terms`."""
+    kappa_terms: Mapping[str, tuple[str, ...]] | None = None
+    """Expert per-target override of the `cf` regressor names (e.g. `("cf",)` or
+    `("cf", "cf ** 2", "cf * health_mom")`). Mutually exclusive with
+    `kappa_degree`; `None` means expand `kappa_degree`."""
 
     def __post_init__(self) -> None:  # noqa: D105
-        object.__setattr__(
-            self, "kappa_terms", ensure_containers_are_immutable(self.kappa_terms)
-        )
+        if not self.instruments:
+            msg = (
+                "CorrectionSpec needs at least one excluded observed instrument; "
+                "otherwise the control-function residual is collinear with the "
+                "production inputs and kappa is unidentified."
+            )
+            raise ValueError(msg)
+        if self.kappa_degree is not None and self.kappa_terms is not None:
+            msg = "kappa_degree and kappa_terms are mutually exclusive; set one."
+            raise ValueError(msg)
+        if self.kappa_terms is not None:
+            object.__setattr__(
+                self, "kappa_terms", ensure_containers_are_immutable(self.kappa_terms)
+            )
 
 
 @beartype_init(MODEL_SPEC_CONF)
@@ -177,15 +192,24 @@ class ModelSpec:
 
         """
         factors = {}
+        auto_instruments: list[str] = []
         for name, spec in d["factors"].items():
+            correction = None
             if "correction" in spec:
-                msg = (
-                    f"Factor {name!r} declares a 'correction' block, but parsing a "
-                    "control-function correction from a dict/YAML spec is not yet "
-                    "supported. Build the model via the FactorSpec constructor and "
-                    "pass a CorrectionSpec on the investment factor."
+                cd = spec["correction"]
+                kt = cd.get("kappa_terms")
+                correction = CorrectionSpec(
+                    instruments=tuple(cd["instruments"]),
+                    state_predictors=tuple(cd.get("state_predictors", ())),
+                    targets=tuple(cd.get("targets", ())),
+                    kappa_degree=cd.get("kappa_degree"),
+                    kappa_terms=(
+                        {t: tuple(v) for t, v in kt.items()} if kt is not None else None
+                    ),
                 )
-                raise NotImplementedError(msg)
+                auto_instruments.extend(
+                    i for i in correction.instruments if i not in auto_instruments
+                )
             normalizations = None
             if "normalizations" in spec:
                 nd = spec["normalizations"]
@@ -203,6 +227,7 @@ class ModelSpec:
                 transition_function=spec.get("transition_function"),
                 has_production_shock=spec.get("has_production_shock", True),
                 has_initial_distribution=spec.get("has_initial_distribution", True),
+                correction=correction,
             )
 
         anchoring = None
@@ -211,9 +236,13 @@ class ModelSpec:
 
         stagemap = d.get("stagemap")
 
+        # Auto-register control-function instruments as observed factors (deduped).
+        observed = tuple(d.get("observed_factors", []))
+        observed += tuple(i for i in auto_instruments if i not in observed)
+
         return cls(
             factors=factors,
-            observed_factors=tuple(d.get("observed_factors", [])),
+            observed_factors=observed,
             controls=tuple(d.get("controls", [])),
             stagemap=tuple(stagemap) if stagemap is not None else None,
             anchoring=anchoring,
@@ -319,6 +348,32 @@ class ModelSpec:
             for name, spec in self.factors.items()
         }
         return self._replace(factors=new_factors)
+
+    def with_correction(
+        self,
+        factor_name: str,
+        correction: CorrectionSpec,
+    ) -> Self:
+        """Return a new ModelSpec attaching a control-function correction.
+
+        Attaches `correction` to `factor_name` and auto-registers its instruments
+        as observed factors (deduped against existing ones), so instruments are
+        declared exactly once.
+
+        Args:
+            factor_name: The endogenous investment factor to correct.
+            correction: The control-function specification.
+
+        Returns:
+            New ModelSpec with the correction attached and instruments registered.
+
+        """
+        corrected = replace(self.factors[factor_name], correction=correction)
+        new_factors = {**self.factors, factor_name: corrected}
+        new_observed = self.observed_factors + tuple(
+            i for i in correction.instruments if i not in self.observed_factors
+        )
+        return self._replace(factors=new_factors, observed_factors=new_observed)
 
     def with_anchoring(
         self,
