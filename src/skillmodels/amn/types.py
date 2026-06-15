@@ -51,13 +51,17 @@ class AMNEstimationOptions:
     `NotImplementedError`."""
 
     investment_endogeneity: bool
-    """The AMN eq.-8 control-function correction is NOT yet implemented.
-    Defaults to False (estimate production/transition parameters without the
-    correction). For a model with endogenous (investment) factors, passing
-    True makes Stage 3 raise NotImplementedError -- it is an explicit opt-in to
-    the (currently unavailable) correction, not the default. Ignored when the
-    model has no endogenous (investment) factors. Note: `estimate_af` calls
-    `estimate_amn` for start values and relies on this default being False."""
+    """Whether to apply the AMN eq.-7-8 investment control-function correction
+    (AF Sec. 3.5). Defaults to False (estimate production/transition parameters
+    WITHOUT the correction). For a model with endogenous (investment) factors,
+    passing True opts into the control-function pass in Stage 3: a first-stage
+    investment equation is fitted per investment factor and its residual is
+    added as a `kappa*cf` covariate to each state factor's production
+    regression (with the present latent factors as inputs and the observed
+    factors as excluded instruments). Ignored when the model has no endogenous
+    (investment) factors. The default stays False because `estimate_af` calls
+    `estimate_amn` for start values and the AF likelihood implements only
+    kappa=0; opt in at the application site."""
 
     allow_ces_overnormalization: bool
     """Opt out of the CES minimal-normalization guard. When True, extra
@@ -242,9 +246,13 @@ class ProductionFitResult:
     params-DataFrame format (4-level MultiIndex)."""
 
     investment_params: pd.DataFrame
-    """Investment-equation parameters (eq. 7), 4-level MultiIndex. Currently
-    always empty: the AMN eq.-8 control-function correction is not yet
-    implemented, so no investment-equation parameters are produced."""
+    """Investment-equation parameters (eq. 7), 4-level MultiIndex. Populated
+    under the control-function correction (`investment_endogeneity=True` with
+    endogenous factors) with the first-stage `investment_eq` coefficients and
+    `investment_sds` residual SD per investment factor and period; empty
+    otherwise. When the correction runs, each state factor's production shock
+    SD (`shock_sds`) is the corrected SD(eps_C) and the production block gains
+    a `cf` row carrying kappa_t."""
 
     n_draws: int
     """Number of simulated latent-factor trajectories used."""
