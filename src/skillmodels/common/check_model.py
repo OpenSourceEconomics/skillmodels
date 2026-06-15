@@ -1,6 +1,7 @@
 """Functions to validate model specifications."""
 
 from collections.abc import Mapping
+from itertools import combinations
 from typing import Any
 
 import numpy as np
@@ -144,20 +145,49 @@ def _check_measurements(
 def _check_no_overlap_in_measurements_of_states_and_inv(
     model_spec: ModelSpec, labels: Labels
 ) -> list[str]:
+    """Reject measurement-name collisions across latent factors of split halves.
+
+    With augmented periods, state factors are measured at the even aug-periods and
+    endogenous factors at the odd ones. A measurement name shared by a state and an
+    endogenous factor (or by two endogenous factors, e.g. a duplicate-measurement
+    twin) collides their level/prediction measurement systems. State-vs-state
+    sharing is left alone (legitimate cross-loadings).
+    """
     report = []
     for period in labels.periods:
-        meas: dict[str, set] = {}
+        aug_periods = [
+            aug_period
+            for aug_period, p in labels.aug_periods_to_periods.items()
+            if p == period
+        ]
+        state_meas: dict[str, set[str]] = {}
+        endogenous_meas: dict[str, set[str]] = {}
         for factor in labels.latent_factors:
             fspec = model_spec.factors[factor]
-            if fspec.is_endogenous:
-                meas["endogenous_factors"] = set(fspec.measurements[period])
-            else:
-                meas["states"] = set(fspec.measurements[period])
-        if overlap := meas["states"].intersection(meas["endogenous_factors"]):
-            report.append(
-                "Measurements for exogenous and endogenous latent factors must not "
-                f"overlap.\n\nCheck measurements {overlap} in period {period}.",
-            )
+            names = {
+                name
+                for aug_period in aug_periods
+                for name in fspec.measurements[aug_period]
+            }
+            target = endogenous_meas if fspec.is_endogenous else state_meas
+            target[factor] = names
+
+        pairs = [
+            (s_factor, s_names, e_factor, e_names)
+            for s_factor, s_names in state_meas.items()
+            for e_factor, e_names in endogenous_meas.items()
+        ]
+        pairs += [
+            (f1, n1, f2, n2)
+            for (f1, n1), (f2, n2) in combinations(endogenous_meas.items(), 2)
+        ]
+        for factor_a, names_a, factor_b, names_b in pairs:
+            if overlap := names_a & names_b:
+                report.append(
+                    "Measurements for distinct latent factors must not overlap.\n\n"
+                    f"Check measurements {overlap} shared by {factor_a} and "
+                    f"{factor_b} in period {period}.",
+                )
     return report
 
 

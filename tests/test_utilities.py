@@ -120,7 +120,7 @@ def test_switch_linear_and_translog_back_and_forth(model2) -> None:
         assert orig.normalizations == back.normalizations
         assert orig.transition_function == back.transition_function
         assert orig.is_endogenous == back.is_endogenous
-        assert orig.is_correction == back.is_correction
+        assert orig.correction == back.correction
 
 
 def test_reduce_params_via_extract_factors(model2) -> None:

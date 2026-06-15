@@ -3,6 +3,7 @@
 import pandas as pd
 
 from skillmodels.common.types import (
+    ControlFunctionInfo,
     Dimensions,
     EndogenousFactorsInfo,
     Labels,
@@ -62,6 +63,15 @@ def get_params_index(
         aug_periods=labels.aug_periods,
         has_endogenous_factors=endogenous_factors_info.has_endogenous_factors,
     )
+    if endogenous_factors_info.control_function is not None:
+        ind_tups += get_investment_eq_index_tuples(
+            aug_periods=labels.aug_periods,
+            control_function=endogenous_factors_info.control_function,
+        )
+        ind_tups += get_kappa_index_tuples(
+            aug_periods=labels.aug_periods,
+            control_function=endogenous_factors_info.control_function,
+        )
 
     return pd.MultiIndex.from_tuples(
         ind_tups,
@@ -144,6 +154,60 @@ def get_shock_sds_index_tuples(
     for aug_period in aug_periods[:end]:
         for factor in factors:
             ind_tups.append(("shock_sds", aug_period, factor, "-"))
+    return ind_tups
+
+
+def get_investment_eq_index_tuples(
+    aug_periods: tuple[int, ...],
+    control_function: ControlFunctionInfo,
+) -> list[tuple[str, int, str, str]]:
+    """Index tuples for the first-stage investment-equation coefficients.
+
+    One canonical block keyed by the investment factor (`name1`). The
+    predictor order (`name2`) is the single source of truth shared with the
+    prediction DAG node: state predictors, then excluded instruments, then the
+    constant. A control function only exists for endogenous models, so the
+    rows always live on `aug_periods[:-2]`.
+
+    Args:
+        aug_periods: The augmented periods of the model.
+        control_function: The resolved control-function configuration.
+
+    """
+    inv = control_function.investment_factor
+    predictors = (
+        *control_function.state_predictors,
+        *control_function.instruments,
+        "constant",
+    )
+    ind_tups = []
+    for aug_period in aug_periods[:-2]:
+        for predictor in predictors:
+            ind_tups.append(("investment_eq", aug_period, inv, predictor))
+    return ind_tups
+
+
+def get_kappa_index_tuples(
+    aug_periods: tuple[int, ...],
+    control_function: ControlFunctionInfo,
+) -> list[tuple[str, int, str, str]]:
+    """Index tuples for the control-function loadings (kappa).
+
+    Each target factor receives one `("kappa", aug_period, target, term)` row
+    per cf regressor term, free per period (a dedicated category, so the
+    transition-stage constraints do not touch it). A control function only
+    exists for endogenous models, so the rows live on `aug_periods[:-2]`.
+
+    Args:
+        aug_periods: The augmented periods of the model.
+        control_function: The resolved control-function configuration.
+
+    """
+    ind_tups = []
+    for aug_period in aug_periods[:-2]:
+        for target, terms in control_function.kappa_terms.items():
+            for term in terms:
+                ind_tups.append(("kappa", aug_period, target, term))
     return ind_tups
 
 

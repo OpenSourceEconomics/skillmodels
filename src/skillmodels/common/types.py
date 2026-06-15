@@ -92,8 +92,7 @@ class FactorType(Enum):
     """Type of a latent factor in the model."""
 
     STATE = auto()  # Regular state factor
-    ENDOGENOUS = auto()  # Endogenous factor (not a correction)
-    CORRECTION = auto()  # Correction factor (is_endogenous=True, is_correction=True)
+    ENDOGENOUS = auto()  # Endogenous (investment) factor
 
 
 class MeasurementType(Enum):
@@ -249,39 +248,45 @@ class FactorInfo:
 
     @property
     def is_endogenous(self) -> bool:
-        """Whether the factor is endogenous (ENDOGENOUS or CORRECTION)."""
-        return self.factor_type in (FactorType.ENDOGENOUS, FactorType.CORRECTION)
-
-    @property
-    def is_correction(self) -> bool:
-        """Whether the factor is a correction factor."""
-        return self.factor_type == FactorType.CORRECTION
+        """Whether the factor is endogenous."""
+        return self.factor_type == FactorType.ENDOGENOUS
 
     @classmethod
-    def from_flags(
-        cls, *, is_endogenous: bool = False, is_correction: bool = False
-    ) -> FactorInfo:
+    def from_flags(cls, *, is_endogenous: bool = False) -> FactorInfo:
         """Create FactorInfo from boolean flags.
 
         Args:
             is_endogenous: Whether the factor is endogenous.
-            is_correction: Whether the factor is a correction (must be endogenous).
 
         Returns:
             FactorInfo with the appropriate FactorType.
 
-        Raises:
-            ValueError: If is_correction is True but is_endogenous is False.
-
         """
-        if is_correction and not is_endogenous:
-            msg = "A correction factor must also be endogenous"
-            raise ValueError(msg)
-        if is_correction:
-            return cls(factor_type=FactorType.CORRECTION)
-        if is_endogenous:
-            return cls(factor_type=FactorType.ENDOGENOUS)
-        return cls(factor_type=FactorType.STATE)
+        factor_type = FactorType.ENDOGENOUS if is_endogenous else FactorType.STATE
+        return cls(factor_type=factor_type)
+
+
+@dataclass(frozen=True)
+class ControlFunctionInfo:
+    """Resolved control-function configuration for the endogenous investment.
+
+    Single source of truth shared by the CHS (Kalman-MLE) and AMN
+    (simulate-and-regress) estimators. Built by resolving the `CorrectionSpec`
+    declared on the endogenous investment `FactorSpec`: empty `state_predictors`
+    and `targets` expand to all state factors, and each target's `kappa_terms`
+    default to `("cf",)`.
+    """
+
+    investment_factor: str
+    """The endogenous factor whose control-function residual `cf` is formed."""
+    state_predictors: tuple[str, ...]
+    """State factors entering the contemporaneous first-stage equation."""
+    instruments: tuple[str, ...]
+    """Excluded observed factors entering the first stage only."""
+    targets: tuple[str, ...]
+    """State factors whose production equation receives the `kappa * cf` term."""
+    kappa_terms: MappingProxyType[str, tuple[str, ...]]
+    """Per-target `cf` regressor names (e.g. `("cf",)`)."""
 
 
 @dataclass(frozen=True)
@@ -297,6 +302,9 @@ class EndogenousFactorsInfo:
     """Return the augmented period indices for a given original period."""
     factor_info: MappingProxyType[str, FactorInfo]
     """Mapping from factor name to its `FactorInfo`."""
+    control_function: ControlFunctionInfo | None = None
+    """Resolved control-function configuration, or `None` if no factor declares
+    a `correction`."""
 
 
 @beartype_init(MODEL_SPEC_CONF)
@@ -394,6 +402,15 @@ class ParsingInfo:
     """Whether to ignore constant when anchoring."""
     has_endogenous_factors: bool
     """Whether the model has endogenous factors."""
+    investment_eq: Array | slice = slice(0, 0)
+    """Slice for the first-stage investment-equation coefficients (empty unless
+    a control function is present)."""
+    investment_factor: str | None = None
+    """The investment factor carrying the control function, or `None`."""
+    kappa: MappingProxyType[str, Array | slice] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    """Mapping from target factor to its control-function-loading (kappa) slice."""
 
 
 @dataclass(frozen=True)

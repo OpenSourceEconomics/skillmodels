@@ -4,6 +4,7 @@ import pytest
 
 from skillmodels.common.model_spec import (
     AnchoringSpec,
+    CorrectionSpec,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -78,6 +79,62 @@ def test_from_dict_with_stagemap() -> None:
     d["stagemap"] = [0]
     spec = ModelSpec.from_dict(d)
     assert spec.stagemap == (0,)
+
+
+def test_from_dict_correction_block_not_yet_supported() -> None:
+    d = _minimal_dict()
+    d["factors"]["f1"]["is_endogenous"] = True
+    d["factors"]["f1"]["correction"] = {"instruments": ["z1"]}
+    with pytest.raises(NotImplementedError, match="correction"):
+        ModelSpec.from_dict(d)
+
+
+def test_correction_spec_defaults_are_empty() -> None:
+    cf = CorrectionSpec()
+    assert cf.state_predictors == ()
+    assert cf.instruments == ()
+    assert cf.targets == ()
+    assert dict(cf.kappa_terms) == {}
+
+
+def test_correction_spec_stores_fields_and_makes_kappa_terms_immutable() -> None:
+    cf = CorrectionSpec(
+        state_predictors=("health_mom", "health_kid"),
+        instruments=("sum_inv_paid_log", "sum_inv_private_log"),
+        targets=("health_mom", "health_kid"),
+        kappa_terms={"health_mom": ("cf",), "health_kid": ("cf", "cf ** 2")},
+    )
+    assert cf.state_predictors == ("health_mom", "health_kid")
+    assert cf.instruments == ("sum_inv_paid_log", "sum_inv_private_log")
+    assert cf.targets == ("health_mom", "health_kid")
+    assert cf.kappa_terms["health_kid"] == ("cf", "cf ** 2")
+    # kappa_terms must be converted to an immutable mapping.
+    with pytest.raises(TypeError):
+        cf.kappa_terms["health_mom"] = ("cf", "cf ** 2")  # ty: ignore[invalid-assignment]
+
+
+def test_correction_spec_is_frozen() -> None:
+    cf = CorrectionSpec()
+    with pytest.raises(AttributeError):
+        cf.targets = ("health_mom",)  # ty: ignore[invalid-assignment]
+
+
+def test_factor_spec_correction_defaults_to_none() -> None:
+    spec = FactorSpec(measurements=(("y1",),))
+    assert spec.correction is None
+
+
+def test_factor_spec_accepts_correction() -> None:
+    cf = CorrectionSpec(
+        instruments=("z1",),
+        targets=("health_mom",),
+    )
+    spec = FactorSpec(
+        measurements=(("ln_inv",),),
+        is_endogenous=True,
+        correction=cf,
+    )
+    assert spec.correction is cf
 
 
 def test_with_added_factor(model2) -> None:

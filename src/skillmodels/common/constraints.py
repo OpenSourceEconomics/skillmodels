@@ -588,6 +588,30 @@ def _get_constraints_for_augmented_periods(
                 )
             )
 
+    control_function = endogenous_factors_info.control_function
+    if control_function is not None:
+        # The control-function loading (kappa) only acts where a target factor's
+        # production transition runs. On the target's carry-forward aug periods the
+        # base transition is pinned to identity, so kappa must be pinned to 0 there
+        # too (otherwise kappa * cf corrupts the carried-forward state). Targets are
+        # state factors, so their carry-forward periods are the STATES aug periods,
+        # truncated by [:-1] for the same index-range reason as the loops above.
+        aug_period_meas_types = (
+            endogenous_factors_info.aug_periods_to_aug_period_meas_types
+        )
+        carry_forward_aug_periods = [
+            k for k, v in aug_period_meas_types.items() if v == MeasurementType.STATES
+        ][:-1]
+        for target in control_function.targets:
+            for aug_period in carry_forward_aug_periods:
+                for term in control_function.kappa_terms[target]:
+                    constraints.append(
+                        FixedConstraintWithValue(
+                            loc=("kappa", aug_period, target, term),
+                            value=0.0,
+                        )
+                    )
+
     return constraints
 
 

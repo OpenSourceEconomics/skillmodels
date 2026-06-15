@@ -518,7 +518,6 @@ def _fit_period_production(
     *,
     factor_to_function_name: dict[str, str],
     investment_factors: list[str],
-    correction_factors: list[str],
     context: _ProductionContext,
     run_cf: bool,
 ) -> list[tuple[str, int, str, str, float]]:
@@ -527,7 +526,7 @@ def _fit_period_production(
     Under `run_cf` the production inputs are the present latent factors only
     (observed factors are the excluded instruments), and the control-function
     residual is injected as a `kappa*cf` covariate into *state* outcomes only
-    -- not the investment factor's own transition nor a correction factor's.
+    -- not the investment factor's own transition.
     Without `run_cf` the regressors are all present factors (legacy behaviour).
 
     Return:
@@ -551,11 +550,7 @@ def _fit_period_production(
             continue
         y = panel[target_col].to_numpy()
 
-        inject_cf = (
-            run_cf
-            and factor not in investment_factors
-            and factor not in correction_factors
-        )
+        inject_cf = run_cf and factor not in investment_factors
         cf: np.ndarray | None = None
         if inject_cf and context.cf_by_factor:
             cf = next(iter(context.cf_by_factor.values()))
@@ -621,14 +616,16 @@ def simulate_and_regress(
     endog_info = processed_model.endogenous_factors_info
     run_cf = investment_endogeneity and endog_info.has_endogenous_factors
 
-    investment_factors = [
-        f
-        for f, info in endog_info.factor_info.items()
-        if info.is_endogenous and not info.is_correction
-    ]
-    correction_factors = [
-        f for f, info in endog_info.factor_info.items() if info.is_correction
-    ]
+    control_function = endog_info.control_function
+    if run_cf and control_function is None:
+        msg = (
+            "investment_endogeneity=True requires a CorrectionSpec declaring the "
+            "control function on the endogenous investment factor."
+        )
+        raise ValueError(msg)
+    investment_factors = (
+        [control_function.investment_factor] if control_function is not None else []
+    )
 
     panel = _draw_factor_panel(structural, mixture_weights, n_draws=n_draws, seed=seed)
 
@@ -704,7 +701,6 @@ def simulate_and_regress(
                 model_spec,
                 factor_to_function_name=factor_to_function_name,
                 investment_factors=investment_factors,
-                correction_factors=correction_factors,
                 context=context,
                 run_cf=run_cf,
             )

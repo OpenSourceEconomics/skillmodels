@@ -1,11 +1,13 @@
 """Tests for params index."""
 
+from dataclasses import replace
 from types import MappingProxyType
 
 import pandas as pd
 import pytest
 
 from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.model_spec import CorrectionSpec
 from skillmodels.common.params_index import (
     get_control_params_index_tuples,
     get_initial_cholcovs_index_tuples,
@@ -20,6 +22,70 @@ from skillmodels.common.params_index import (
 from skillmodels.common.process_model import process_model
 from skillmodels.common.types import TransitionInfo
 from skillmodels.test_data.model2 import MODEL2
+
+
+def _corr_model_processed():
+    """Process MODEL2 with fac3 endogenous + a control-function correction."""
+    fac3 = MODEL2.factors["fac3"]
+    corr = CorrectionSpec(instruments=("inv_z",))
+    new_fac3 = replace(fac3, is_endogenous=True, correction=corr)
+    new_factors = dict(MODEL2.factors) | {"fac3": new_fac3}
+    model = MODEL2._replace(factors=new_factors)._replace(stagemap=None)
+    model = model._replace(observed_factors=("inv_z",))
+    return process_model(model)
+
+
+def test_params_index_includes_investment_eq_rows() -> None:
+    processed = _corr_model_processed()
+    index = get_params_index(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        transition_info=processed.transition_info,
+        endogenous_factors_info=processed.endogenous_factors_info,
+    )
+    df = index.to_frame(index=False)
+    inv_eq = df[df["category"] == "investment_eq"]
+    expected_periods = list(processed.labels.aug_periods[:-2])
+
+    # name1 is always the investment factor.
+    assert set(inv_eq["name1"]) == {"fac3"}
+    # Predictors = state_predictors (fac1, fac2) + instruments (inv_z) + constant.
+    assert set(inv_eq["name2"]) == {"fac1", "fac2", "inv_z", "constant"}
+    # Rows live on aug_periods[:-2] only (endogenous truncation).
+    assert sorted(inv_eq["aug_period"].unique()) == expected_periods
+    assert len(inv_eq) == len(expected_periods) * 4
+    # SD(eta_I) is NOT a free parameter in the CHS path (the contemporaneous
+    # first-stage residual variance is implied by the state covariance).
+    assert "investment_sds" not in set(df["category"])
+
+
+def test_params_index_includes_kappa_rows() -> None:
+    processed = _corr_model_processed()
+    index = get_params_index(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        transition_info=processed.transition_info,
+        endogenous_factors_info=processed.endogenous_factors_info,
+    )
+    df = index.to_frame(index=False)
+    kappa = df[df["category"] == "kappa"]
+    expected_periods = list(processed.labels.aug_periods[:-2])
+
+    # Targets default to the state factors fac1, fac2; default kappa term is "cf".
+    assert set(kappa["name1"]) == {"fac1", "fac2"}
+    assert set(kappa["name2"]) == {"cf"}
+    assert sorted(kappa["aug_period"].unique()) == expected_periods
+    # one ("kappa", period, target, "cf") row per (period, target)
+    assert len(kappa) == len(expected_periods) * 2
+
+
+def test_params_index_no_investment_rows_without_correction(model2_inputs) -> None:
+    index = get_params_index(**model2_inputs)
+    cats = set(index.get_level_values("category"))
+    assert "investment_eq" not in cats
+    assert "kappa" not in cats
 
 
 @pytest.fixture

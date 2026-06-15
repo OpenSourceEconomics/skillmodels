@@ -248,17 +248,11 @@ def get_transition_plots(
                 "(the last period has no transition).",
             )
 
-    if (
-        include_correction_factors
-        or not processed_model.endogenous_factors_info.has_endogenous_factors
-    ):
-        latent_factors = processed_model.labels.latent_factors
-    else:
-        latent_factors = [
-            lf
-            for lf in processed_model.labels.latent_factors
-            if not processed_model.endogenous_factors_info.factor_info[lf].is_correction
-        ]
+    # `include_correction_factors` is a deprecated no-op: correction factors are
+    # no longer separate measured latent twins (the control function is a
+    # deterministic DAG node), so there is nothing to filter out.
+    _ = include_correction_factors
+    latent_factors = processed_model.labels.latent_factors
     all_factors = processed_model.labels.all_factors
 
     states = _normalize_states_columns(
@@ -272,7 +266,7 @@ def get_transition_plots(
         params=params,
         states=states,
         state_ranges=state_ranges,
-        latent_factors=latent_factors,  # ty: ignore[invalid-argument-type]
+        latent_factors=latent_factors,
         all_factors=all_factors,
         quantiles_of_other_factors=quantiles_of_other_factors,
         periods=periods_list,

@@ -15,8 +15,10 @@ jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 with contextlib.suppress(ImportError):
     import pdbp  # noqa: F401
 
+from skillmodels.common.control_function import generate_kappa_terms  # noqa: E402
 from skillmodels.common.model_spec import (  # noqa: E402
     AnchoringSpec,
+    CorrectionSpec,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -24,7 +26,9 @@ from skillmodels.common.model_spec import (  # noqa: E402
 
 __all__ = [
     "AnchoringSpec",
+    "CorrectionSpec",
     "FactorSpec",
     "ModelSpec",
     "Normalizations",
+    "generate_kappa_terms",
 ]

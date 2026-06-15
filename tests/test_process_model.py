@@ -8,9 +8,17 @@ import pytest
 from pandas.testing import assert_frame_equal
 
 from skillmodels.common.config import TEST_DATA_DIR
-from skillmodels.common.model_spec import FactorSpec
-from skillmodels.common.process_model import get_has_endogenous_factors, process_model
-from skillmodels.common.types import Normalizations, TransitionInfo
+from skillmodels.common.model_spec import CorrectionSpec, FactorSpec, ModelSpec
+from skillmodels.common.process_model import (
+    _resolve_control_function,
+    get_has_endogenous_factors,
+    process_model,
+)
+from skillmodels.common.types import (
+    ControlFunctionInfo,
+    Normalizations,
+    TransitionInfo,
+)
 from skillmodels.test_data.model2 import MODEL2
 
 
@@ -302,27 +310,170 @@ def test_model_has_endogenous_factors_not_specified() -> None:
     assert not get_has_endogenous_factors(factors)
 
 
-def test_get_has_endogenous_factors_wrong_constellation() -> None:
-    factors = {"a": _fspec(is_endogenous=False, is_correction=True)}
-    with pytest.raises(ValueError, match="is_endogenous"):
-        get_has_endogenous_factors(factors)
-
-
 def test_get_has_endogenous_factors_indeed() -> None:
     factors = {
-        "a": _fspec(is_endogenous=True, is_correction=False),
-        "b": _fspec(is_endogenous=False, is_correction=False),
+        "a": _fspec(is_endogenous=True),
+        "b": _fspec(is_endogenous=False),
     }
     assert get_has_endogenous_factors(factors)
 
 
-def test_get_has_endogenous_factors_and_correction() -> None:
+def _corr_model(correction: CorrectionSpec) -> ModelSpec:
+    """Two state factors + one endogenous investment factor carrying a correction."""
     factors = {
-        "a": _fspec(is_endogenous=True, is_correction=False),
-        "b": _fspec(is_endogenous=False, is_correction=False),
-        "c": _fspec(is_endogenous=True, is_correction=True),
+        "health_mom": _fspec(transition_function="linear"),
+        "health_kid": _fspec(transition_function="linear"),
+        "ln_inv": _fspec(
+            is_endogenous=True,
+            transition_function="linear",
+            correction=correction,
+        ),
     }
-    assert get_has_endogenous_factors(factors)
+    return ModelSpec(
+        factors=factors,
+        observed_factors=("sum_inv_paid_log", "sum_inv_private_log"),
+    )
+
+
+def test_resolve_control_function_returns_none_without_correction() -> None:
+    model = ModelSpec(factors={"a": _fspec(transition_function="linear")})
+    assert _resolve_control_function(model) is None
+
+
+def test_resolve_control_function_resolves_defaults() -> None:
+    model = _corr_model(
+        CorrectionSpec(instruments=("sum_inv_paid_log", "sum_inv_private_log"))
+    )
+    info = _resolve_control_function(model)
+    assert isinstance(info, ControlFunctionInfo)
+    assert info.investment_factor == "ln_inv"
+    # Empty predictors/targets default to all state factors.
+    assert info.state_predictors == ("health_mom", "health_kid")
+    assert info.targets == ("health_mom", "health_kid")
+    assert info.instruments == ("sum_inv_paid_log", "sum_inv_private_log")
+    # Each target with no explicit kappa_terms defaults to ("cf",).
+    assert info.kappa_terms["health_mom"] == ("cf",)
+    assert info.kappa_terms["health_kid"] == ("cf",)
+
+
+def test_resolve_control_function_preserves_explicit_fields() -> None:
+    model = _corr_model(
+        CorrectionSpec(
+            state_predictors=("health_mom",),
+            instruments=("sum_inv_paid_log",),
+            targets=("health_kid",),
+            kappa_terms={"health_kid": ("cf", "cf ** 2")},
+        )
+    )
+    info = _resolve_control_function(model)
+    assert info is not None
+    assert info.state_predictors == ("health_mom",)
+    assert info.targets == ("health_kid",)
+    assert info.kappa_terms["health_kid"] == ("cf", "cf ** 2")
+    # Targets not listed get no kappa block.
+    assert "health_mom" not in info.kappa_terms
+
+
+def test_resolve_control_function_rejects_multiple_investment_factors() -> None:
+    cf = CorrectionSpec(instruments=("sum_inv_paid_log",))
+    factors = {
+        "health_mom": _fspec(transition_function="linear"),
+        "ln_inv_a": _fspec(
+            is_endogenous=True, transition_function="linear", correction=cf
+        ),
+        "ln_inv_b": _fspec(
+            is_endogenous=True, transition_function="linear", correction=cf
+        ),
+    }
+    model = ModelSpec(factors=factors, observed_factors=("sum_inv_paid_log",))
+    with pytest.raises(NotImplementedError, match="one investment factor"):
+        _resolve_control_function(model)
+
+
+def test_process_model_wires_control_function_through_augmentation() -> None:
+    """The resolved control function must survive endogenous-period augmentation.
+
+    Regression: `_augment_periods_for_endogenous_factors` rebuilds each
+    `FactorSpec` and previously omitted `correction`, silently resetting it to
+    `None`. Because augmentation runs exactly when endogenous factors exist (the
+    only case that can carry a correction), `control_function` was always `None`
+    in the real `process_model` pipeline. The resolver unit tests missed it by
+    calling `_resolve_control_function` on the un-augmented spec directly.
+    """
+    fac3 = MODEL2.factors["fac3"]
+    corr = CorrectionSpec(instruments=("inv_z",))
+    new_fac3 = replace(fac3, is_endogenous=True, correction=corr)
+    new_factors = dict(MODEL2.factors) | {"fac3": new_fac3}
+    model = MODEL2._replace(factors=new_factors)._replace(stagemap=None)
+    # The instrument must be a declared observed factor (the prediction node
+    # resolves its position in all_factors).
+    model = model._replace(observed_factors=("inv_z",))
+
+    processed = process_model(model)
+    cf_info = processed.endogenous_factors_info.control_function
+    assert isinstance(cf_info, ControlFunctionInfo)
+    assert cf_info.investment_factor == "fac3"
+    assert cf_info.instruments == ("inv_z",)
+    # The endogenous investment is not a predictor/target of itself; the state
+    # factors fac1/fac2 are the defaults.
+    assert "fac3" not in cf_info.targets
+    assert set(cf_info.targets) == {"fac1", "fac2"}
+    assert set(cf_info.state_predictors) == {"fac1", "fac2"}
+
+
+def test_resolve_control_function_rejects_model_with_no_state_factors() -> None:
+    cf = CorrectionSpec(instruments=("z1",))
+    factors = {
+        "ln_inv": _fspec(
+            is_endogenous=True, transition_function="linear", correction=cf
+        ),
+        "other_inv": _fspec(is_endogenous=True, transition_function="linear"),
+    }
+    model = ModelSpec(factors=factors, observed_factors=("z1",))
+    with pytest.raises(ValueError, match="no state factors"):
+        _resolve_control_function(model)
+
+
+def test_resolve_control_function_requires_at_least_one_instrument() -> None:
+    factors = {
+        "health_mom": _fspec(transition_function="linear"),
+        "ln_inv": _fspec(
+            is_endogenous=True,
+            transition_function="linear",
+            correction=CorrectionSpec(),  # no instruments
+        ),
+    }
+    model = ModelSpec(factors=factors)
+    with pytest.raises(ValueError, match="instrument"):
+        _resolve_control_function(model)
+
+
+def test_resolve_control_function_rejects_instrument_not_observed() -> None:
+    factors = {
+        "health_mom": _fspec(transition_function="linear"),
+        "ln_inv": _fspec(
+            is_endogenous=True,
+            transition_function="linear",
+            correction=CorrectionSpec(instruments=("not_observed",)),
+        ),
+    }
+    model = ModelSpec(factors=factors, observed_factors=("sum_inv_paid_log",))
+    with pytest.raises(ValueError, match="observed"):
+        _resolve_control_function(model)
+
+
+def test_resolve_control_function_rejects_correction_on_non_endogenous() -> None:
+    factors = {
+        "health_mom": _fspec(transition_function="linear"),
+        "ln_inv": _fspec(
+            is_endogenous=False,
+            transition_function="linear",
+            correction=CorrectionSpec(instruments=("sum_inv_paid_log",)),
+        ),
+    }
+    model = ModelSpec(factors=factors, observed_factors=("sum_inv_paid_log",))
+    with pytest.raises(ValueError, match="endogenous"):
+        _resolve_control_function(model)
 
 
 def test_augmented_factor_spec_forwards_optional_flags() -> None:
@@ -341,11 +492,13 @@ def test_augmented_factor_spec_forwards_optional_flags() -> None:
     )
 
     fac3 = MODEL2.factors["fac3"]
+    corr = CorrectionSpec(instruments=("inv_z",))
     custom_fac3 = replace(
         fac3,
         is_endogenous=True,
         has_production_shock=False,
         has_initial_distribution=False,
+        correction=corr,
     )
     new_factors = dict(MODEL2.factors) | {"fac3": custom_fac3}
     model = MODEL2._replace(factors=new_factors)._replace(stagemap=None)
@@ -360,3 +513,5 @@ def test_augmented_factor_spec_forwards_optional_flags() -> None:
     assert aug_fac3.has_initial_distribution is False
     # Sanity: the explicitly-set is_endogenous survives too.
     assert aug_fac3.is_endogenous is True
+    # The control-function correction must survive augmentation too.
+    assert aug_fac3.correction is corr

@@ -314,6 +314,13 @@ def _partial_some_log_likelihood(
     # n_transitions). To achieve that, we replace the last aug_period by -1. If there
     # are endogenous factors, the last aug_period is found at index -2 (there should not
     # be measurements for endogenous factors in the "second half" of the last period).
+    # Augmented-period timing: real period p -> even aug_period 2p (states half)
+    # and odd 2p+1 (endogenous half). The investment level and its first-stage
+    # prediction are produced at the same odd aug_period, so cf is a same-period
+    # residual; transition[t] steps t->t+1, so cf formed at odd t enters theta at
+    # t+1. With endogenous factors the terminal aug_period is aug_periods[-2],
+    # dropping the non-existent final production transition rather than applying
+    # one into a non-existent period.
     last_aug_period = (
         model.labels.aug_periods[-2]
         if parsing_info.has_endogenous_factors
@@ -323,7 +330,11 @@ def _partial_some_log_likelihood(
     if max(iteration_to_period) != last_aug_period - 1:
         raise ValueError("Unexpected iteration_to_period configuration")
 
-    if is_all_linear(model.transition_info.function_names):
+    # A control function makes the production equation non-linear in the raw
+    # states (cf is a non-linear function of the latent states), so the linear
+    # fast-path would silently bypass the cf DAG node. Force the unscented path.
+    has_control_function = model.endogenous_factors_info.control_function is not None
+    if is_all_linear(model.transition_info.function_names) and not has_control_function:
         constant_factor_indices = frozenset(
             i
             for i, f in enumerate(model.labels.latent_factors)

@@ -13,6 +13,7 @@ from skillmodels.amn.simulate_and_regress import (
 )
 from skillmodels.amn.types import MinimumDistanceResult
 from skillmodels.common.model_spec import (
+    CorrectionSpec,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -315,6 +316,11 @@ def _cf_model() -> ModelSpec:
                 ),
                 transition_function="linear",
                 is_endogenous=True,
+                correction=CorrectionSpec(
+                    state_predictors=("skills",),
+                    instruments=("income",),
+                    targets=("skills",),
+                ),
             ),
         },
         observed_factors=("income",),
@@ -443,12 +449,14 @@ def test_simulate_and_regress_naive_path_is_biased():
     assert abs(corrected_psi - _CF_PSI) < 0.10
 
 
-def test_simulate_and_regress_requires_observed_instrument():
+def test_simulate_and_regress_requires_correction_spec():
+    # An endogenous factor without a CorrectionSpec cannot opt into the control
+    # function: the request must fail loudly rather than silently no-op.
     model = _endogenous_model()
     processed = process_model(model)
     structural = _endogenous_structural()
 
-    with pytest.raises(ValueError, match="observed factor"):
+    with pytest.raises(ValueError, match="CorrectionSpec"):
         simulate_and_regress(
             structural,
             processed,

@@ -11,6 +11,25 @@ from skillmodels.common.check_model import (
     check_stagemap,
 )
 from skillmodels.common.model_spec import FactorSpec, ModelSpec, Normalizations
+from skillmodels.common.process_model import process_model
+from skillmodels.test_data.simplest_augmented_model import SIMPLEST_AUGMENTED_MODEL
+
+
+def test_check_model_rejects_two_endogenous_factors_sharing_measurement() -> None:
+    # A second endogenous factor reusing fac2's "inv" measurement — the kind of
+    # duplicate-measurement collision the old guard silently missed.
+    base = SIMPLEST_AUGMENTED_MODEL
+    inv_b = FactorSpec(
+        measurements=(("inv",), ("inv",)),
+        normalizations=Normalizations(
+            loadings=({"inv": 1}, {"inv": 1}), intercepts=({}, {})
+        ),
+        is_endogenous=True,
+        transition_function="linear",
+    )
+    model = base._replace(factors=dict(base.factors) | {"fac2b": inv_b})
+    with pytest.raises(ValueError, match="overlap"):
+        process_model(model)
 
 
 def test_invalid_stagemap_length() -> None:

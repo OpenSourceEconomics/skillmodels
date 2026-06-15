@@ -20,6 +20,43 @@ from skillmodels.common.types import (
 
 @beartype_init(MODEL_SPEC_CONF)
 @dataclass(frozen=True)
+class CorrectionSpec:
+    """Control-function correction for an endogenous investment factor.
+
+    Declared on the endogenous investment `FactorSpec`. It makes the library
+    own the AF Section 3.5 / AMN eq. 7-8 control function: a contemporaneous
+    first-stage equation predicts the investment factor from the present state
+    factors and excluded observed instruments, and its residual `cf` enters
+    each target factor's production equation as an additive `kappa * cf` term.
+
+    The same specification is read by both the CHS (Kalman-MLE) and AMN
+    (simulate-and-regress) estimators, so the control function is configured in
+    exactly one place regardless of which estimator runs.
+    """
+
+    state_predictors: tuple[str, ...] = ()
+    """State factors entering the first-stage investment equation. Empty means
+    all state factors; per-period presence is then handled downstream."""
+    instruments: tuple[str, ...] = ()
+    """Excluded observed factors. They enter the first-stage equation only and
+    never the production (target) equations, identifying `kappa`."""
+    targets: tuple[str, ...] = ()
+    """State factors whose production equation receives the additive `kappa *
+    cf` term. Empty means all state factors."""
+    kappa_terms: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    """Per-target `cf` regressor names (e.g. `("cf",)` or
+    `("cf", "cf ** 2", "cf * health_mom")`). A target with no entry defaults to
+    `("cf",)`; interaction terms (for translog targets) must be listed
+    explicitly."""
+
+    def __post_init__(self) -> None:  # noqa: D105
+        object.__setattr__(
+            self, "kappa_terms", ensure_containers_are_immutable(self.kappa_terms)
+        )
+
+
+@beartype_init(MODEL_SPEC_CONF)
+@dataclass(frozen=True)
 class FactorSpec:
     """Specification for a single latent factor."""
 
@@ -29,8 +66,12 @@ class FactorSpec:
     """Identification normalizations for this factor."""
     is_endogenous: bool = False
     """Whether this factor is endogenous."""
-    is_correction: bool = False
-    """Whether this factor is a correction factor."""
+    correction: CorrectionSpec | None = None
+    """Control-function correction declared on an endogenous investment factor.
+
+    When set (and the factor is endogenous), the library forms the deterministic
+    control-function residual `cf` and injects `kappa * cf` into each target
+    factor's production equation. `None` means no correction."""
     transition_function: str | Callable | None = None
     """Transition function name (e.g. `"linear"`, `"log_ces"`) or a callable."""
     has_production_shock: bool = True
@@ -137,6 +178,14 @@ class ModelSpec:
         """
         factors = {}
         for name, spec in d["factors"].items():
+            if "correction" in spec:
+                msg = (
+                    f"Factor {name!r} declares a 'correction' block, but parsing a "
+                    "control-function correction from a dict/YAML spec is not yet "
+                    "supported. Build the model via the FactorSpec constructor and "
+                    "pass a CorrectionSpec on the investment factor."
+                )
+                raise NotImplementedError(msg)
             normalizations = None
             if "normalizations" in spec:
                 nd = spec["normalizations"]
@@ -151,7 +200,6 @@ class ModelSpec:
                 measurements=tuple(tuple(m) for m in spec["measurements"]),
                 normalizations=normalizations,
                 is_endogenous=spec.get("is_endogenous", False),
-                is_correction=spec.get("is_correction", False),
                 transition_function=spec.get("transition_function"),
                 has_production_shock=spec.get("has_production_shock", True),
                 has_initial_distribution=spec.get("has_initial_distribution", True),

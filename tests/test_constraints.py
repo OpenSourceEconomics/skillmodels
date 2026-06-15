@@ -23,8 +23,61 @@ from skillmodels.common.constraints import (
     get_constraints,
 )
 from skillmodels.common.process_model import process_model
-from skillmodels.common.types import Anchoring, Labels, Normalizations
+from skillmodels.common.types import (
+    Anchoring,
+    Labels,
+    MeasurementType,
+    Normalizations,
+)
 from skillmodels.test_data.simplest_augmented_model import SIMPLEST_AUGMENTED_MODEL
+
+
+def _corr_model_processed():
+    """Process a correction model: an endogenous investment + an instrument."""
+    from dataclasses import replace  # noqa: PLC0415
+
+    from skillmodels.common.model_spec import CorrectionSpec  # noqa: PLC0415
+    from skillmodels.test_data.model2 import MODEL2  # noqa: PLC0415
+
+    fac3 = MODEL2.factors["fac3"]
+    corr = CorrectionSpec(instruments=("inv_z",))
+    new_factors = dict(MODEL2.factors) | {
+        "fac3": replace(fac3, is_endogenous=True, correction=corr)
+    }
+    model = MODEL2._replace(factors=new_factors)._replace(stagemap=None)
+    model = model._replace(observed_factors=("inv_z",))
+    return process_model(model)
+
+
+def test_get_constraints_pins_kappa_to_zero_on_carry_forward_periods() -> None:
+    processed = _corr_model_processed()
+    constraints = get_constraints(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        anchoring_info=processed.anchoring,
+        normalizations=processed.normalizations,
+        endogenous_factors_info=processed.endogenous_factors_info,
+        bounds_distance=1e-8,
+    )
+    kappa_fixed = [
+        c
+        for c in constraints
+        if isinstance(c, FixedConstraintWithValue)
+        and isinstance(c.loc, tuple)
+        and c.loc[0] == "kappa"
+    ]
+    assert kappa_fixed, "kappa must be pinned to 0 on carry-forward periods"
+    # All such constraints pin kappa to exactly 0.
+    assert all(c.value == 0.0 for c in kappa_fixed)
+    # They fall only on the state factors' carry-forward (STATES) aug periods,
+    # never on the production (ENDOGENOUS) aug periods where kappa is free.
+    meas_types = processed.endogenous_factors_info.aug_periods_to_aug_period_meas_types
+    for c in kappa_fixed:
+        assert isinstance(c.loc, tuple)
+        _category, aug_period, target, _term = c.loc
+        assert target in ("fac1", "fac2")
+        assert meas_types[aug_period] == MeasurementType.STATES
 
 
 def _to_dict(c: om.constraints.Constraint) -> dict[str, Any]:

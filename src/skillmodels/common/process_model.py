@@ -1,6 +1,6 @@
 """Functions to process model specifications from user-friendly to internal form."""
 
-from collections.abc import KeysView, Mapping
+from collections.abc import Callable, KeysView, Mapping
 from dataclasses import replace
 from functools import partial
 from types import MappingProxyType
@@ -14,10 +14,17 @@ from pandas import DataFrame
 
 import skillmodels.common.transition_functions as t_f_module
 from skillmodels.common.check_model import check_model, check_stagemap
+from skillmodels.common.control_function import (
+    build_cf_node,
+    build_kappa_addition_node,
+    build_kappa_term_evaluators,
+    build_prediction_node,
+)
 from skillmodels.common.decorators import extract_params, jax_array_output
 from skillmodels.common.model_spec import FactorSpec, ModelSpec
 from skillmodels.common.types import (
     Anchoring,
+    ControlFunctionInfo,
     Dimensions,
     EndogenousFactorsInfo,
     FactorInfo,
@@ -83,7 +90,11 @@ def process_model(model_spec: ModelSpec) -> ProcessedModel:
         anchoring=anchoring,
         has_endogenous_factors=has_endogenous_factors,
     )
-    transition_info = _get_transition_info(model_spec=_model_spec_aug, labels=labels)
+    transition_info = _get_transition_info(
+        model_spec=_model_spec_aug,
+        labels=labels,
+        control_function=endogenous_factors_info.control_function,
+    )
     labels = replace(
         labels, transition_names=tuple(transition_info.function_names.values())
     )
@@ -108,29 +119,14 @@ def process_model(model_spec: ModelSpec) -> ProcessedModel:
 
 def get_has_endogenous_factors(factors: Mapping[str, FactorSpec]) -> bool:
     """Return True if any endogenous factors are present."""
-    endogenous_factors = pd.DataFrame(
-        [
-            {
-                "factor": f,
-                "is_endogenous": v.is_endogenous,
-                "is_correction": v.is_correction,
-            }
-            for f, v in factors.items()
-        ]
-    ).set_index("factor")
-    if (endogenous_factors.dtypes != bool).any():  # noqa: E721
-        raise ValueError(
-            "If specified, 'is_endogenous' and 'is_correction' both need to be of type"
-            f"'bool', got:\n{endogenous_factors}"
-        )
-    if (
-        ~endogenous_factors["is_endogenous"] & endogenous_factors["is_correction"]
-    ).any():
-        raise ValueError(
-            "A factor cannot be a correction and not endogenous, got:\n"
-            f"{endogenous_factors}"
-        )
-    return bool(endogenous_factors["is_endogenous"].any())
+    for factor, fspec in factors.items():
+        if not isinstance(fspec.is_endogenous, bool):
+            msg = (
+                f"'is_endogenous' must be a bool, got {fspec.is_endogenous!r} "
+                f"for {factor}."
+            )
+            raise TypeError(msg)
+    return any(fspec.is_endogenous for fspec in factors.values())
 
 
 def get_dimensions(
@@ -281,6 +277,12 @@ def _augment_periods_for_endogenous_factors(
     """
     new_factors: dict[str, FactorSpec] = {}
     for fac, fspec in model_spec.factors.items():
+        # insert_at_modulo decides measurement parity: endogenous (investment)
+        # factors are measured at ODD aug_periods (the endogenous half), ordinary
+        # state factors at EVEN aug_periods (the states half). This co-placement
+        # produces the investment level and the first-class control-function
+        # prediction at the same odd aug_period, so the residual cf = level -
+        # prediction is a genuine same-period residual.
         insert_at_modulo = 0 if fspec.is_endogenous else 1
 
         # Insert empty elements into measurements when we do not have those.
@@ -318,7 +320,7 @@ def _augment_periods_for_endogenous_factors(
             measurements=aug_measurements,
             normalizations=aug_normalizations,
             is_endogenous=fspec.is_endogenous,
-            is_correction=fspec.is_correction,
+            correction=fspec.correction,
             transition_function=fspec.transition_function,
             has_production_shock=fspec.has_production_shock,
             has_initial_distribution=fspec.has_initial_distribution,
@@ -327,12 +329,71 @@ def _augment_periods_for_endogenous_factors(
     return model_spec._replace(factors=new_factors)
 
 
-def _get_transition_info(model_spec: ModelSpec, labels: Labels) -> TransitionInfo:
-    """Collect information about transition functions."""
-    func_list, param_names = [], []
-    latent_factors = labels.latent_factors
-    all_factors = labels.all_factors
+def _inject_control_function_nodes(
+    *,
+    functions: dict,
+    control_function: ControlFunctionInfo,
+    all_factors: tuple[str, ...],
+) -> None:
+    """Graft the control-function nodes into the transition DAG in place.
 
+    Adds a contemporaneous first-stage prediction node and a residual `cf`
+    node, and rewrites each target factor's `__next_<target>__` node to add
+    `kappa * cf` on top of the (untouched) base production node. The base node
+    is preserved under `__base_next_<target>__`, so its arguments, positional
+    parameter layout, and DAG dependencies are unchanged.
+
+    Args:
+        functions: The DAG node mapping built by `_get_transition_info`.
+        control_function: The resolved control-function configuration.
+        all_factors: Factor order of the `states` vector (latent then observed).
+
+    """
+    inv = control_function.investment_factor
+    inv_pos = all_factors.index(inv)
+    predictor_positions = tuple(
+        all_factors.index(factor)
+        for factor in (
+            *control_function.state_predictors,
+            *control_function.instruments,
+        )
+    )
+    factor_positions = {factor: i for i, factor in enumerate(all_factors)}
+
+    prediction_node = f"__prediction_{inv}__"
+    functions[prediction_node] = build_prediction_node(
+        beta_key=f"__first_stage_{inv}__",
+        predictor_positions=predictor_positions,
+    )
+    functions["cf"] = rename_arguments(
+        build_cf_node(inv_pos=inv_pos),
+        mapper={"prediction": prediction_node},
+    )
+
+    for target in control_function.targets:
+        base_node = f"__base_next_{target}__"
+        functions[base_node] = functions.pop(f"__next_{target}__")
+        evaluators = build_kappa_term_evaluators(
+            kappa_terms=control_function.kappa_terms[target],
+            factor_positions=factor_positions,
+        )
+        functions[f"__next_{target}__"] = rename_arguments(
+            build_kappa_addition_node(
+                kappa_key=f"__kappa_{target}__",
+                kappa_evaluators=evaluators,
+            ),
+            mapper={"base_value": base_node},
+        )
+
+
+def _build_base_transition_funcs(
+    model_spec: ModelSpec,
+    latent_factors: tuple[str, ...],
+    all_factors: tuple[str, ...],
+) -> tuple[list[Callable], list[list[str]]]:
+    """Build the per-factor base transition callables and their parameter names."""
+    func_list: list[Callable] = []
+    param_names: list[list[str]] = []
     for factor in latent_factors:
         spec = model_spec.factors[factor].transition_function
         if isinstance(spec, str):
@@ -346,17 +407,35 @@ def _get_transition_info(model_spec: ModelSpec, labels: Labels) -> TransitionInf
                 raise AttributeError(
                     "Custom transition functions must have a __name__ attribute.",
                 )
-            if hasattr(spec, "__registered_params__"):
-                names: list[str] = spec.__registered_params__  # ty: ignore[invalid-assignment]
-                param_names.append(names)
-            else:
+            if not hasattr(spec, "__registered_params__"):
                 raise AttributeError(
                     "Custom transition_functions must have a __registered_params__ "
                     "attribute. You can set it via the register_params decorator.",
                 )
+            names: list[str] = spec.__registered_params__  # ty: ignore[invalid-assignment]
+            param_names.append(names)
             func_list.append(extract_params(spec, key=factor, names=names))
+    return func_list, param_names
 
-    function_names = [f.__name__ for f in func_list]
+
+def _get_transition_info(
+    model_spec: ModelSpec,
+    labels: Labels,
+    control_function: ControlFunctionInfo | None = None,
+) -> TransitionInfo:
+    """Collect information about transition functions."""
+    latent_factors = labels.latent_factors
+    all_factors = labels.all_factors
+
+    func_list, param_names = _build_base_transition_funcs(
+        model_spec=model_spec,
+        latent_factors=latent_factors,
+        all_factors=all_factors,
+    )
+
+    # `extract_params` preserves `__name__` via `functools.wraps`, but `ty` only
+    # sees the `Callable` return type, which does not expose it.
+    function_names = [f.__name__ for f in func_list]  # ty: ignore[unresolved-attribute]
 
     functions = {
         f"__next_{fac}__": func
@@ -370,6 +449,13 @@ def _get_transition_info(model_spec: ModelSpec, labels: Labels) -> TransitionInf
 
     for i, factor in enumerate(labels.all_factors):
         functions[factor] = partial(_extract_factor, pos=i)
+
+    if control_function is not None:
+        _inject_control_function_nodes(
+            functions=functions,
+            control_function=control_function,
+            all_factors=all_factors,
+        )
 
     transition_function = concatenate_functions(
         functions=functions,
@@ -398,6 +484,90 @@ def _get_transition_info(model_spec: ModelSpec, labels: Labels) -> TransitionInf
     )
 
 
+def _resolve_control_function(model_spec: ModelSpec) -> ControlFunctionInfo | None:
+    """Resolve the `CorrectionSpec` declared on the investment factor.
+
+    Expand the user-facing `CorrectionSpec` (which may leave fields empty as
+    "all state factors" / "the default `cf` regressor") into a fully resolved
+    `ControlFunctionInfo` read by both estimators. Return `None` when no factor
+    declares a `correction`.
+
+    Args:
+        model_spec: The model specification.
+
+    Returns:
+        Resolved `ControlFunctionInfo`, or `None` if there is no correction.
+
+    Raises:
+        ValueError: If a non-endogenous factor declares a `correction`.
+        NotImplementedError: If more than one factor declares a `correction`.
+
+    """
+    with_correction = [
+        (fac, fspec.correction)
+        for fac, fspec in model_spec.factors.items()
+        if fspec.correction is not None
+    ]
+    if not with_correction:
+        return None
+    if len(with_correction) > 1:
+        names = ", ".join(fac for fac, _ in with_correction)
+        msg = (
+            "The control function supports exactly one investment factor, but "
+            f"a correction was declared on multiple factors: {names}."
+        )
+        raise NotImplementedError(msg)
+
+    investment_factor, spec = with_correction[0]
+    if not model_spec.factors[investment_factor].is_endogenous:
+        msg = (
+            f"Factor {investment_factor!r} declares a correction but is not "
+            "endogenous. A control function requires an endogenous investment "
+            "factor."
+        )
+        raise ValueError(msg)
+
+    if not spec.instruments:
+        msg = (
+            f"The correction on {investment_factor!r} needs at least one excluded "
+            "observed instrument; otherwise the control-function residual is "
+            "collinear with the production inputs and kappa is unidentified."
+        )
+        raise ValueError(msg)
+    not_observed = tuple(
+        i for i in spec.instruments if i not in model_spec.observed_factors
+    )
+    if not_observed:
+        msg = (
+            f"The correction on {investment_factor!r} lists instruments "
+            f"{not_observed} that are not declared observed factors. Control-"
+            "function instruments must be observed factors of the model."
+        )
+        raise ValueError(msg)
+
+    state_factors = tuple(
+        fac for fac, fspec in model_spec.factors.items() if not fspec.is_endogenous
+    )
+    state_predictors = spec.state_predictors or state_factors
+    targets = spec.targets or state_factors
+    if not targets:
+        msg = (
+            f"Factor {investment_factor!r} declares a correction but the model "
+            "has no state factors to apply it to. A control function needs at "
+            "least one non-endogenous state factor as a target."
+        )
+        raise ValueError(msg)
+    kappa_terms = {target: spec.kappa_terms.get(target, ("cf",)) for target in targets}
+
+    return ControlFunctionInfo(
+        investment_factor=investment_factor,
+        state_predictors=tuple(state_predictors),
+        instruments=tuple(spec.instruments),
+        targets=tuple(targets),
+        kappa_terms=MappingProxyType(kappa_terms),
+    )
+
+
 def _get_endogenous_factors_info(
     *,
     has_endogenous_factors: bool,
@@ -407,10 +577,7 @@ def _get_endogenous_factors_info(
     """Collect information about endogenous factors."""
     factor_info = {}
     for fac, fspec in model_spec.factors.items():
-        factor_info[fac] = FactorInfo.from_flags(
-            is_endogenous=fspec.is_endogenous,
-            is_correction=fspec.is_correction,
-        )
+        factor_info[fac] = FactorInfo.from_flags(is_endogenous=fspec.is_endogenous)
 
     return EndogenousFactorsInfo(
         has_endogenous_factors=has_endogenous_factors,
@@ -423,6 +590,7 @@ def _get_endogenous_factors_info(
             aug_periods_to_periods=labels.aug_periods_to_periods,
         ),
         factor_info=MappingProxyType(factor_info),
+        control_function=_resolve_control_function(model_spec),
     )
 
 

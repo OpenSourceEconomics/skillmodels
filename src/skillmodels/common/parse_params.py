@@ -59,6 +59,31 @@ def create_parsing_info(
     meas_sds = _get_positional_selector_from_loc(range_sr=range_sr, loc="meas_sds")
     shock_sds = _get_positional_selector_from_loc(range_sr=range_sr, loc="shock_sds")
 
+    # control-function first-stage equation (empty selector for non-CF models).
+    investment_eq = _get_positional_selector_from_loc(
+        range_sr=range_sr, loc="investment_eq"
+    )
+    investment_eq_rows = params_index[
+        params_index.get_level_values("category") == "investment_eq"
+    ]
+    investment_factor = (
+        str(investment_eq_rows.get_level_values("name1")[0])
+        if len(investment_eq_rows)
+        else None
+    )
+
+    # control-function loadings (kappa), one selector per target factor.
+    kappa: dict[str, Array | slice] = {}
+    kappa_targets = params_index[
+        params_index.get_level_values("category") == "kappa"
+    ].get_level_values("name1")
+    kappa_helper = pd.DataFrame(index=params_index)
+    for target in dict.fromkeys(kappa_targets):
+        loc = kappa_helper.query(f"category == 'kappa' & name1 == '{target}'").index
+        kappa[str(target)] = _get_positional_selector_from_loc(
+            range_sr=range_sr, loc=loc
+        )
+
     # loadings:
     mask = update_info[list(labels.latent_factors)].to_numpy()
     helper = np.arange(mask.size).reshape(mask.shape)
@@ -105,6 +130,9 @@ def create_parsing_info(
         is_anchoring_update=is_anchoring_update,
         ignore_constant_when_anchoring=anchoring.ignore_constant_when_anchoring,
         has_endogenous_factors=has_endogenous_factors,
+        investment_eq=investment_eq,
+        investment_factor=investment_factor,
+        kappa=MappingProxyType(kappa),
     )
 
 
@@ -296,6 +324,18 @@ def _get_transition_params(
     for factor in list(labels.latent_factors):
         ilocs = info.transition[factor]
         trans_params[factor] = params[ilocs].reshape(n_aug_periods - len_reduction, -1)
+    if info.investment_factor is not None:
+        # First-stage betas, threaded under a reserved key so the prediction DAG
+        # node reads them as ordinary period-sliced transition coefficients.
+        reserved = f"__first_stage_{info.investment_factor}__"
+        trans_params[reserved] = params[info.investment_eq].reshape(
+            n_aug_periods - len_reduction, -1
+        )
+    for target, ilocs in info.kappa.items():
+        # Control-function loadings, one reserved key per target factor.
+        trans_params[f"__kappa_{target}__"] = params[ilocs].reshape(
+            n_aug_periods - len_reduction, -1
+        )
     return MappingProxyType(trans_params)
 
 
