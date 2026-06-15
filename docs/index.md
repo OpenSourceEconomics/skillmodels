@@ -13,7 +13,7 @@ nonlinear latent-factor model. Key features:
 
 - **Three estimators with one model spec**:
   - `chs` — Kalman MLE (CHS 2010), the historical core.
-  - `af` — sequential Halton-quadrature MLE (Attanasio & Freyberger 2025),
+  - `af` — sequential Halton-quadrature MLE (Antweiler & Freyberger 2025),
     period-by-period.
   - `amn` — three-stage mixture-of-normals (Attanasio, Meghir & Nix 2020):
     EM, minimum distance, simulated regression.

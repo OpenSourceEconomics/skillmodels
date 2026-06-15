@@ -5,7 +5,8 @@ estimators on CNLSY data. This guide picks up where the tutorial leaves off and
 quantifies the uncertainty around each estimator's point estimates:
 
 1. **CHS**: analytic sandwich standard errors from `estimagic.estimate_ml`.
-2. **AF**: score-resampling cluster bootstrap (`compute_af_standard_errors`).
+2. **AF**: propagated influence-function score bootstrap
+   (`compute_af_standard_errors`).
 3. **AMN**: nonparametric cluster bootstrap (`compute_amn_standard_errors`).
 
 The end of the guide overlays the three posterior factor trajectories on a
@@ -24,7 +25,7 @@ sampling-distribution machinery differs:
 | Estimator | Inference                                            | Why this and not bootstrap (CHS) / not sandwich (AF, AMN) |
 | --------- | ---------------------------------------------------- | --------------------------------------------------------- |
 | CHS       | Analytic sandwich (`estimate_ml`'s Fisher + outer)   | Closed-form is valid; bootstrap is just slower.           |
-| AF        | Score-resampling bootstrap                           | The closed-form variance ignores estimation error in period-$t-1$ nuisance params, biasing every period-$t \geq 1$ SE down. The score bootstrap captures the propagation. |
+| AF        | Propagated influence-function score bootstrap        | The closed-form variance ignores estimation error in period-$t-1$ nuisance params, biasing every period-$t \geq 1$ SE down. The influence-function score bootstrap propagates that earlier-period uncertainty, so cross-period covariances are non-zero. |
 | AMN       | Full re-estimation cluster bootstrap                 | The three-stage estimator has no clean sandwich form; each stage's residual variance compounds.  |
 
 ## CHS: analytic standard errors
@@ -51,12 +52,20 @@ likelihood and its derivatives at `chs_result.params` and assembles the
 robust sandwich. The output's `params` column has 95% confidence intervals
 ready to plot.
 
-## AF: score-resampling bootstrap
+## AF: propagated influence-function score bootstrap
 
-`compute_af_standard_errors` precomputes the per-observation scores at the
-optimum once, then for each of `n_boot` replicates resamples caseids,
-averages the resampled scores, and applies a one-step Newton update from the
-point estimate. No per-replicate re-estimation, so 10 000 replicates run in
+`compute_af_standard_errors` implements the Antweiler & Freyberger (2025)
+§4.2 score bootstrap (after Armstrong, Bertanha & Hong 2014) in its
+sequential-estimator influence-function form. It builds a single
+per-observation influence matrix once at the optimum: each period block is a
+one-step Newton update of that period's full-chain score that also carries
+the earlier periods' influence via the cross-period (Hessian) blocks. For
+each of `n_boot` replicates it draws *one shared* caseid index, resamples the
+rows of the influence matrix with it, and shifts the estimate by the negated
+resample mean. The shared index propagates earlier-period estimation
+uncertainty, so the $t \geq 1$ standard errors are consistent and the
+cross-period covariances are non-zero (unlike an own-block, independent-period
+resample). No per-replicate re-estimation, so 10 000 replicates run in
 seconds.
 
 ```python
@@ -76,8 +85,8 @@ af_inference.replicate_params  # (n_boot, n_params)
 
 The `replicate_params` DataFrame is the right object for plotting 95%
 intervals: take the 2.5%/97.5% empirical quantiles per parameter rather than
-$\hat{\theta} \pm 1.96 \cdot \mathrm{SE}$, since the per-replicate one-step
-shifts can be visibly skewed.
+$\hat{\theta} \pm 1.96 \cdot \mathrm{SE}$, since the one-step shifts can be
+visibly skewed.
 
 ## AMN: cluster bootstrap
 
@@ -85,7 +94,11 @@ AMN's three-stage pipeline (EM → minimum distance → simulate-and-regress) ha
 no analytic sandwich, so inference is a full cluster bootstrap: resample
 caseids with replacement, re-run all three stages, repeat. Per-replicate cost
 is dominated by the Stage 1 EM (~seconds for $n \approx 2000$, $K = 2$,
-$\approx 40$ augmented measures).
+$\approx 40$ augmented measures). Each replicate draws a fresh per-replicate
+seed (so the Stage-1 EM initialisation and the Stage-3 simulation vary across
+replicates), and any replicate that fails to converge is excluded from the
+bootstrap distribution and reported via a `RuntimeWarning`; its row in
+`replicate_params` is `NaN`.
 
 ```python
 from skillmodels.amn import compute_amn_standard_errors

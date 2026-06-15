@@ -166,10 +166,11 @@ data-driven start beats random init by a wide margin.
 
 ### Stage-2 weighting
 
-`minimum_distance_weighting="identity"` (the paper's default) is fast and
-robust. The `"optimal"` option computes an Avar-based weighting matrix from
-the EM score outer product; it is slower but tighter under correct
-specification.
+`minimum_distance_weighting="identity"` (the paper's default, and currently the
+only implemented option) is fast and robust: it is an unweighted identity-metric
+criterion over per-component means and the full covariance matrices. The
+`"optimal"` value is reserved for a future Avar-weighted criterion and currently
+raises `NotImplementedError`.
 
 ### Stage-3 simulation size
 
@@ -182,9 +183,11 @@ RNG is fully reproducible via `seed`.
 ## Inference
 
 Inference is a cluster bootstrap that re-runs all three stages on each
-replicate. Wall-clock is dominated by Stage 1 EM ($\approx$ seconds for
-$n \approx 2000$), so 1000 replicates run in $\approx$ 10-30 minutes on a
-single machine.
+replicate. Each replicate draws a fresh seed, so the Stage-1 EM initialisation
+and Stage-3 simulation vary across replicates; replicates that fail to converge
+are excluded from the distribution and reported via a warning. Wall-clock is
+dominated by Stage 1 EM ($\approx$ seconds for $n \approx 2000$), so 1000
+replicates run in $\approx$ 10-30 minutes on a single machine.
 
 ```python
 from skillmodels.amn import compute_amn_standard_errors
@@ -199,16 +202,39 @@ inference.replicate_params  # (n_boot, n_params); failed replicates are NaN
 The paper itself uses 100 replicates (Tables 5-6); 1000 gives smoother CIs
 without changing the qualitative picture.
 
+## Endogenous investment (control-function correction)
+
+For a model with an endogenous (investment) factor, set
+`investment_endogeneity=True` on `AMNEstimationOptions` to apply the AMN (2020)
+eq. 7-8 / AF Sec. 3.5 control-function correction in Stage 3. Per period, a
+first-stage investment equation `ln I_t ~ theta_t (+ observed instruments Y_t)`
+is OLS-fit on the simulated panel; its residual
+`eta_{I,t} = ln I_t - E[ln I_t | theta_t, Y_t]` is added as an additive `cf`
+covariate (coefficient `kappa_t`, period- and output-specific) to each state
+factor's production regression. Under the correction:
+
+- observed factors are EXCLUDED from the production function — they act as the
+  excluded instruments;
+- at least one observed instrument is REQUIRED (otherwise `simulate_and_regress`
+  raises a `ValueError`, because the residual would be collinear with the
+  production inputs);
+- the first-stage coefficients and shock SD are returned under the
+  `investment_eq` / `investment_sds` categories on
+  `result.stages.production.investment_params`, and the production shock SD
+  (`shock_sds`) is the corrected SD(eps_C);
+- more than one present investment factor in a period is unsupported and raises
+  `NotImplementedError`.
+
+The default is `False`, because `estimate_af` calls `estimate_amn` for start
+values and the AF likelihood implements only `kappa=0`; opt into the correction
+at the application call site. The flag is a no-op for models without endogenous
+factors.
+
 ## What AMN does not (yet) do
 
 - **Anchoring** is not wired through the AMN stages. The model spec's
   `AnchoringSpec` is accepted (so the spec stays compatible with CHS), but
   the AMN result reports unanchored factor scales.
-- **Custom transition functions.** AMN's Stage 3 currently supports `linear`,
-  `translog`, `linear_and_squares`, `log_ces`, and `log_ces_general`. Custom
-  `@register_params` transitions work for CHS / AF but raise a
-  `NotImplementedError` from `simulate_and_regress`. Extension is mechanical;
-  see the per-transition branches in `amn/simulate_and_regress.py`.
 - **Within-stage user constraints.** `estimate_amn(constraints=...)` is a
   pass-through hook for forward compatibility; the AMN stages do not yet
   honour `om.EqualityConstraint`. User `fixed_params` are applied

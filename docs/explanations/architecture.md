@@ -16,7 +16,8 @@ src/skillmodels/
 │   ├── constraints.py         get_constraints, FixedConstraintWithValue,
 │   │                          collect_fixed_locs, project_to_probability_constraints
 │   ├── selector.py            select_by_loc, align_index_names
-│   ├── transition_functions.py  linear / translog / log_ces / ...
+│   ├── transition_functions.py  linear / translog / log_ces / translog_af /
+│   │                          log_ces_af / ...
 │   ├── transitions.py         apply_anchored_transition (sigma-points-agnostic)
 │   ├── anchoring.py           anchor / unanchor states
 │   ├── state_ranges.py        create_state_ranges
@@ -34,23 +35,28 @@ src/skillmodels/
 ├── af/                      Antweiler-Freyberger sequential Halton MLE
 │   ├── types.py               AFEstimationOptions, AFEstimationResult, ...
 │   ├── estimate.py            estimate_af(...) -- top-level orchestration
+│   ├── validate.py            validate_af_model, kappa-scope / leakage checks
+│   ├── params.py              per-period optimagic params + constraints
 │   ├── initial_period.py      period-0 mixture + measurement system MLE
 │   ├── transition_period.py   period-t transition + measurement-system MLE
 │   ├── likelihood.py          jitted period-specific log-likelihoods
 │   ├── halton.py              quadrature nodes / weights
 │   ├── batching.py            obs-batching for the autodiff chunking
-│   ├── posterior_states.py    conditional-distribution materialisation
-│   └── inference.py           compute_af_standard_errors (cluster bootstrap)
+│   ├── posterior_states.py    posterior means from the chained sample
+│   └── inference.py           compute_af_standard_errors (propagated
+│                              influence-function score bootstrap)
 └── amn/                     Attanasio-Meghir-Nix 2020 (three-stage)
     ├── types.py               AMNEstimationOptions, ...
     ├── estimate.py            estimate_amn(...) -- top-level orchestration
     ├── mixture_em.py          Stage 1: EM on the augmented mixture
     ├── minimum_distance.py    Stage 2: structural recovery
     ├── simulate_and_regress.py Stage 3: synthetic-panel regression
+    │                          (optional endogenous-investment control function)
     ├── moments.py             Spearman + Bartlett start-values
     ├── start_values.py        get_spearman_start_params, pool_equality_groups
     ├── posterior_states.py    simulate factor paths from fitted mixture
-    └── inference.py           compute_amn_standard_errors (cluster bootstrap)
+    └── inference.py           compute_amn_standard_errors (cluster bootstrap,
+                               per-replicate seeds + nonconvergence filtering)
 ```
 
 ## How the layers interact

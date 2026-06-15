@@ -1,8 +1,25 @@
 # Endogeneity Corrections
 
 When investment decisions depend on concurrent latent factor values, investments are
-endogenous. skillmodels implements an endogeneity correction via the control function
-approach, using period augmentation in the Kalman filter.
+endogenous. The control-function approach corrects for this by adding the unobserved
+component of investment (a first-stage residual) to the production function.
+
+Which estimator carries the correction differs:
+
+- **CHS** (the Kalman-filter MLE) implements the control function via period
+  augmentation, described below: an `is_endogenous` / `is_correction` factor pair lets
+  the transition function difference out the control-function residual.
+- **AF** implements only the EXOGENOUS-investment case (`kappa_t = 0`): production and
+  investment shocks are treated as independent draws. A nonzero `kappa_t`
+  control-function term is not part of the AF likelihood;
+  `af.validate.fail_if_unsupported_kappa_params` raises `NotImplementedError` if
+  `kappa` / `kappa_t` parameters are supplied to `estimate_af`.
+- **AMN** implements the control-function correction in its Stage-3
+  simulate-and-regress step, gated by `AMNEstimationOptions.investment_endogeneity`
+  (default `False`). See [Estimate a model with AMN](../how_to_guides/how_to_estimate_amn.md)
+  for the AMN route.
+
+The rest of this page documents the CHS period-augmentation route.
 
 ## Using Endogenous Factors
 

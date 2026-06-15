@@ -1,6 +1,6 @@
 # Estimate a Model with AF (sequential Halton MLE)
 
-The Attanasio & Freyberger 2025 estimator (`skillmodels.af.estimate_af`) fits
+The Antweiler & Freyberger (2025) estimator (`skillmodels.af.estimate_af`) fits
 each period in sequence: period 0 jointly estimates the initial-period
 measurement system and the latent mixture; each subsequent period takes the
 estimated conditional state distribution and runs a period-specific MLE over a
@@ -39,17 +39,29 @@ result.all_params              # canonical skillmodels params DataFrame
 result.period_results[0]       # per-period AFPeriodResult
 ```
 
-For cluster-bootstrap standard errors, pass the same `model`, `data`, and
+For score-bootstrap standard errors, pass the same `data` and
 `af_options` to `compute_af_standard_errors`:
 
 ```python
 from skillmodels.af import compute_af_standard_errors
 
 inference = compute_af_standard_errors(
-    result, data, af_options, n_boot=200, seed=0
+    result, data, af_options, n_boot=10_000, seed=0
 )
 inference.standard_errors
 ```
+
+`compute_af_standard_errors` implements the propagated influence-function
+score bootstrap of Antweiler & Freyberger (2025) §4.2 (after Armstrong,
+Bertanha & Hong 2014). It builds a single per-observation influence matrix
+once at the optimum — each period block carries the earlier periods'
+estimation uncertainty through the cross-period blocks of the full-chain
+Hessian — then resamples its caseid rows with one shared index per
+replicate. Because the same index is used across periods, the resulting
+$t \geq 1$ standard errors are consistent and the cross-period covariances
+are non-zero. No per-replicate re-estimation is involved, so 10 000
+replicates run in seconds. The result exposes `standard_errors`, `vcov`,
+and `replicate_params`.
 
 ## Optimizer
 
@@ -97,9 +109,28 @@ parameter templates are seeded:
 - `"constant"` — legacy 0.5 / data-scaled defaults; useful for regression
   testing and reproducing pre-fix results.
 
-The bootstrap inference path internally re-runs the optimizer with
-`initialization_strategy="constant"` on each replicate so that the AMN seeds
-are computed only once.
+`compute_af_standard_errors` does not re-run the optimizer per replicate, so
+the choice of `initialization_strategy` does not enter the inference path:
+the score bootstrap reuses the point estimate and only resamples the
+precomputed influence matrix.
+
+## Production transition functions
+
+For an AF production function, use the AF-specific transition functions
+`translog_af` (eq. 6: linear terms + pairwise interactions, NO square terms)
+or `log_ces_af` (eq. 7: CES over the production factors only). They enumerate
+parameters over the production factors (skill + investment) so observed
+factors such as income do not leak in as free production coefficients.
+
+The general-library transitions (`linear`, `translog`, `robust_translog`,
+`linear_and_squares`, `log_ces`, `log_ces_with_constant`, `log_ces_general`)
+enumerate parameters over *all* factors, including observed ones. Using one of
+these for a (non-endogenous) production factor while observed factors are
+present makes income enter the production function with its own free
+coefficients, which changes the AF estimand (income should affect skills only
+through the investment equation). `validate_af_model` emits a `UserWarning` in
+that case; either switch to `translog_af` / `log_ces_af`, or pin every
+observed-factor transition coefficient to 0 via `fixed_params`.
 
 ## Anchoring and endogenous factors
 
@@ -112,3 +143,11 @@ the AF likelihood.
 Endogenous factors (investment in period $t$ measured by inv-measures in
 period $t$) are supported. See `tests/test_af_estimate.py` for a worked
 example with `is_endogenous=True`.
+
+The AF likelihood implements only the exogenous-investment case
+($\kappa_t = 0$): production and investment shocks are integrated as
+independent draws. The endogenous-investment control function is not part of
+the AF estimator — supplying `kappa` / `kappa_t` parameters raises
+`NotImplementedError`. The control-function correction lives in the AMN
+estimator (`AMNEstimationOptions.investment_endogeneity`); see
+[How to estimate AMN](how_to_estimate_amn.md).

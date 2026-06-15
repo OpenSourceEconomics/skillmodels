@@ -67,7 +67,16 @@ Each factor requires:
 - **measurements**: A nested tuple with measurement variable names for each period.
   Empty tuples indicate no measurements in that period.
 - **transition_function**: Name of a transition function (`linear`, `log_ces`,
-  `constant`, `translog`) or a custom function.
+  `constant`, `translog`, ...) or a custom function. See
+  [Transition Functions](../reference_guides/transition_functions.md) for the full
+  list. For an **AF production function**, prefer the production-factors-only
+  variants `translog_af` (AF eq. 6: linear + pairwise interactions, no squares)
+  and `log_ces_af` (AF eq. 7: CES over production factors only). The general
+  built-in transitions (`translog`, `log_ces`, ...) enumerate parameters over
+  **all** factors, including observed ones, so income and other observed factors
+  would receive free production coefficients — which changes the AF estimand.
+  `estimate_af` emits a `UserWarning` if you use a general built-in transition on
+  a production factor while observed factors are present.
 - **normalizations** (optional): Fixed values for loadings and intercepts to identify
   the model.
 - **is_endogenous** (optional): Whether this factor is endogenous (default: false).

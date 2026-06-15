@@ -110,10 +110,22 @@ pipeline:
 - **em_max_iter**, **em_tol**, **em_n_init**, **em_reg_covar**: Stage-1 EM
   numerical knobs.
 - **n_simulation_draws**: Stage-3 synthetic-panel size.
-- **minimum_distance_weighting**: Stage-2 weighting; `"identity"` (default) or
-  `"optimal"`.
-- **investment_endogeneity**: include the control-function residual in Stage 3
-  for endogenous-investment models.
+- **minimum_distance_weighting**: Stage-2 weighting. `"identity"` (default) is
+  the paper's unweighted identity-metric criterion over per-component means and
+  full covariance matrices, and is currently the only implemented option.
+  `"optimal"` is reserved for a future Avar-weighted criterion and raises
+  `NotImplementedError`.
+- **investment_endogeneity**: apply the AMN (2020) eq. 7-8 / AF Sec. 3.5
+  investment control-function correction in Stage 3. Defaults to `False`. When
+  `True` and the model has an endogenous (investment) factor, a first-stage
+  investment equation is OLS-fit per period and its residual is added as an
+  additive `cf` covariate (coefficient `kappa_t`) to each state factor's
+  production regression; observed factors are then excluded from the production
+  function and act as instruments (at least one observed instrument is
+  required). The default stays `False` because `estimate_af` calls
+  `estimate_amn` for start values and the AF likelihood implements only
+  `kappa=0`; opt into the correction at the application call site. A no-op for
+  models without endogenous factors.
 
 The shared structural field — number of mixture components in the latent
 distribution — lives directly on `ModelSpec.n_mixtures`, since it changes the
