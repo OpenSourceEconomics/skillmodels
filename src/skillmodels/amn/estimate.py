@@ -157,7 +157,6 @@ def estimate_amn(
         mixture_weights=mixture.weights,
         n_draws=amn_options.n_simulation_draws,
         seed=amn_options.seed,
-        investment_endogeneity=amn_options.investment_endogeneity,
     )
 
     measurement = _measurement_params_dataframe(structural)

@@ -422,7 +422,7 @@ def _fit_first_stage_investment(
     period: int,
     *,
     present_investment: list[str],
-    latent_present_names: list[str],
+    state_predictors: list[str],
     present_observed: list[str],
 ) -> tuple[dict[str, np.ndarray], list[tuple[str, int, str, str, float]]]:
     """Fit the contemporaneous investment equation(s) (AMN eq. 7).
@@ -436,10 +436,10 @@ def _fit_first_stage_investment(
         panel: Simulated latent-factor panel.
         period: Calendar period `t` (the `aug_period` index emitted on rows).
         present_investment: Investment factors present at `period`.
-        latent_present_names: Latent factors present at `period` (state +
-            investment), in design order.
-        present_observed: Observed factors present at `period` (the excluded
-            instruments).
+        state_predictors: CorrectionSpec first-stage state predictors present at
+            `period`, in design order.
+        present_observed: CorrectionSpec instruments present at `period` (the
+            excluded observed factors).
 
     Return:
         Tuple `(cf_by_factor, investment_rows)` where `cf_by_factor` maps each
@@ -456,9 +456,9 @@ def _fit_first_stage_investment(
     """
     if len(present_investment) > 1:
         msg = (
-            "AMN investment_endogeneity with more than one present investment "
-            f"factor at period {period} is unsupported: the control-function "
-            "choice for the state-factor production regressions is ambiguous."
+            "AMN control function with more than one present investment factor at "
+            f"period {period} is unsupported: the control-function choice for the "
+            "state-factor production regressions is ambiguous."
         )
         raise NotImplementedError(msg)
 
@@ -467,16 +467,13 @@ def _fit_first_stage_investment(
     for inv_factor in present_investment:
         if not present_observed:
             msg = (
-                "AMN investment_endogeneity requires at least one present "
-                f"observed factor at period {period} to identify the "
-                f"control-function coefficient for '{inv_factor}': without an "
-                "excluded instrument the residual eta_{I,t} is collinear with "
-                "the production inputs (theta_t, I_t). Add an observed factor "
-                "(income/prices) or set investment_endogeneity=False."
+                "The AMN control function requires at least one present instrument "
+                f"at period {period} to identify the control-function coefficient "
+                f"for '{inv_factor}': without an excluded instrument the residual "
+                "eta_{I,t} is collinear with the production inputs (theta_t, I_t)."
             )
             raise ValueError(msg)
-        state_determinants = [f for f in latent_present_names if f != inv_factor]
-        determinant_names = [*state_determinants, *present_observed]
+        determinant_names = [*state_predictors, *present_observed]
         y_invest = panel[_slot_column(period, inv_factor)].to_numpy()
         x_determinants = panel[
             [_slot_column(period, f) for f in determinant_names]
@@ -517,9 +514,9 @@ def _fit_period_production(
     model_spec: ModelSpec,
     *,
     factor_to_function_name: dict[str, str],
-    investment_factors: list[str],
     context: _ProductionContext,
     run_cf: bool,
+    targets: list[str],
 ) -> list[tuple[str, int, str, str, float]]:
     """Run the production regressions for every latent outcome at `period`.
 
@@ -550,7 +547,7 @@ def _fit_period_production(
             continue
         y = panel[target_col].to_numpy()
 
-        inject_cf = run_cf and factor not in investment_factors
+        inject_cf = run_cf and factor in targets
         cf: np.ndarray | None = None
         if inject_cf and context.cf_by_factor:
             cf = next(iter(context.cf_by_factor.values()))
@@ -581,7 +578,6 @@ def simulate_and_regress(
     *,
     n_draws: int = 100_000,
     seed: int = 0,
-    investment_endogeneity: bool = True,
 ) -> ProductionFitResult:
     """Simulate the joint latent-factor distribution and run Stage-3 regressions.
 
@@ -593,20 +589,14 @@ def simulate_and_regress(
         mixture_weights: Per-component mixture weights from Stage 1.
         n_draws: Synthetic-panel size.
         seed: RNG seed.
-        investment_endogeneity: Whether to apply the AMN eq.-7-8 investment
-            control-function correction (AF Sec. 3.5). When True AND the
-            model has endogenous (investment) factors, a contemporaneous
-            first-stage investment equation `ln I_t = b0 + b_theta.theta_t +
-            b_Y.Y_t + eta_{I,t}` is fitted per investment factor (determinants
-            = the present production-state latents plus the excluded observed
-            instruments Y_t), and its in-sample residual `eta_{I,t}` is added
-            as an extra additive `kappa*cf` covariate to each *state* outcome
-            factor's production regression. Under this path the production
-            inputs are the present LATENT factors only (observed factors are
-            the excluded instruments). For models without endogenous factors
-            this flag is a no-op. Identification requires at least one present
-            observed factor (else `cf` is collinear with the production
-            inputs); otherwise a `ValueError` is raised.
+
+    The AMN eq.-7-8 investment control-function correction (AF Sec. 3.5) runs iff
+    the model declares a `CorrectionSpec` (presence is the single trigger). A
+    contemporaneous first-stage investment equation is then fitted per investment
+    factor over the spec's `state_predictors` + excluded `instruments`, and its
+    in-sample residual `eta_{I,t}` is added as an additive `kappa * cf` covariate
+    to each `targets` factor's production regression. AMN implements only the
+    linear `cf` term; higher-order `kappa_terms` raise `NotImplementedError`.
 
     Return:
         ProductionFitResult with production-function and investment-equation
@@ -614,17 +604,31 @@ def simulate_and_regress(
 
     """
     endog_info = processed_model.endogenous_factors_info
-    run_cf = investment_endogeneity and endog_info.has_endogenous_factors
-
     control_function = endog_info.control_function
-    if run_cf and control_function is None:
-        msg = (
-            "investment_endogeneity=True requires a CorrectionSpec declaring the "
-            "control function on the endogenous investment factor."
-        )
-        raise ValueError(msg)
+    # CorrectionSpec presence is the single trigger; there is no separate flag.
+    run_cf = control_function is not None
+
+    if control_function is not None:
+        # AMN implements only a single linear cf term per target; the higher-order
+        # (translog) kappa_terms basis needs estimate_chs.
+        for target, terms in control_function.kappa_terms.items():
+            if tuple(terms) != ("cf",):
+                msg = (
+                    "AMN implements only a linear control function (kappa * cf). "
+                    f"Target {target!r} requests higher-order terms {tuple(terms)}; "
+                    "use estimate_chs for the full polynomial basis."
+                )
+                raise NotImplementedError(msg)
+
     investment_factors = (
         [control_function.investment_factor] if control_function is not None else []
+    )
+    cf_targets = list(control_function.targets) if control_function is not None else []
+    cf_predictors = (
+        list(control_function.state_predictors) if control_function is not None else []
+    )
+    cf_instruments = (
+        list(control_function.instruments) if control_function is not None else []
     )
 
     panel = _draw_factor_panel(structural, mixture_weights, n_draws=n_draws, seed=seed)
@@ -636,7 +640,6 @@ def simulate_and_regress(
     )
 
     latent_factor_set = set(processed_model.labels.latent_factors)
-    observed_factor_set = set(processed_model.labels.observed_factors)
 
     transition_rows: list[tuple[str, int, str, str, float]] = []
     investment_rows: list[tuple[str, int, str, str, float]] = []
@@ -678,9 +681,11 @@ def simulate_and_regress(
                 present_investment=[
                     f for f in present_factor_names if f in investment_factors
                 ],
-                latent_present_names=latent_present_names,
+                state_predictors=[
+                    f for f in cf_predictors if f in present_factor_names
+                ],
                 present_observed=[
-                    f for f in present_factor_names if f in observed_factor_set
+                    f for f in cf_instruments if f in present_factor_names
                 ],
             )
             investment_rows.extend(period_investment_rows)
@@ -700,9 +705,9 @@ def simulate_and_regress(
                 processed_model,
                 model_spec,
                 factor_to_function_name=factor_to_function_name,
-                investment_factors=investment_factors,
                 context=context,
                 run_cf=run_cf,
+                targets=cf_targets,
             )
         )
 

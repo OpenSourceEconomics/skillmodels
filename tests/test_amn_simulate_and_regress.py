@@ -1,5 +1,7 @@
 """Tests for `skillmodels.amn.simulate_and_regress` (AMN Stage 3)."""
 
+from dataclasses import replace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -253,7 +255,6 @@ def test_simulate_and_regress_no_investment_eq_category():
         mixture_weights=np.array([1.0]),
         n_draws=3000,
         seed=0,
-        investment_endogeneity=False,
     )
 
     # Production params are produced; the misleading 'investment_eq' rows
@@ -386,7 +387,6 @@ def test_simulate_and_regress_control_function_recovers_psi_and_kappa():
         mixture_weights=np.array([1.0]),
         n_draws=4000,
         seed=0,
-        investment_endogeneity=True,
     )
 
     prod = result.production_params
@@ -412,26 +412,24 @@ def test_simulate_and_regress_control_function_recovers_psi_and_kappa():
 
 def test_simulate_and_regress_naive_path_is_biased():
     model = _cf_model()
-    processed = process_model(model)
     structural = _cf_structural()
+    naive_model = model.without_correction()
 
     naive = simulate_and_regress(
         structural,
-        processed,
-        model,
+        process_model(naive_model),
+        naive_model,
         mixture_weights=np.array([1.0]),
         n_draws=4000,
         seed=0,
-        investment_endogeneity=False,
     )
     corrected = simulate_and_regress(
         structural,
-        processed,
+        process_model(model),
         model,
         mixture_weights=np.array([1.0]),
         n_draws=4000,
         seed=0,
-        investment_endogeneity=True,
     )
 
     naive_psi = float(
@@ -449,14 +447,21 @@ def test_simulate_and_regress_naive_path_is_biased():
     assert abs(corrected_psi - _CF_PSI) < 0.10
 
 
-def test_simulate_and_regress_requires_correction_spec():
-    # An endogenous factor without a CorrectionSpec cannot opt into the control
-    # function: the request must fail loudly rather than silently no-op.
-    model = _endogenous_model()
+def test_simulate_and_regress_raises_on_higher_order_kappa():
+    # AMN implements only the linear cf term; a degree-2 (translog) CorrectionSpec
+    # basis must raise rather than silently estimate a linear correction.
+    model = _cf_model()
+    inv = model.factors["investment"]
+    assert inv.correction is not None
+    hi_correction = replace(inv.correction, kappa_degree=2)
+    model = model._replace(
+        factors=dict(model.factors)
+        | {"investment": replace(inv, correction=hi_correction)}
+    )
     processed = process_model(model)
-    structural = _endogenous_structural()
+    structural = _cf_structural()
 
-    with pytest.raises(ValueError, match="CorrectionSpec"):
+    with pytest.raises(NotImplementedError, match="linear control function"):
         simulate_and_regress(
             structural,
             processed,
@@ -464,5 +469,4 @@ def test_simulate_and_regress_requires_correction_spec():
             mixture_weights=np.array([1.0]),
             n_draws=200,
             seed=0,
-            investment_endogeneity=True,
         )
