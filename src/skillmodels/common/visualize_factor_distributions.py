@@ -192,7 +192,7 @@ def univariate_densities(
             Can be a single DataFrame, a list (one per scenario), or a
             dict mapping scenario label to DataFrame. Produce it via
             the estimator you used (CHS:
-            ``get_filtered_states(...)["anchored_states"]["states"]``;
+            ``get_individual_states(...)["anchored_states"]["states"]``;
             AF: ``get_af_posterior_states(...)``; AMN:
             ``get_amn_posterior_states(...)``).
         factors: Factors for which to plot the densities.

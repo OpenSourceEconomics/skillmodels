@@ -40,7 +40,7 @@ def decompose_measurement_variance(
         filtered_states: DataFrame with one column per latent factor plus a
             "period" column. The caller is responsible for producing this
             via the estimator they used (CHS:
-            ``get_filtered_states(...)["anchored_states"]["states"]``;
+            ``get_individual_states(...)["anchored_states"]["states"]``;
             AF: ``get_af_posterior_states(...)``; AMN:
             ``get_amn_posterior_states(...)``). Anchored states are
             preferable when available; if not, unanchored states still

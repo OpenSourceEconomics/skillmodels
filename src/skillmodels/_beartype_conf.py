@@ -72,7 +72,7 @@ MODEL_SPEC_CONF = _conf(ModelSpecInitializationError)
 # AMNEstimationOptions.
 OPTIONS_CONF = _conf(OptionsInitializationError)
 
-# `get_maximization_inputs`, `get_filtered_states`, `estimate_af`,
+# `get_maximization_inputs`, `get_individual_states`, `estimate_af`,
 # `estimate_amn`, `get_af_posterior_states`,
 # `get_amn_posterior_states`.
 ESTIMATION_CONF = _conf(EstimationCallError)

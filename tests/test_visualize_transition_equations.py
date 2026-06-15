@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.individual_states import get_individual_states_from_params
 from skillmodels.common.visualize_transition_equations import (
     combine_transition_plots,
     get_transition_plots,
@@ -31,9 +31,9 @@ def test_visualize_transition_equations_runs() -> None:
     params = params.reindex(full_index)
     params["value"] = params["value"].fillna(0)
 
-    states = get_filtered_states(model_spec=model, data=data, params=params)[
-        "anchored_states"
-    ]["states"]
+    states = get_individual_states_from_params(
+        model_spec=model, data=data, params=params
+    )["anchored_states"]["states"]
 
     subplots = get_transition_plots(
         model_spec=model,

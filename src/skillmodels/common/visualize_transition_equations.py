@@ -173,7 +173,7 @@ def get_transition_plots(
         filtered_states: Pre-computed filtered states DataFrame (with a
             ``period`` column and one column per latent factor). Produce
             it via the estimator you used (CHS:
-            ``get_filtered_states(...)["anchored_states"]["states"]``;
+            ``get_individual_states(...)["anchored_states"]["states"]``;
             AF: ``get_af_posterior_states(...)``; AMN:
             ``get_amn_posterior_states(...)``).
         data: Empirical dataset used to estimate the model. Required when

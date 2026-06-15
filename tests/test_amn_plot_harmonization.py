@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from skillmodels.amn import AMNEstimationOptions, estimate_amn
-from skillmodels.chs.filtered_states import get_filtered_states
+from skillmodels.common.individual_states import get_individual_states
 from skillmodels.common.model_spec import (
     FactorSpec,
     ModelSpec,
@@ -26,6 +26,7 @@ def _tiny_model() -> ModelSpec:
                 transition_function="linear",
             ),
         },
+        n_mixtures=2,
     )
 
 
@@ -52,22 +53,15 @@ def _tiny_data(n: int = 500, seed: int = 0) -> pd.DataFrame:
 def amn_fit():
     model = _tiny_model()
     data = _tiny_data(n=400)
-    options = AMNEstimationOptions(
-        n_mixture_components=2, n_simulation_draws=1000, seed=0
-    )
+    options = AMNEstimationOptions(n_simulation_draws=1000, seed=0)
     fit = estimate_amn(model, data, options)
     return fit, data
 
 
-def test_get_filtered_states_dispatches_to_amn(amn_fit):
+def test_get_individual_states_dispatches_to_amn(amn_fit):
     fit, data = amn_fit
 
-    out = get_filtered_states(
-        model_spec=fit.model_spec,
-        data=data,
-        params=fit.all_params,
-        amn_result=fit,
-    )
+    out = get_individual_states(data=data, result=fit)
 
     assert "unanchored_states" in out
     states = out["unanchored_states"]["states"]
@@ -75,44 +69,14 @@ def test_get_filtered_states_dispatches_to_amn(amn_fit):
     assert {"id", "period", "skills"} <= set(states.columns)
 
 
-def test_get_filtered_states_rejects_both_af_and_amn_results(amn_fit):
-    """Passing an AMN result to `af_result=` triggers the beartype perimeter.
-
-    Pre-beartype, the test passed `fit` (an `AMNEstimationResult`) to
-    both `af_result=` and `amn_result=` and the function body's
-    `only one of` `ValueError` fired. Beartype now intercepts first
-    because `AMNEstimationResult` is not assignable to
-    `AFEstimationResult | None`. The body-level guard remains in
-    place for the still-valid case of two real results of the right
-    type; that combination requires fitting both estimators, which
-    this fixture deliberately skips.
-    """
-    from skillmodels.exceptions import EstimationCallError  # noqa: PLC0415
-
-    fit, data = amn_fit
-    with pytest.raises(EstimationCallError, match="af_result"):
-        get_filtered_states(
-            model_spec=fit.model_spec,
-            data=data,
-            params=fit.all_params,
-            af_result=fit,
-            amn_result=fit,
-        )
-
-
 def test_decompose_measurement_variance_works_with_amn_result(amn_fit):
     fit, data = amn_fit
 
-    filtered = get_filtered_states(
-        model_spec=fit.model_spec,
-        data=data,
-        params=fit.all_params,
-        amn_result=fit,
-    )
+    filtered = get_individual_states(data=data, result=fit)
     states_root = filtered.get("anchored_states", filtered["unanchored_states"])
     decomp = decompose_measurement_variance(
         fit.model_spec,
-        fit.all_params,
+        fit.params,
         filtered_states=states_root["states"],
     )
 

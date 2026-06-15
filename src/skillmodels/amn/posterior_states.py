@@ -19,7 +19,7 @@ standard Bayes posterior of `k` given `Y_i`, and
 ``E[theta | Y_i] = sum_k r(k|i) mu_{theta|Y}(k, i)``.
 
 The function returns a dict matching the CHS / AF
-`get_filtered_states` shape (an ``"unanchored_states"`` entry only —
+`get_individual_states` shape (an ``"unanchored_states"`` entry only —
 AMN does not produce anchored states without an explicit anchoring
 post-step).
 """

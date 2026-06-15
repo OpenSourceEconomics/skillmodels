@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.individual_states import get_individual_states_from_params
 from skillmodels.common.simulate_data import simulate_dataset
 from skillmodels.common.visualize_factor_distributions import (
     bivariate_density_contours,
@@ -30,9 +30,9 @@ def _load_model2_filtered() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     max_inputs = get_maximization_inputs(MODEL2, data, chs_options=MODEL2_CHS_OPTIONS)
     params = params.loc[max_inputs["params_template"].index]
 
-    states = get_filtered_states(model_spec=MODEL2, data=data, params=params)[
-        "anchored_states"
-    ]["states"]
+    states = get_individual_states_from_params(
+        model_spec=MODEL2, data=data, params=params
+    )["anchored_states"]["states"]
     return data, params, states
 
 

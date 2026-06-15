@@ -34,7 +34,7 @@ class OptionsInitializationError(SkillmodelsInputError):
 class EstimationCallError(SkillmodelsInputError):
     """Bad argument to an estimation entry point.
 
-    Raised by `get_maximization_inputs`, `get_filtered_states`,
+    Raised by `get_maximization_inputs`, `get_individual_states`,
     `estimate_af`, `estimate_amn`, `get_af_posterior_states`, or
     `get_amn_posterior_states` when arguments don't match the
     declared types.
