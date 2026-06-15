@@ -90,12 +90,11 @@ def fitted_result() -> tuple[AFInferenceResult, pd.DataFrame]:
     af_opts = AFEstimationOptions(
         n_halton_points=25,
         n_halton_points_shock=15,
-        n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
     )
-    fit = estimate_af(model_spec=model, data=data, af_options=af_opts)
+    fit = estimate_af(model_spec=model, data=data, options=af_opts)
     inference = compute_af_standard_errors(fit, data, af_opts, n_boot=2000, seed=0)
-    return inference, fit.all_params
+    return inference, fit.params
 
 
 @pytest.mark.end_to_end
@@ -228,15 +227,14 @@ def test_af_inference_se_shrinks_with_sample_size() -> None:
     af_opts = AFEstimationOptions(
         n_halton_points=25,
         n_halton_points_shock=15,
-        n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
     )
 
     data_small = _simulate_linear_data(n_obs=200, n_periods=2, seed=1)
     data_large = _simulate_linear_data(n_obs=800, n_periods=2, seed=1)
 
-    fit_small = estimate_af(model_spec=model, data=data_small, af_options=af_opts)
-    fit_large = estimate_af(model_spec=model, data=data_large, af_options=af_opts)
+    fit_small = estimate_af(model_spec=model, data=data_small, options=af_opts)
+    fit_large = estimate_af(model_spec=model, data=data_large, options=af_opts)
 
     inf_small = compute_af_standard_errors(
         fit_small, data_small, af_opts, n_boot=2000, seed=1
@@ -305,10 +303,9 @@ def fit_and_metas():
     af_opts = AFEstimationOptions(
         n_halton_points=25,
         n_halton_points_shock=15,
-        n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
     )
-    fit = estimate_af(model_spec=model, data=data, af_options=af_opts)
+    fit = estimate_af(model_spec=model, data=data, options=af_opts)
     metas = _build_metas_for_test(fit, data, af_opts)
     return fit, data, af_opts, metas
 
@@ -397,7 +394,7 @@ def test_af_inference_period1_information_matches_fullchain_ownblock(
     _block_diagonal_sandwich_single information matrix for period 1.
     """
     fit, _data, _af_opts, metas = fit_and_metas
-    flat_super = jnp.asarray(fit.all_params["value"].to_numpy())
+    flat_super = jnp.asarray(fit.params["value"].to_numpy())
 
     period_score_info = _compute_block_diagonal_sandwich(fit, metas)
     period1 = next(p for p in period_score_info if p.period == 1)

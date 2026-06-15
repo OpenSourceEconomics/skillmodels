@@ -90,7 +90,7 @@ def compute_amn_standard_errors(
     caseids = data.index.get_level_values(case_level).unique()
     n_clusters = len(caseids)
 
-    base_index = result.all_params.index
+    base_index = result.params.index
     replicate_rows: list[pd.Series] = []
     n_failed = 0
     for b in range(n_boot):
@@ -113,7 +113,7 @@ def compute_amn_standard_errors(
                 )
                 row = pd.Series(np.nan, index=base_index)
             else:
-                row = boot_result.all_params.reindex(base_index)["value"]
+                row = boot_result.params.reindex(base_index)["value"]
         except (np.linalg.LinAlgError, ValueError, RuntimeError) as exc:
             n_failed += 1
             warnings.warn(

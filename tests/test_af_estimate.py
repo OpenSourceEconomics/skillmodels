@@ -22,10 +22,10 @@ from skillmodels.af.likelihood import (
 )
 from skillmodels.af.transition_period import _update_conditional_distribution
 from skillmodels.af.types import ChainLink, ConditionalDistribution, MixtureComponent
-from skillmodels.chs.filtered_states import get_filtered_states
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.decorators import register_params
+from skillmodels.common.individual_states import get_individual_states
 from skillmodels.common.model_spec import (
     FactorSpec,
     ModelSpec,
@@ -89,20 +89,19 @@ def test_af_estimate_runs_on_model2(model2_af, model2_data) -> None:
     af_options = AFEstimationOptions(
         n_halton_points=20,
         n_halton_points_shock=10,
-        n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
     )
 
     result = estimate_af(
         model_spec=model2_af,
         data=model2_data,
-        af_options=af_options,
+        options=af_options,
     )
 
     # Basic checks
     assert len(result.period_results) == 3
-    assert result.all_params is not None
-    assert len(result.all_params) > 0
+    assert result.params is not None
+    assert len(result.params) > 0
 
     # Check each period converged (or at least produced finite likelihood)
     for pr in result.period_results:
@@ -125,18 +124,17 @@ def test_af_measurement_params_in_ballpark(
     af_options = AFEstimationOptions(
         n_halton_points=30,
         n_halton_points_shock=15,
-        n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
     )
 
     result = estimate_af(
         model_spec=model2_af,
         data=model2_data,
-        af_options=af_options,
+        options=af_options,
     )
 
     # Compare period 0 measurement SDs
-    af_meas_sds = result.all_params.query("category == 'meas_sds' and period == 0")
+    af_meas_sds = result.params.query("category == 'meas_sds' and period == 0")
     if len(af_meas_sds) > 0:
         af_sd_values = af_meas_sds["value"].to_numpy()
         # All SDs should be positive and not too extreme
@@ -188,17 +186,16 @@ def test_af_estimate_single_factor() -> None:
     af_options = AFEstimationOptions(
         n_halton_points=25,
         n_halton_points_shock=10,
-        n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
     )
 
-    result = estimate_af(model_spec=model, data=data, af_options=af_options)
+    result = estimate_af(model_spec=model, data=data, options=af_options)
 
     assert len(result.period_results) == 2
     assert np.isfinite(result.period_results[0].loglikelihood)
 
     # Check that estimated loadings are roughly in the right direction
-    af_loadings = result.all_params.query("category == 'loadings' and period == 0")
+    af_loadings = result.params.query("category == 'loadings' and period == 0")
     if len(af_loadings) > 0:
         # m1 loading on skill should be fixed at 1.0
         # m2 loading should be roughly 0.8
@@ -262,10 +259,9 @@ def test_af_vs_chs_measurement_params_agree() -> None:
     af_result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=50,
             n_halton_points_shock=20,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
     )
@@ -395,10 +391,9 @@ def test_af_transition_params_affect_likelihood() -> None:
     af_opts = AFEstimationOptions(
         n_halton_points=30,
         n_halton_points_shock=15,
-        n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
     )
-    result = estimate_af(model_spec=model, data=data, af_options=af_opts)
+    result = estimate_af(model_spec=model, data=data, options=af_opts)
 
     # Period 1 result should have transition params
     p1 = result.period_results[1].params
@@ -430,10 +425,9 @@ def test_af_recovers_linear_transition_params() -> None:
     af_opts = AFEstimationOptions(
         n_halton_points=800,
         n_halton_points_shock=20,
-        n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
     )
-    result = estimate_af(model_spec=model, data=data, af_options=af_opts)
+    result = estimate_af(model_spec=model, data=data, options=af_opts)
 
     # Extract estimated transition params from period 1 (transition 0->1)
     p1 = result.period_results[1].params
@@ -479,10 +473,9 @@ def test_af_vs_chs_transition_params_agree() -> None:
     af_result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=40,
             n_halton_points_shock=20,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
     )
@@ -576,10 +569,9 @@ def test_af_vs_chs_both_estimated_on_model2(model2_af, model2_data) -> None:
     af_result = estimate_af(
         model_spec=model2_af,
         data=model2_data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=60,
             n_halton_points_shock=30,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
     )
@@ -759,10 +751,9 @@ def test_af_estimate_with_endogenous_factor() -> None:
     result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=30,
             n_halton_points_shock=15,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
     )
@@ -1532,13 +1523,12 @@ def test_af_joint_halton_recovers_sigma_prod_with_chain_link() -> None:  # noqa:
     af_opts = AFEstimationOptions(
         n_halton_points=200,
         n_halton_points_shock=200,
-        n_mixture_components=2,
         optimizer_algorithm="scipy_lbfgsb",
     )
     result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=af_opts,
+        options=af_opts,
         fixed_params=fixed_params,
         start_params=truth_df,
     )
@@ -1560,10 +1550,10 @@ def test_af_joint_halton_recovers_sigma_prod_with_chain_link() -> None:  # noqa:
 
 
 @pytest.mark.end_to_end
-def test_af_get_filtered_states() -> None:
-    """Verify get_filtered_states works with AF results.
+def test_af_get_individual_states() -> None:
+    """Verify get_individual_states works with AF results.
 
-    Run AF on a simple single-factor model, then call get_filtered_states
+    Run AF on a simple single-factor model, then call get_individual_states
     with the AF result. Check the returned DataFrame has the right shape,
     columns, and reasonable values.
     """
@@ -1573,20 +1563,14 @@ def test_af_get_filtered_states() -> None:
     af_result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=30,
             n_halton_points_shock=15,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
     )
 
-    result = get_filtered_states(
-        model_spec=model,
-        data=data,
-        params=af_result.all_params,
-        af_result=af_result,
-    )
+    result = get_individual_states(data=data, result=af_result)
 
     # Should have unanchored_states
     assert "unanchored_states" in result
@@ -1635,10 +1619,9 @@ def test_af_estimate_with_translog() -> None:
     result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=30,
             n_halton_points_shock=15,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
     )
@@ -1726,10 +1709,9 @@ def test_af_joint_initial_distribution_with_observed_factor() -> None:
     result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=40,
             n_halton_points_shock=15,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
     )
@@ -1837,10 +1819,9 @@ def test_af_fixed_params_pins_time_invariant_latent() -> None:
     result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=30,
             n_halton_points_shock=15,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
         fixed_params=fixed_df,
@@ -1958,10 +1939,9 @@ def test_af_log_ces_with_cross_factor_gamma_fixed_at_zero() -> None:
     result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=20,
             n_halton_points_shock=10,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
         fixed_params=fixed_df,
@@ -1998,10 +1978,9 @@ def test_af_log_ces_with_cross_factor_gamma_fixed_at_nonzero() -> None:
     result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=20,
             n_halton_points_shock=10,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
         fixed_params=fixed_df,
@@ -2076,10 +2055,9 @@ def test_af_estimate_tolerates_nan_measurements() -> None:
     result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=30,
             n_halton_points_shock=15,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
     )
@@ -2140,10 +2118,9 @@ def test_af_estimate_with_register_params_user_transition() -> None:
     result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=30,
             n_halton_points_shock=15,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
     )
@@ -2208,10 +2185,9 @@ def test_af_result_to_numpy_materialises_and_drops_samples_per_component() -> No
     result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=AFEstimationOptions(
+        options=AFEstimationOptions(
             n_halton_points=20,
             n_halton_points_shock=10,
-            n_mixture_components=1,
             optimizer_algorithm="scipy_lbfgsb",
         ),
     ).to_numpy()

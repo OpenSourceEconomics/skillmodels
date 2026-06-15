@@ -28,9 +28,6 @@ class AFEstimationOptions:
     n_halton_points_shock: int
     """Quadrature nodes for production shock integration."""
 
-    n_mixture_components: int
-    """Gaussian mixture components for initial distribution."""
-
     optimizer_algorithm: str
     """Optimization algorithm for each period's MLE.
 
@@ -58,8 +55,11 @@ class AFEstimationOptions:
     likelihood value is unchanged.
     """
 
-    initialization_strategy: Literal["constant", "spearman", "amn"]
+    start_params_strategy: Literal["none", "constant", "spearman", "amn"]
     """Strategy for seeding optimizer start values.
+
+    Canonical name shared with `CHSEstimationOptions`; the literal set is
+    unified across the two likelihood estimators.
 
     `"amn"` (default) runs the full AMN 2020 three-stage estimator
     upfront and uses its parameter estimates as start values for the
@@ -67,7 +67,11 @@ class AFEstimationOptions:
     moments per period (factor-analysis identification) to seed
     loadings, sigma_meas, sigma_shock, and sigma_inv. `"constant"`
     reproduces the legacy 0.5 / 0.5*obs_sd defaults; provided for
-    regression testing and pre-fix reproducibility.
+    regression testing and pre-fix reproducibility. `"none"` is accepted
+    for cross-estimator symmetry and behaves identically to `"constant"`
+    (AF always needs concrete per-period starts, so there is no NaN-leave
+    mode; the static defaults stand and the caller's `start_params`
+    overlay them).
     """
 
     keep_conditional_distributions: bool
@@ -100,7 +104,6 @@ class AFEstimationOptions:
         self,
         n_halton_points: int = 50,
         n_halton_points_shock: int = 30,
-        n_mixture_components: int = 2,
         optimizer_algorithm: str = "fides",
         optimizer_options: Mapping[str, Any] | None = None,
         *,
@@ -108,7 +111,7 @@ class AFEstimationOptions:
         coarse_fraction: float = 0.5,
         stability_floor: float = 1e-217,
         n_obs_per_batch: int | None = None,
-        initialization_strategy: Literal["constant", "spearman", "amn"] = "amn",
+        start_params_strategy: Literal["none", "constant", "spearman", "amn"] = "amn",
         keep_conditional_distributions: bool = True,
         n_halton_points_posterior_summary: int = 256,
     ) -> None:
@@ -120,7 +123,6 @@ class AFEstimationOptions:
             raise ValueError(msg)
         object.__setattr__(self, "n_halton_points", n_halton_points)
         object.__setattr__(self, "n_halton_points_shock", n_halton_points_shock)
-        object.__setattr__(self, "n_mixture_components", n_mixture_components)
         object.__setattr__(self, "optimizer_algorithm", optimizer_algorithm)
         object.__setattr__(
             self,
@@ -131,7 +133,7 @@ class AFEstimationOptions:
         object.__setattr__(self, "coarse_fraction", coarse_fraction)
         object.__setattr__(self, "stability_floor", stability_floor)
         object.__setattr__(self, "n_obs_per_batch", n_obs_per_batch)
-        object.__setattr__(self, "initialization_strategy", initialization_strategy)
+        object.__setattr__(self, "start_params_strategy", start_params_strategy)
         object.__setattr__(
             self, "keep_conditional_distributions", keep_conditional_distributions
         )
@@ -320,7 +322,7 @@ class AFEstimationResult:
     period_results: tuple[AFPeriodResult, ...]
     """Per-period estimation results, ordered by period."""
 
-    all_params: pd.DataFrame
+    params: pd.DataFrame
     """Combined parameters from all periods with standard 4-level MultiIndex."""
 
     model_spec: ModelSpec
@@ -328,6 +330,17 @@ class AFEstimationResult:
 
     conditional_distributions: tuple[ConditionalDistribution, ...]
     """Estimated conditional distributions per period (for filtered states)."""
+
+    success: bool
+    """AND across the per-period optimiser convergence flags. Conforms to
+    `skillmodels.common.estimation.CommonEstimationResult`."""
+
+    loglikelihood: float
+    """Sum of the per-period log-likelihoods at the optimum (AF maximises a
+    sequence of per-period likelihoods)."""
+
+    md_criterion: float | None = None
+    """Always `None` for AF; present to satisfy the common result Protocol."""
 
     def to_numpy(self) -> AFEstimationResult:
         """Return a copy with all device arrays materialised as numpy.

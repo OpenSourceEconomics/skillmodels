@@ -96,7 +96,7 @@ def estimate_initial_period(  # noqa: PLR0915
         to latent (or `state_factors`) coordinates.
 
     """
-    n_components = af_options.n_mixture_components
+    n_components = processed_model.dimensions.n_mixtures
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
     n_obs_factors = len(observed_factors)
@@ -151,7 +151,7 @@ def estimate_initial_period(  # noqa: PLR0915
     # parameters on weakly-identified ridges (notably sigma_inv vs sigma_meas) the
     # moment-based seed is the difference between converging at truth and
     # drifting to the boundary.
-    if af_options.initialization_strategy == "spearman":
+    if af_options.start_params_strategy == "spearman":
         all_measures_full = _get_ordered_measures(measurements_p0)
         params_template = _apply_moment_based_overrides_initial(
             params_template,

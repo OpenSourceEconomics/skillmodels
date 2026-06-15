@@ -148,11 +148,10 @@ def test_af_chain_runs_for_t5() -> None:
     af_options = AFEstimationOptions(
         n_halton_points=20,
         n_halton_points_shock=10,
-        n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
     )
 
-    result = estimate_af(model_spec=model, data=data, af_options=af_options)
+    result = estimate_af(model_spec=model, data=data, options=af_options)
 
     assert len(result.period_results) == 5, (
         f"Expected 5 per-period results for T=5; got {len(result.period_results)}"

@@ -794,7 +794,7 @@ def _initialize_transition_params(
     If `fixed_params` is provided, matching entries are pinned (value +
     bounds clamped).
 
-    When ``af_options.initialization_strategy == "spearman"``, run
+    When ``af_options.start_params_strategy == "spearman"``, run
     Spearman cross-covariance estimation per factor at the current period
     and seed loadings, sigma_meas, sigma_shock, sigma_inv, and inv-equation β from
     those moments. Falls back to the static defaults below for any factor
@@ -836,7 +836,7 @@ def _initialize_transition_params(
     # the sigma_inv / sigma_meas constant-Var ridge.
     if (
         af_options is not None
-        and af_options.initialization_strategy == "spearman"
+        and af_options.start_params_strategy == "spearman"
         and model_spec is not None
         and period is not None
     ):

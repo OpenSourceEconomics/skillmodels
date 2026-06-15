@@ -28,6 +28,7 @@ def _tiny_model() -> ModelSpec:
                 transition_function="linear",
             ),
         },
+        n_mixtures=2,
     )
 
 
@@ -53,26 +54,22 @@ def _tiny_data(n: int = 800, seed: int = 0) -> pd.DataFrame:
 def test_bootstrap_returns_expected_shapes():
     model = _tiny_model()
     data = _tiny_data(n=500, seed=0)
-    options = AMNEstimationOptions(
-        n_mixture_components=2, n_simulation_draws=1000, seed=0
-    )
+    options = AMNEstimationOptions(n_simulation_draws=1000, seed=0)
     fit = estimate_amn(model, data, options)
 
     inference = compute_amn_standard_errors(fit, data, options, n_boot=5, seed=11)
 
     assert inference.n_boot == 5
     assert inference.n_clusters == 500
-    assert inference.standard_errors.shape[0] == fit.all_params.shape[0]
-    assert inference.replicate_params.shape == (5, fit.all_params.shape[0])
-    assert inference.vcov.shape == (fit.all_params.shape[0], fit.all_params.shape[0])
+    assert inference.standard_errors.shape[0] == fit.params.shape[0]
+    assert inference.replicate_params.shape == (5, fit.params.shape[0])
+    assert inference.vcov.shape == (fit.params.shape[0], fit.params.shape[0])
 
 
 def test_bootstrap_standard_errors_non_negative_and_finite_where_replicates_finite():
     model = _tiny_model()
     data = _tiny_data(n=500, seed=1)
-    options = AMNEstimationOptions(
-        n_mixture_components=2, n_simulation_draws=1000, seed=0
-    )
+    options = AMNEstimationOptions(n_simulation_draws=1000, seed=0)
     fit = estimate_amn(model, data, options)
 
     inference = compute_amn_standard_errors(fit, data, options, n_boot=8, seed=42)
@@ -90,9 +87,7 @@ def test_bootstrap_standard_errors_non_negative_and_finite_where_replicates_fini
 def test_bootstrap_uses_distinct_reproducible_replicate_seeds(monkeypatch):
     model = _tiny_model()
     data = _tiny_data(n=500, seed=0)
-    options = AMNEstimationOptions(
-        n_mixture_components=2, n_simulation_draws=1000, seed=0
-    )
+    options = AMNEstimationOptions(n_simulation_draws=1000, seed=0)
     fit = estimate_amn(model, data, options)
 
     real = inf.estimate_amn
@@ -122,9 +117,7 @@ def test_bootstrap_uses_distinct_reproducible_replicate_seeds(monkeypatch):
 def test_bootstrap_excludes_nonconverged_replicate(monkeypatch):
     model = _tiny_model()
     data = _tiny_data(n=500, seed=0)
-    options = AMNEstimationOptions(
-        n_mixture_components=2, n_simulation_draws=1000, seed=0
-    )
+    options = AMNEstimationOptions(n_simulation_draws=1000, seed=0)
     fit = estimate_amn(model, data, options)
 
     real = inf.estimate_amn
@@ -137,9 +130,9 @@ def test_bootstrap_excludes_nonconverged_replicate(monkeypatch):
         real_fit = real(model_spec, boot_data, amn_options)
         if idx == 1:
             # 2nd replicate: nonconverged with a recognizable sentinel value.
-            bad_params = real_fit.all_params.copy()
+            bad_params = real_fit.params.copy()
             bad_params["value"] = sentinel
-            return dataclasses.replace(real_fit, all_params=bad_params, success=False)
+            return dataclasses.replace(real_fit, params=bad_params, success=False)
         return real_fit
 
     monkeypatch.setattr(inf, "estimate_amn", spy)

@@ -220,7 +220,7 @@ def compute_af_standard_errors(
     )
 
     rng = np.random.default_rng(seed)
-    all_params = result.all_params
+    all_params = result.params
     replicate_values = np.tile(all_params["value"].to_numpy()[None, :], (n_boot, 1))
 
     pos_lookup = {tuple(loc): i for i, loc in enumerate(all_params.index)}
@@ -396,7 +396,7 @@ def _build_initial_period_meta(
 ) -> _PeriodMeta:
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
-    n_components = af_options.n_mixture_components
+    n_components = processed_model.dimensions.n_mixtures
 
     reconstructed_factors = tuple(
         f for f in factors if not model_spec.factors[f].has_initial_distribution
@@ -1087,7 +1087,7 @@ def _build_influence_matrix(
     ``free_global_cols`` maps each free column to its global position in
     ``all_params``.
     """
-    flat_super = jnp.asarray(result.all_params["value"].to_numpy())
+    flat_super = jnp.asarray(result.params["value"].to_numpy())
 
     free_positions: list[int] = []
     free_locs: list[tuple[Any, ...]] = []

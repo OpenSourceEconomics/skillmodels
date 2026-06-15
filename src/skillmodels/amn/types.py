@@ -25,9 +25,6 @@ from skillmodels.common.types import ensure_containers_are_immutable
 class AMNEstimationOptions:
     """Configuration options for the AMN estimator."""
 
-    n_mixture_components: int
-    """Components in the Gaussian-mixture approximation to F_{theta,X}."""
-
     em_max_iter: int
     """Maximum EM iterations in Stage 1."""
 
@@ -70,7 +67,6 @@ class AMNEstimationOptions:
 
     def __init__(  # noqa: D107
         self,
-        n_mixture_components: int = 2,
         em_max_iter: int = 500,
         em_tol: float = 1e-6,
         em_n_init: int = 5,
@@ -84,7 +80,6 @@ class AMNEstimationOptions:
         keep_synthetic_panel: bool = False,
         seed: int = 0,
     ) -> None:
-        object.__setattr__(self, "n_mixture_components", n_mixture_components)
         object.__setattr__(self, "em_max_iter", em_max_iter)
         object.__setattr__(self, "em_tol", em_tol)
         object.__setattr__(self, "em_n_init", em_n_init)
@@ -270,13 +265,21 @@ class AMNEstimationResult:
     stages: AMNStageResults
     """Per-stage intermediate outputs."""
 
-    all_params: pd.DataFrame
+    params: pd.DataFrame
     """Combined parameters across stages, in the standard 4-level
     MultiIndex (category, period, name1, name2) format consumed by every
     other skillmodels entry point."""
 
     success: bool
     """AND across stage convergence flags."""
+
+    md_criterion: float
+    """Stage-2 minimum-distance criterion at the optimum (AMN's objective).
+    Conforms to `skillmodels.common.estimation.CommonEstimationResult`."""
+
+    loglikelihood: float | None = None
+    """Always `None` for AMN (minimum-distance, not likelihood); present to
+    satisfy the common result Protocol."""
 
     synthetic_panel: pd.DataFrame | None = None
     """Stage-3 simulated factor panel, kept iff

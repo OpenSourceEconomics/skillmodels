@@ -96,7 +96,7 @@ def _apply_overrides(
 def estimate_amn(
     model_spec: ModelSpec,
     data: pd.DataFrame,
-    amn_options: AMNEstimationOptions | None = None,
+    options: AMNEstimationOptions | None = None,
     start_params: pd.DataFrame | None = None,
     fixed_params: pd.DataFrame | None = None,
     constraints: list[om.constraints.Constraint] | None = None,
@@ -106,7 +106,7 @@ def estimate_amn(
     Args:
         model_spec: Same model spec used by CHS and AF.
         data: Panel dataset in long format with MultiIndex (id, period).
-        amn_options: AMN-specific options. If None, uses defaults.
+        options: AMN-specific options. If None, uses defaults.
         start_params: Optional starting parameter values; overlaid on the
             estimated combined params DataFrame as well as on Stage 1 EM
             starts (the latter not yet wired).
@@ -124,8 +124,9 @@ def estimate_amn(
 
     """
     del constraints  # forward-compat hook; AMN stages do not yet honour these
-    if amn_options is None:
-        amn_options = AMNEstimationOptions()
+    if options is None:
+        options = AMNEstimationOptions()
+    amn_options = options
 
     processed_model = process_model(model_spec)
     layout = build_augmented_measure_layout(processed_model)
@@ -133,7 +134,7 @@ def estimate_amn(
 
     mixture = fit_mixture_em(
         augmented,
-        n_components=amn_options.n_mixture_components,
+        n_components=processed_model.dimensions.n_mixtures,
         max_iter=amn_options.em_max_iter,
         tol=amn_options.em_tol,
         n_init=amn_options.em_n_init,
@@ -176,7 +177,8 @@ def estimate_amn(
             structural=structural,
             production=production,
         ),
-        all_params=all_params,
+        params=all_params,
         success=success,
+        md_criterion=float(structural.objective_value),
         synthetic_panel=None,
     )

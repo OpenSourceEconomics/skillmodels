@@ -31,7 +31,7 @@ from skillmodels.common.process_model import process_model
 def estimate_af(
     model_spec: ModelSpec,
     data: pd.DataFrame,
-    af_options: AFEstimationOptions | None = None,
+    options: AFEstimationOptions | None = None,
     start_params: pd.DataFrame | None = None,
     fixed_params: pd.DataFrame | None = None,
     constraints: list[om.constraints.Constraint] | None = None,
@@ -49,7 +49,7 @@ def estimate_af(
     Args:
         model_spec: Model specification (same as for CHS estimation).
         data: Dataset in long format with MultiIndex (id, period).
-        af_options: AF-specific estimation options. If None, uses defaults.
+        options: AF-specific estimation options. If None, uses defaults.
         start_params: Optional starting parameter values. If provided, any
             matching index entries override the heuristic defaults. Uses the
             same 4-level MultiIndex as CHS params (category, period, name1,
@@ -89,8 +89,9 @@ def estimate_af(
     """
     jax.config.update("jax_enable_x64", val=True)
 
-    if af_options is None:
-        af_options = AFEstimationOptions()
+    if options is None:
+        options = AFEstimationOptions()
+    af_options = options
 
     validate_af_model(model_spec)
     fail_if_unsupported_kappa_params(start_params, fixed_params, constraints)
@@ -99,13 +100,13 @@ def estimate_af(
     # If AMN-based starts are requested, run the full AMN three-stage
     # estimator upfront and overlay its parameter estimates onto the
     # caller-supplied `start_params` (user values win on overlap).
-    # After this the per-period MLE proceeds with `initialization_strategy
+    # After this the per-period MLE proceeds with `start_params_strategy
     # = "constant"` internally so the within-period Spearman pre-pass is
     # skipped (AMN's values are already in the optimizer's starting
     # neighbourhood).
-    if af_options.initialization_strategy == "amn":
+    if af_options.start_params_strategy == "amn":
         amn_result = estimate_amn(model_spec=model_spec, data=data)
-        amn_start = amn_result.all_params[["value"]]
+        amn_start = amn_result.params[["value"]]
         if start_params is not None:
             user_idx = start_params.index
             amn_start = amn_start.drop(
@@ -118,14 +119,13 @@ def estimate_af(
         af_options = AFEstimationOptions(
             n_halton_points=af_options.n_halton_points,
             n_halton_points_shock=af_options.n_halton_points_shock,
-            n_mixture_components=af_options.n_mixture_components,
             optimizer_algorithm=af_options.optimizer_algorithm,
             optimizer_options=dict(af_options.optimizer_options),
             two_stage=af_options.two_stage,
             coarse_fraction=af_options.coarse_fraction,
             stability_floor=af_options.stability_floor,
             n_obs_per_batch=af_options.n_obs_per_batch,
-            initialization_strategy="constant",
+            start_params_strategy="constant",
             keep_conditional_distributions=(af_options.keep_conditional_distributions),
             n_halton_points_posterior_summary=(
                 af_options.n_halton_points_posterior_summary
@@ -234,9 +234,11 @@ def estimate_af(
 
     return AFEstimationResult(
         period_results=tuple(period_results),
-        all_params=all_params,
+        params=all_params,
         model_spec=model_spec,
         conditional_distributions=conditional_dists_out,
+        success=all(r.success for r in period_results),
+        loglikelihood=float(sum(r.loglikelihood for r in period_results)),
     )
 
 

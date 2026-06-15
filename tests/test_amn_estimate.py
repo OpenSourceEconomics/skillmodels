@@ -25,6 +25,7 @@ def _tiny_model() -> ModelSpec:
                 transition_function="linear",
             ),
         },
+        n_mixtures=2,
     )
 
 
@@ -50,19 +51,17 @@ def _tiny_data(n: int = 1500, seed: int = 0) -> pd.DataFrame:
 def test_estimate_amn_produces_combined_params_dataframe():
     model = _tiny_model()
     data = _tiny_data(n=1500)
-    options = AMNEstimationOptions(
-        n_mixture_components=2, n_simulation_draws=5000, seed=0
-    )
+    options = AMNEstimationOptions(n_simulation_draws=5000, seed=0)
 
     result = estimate_amn(model, data, options)
 
-    assert result.all_params.index.names == [
+    assert result.params.index.names == [
         "category",
         "aug_period",
         "name1",
         "name2",
     ]
-    cats = set(result.all_params.index.get_level_values("category"))
+    cats = set(result.params.index.get_level_values("category"))
     assert {"loadings", "meas_sds", "transition", "shock_sds"} <= cats
     # 6 measurement loadings, 6 meas_sds, 1 transition (slope on skills) +
     # constant for period 0, 1 shock_sds for period 0.
@@ -72,9 +71,7 @@ def test_estimate_amn_produces_combined_params_dataframe():
 def test_estimate_amn_honors_fixed_params():
     model = _tiny_model()
     data = _tiny_data(n=1500)
-    options = AMNEstimationOptions(
-        n_mixture_components=2, n_simulation_draws=5000, seed=0
-    )
+    options = AMNEstimationOptions(n_simulation_draws=5000, seed=0)
 
     pin_loc = ("loadings", 1, "y2", "skills")
     fixed = pd.DataFrame(
@@ -86,15 +83,13 @@ def test_estimate_amn_honors_fixed_params():
 
     result = estimate_amn(model, data, options, fixed_params=fixed)
 
-    assert result.all_params.loc[pin_loc, "value"] == pytest.approx(0.42)
+    assert result.params.loc[pin_loc, "value"] == pytest.approx(0.42)
 
 
 def test_estimate_amn_returns_success_flag():
     model = _tiny_model()
     data = _tiny_data(n=1500)
-    options = AMNEstimationOptions(
-        n_mixture_components=2, n_simulation_draws=2000, seed=1
-    )
+    options = AMNEstimationOptions(n_simulation_draws=2000, seed=1)
 
     result = estimate_amn(model, data, options)
 
@@ -109,7 +104,7 @@ def test_estimate_amn_returns_success_flag():
 def test_estimate_amn_honors_fixed_params_keyed_by_period():
     """`fixed_params` keyed by `period` (the public level name) must pin.
 
-    AMN's combined `all_params` uses `aug_period` internally; users
+    AMN's combined `params` uses `aug_period` internally; users
     supply overrides keyed by `period`. `align_index_names` should
     rename the override's level so `MultiIndex.union` keeps the
     level names intact and the pin survives. Regression for the
@@ -118,9 +113,7 @@ def test_estimate_amn_honors_fixed_params_keyed_by_period():
     """
     model = _tiny_model()
     data = _tiny_data(n=1500)
-    options = AMNEstimationOptions(
-        n_mixture_components=2, n_simulation_draws=5000, seed=0
-    )
+    options = AMNEstimationOptions(n_simulation_draws=5000, seed=0)
 
     pin_loc = ("loadings", 1, "y2", "skills")
     fixed = pd.DataFrame(
@@ -133,10 +126,10 @@ def test_estimate_amn_honors_fixed_params_keyed_by_period():
 
     result = estimate_amn(model, data, options, fixed_params=fixed)
 
-    assert list(result.all_params.index.names) == [
+    assert list(result.params.index.names) == [
         "category",
         "aug_period",
         "name1",
         "name2",
     ]
-    assert result.all_params.loc[pin_loc, "value"] == pytest.approx(0.42)
+    assert result.params.loc[pin_loc, "value"] == pytest.approx(0.42)

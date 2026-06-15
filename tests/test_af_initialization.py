@@ -7,27 +7,27 @@ from skillmodels.af.types import AFEstimationOptions
 from skillmodels.amn.moments import spearman_factor_moments
 
 
-def test_default_initialization_strategy_is_amn():
+def test_default_start_params_strategy_is_amn():
     """Default initialization runs the full AMN estimator upfront."""
     opts = AFEstimationOptions()
 
-    assert opts.initialization_strategy == "amn"
+    assert opts.start_params_strategy == "amn"
 
 
-def test_initialization_strategy_can_be_set_to_spearman():
+def test_start_params_strategy_can_be_set_to_spearman():
     """Legacy Spearman pre-pass is available under the `"spearman"` name."""
-    opts = AFEstimationOptions(initialization_strategy="spearman")
+    opts = AFEstimationOptions(start_params_strategy="spearman")
 
-    assert opts.initialization_strategy == "spearman"
+    assert opts.start_params_strategy == "spearman"
 
 
-def test_initialization_strategy_can_be_set_to_constant():
+def test_start_params_strategy_can_be_set_to_constant():
     """Legacy constant init remains available for regression testing."""
     opts = AFEstimationOptions(
-        initialization_strategy="constant",
+        start_params_strategy="constant",
     )
 
-    assert opts.initialization_strategy == "constant"
+    assert opts.start_params_strategy == "constant"
 
 
 def test_spearman_seed_closer_to_truth_than_constant_default():
@@ -75,13 +75,12 @@ def test_spearman_falls_back_for_single_measurement_factor():
     assert result.meas_sds.shape == (1,)
 
 
-def test_initialization_strategy_other_options_unchanged():
+def test_start_params_strategy_other_options_unchanged():
     """Other AFEstimationOptions fields remain at their existing defaults."""
     opts = AFEstimationOptions()
 
     assert opts.n_halton_points == 50
     assert opts.n_halton_points_shock == 30
-    assert opts.n_mixture_components == 2
     assert opts.optimizer_algorithm == "fides"
     assert opts.two_stage is False
     assert opts.coarse_fraction == 0.5

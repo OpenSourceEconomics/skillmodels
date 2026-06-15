@@ -243,9 +243,9 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             data=data,
             params_template=params_template,
         )
-        common = amn_result.all_params.index.intersection(params_template.index)
+        common = amn_result.params.index.intersection(params_template.index)
         free_common = common[~pre_pinned.reindex(common, fill_value=False)]
-        params_template.loc[free_common, "value"] = amn_result.all_params.loc[
+        params_template.loc[free_common, "value"] = amn_result.params.loc[
             free_common, "value"
         ]
 

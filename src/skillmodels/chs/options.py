@@ -1,9 +1,12 @@
 """CHS-specific estimation options."""
 
-from dataclasses import dataclass
-from typing import Literal
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Any, Literal
 
 from skillmodels._beartype_conf import OPTIONS_CONF, beartype_init
+from skillmodels.common.types import ensure_containers_are_immutable
 
 
 @beartype_init(OPTIONS_CONF)
@@ -25,8 +28,11 @@ class CHSEstimationOptions:
     """Hardness of lower clipping."""
     clipping_upper_hardness: float = 1
     """Hardness of upper clipping."""
-    start_params_strategy: Literal["none", "spearman", "amn"] = "amn"
+    start_params_strategy: Literal["none", "constant", "spearman", "amn"] = "amn"
     """How to populate the `value` column of the `params_template`.
+
+    Canonical name shared with `AFEstimationOptions`; the literal set is
+    unified across the two likelihood estimators.
 
     `"amn"` (default) runs the full Attanasio-Meghir-Nix (2020)
     three-stage estimator and uses its parameter estimates as starting
@@ -34,8 +40,25 @@ class CHSEstimationOptions:
     from Spearman cross-covariance / Bartlett-OLS moments only (fast
     but less accurate on non-Gaussian factor distributions). `"none"`
     leaves free entries as `NaN` so the caller can fill them.
+    `"constant"` is accepted for cross-estimator symmetry and, for the
+    Kalman template, behaves identically to `"none"` (no moment seeding;
+    the template's default values stand).
     """
+
+    optimizer_algorithm: str = "scipy_lbfgsb"
+    """`optimagic` algorithm name driving `estimate_chs`'s `maximize` call."""
+
+    optimizer_options: Mapping[str, Any] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    """Extra keyword arguments forwarded to `optimagic.maximize` by
+    `estimate_chs` (e.g. `multistart`, `algo_options`)."""
 
     def __post_init__(self) -> None:  # noqa: D105
         if not self.robust_bounds:
             object.__setattr__(self, "bounds_distance", 0.0)
+        object.__setattr__(
+            self,
+            "optimizer_options",
+            ensure_containers_are_immutable(dict(self.optimizer_options)),
+        )

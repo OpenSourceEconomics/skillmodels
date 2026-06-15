@@ -214,7 +214,6 @@ def test_estimate_af_enforces_equality_across_periods() -> None:
     af_options = AFEstimationOptions(
         n_halton_points=20,
         n_halton_points_shock=10,
-        n_mixture_components=1,
         optimizer_algorithm="scipy_lbfgsb",
     )
 
@@ -230,7 +229,7 @@ def test_estimate_af_enforces_equality_across_periods() -> None:
     result = estimate_af(
         model_spec=model,
         data=data,
-        af_options=af_options,
+        options=af_options,
         constraints=constraints,
     )
 
