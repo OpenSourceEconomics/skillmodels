@@ -290,6 +290,10 @@ def _apply_neutral_defaults(
     params.loc[free & (cat == "mixture_weights"), "value"] = 1.0 / max(n_mixtures, 1)
     params.loc[free & (cat == "initial_cholcovs"), "value"] = 0.0
     params.loc[free & (cat == "transition"), "value"] = 0.5
+    # Control-function categories (present only under a CorrectionSpec). Seed
+    # small/neutral: no first-stage relationship and no correction initially.
+    params.loc[free & (cat == "investment_eq"), "value"] = 0.0
+    params.loc[free & (cat == "kappa"), "value"] = 0.0
     diag_values = pd.Series(
         [_is_cholcov_diag(idx) for idx in params.index],
         index=params.index,

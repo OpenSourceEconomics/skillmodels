@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 from skillmodels.amn.start_values import (
+    _apply_neutral_defaults,
     get_spearman_start_params,
     pool_equality_groups,
 )
@@ -25,6 +26,34 @@ from skillmodels.common.constraints import select_by_loc
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.utilities import reduce_n_periods
 from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
+
+
+def test_apply_neutral_defaults_fills_correction_categories() -> None:
+    """Neutral defaults must seed `investment_eq` and `kappa`.
+
+    The first-stage (`investment_eq`) and control-function (`kappa`)
+    coefficients are not produced by the moment / AMN overrides for every
+    model, so the neutral defaults must cover them; otherwise the seeded
+    start point keeps NaNs and `optimagic` rejects it. They seed to 0 — no
+    first-stage relationship and no correction initially.
+    """
+    index = pd.MultiIndex.from_tuples(
+        [
+            ("investment_eq", 2, "inv", "fac1"),
+            ("investment_eq", 2, "inv", "constant"),
+            ("kappa", 1, "fac1", "cf"),
+            ("transition", 0, "fac1", "fac1"),
+        ],
+        names=["category", "aug_period", "name1", "name2"],
+    )
+    params = pd.DataFrame({"value": [np.nan] * len(index)}, index=index)
+    free = params["value"].isna()
+
+    _apply_neutral_defaults(params, free, n_mixtures=1)
+
+    assert not params["value"].isna().any()
+    assert params.loc[("investment_eq", 2, "inv", "fac1"), "value"] == 0.0
+    assert params.loc[("kappa", 1, "fac1", "cf"), "value"] == 0.0
 
 
 @pytest.fixture

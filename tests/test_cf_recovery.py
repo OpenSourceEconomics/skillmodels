@@ -142,7 +142,7 @@ def test_control_function_recovers_period_specific_kappa() -> None:
     template = get_maximization_inputs(
         model,
         z1_panel,
-        chs_options=CHSEstimationOptions(start_params_strategy="spearman"),
+        chs_options=CHSEstimationOptions(start_params_strategy="none"),
     )["params_template"]
     true_params = _fill_true_params(template, all_factors)
 
@@ -212,7 +212,7 @@ def test_control_function_recovers_period_specific_kappa() -> None:
     mi = get_maximization_inputs(
         model,
         est_data,
-        chs_options=CHSEstimationOptions(start_params_strategy="spearman"),
+        chs_options=CHSEstimationOptions(start_params_strategy="none"),
     )
     start = mi["params_template"].copy()
     free = start["value"].isna()
