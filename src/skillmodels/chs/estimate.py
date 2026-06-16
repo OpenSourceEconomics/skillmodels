@@ -1,15 +1,20 @@
 """One-call driver for the CHS Kalman-MLE estimator.
 
 `estimate_chs` is a thin wrapper over `get_maximization_inputs` +
-`optimagic.maximize`, giving CHS the same `estimate_*(model_spec, data,
+`estimagic.estimate_ml`, giving CHS the same `estimate_*(model_spec, data,
 options, ...) -> ...EstimationResult` surface as `estimate_af` and
-`estimate_amn`. `get_maximization_inputs` stays public as the power-user
-escape hatch for callers who want to drive the optimiser themselves.
+`estimate_amn`. Running through `estimate_ml` (rather than a bare
+`optimagic.maximize`) means the returned result carries full ML inference —
+standard errors, covariances, summaries — so callers that need inference can
+adopt `estimate_chs` instead of hand-rolling `estimate_ml` on top of the
+inputs. `get_maximization_inputs` stays public as the power-user escape
+hatch for callers who want to drive the optimiser themselves.
 """
 
 import optimagic as om
 import pandas as pd
 from beartype import beartype
+from estimagic import estimate_ml
 
 from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
@@ -52,8 +57,9 @@ def estimate_chs(
 
     Return:
         `CHSEstimationResult` with the estimated `params`, the `success`
-        flag, the maximised `loglikelihood`, and the raw optimagic
-        `optimize_result`.
+        flag, the maximised `loglikelihood`, the raw optimagic
+        `optimize_result`, and the estimagic `likelihood_result` carrying ML
+        inference (`.se()` / `.cov()` / `.summary()`).
 
     """
     options = options or CHSEstimationOptions()
@@ -72,14 +78,27 @@ def estimate_chs(
 
     all_constraints = [*max_inputs["constraints"], *(constraints or [])]
 
-    res = om.maximize(
-        fun=max_inputs["loglike"],
+    optimize_options = {
+        "algorithm": options.optimizer_algorithm,
+        "algo_options": to_plain_dict(options.optimizer_options) or None,
+        "fun_and_jac": max_inputs["loglike_and_gradient"],
+    }
+
+    # Default to OPG/jacobian-based inference (`hessian=False`): the numerical
+    # Hessian costs O(n_params**2) Kalman passes and is prohibitive on real
+    # models. Overridable via `options.estimate_ml_options`.
+    estimate_ml_kwargs = {
+        "hessian": False,
+        **to_plain_dict(options.estimate_ml_options),
+    }
+
+    res = estimate_ml(
+        loglike=max_inputs["loglikeobs"],
         params=start[["value"]],
-        algorithm=options.optimizer_algorithm,
+        optimize_options=optimize_options,
         bounds=om.Bounds(lower=start["lower_bound"], upper=start["upper_bound"]),
         constraints=all_constraints,
-        fun_and_jac=max_inputs["loglike_and_gradient"],
-        **to_plain_dict(options.optimizer_options),
+        **estimate_ml_kwargs,
     )
 
     loglikelihood = float(max_inputs["loglike"](res.params))
@@ -87,7 +106,8 @@ def estimate_chs(
     return CHSEstimationResult(
         model_spec=model_spec,
         params=res.params,
-        success=bool(res.success),
+        success=bool(res.optimize_result.success),
         loglikelihood=loglikelihood,
-        optimize_result=res,
+        optimize_result=res.optimize_result,
+        likelihood_result=res,
     )

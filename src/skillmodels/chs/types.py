@@ -14,7 +14,9 @@ class CHSEstimationResult:
 
     Conforms to `skillmodels.common.estimation.CommonEstimationResult`:
     `loglikelihood` is always populated (CHS maximises a likelihood) and
-    `md_criterion` is always `None`.
+    `md_criterion` is always `None`. Estimation runs through
+    `estimagic.estimate_ml`, so `likelihood_result` carries full ML
+    inference (standard errors, covariances, summaries).
     """
 
     model_spec: ModelSpec
@@ -25,13 +27,18 @@ class CHSEstimationResult:
     (category, period, name1, name2) and a `"value"` column."""
 
     success: bool
-    """Whether the optimagic maximisation converged."""
+    """Whether the optimiser converged."""
 
     loglikelihood: float
     """Maximised log-likelihood at the optimum."""
 
     optimize_result: Any
-    """Raw optimagic `OptimizeResult` for full diagnostics."""
+    """Raw optimagic `OptimizeResult` for full optimisation diagnostics."""
+
+    likelihood_result: Any = None
+    """The estimagic `LikelihoodResult` from `estimate_ml`, exposing ML
+    inference via `.se()` / `.cov()` / `.summary()` / `.p_values()`. `None`
+    only for hand-constructed results (e.g. in tests)."""
 
     md_criterion: float | None = None
     """Always `None` for CHS; present to satisfy the common result Protocol."""

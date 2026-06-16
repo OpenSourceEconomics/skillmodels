@@ -21,7 +21,13 @@ def model2_data():
     return data.set_index(["caseid", "period"])
 
 
-def test_estimate_chs_returns_conforming_result(model2_data):
+@pytest.fixture
+def anchoring_start_params():
+    start_params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
+    return start_params.set_index(["category", "period", "name1", "name2"])
+
+
+def test_estimate_chs_returns_conforming_result(model2_data, anchoring_start_params):
     """Converge from the known optimum to a conforming `CHSEstimationResult`.
 
     Starting at the regression-vault optimum keeps the run cheap: the
@@ -29,14 +35,11 @@ def test_estimate_chs_returns_conforming_result(model2_data):
     skips the (slow) AMN/Spearman seeding since full start values are
     supplied.
     """
-    start_params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
-    start_params = start_params.set_index(["category", "period", "name1", "name2"])
-
     result = estimate_chs(
         MODEL2,
         model2_data,
         CHSEstimationOptions(start_params_strategy="none"),
-        start_params=start_params,
+        start_params=anchoring_start_params,
     )
 
     assert isinstance(result, CHSEstimationResult)
@@ -45,3 +48,23 @@ def test_estimate_chs_returns_conforming_result(model2_data):
     assert result.md_criterion is None
     assert result.model_spec is MODEL2
     assert "value" in result.params.columns
+
+
+def test_estimate_chs_provides_ml_inference(model2_data, anchoring_start_params):
+    """`estimate_chs` drives `estimate_ml`, so the result carries inference.
+
+    The result exposes the estimagic `LikelihoodResult`, from which standard
+    errors (and covariances, summaries) are available — the reason apps that
+    need inference can adopt `estimate_chs` instead of hand-rolling
+    `estimate_ml` on top of `get_maximization_inputs`.
+    """
+    result = estimate_chs(
+        MODEL2,
+        model2_data,
+        CHSEstimationOptions(start_params_strategy="none"),
+        start_params=anchoring_start_params,
+    )
+
+    assert result.likelihood_result is not None
+    standard_errors = result.likelihood_result.se()
+    assert standard_errors is not None

@@ -46,13 +46,31 @@ class CHSEstimationOptions:
     """
 
     optimizer_algorithm: str = "scipy_lbfgsb"
-    """`optimagic` algorithm name driving `estimate_chs`'s `maximize` call."""
+    """`optimagic` algorithm name for the maximisation.
+
+    `estimate_chs` forwards it as `estimate_ml`'s
+    `optimize_options["algorithm"]` (e.g. `"scipy_lbfgsb"`, `"fides"`)."""
 
     optimizer_options: Mapping[str, Any] = field(
         default_factory=lambda: MappingProxyType({})
     )
-    """Extra keyword arguments forwarded to `optimagic.maximize` by
-    `estimate_chs` (e.g. `multistart`, `algo_options`)."""
+    """Algorithm-specific options (`optimize_options["algo_options"]`).
+
+    Forwarded by `estimate_chs` to `estimate_ml` (e.g. convergence
+    tolerances, trust-region settings for `fides`)."""
+
+    estimate_ml_options: Mapping[str, Any] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    """Extra keyword arguments forwarded verbatim to `estimagic.estimate_ml`.
+
+    The generic estimagic pass-through for everything beyond the optimiser
+    knobs above — e.g. `logging` (an `optimagic` log-options object),
+    `hessian`, `jacobian`, `design_info`. `estimate_chs` defaults
+    `hessian=False` (OPG/jacobian-based standard errors, since the numerical
+    Hessian is prohibitively expensive); override it here for the sandwich
+    covariance. `estimate_chs` manages `loglike`, `params`, `bounds`,
+    `constraints`, and `optimize_options` itself, so do not set those here."""
 
     def __post_init__(self) -> None:  # noqa: D105
         if not self.robust_bounds:
@@ -61,4 +79,9 @@ class CHSEstimationOptions:
             self,
             "optimizer_options",
             ensure_containers_are_immutable(dict(self.optimizer_options)),
+        )
+        object.__setattr__(
+            self,
+            "estimate_ml_options",
+            ensure_containers_are_immutable(dict(self.estimate_ml_options)),
         )
