@@ -11,10 +11,43 @@ from skillmodels.chs.maximization_inputs import (
     _to_numpy,
     get_maximization_inputs,
 )
+from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.constraints import FixedConstraintWithValue
 from skillmodels.common.utilities import reduce_n_periods
 from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
+
+
+@pytest.mark.long_running
+def test_amn_start_params_satisfy_equality_constraints() -> None:
+    """AMN-seeded start values must satisfy the stage-equality constraints.
+
+    AMN estimates parameters per aug_period, but the stage
+    `PairwiseEqualityConstraint`s tie transition / shock params across the
+    aug_periods of a stage. The AMN seed must re-pool those groups; otherwise
+    `optimagic` rejects the start point with `InvalidParamsError`.
+    """
+    data = pd.read_stata(TEST_DATA_DIR / "model2_simulated_data.dta").set_index(
+        ["caseid", "period"]
+    )
+    mi = get_maximization_inputs(
+        model_spec=MODEL2,
+        data=data,
+        chs_options=CHSEstimationOptions(start_params_strategy="amn"),
+    )
+    template = mi["params_template"]
+    # optimagic validates start-point feasibility at setup and raises
+    # InvalidParamsError on a violated equality constraint. A trivial one-step
+    # maximize reaches that check without running the Kalman likelihood.
+    res = om.maximize(
+        fun=lambda p: float(p["value"].sum()),
+        params=template[["value"]],
+        algorithm="scipy_lbfgsb",
+        bounds=om.Bounds(lower=template["lower_bound"], upper=template["upper_bound"]),
+        constraints=mi["constraints"],
+        algo_options={"stopping_maxiter": 1},
+    )
+    assert res is not None
 
 
 def test_to_numpy_with_dict() -> None:

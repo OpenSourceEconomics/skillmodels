@@ -158,6 +158,49 @@ def get_spearman_start_params(
     return out
 
 
+def get_amn_start_params(
+    model_spec: ModelSpec,
+    data: pd.DataFrame,
+    params_template: pd.DataFrame,
+    amn_params: pd.DataFrame,
+) -> pd.DataFrame:
+    """Seed start values from AMN estimates, pooling stage-tied params.
+
+    Fills via `get_spearman_start_params` (covering entries AMN does not
+    produce — e.g. mixture weights and initial Cholesky diagonals), overlays
+    the AMN estimates onto the common free entries, then re-pools the
+    `transition` / `shock_sds` seeds within each stage. The re-pool is
+    essential: AMN estimates per aug_period, so its raw overlay violates the
+    within-stage `PairwiseEqualityConstraint`s that `optimagic` checks at the
+    start point (`get_spearman_start_params` pools them, but the AMN overlay
+    re-breaks the ties).
+
+    Args:
+        model_spec: Model specification.
+        data: Long-format panel with the `(id, period)` MultiIndex consumed by
+            `get_maximization_inputs`.
+        params_template: Template from `get_maximization_inputs`, with pinned
+            entries already filled.
+        amn_params: `AMNEstimationResult.params` to overlay onto the free
+            common entries.
+
+    Return:
+        Copy of `params_template` with seeded, stage-pooled `value`s.
+
+    """
+    pre_pinned = params_template["value"].notna()
+    out = get_spearman_start_params(
+        model_spec=model_spec, data=data, params_template=params_template
+    )
+    common = amn_params.index.intersection(out.index)
+    free_common = common[~pre_pinned.reindex(common, fill_value=False)]
+    out.loc[free_common, "value"] = amn_params.loc[free_common, "value"]
+    _pool_within_stage_equality(
+        out, free=~pre_pinned, processed_model=process_model(model_spec)
+    )
+    return out
+
+
 def pool_equality_groups(  # noqa: C901
     params: pd.DataFrame,
     constraints: list[om.constraints.Constraint],

@@ -16,7 +16,10 @@ import skillmodels.chs.likelihood as lf
 import skillmodels.chs.likelihood_debug as lfd
 from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.amn.estimate import estimate_amn
-from skillmodels.amn.start_values import get_spearman_start_params
+from skillmodels.amn.start_values import (
+    get_amn_start_params,
+    get_spearman_start_params,
+)
 from skillmodels.chs.kalman_filters import (
     calculate_sigma_scaling_factor_and_weights,
     is_all_linear,
@@ -232,22 +235,12 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         )
     elif strategy == "amn":
         amn_result = estimate_amn(model_spec=model_spec, data=data)
-        # First fill template via Spearman for entries AMN doesn't touch
-        # (mixture weights, initial Cholesky diagonals not directly
-        # produced by AMN's three stages); then overlay AMN values onto
-        # the common index. Skip indices pre-pinned by
-        # `enforce_fixed_constraints`.
-        pre_pinned = params_template["value"].notna()
-        params_template = get_spearman_start_params(
+        params_template = get_amn_start_params(
             model_spec=model_spec,
             data=data,
             params_template=params_template,
+            amn_params=amn_result.params,
         )
-        common = amn_result.params.index.intersection(params_template.index)
-        free_common = common[~pre_pinned.reindex(common, fill_value=False)]
-        params_template.loc[free_common, "value"] = amn_result.params.loc[
-            free_common, "value"
-        ]
 
     params_template = project_to_probability_constraints(
         params_template=params_template, constraints=constraints
