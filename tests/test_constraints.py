@@ -113,6 +113,46 @@ def test_get_constraints_pins_instrument_out_of_production() -> None:
         assert target in ("fac1", "fac2")
 
 
+def test_get_constraints_skips_custom_target_transition() -> None:
+    # A custom (registered) production transition on a correction target has no
+    # built-in `params_<name>` enumerator; the instrument-exclusion guard must
+    # skip it (custom-production leakage is validated separately by
+    # `check_model`) rather than raise AttributeError.
+    from dataclasses import replace  # noqa: PLC0415
+
+    from skillmodels.common.decorators import register_params  # noqa: PLC0415
+    from skillmodels.common.model_spec import CorrectionSpec  # noqa: PLC0415
+    from skillmodels.test_data.model2 import MODEL2  # noqa: PLC0415
+
+    @register_params(params=["constant", "fac1", "fac2"])
+    def custom_prod(fac1, fac2, params):
+        return params["constant"] + params["fac1"] * fac1 + params["fac2"] * fac2
+
+    corr = CorrectionSpec(instruments=("inv_z",))
+    new_factors = dict(MODEL2.factors) | {
+        "fac1": replace(MODEL2.factors["fac1"], transition_function=custom_prod),
+        "fac3": replace(MODEL2.factors["fac3"], is_endogenous=True, correction=corr),
+    }
+    model = (
+        MODEL2._replace(factors=new_factors)
+        ._replace(stagemap=None)
+        ._replace(observed_factors=("inv_z",))
+    )
+    processed = process_model(model)
+
+    # Must not raise `AttributeError: ... has no attribute 'params_custom_prod'`.
+    constraints = get_constraints(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        anchoring_info=processed.anchoring,
+        normalizations=processed.normalizations,
+        endogenous_factors_info=processed.endogenous_factors_info,
+        bounds_distance=1e-8,
+    )
+    assert constraints
+
+
 def _to_dict(c: om.constraints.Constraint) -> dict[str, Any]:
     """Convert a constraint object to a comparable dict for testing."""
     if isinstance(c, FixedConstraintWithValue):

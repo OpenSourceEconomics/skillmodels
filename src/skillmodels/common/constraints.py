@@ -552,9 +552,16 @@ def _get_instrument_exclusion_constraints(
         tname = labels.transition_names[labels.latent_factors.index(target)]
         if not isinstance(tname, str) or tname == "constant":
             continue
+        params_enumerator = getattr(t_f_module, f"params_{tname}", None)
+        if params_enumerator is None:
+            # Custom transition (no built-in `params_<name>` enumerator). The
+            # built-in safe-by-construction pinning does not apply; instrument
+            # leakage through custom production is validated separately by
+            # `check_model`, which raises on it.
+            continue
         leak_names = [
             name
-            for name in getattr(t_f_module, f"params_{tname}")(labels.all_factors)
+            for name in params_enumerator(labels.all_factors)
             if instruments & _factors_in_param_name(name)
         ]
         constraints.extend(
