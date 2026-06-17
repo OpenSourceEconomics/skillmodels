@@ -20,6 +20,7 @@ from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.chs.types import CHSEstimationResult
+from skillmodels.common.constraints import reconcile_start_to_equality
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.types import to_plain_dict
 
@@ -77,6 +78,12 @@ def estimate_chs(
         start.loc[overlay.notna(), "value"] = overlay[overlay.notna()]
 
     all_constraints = [*max_inputs["constraints"], *(constraints or [])]
+
+    # `estimate_ml` (via `om.minimize`) raises `InvalidParamsError` if the start
+    # point violates any equality constraint. Seeding strategies (AMN/Spearman)
+    # and user start_params fill each member independently, so average each
+    # equality group's seeded value onto the constraint surface first.
+    start = reconcile_start_to_equality(start, all_constraints)
 
     optimize_options = {
         "algorithm": options.optimizer_algorithm,

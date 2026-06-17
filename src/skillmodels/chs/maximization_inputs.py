@@ -234,7 +234,11 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             params_template=params_template,
         )
     elif strategy == "amn":
-        amn_result = estimate_amn(model_spec=model_spec, data=data)
+        # Seeding only: fit the linear cf term even for higher-order (translog)
+        # kappa bases; the higher-order kappa terms get the small start defaults.
+        amn_result = estimate_amn(
+            model_spec=model_spec, data=data, linearize_control_function=True
+        )
         params_template = get_amn_start_params(
             model_spec=model_spec,
             data=data,

@@ -100,6 +100,8 @@ def estimate_amn(
     start_params: pd.DataFrame | None = None,
     fixed_params: pd.DataFrame | None = None,
     constraints: list[om.constraints.Constraint] | None = None,
+    *,
+    linearize_control_function: bool = False,
 ) -> AMNEstimationResult:
     """Estimate a latent factor model using the Attanasio-Meghir-Nix method.
 
@@ -117,6 +119,11 @@ def estimate_amn(
         constraints: Reserved for forward-compatibility (equality
             constraints from optimagic). Not yet honoured inside the AMN
             stages; pass-through only.
+        linearize_control_function: When True, fit only the linear `cf` term
+            of any `CorrectionSpec` and skip the higher-order
+            `NotImplementedError` gate. Used when AMN seeds `estimate_chs`:
+            the higher-order `kappa_terms` then fall back to small start
+            defaults rather than being estimated here.
 
     Return:
         AMNEstimationResult containing per-stage outputs and the combined
@@ -158,6 +165,7 @@ def estimate_amn(
         mixture_weights=mixture.weights,
         n_draws=amn_options.n_simulation_draws,
         seed=amn_options.seed,
+        linearize_control_function=linearize_control_function,
     )
 
     measurement = _measurement_params_dataframe(structural)

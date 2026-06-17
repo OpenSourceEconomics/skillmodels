@@ -578,6 +578,7 @@ def simulate_and_regress(
     *,
     n_draws: int = 100_000,
     seed: int = 0,
+    linearize_control_function: bool = False,
 ) -> ProductionFitResult:
     """Simulate the joint latent-factor distribution and run Stage-3 regressions.
 
@@ -589,6 +590,9 @@ def simulate_and_regress(
         mixture_weights: Per-component mixture weights from Stage 1.
         n_draws: Synthetic-panel size.
         seed: RNG seed.
+        linearize_control_function: When True, fit only the single linear `cf`
+            term and skip the higher-order `kappa_terms`
+            `NotImplementedError` gate (used when AMN seeds `estimate_chs`).
 
     The AMN eq.-7-8 investment control-function correction (AF Sec. 3.5) runs iff
     the model declares a `CorrectionSpec` (presence is the single trigger). A
@@ -608,9 +612,12 @@ def simulate_and_regress(
     # CorrectionSpec presence is the single trigger; there is no separate flag.
     run_cf = control_function is not None
 
-    if control_function is not None:
+    if control_function is not None and not linearize_control_function:
         # AMN implements only a single linear cf term per target; the higher-order
-        # (translog) kappa_terms basis needs estimate_chs.
+        # (translog) kappa_terms basis needs estimate_chs. When used to *seed*
+        # estimate_chs (`linearize_control_function=True`), AMN instead fits only
+        # the linear cf term and leaves the higher-order kappa terms for the
+        # start-value defaults.
         for target, terms in control_function.kappa_terms.items():
             if tuple(terms) != ("cf",):
                 msg = (

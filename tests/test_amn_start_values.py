@@ -56,6 +56,41 @@ def test_apply_neutral_defaults_fills_correction_categories() -> None:
     assert params.loc[("kappa", 1, "fac1", "cf"), "value"] == 0.0
 
 
+def test_apply_neutral_defaults_seeds_higher_order_terms_small() -> None:
+    """Higher-order terms seed to a small 0.01, not the linear defaults.
+
+    Translog interactions / squares (`"fac1 * fac2"`, `"fac1 ** 2"`) and
+    higher-order control-function terms (`"cf * fac1"`, `"cf ** 2"`) are not
+    produced by the linear AMN/Spearman seeds. They get a small start so the
+    optimiser explores away from zero without the higher-order monomials
+    dominating the seeded production function.
+    """
+    index = pd.MultiIndex.from_tuples(
+        [
+            ("transition", 0, "fac1", "fac1"),
+            ("transition", 0, "fac1", "fac1 * fac2"),
+            ("transition", 0, "fac1", "fac1 ** 2"),
+            ("kappa", 1, "fac1", "cf"),
+            ("kappa", 1, "fac1", "cf * fac1"),
+            ("kappa", 1, "fac1", "cf ** 2"),
+        ],
+        names=["category", "aug_period", "name1", "name2"],
+    )
+    params = pd.DataFrame({"value": [np.nan] * len(index)}, index=index)
+    free = params["value"].isna()
+
+    _apply_neutral_defaults(params, free, n_mixtures=1)
+
+    # Linear terms keep their category defaults ...
+    assert params.loc[("transition", 0, "fac1", "fac1"), "value"] == 0.5
+    assert params.loc[("kappa", 1, "fac1", "cf"), "value"] == 0.0
+    # ... higher-order terms (a space in `name2`) seed small.
+    assert params.loc[("transition", 0, "fac1", "fac1 * fac2"), "value"] == 0.01
+    assert params.loc[("transition", 0, "fac1", "fac1 ** 2"), "value"] == 0.01
+    assert params.loc[("kappa", 1, "fac1", "cf * fac1"), "value"] == 0.01
+    assert params.loc[("kappa", 1, "fac1", "cf ** 2"), "value"] == 0.01
+
+
 @pytest.fixture
 def model2_short() -> ModelSpec:
     spec = reduce_n_periods(MODEL2, new_n_periods=3)

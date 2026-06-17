@@ -294,6 +294,13 @@ def _apply_neutral_defaults(
     # small/neutral: no first-stage relationship and no correction initially.
     params.loc[free & (cat == "investment_eq"), "value"] = 0.0
     params.loc[free & (cat == "kappa"), "value"] = 0.0
+    # Higher-order terms -- translog interactions / squares ("f1 * f2", "f1 ** 2")
+    # and higher-order cf terms ("cf * f1", "cf ** 2"), identified by a space in
+    # `name2` -- are not produced by the linear AMN/Spearman seeds; start them
+    # small so the optimiser explores away from zero without dominating.
+    name2 = params.index.get_level_values("name2")
+    higher_order = free & pd.Series([" " in str(n) for n in name2], index=params.index)
+    params.loc[higher_order, "value"] = 0.01
     diag_values = pd.Series(
         [_is_cholcov_diag(idx) for idx in params.index],
         index=params.index,
