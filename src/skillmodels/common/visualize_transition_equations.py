@@ -433,8 +433,15 @@ def _prepare_plot_data_for_factor_pair(
             has_endogenous_factors=has_endogenous_factors,
         )
 
+        # Forward every transition-coeffs key sliced at this period, not just the
+        # output factor's: a correction target's grafted DAG also reads the
+        # reserved first-stage (`__first_stage_<inv>__`) and kappa
+        # (`__kappa_<target>__`) keys. All keys share the same per-period axis, so
+        # `[aug_period]` indexes them uniformly; the DAG ignores keys it does not
+        # need (e.g. other factors' coefficients).
         transition_params = {
-            output_factor: parsed_params.transition[output_factor][aug_period]
+            key: per_period[aug_period]
+            for key, per_period in parsed_params.transition.items()
         }
         period_states = states_data[states_data["aug_period"] == aug_period]
 
