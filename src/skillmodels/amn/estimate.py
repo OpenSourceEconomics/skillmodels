@@ -38,9 +38,15 @@ from skillmodels.common.process_model import process_model
 from skillmodels.common.selector import align_index_names
 from skillmodels.common.types import ProcessedModel
 
-# Row cap for the missing-data Stage-1 EM: a seed needs only a representative
-# subsample, and the EM cost scales with the number of distinct missing patterns.
-_MAX_MISSING_DATA_SEED_ROWS = 5000
+# Budget for the missing-data Stage-1 EM. It only produces *start values*, and its
+# cost scales with the number of distinct missing patterns and the augmented
+# dimension (per-pattern Cholesky each iteration). A single warm-started restart
+# with a modest iteration cap and a row subsample keeps seeding tractable on a
+# large, high-dimensional unbalanced panel; the full complete-case path keeps the
+# user's `em_n_init` / `em_max_iter`.
+_MAX_MISSING_DATA_SEED_ROWS = 3000
+_MISSING_DATA_SEED_N_INIT = 1
+_MISSING_DATA_SEED_MAX_ITER = 50
 
 
 def _measurement_params_dataframe(
@@ -143,26 +149,26 @@ def _seed_stage1_mixture(
             )
             layout, augmented = full_layout, full_augmented
 
-    if (
-        fit_method == "missing_data"
-        and augmented.shape[0] > _MAX_MISSING_DATA_SEED_ROWS
-    ):
-        # The missing-data EM cost scales with the number of distinct missing
-        # patterns (worst case: one per row). A seed does not need the full
-        # sample, so cap the rows to keep Stage-1 seeding tractable on large
-        # unbalanced panels.
-        rng = np.random.default_rng(amn_options.seed)
-        keep = rng.choice(
-            augmented.shape[0], _MAX_MISSING_DATA_SEED_ROWS, replace=False
-        )
-        augmented = augmented[keep]
+    n_init = amn_options.em_n_init
+    max_iter = amn_options.em_max_iter
+    if fit_method == "missing_data":
+        n_init = min(amn_options.em_n_init, _MISSING_DATA_SEED_N_INIT)
+        max_iter = min(amn_options.em_max_iter, _MISSING_DATA_SEED_MAX_ITER)
+        if augmented.shape[0] > _MAX_MISSING_DATA_SEED_ROWS:
+            # Subsample rows so the per-pattern work stays bounded; a seed does
+            # not need the full sample.
+            rng = np.random.default_rng(amn_options.seed)
+            keep = rng.choice(
+                augmented.shape[0], _MAX_MISSING_DATA_SEED_ROWS, replace=False
+            )
+            augmented = augmented[keep]
 
     return fit_mixture_em(
         augmented,
         n_components=n_components,
-        max_iter=amn_options.em_max_iter,
+        max_iter=max_iter,
         tol=amn_options.em_tol,
-        n_init=amn_options.em_n_init,
+        n_init=n_init,
         reg_covar=amn_options.em_reg_covar,
         seed=amn_options.seed,
         layout=layout,
