@@ -14,6 +14,7 @@ minimum-distance recovery (`skillmodels.amn.minimum_distance`).
 import warnings
 from collections.abc import Mapping
 from itertools import chain
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,17 @@ from sklearn.mixture import GaussianMixture
 from skillmodels.amn.missing_data_em import fit_gaussian_mixture_missing
 from skillmodels.amn.types import AugmentedMeasureLayout, MixtureFitResult
 from skillmodels.common.types import ProcessedModel
+
+
+class InsufficientCompleteCasesError(ValueError):
+    """Too few listwise-complete rows for a complete-case Stage-1 mixture fit.
+
+    Raised by the complete-case EM when the augmented measure vector has fewer
+    rows observed in *every* column than the mixture has components -- the regime
+    of an unbalanced panel with cross-period attrition. Pass
+    `mixture_em_method="missing_data"` to fit by marginalising over each row's
+    missing entries instead.
+    """
 
 
 def build_augmented_measure_layout(
@@ -196,183 +208,6 @@ def build_augmented_measure_matrix(
     return out
 
 
-def _normalization_measurement_slots(
-    layout: AugmentedMeasureLayout,
-    processed_model: ProcessedModel,
-) -> set[int]:
-    """Return measurement slots whose loading is normalized (must not be dropped).
-
-    Mirrors the normalization detection in
-    `minimum_distance._build_structure`: a `(period, factor, measurement)`
-    slot is protected if `measurement` carries a fixed loading in any
-    `aug_period` mapping to that calendar period.
-    """
-    normalizations = processed_model.normalizations
-    aug_to_period = processed_model.labels.aug_periods_to_periods
-    protected: set[int] = set()
-    for slot, (period, factor, meas_name) in zip(
-        layout.measurement_slots, layout.measurement_meta, strict=True
-    ):
-        if factor not in normalizations:
-            continue
-        for aug_period, cal_period in aug_to_period.items():
-            if int(cal_period) != int(period):
-                continue
-            if meas_name in normalizations[factor].loadings[aug_period]:
-                protected.add(slot)
-                break
-    return protected
-
-
-def _subset_layout(
-    layout: AugmentedMeasureLayout,
-    keep_mask: np.ndarray,
-) -> AugmentedMeasureLayout:
-    """Drop the columns where `keep_mask` is False and re-index every slot.
-
-    Slot indices are absolute positions in the augmented vector, so removing
-    columns shifts the survivors; `old -> new` is the running count of kept
-    columns. Only measurement slots are ever dropped, so the observed-factor
-    and control slots survive and are merely renumbered.
-    """
-    old_to_new = np.cumsum(keep_mask) - 1
-
-    def _remap[T](
-        slots: tuple[int, ...], metas: tuple[T, ...]
-    ) -> tuple[tuple[int, ...], tuple[T, ...]]:
-        kept = [
-            (int(old_to_new[slot]), meta)
-            for slot, meta in zip(slots, metas, strict=True)
-            if keep_mask[slot]
-        ]
-        if not kept:
-            return (), ()
-        new_slots, new_metas = zip(*kept, strict=True)
-        return tuple(new_slots), tuple(new_metas)
-
-    meas_slots, meas_meta = _remap(layout.measurement_slots, layout.measurement_meta)
-    obs_slots, obs_meta = _remap(
-        layout.observed_factor_slots, layout.observed_factor_meta
-    )
-    ctrl_slots, ctrl_meta = _remap(layout.control_slots, layout.control_meta)
-    columns = tuple(
-        c for c, keep in zip(layout.columns, keep_mask, strict=True) if keep
-    )
-    return AugmentedMeasureLayout(
-        columns=columns,
-        measurement_slots=meas_slots,
-        observed_factor_slots=obs_slots,
-        control_slots=ctrl_slots,
-        measurement_meta=meas_meta,
-        observed_factor_meta=obs_meta,
-        control_meta=ctrl_meta,
-    )
-
-
-def _n_complete(augmented: np.ndarray, keep_mask: np.ndarray) -> int:
-    """Count rows with no missing value among the kept columns."""
-    return int((~np.isnan(augmented[:, keep_mask]).any(axis=1)).sum())
-
-
-def reduce_to_seedable_measurements(
-    layout: AugmentedMeasureLayout,
-    augmented: np.ndarray,
-    processed_model: ProcessedModel,
-    *,
-    n_components: int,
-    min_complete_cases: int = 50,
-) -> tuple[AugmentedMeasureLayout, np.ndarray, tuple[tuple[int, str, str], ...]]:
-    """Drop high-missing measurements so Stage 1 can seed on complete cases.
-
-    Stage 1's mixture EM is complete-case only: a row survives only if every
-    augmented column is observed. Rotating-subsample measurements (missing for
-    most person-waves) -- and, in an unbalanced panel, ordinary measurements that
-    are simply absent in some waves -- can drive the complete-case count to zero.
-
-    When the full vector has fewer complete cases than `n_components`, greedily
-    drop the highest-missing non-normalization measurement as long as the drop
-    adds complete cases, until at least `min_complete_cases` remain (or no more
-    droppable measurement helps). Each factor's normalization measurement is never
-    dropped. The dropped measurements are simply not AMN-seeded; their params fall
-    back to the neutral/Spearman seeding defaults. If even dropping every droppable
-    measurement leaves the subset infeasible, the inputs are returned as far as
-    reduced and `fit_mixture_em` raises its informative complete-case error.
-
-    Returns the (possibly unchanged) layout and augmented matrix plus the meta of
-    the dropped measurements. When the full vector already has enough complete
-    cases the inputs are returned untouched, so healthy models are unaffected.
-
-    Args:
-        layout: Augmented-measure layout to (possibly) reduce.
-        augmented: `(n_obs, n_aug)` augmented matrix aligned with `layout`.
-        processed_model: Processed model, for normalization detection.
-        n_components: Mixture components; the complete-case feasibility floor.
-        min_complete_cases: Greedy drops stop once this many complete cases
-            remain (capped below by `n_components`).
-
-    Return:
-        `(reduced_layout, reduced_augmented, dropped_measurement_meta)`.
-
-    """
-    n_aug = augmented.shape[1]
-    full_mask = np.ones(n_aug, dtype=bool)
-    if _n_complete(augmented, full_mask) >= n_components:
-        return layout, augmented, ()
-
-    protected = _normalization_measurement_slots(layout, processed_model)
-    n_rows = max(augmented.shape[0], 1)
-    missing_rate = np.isnan(augmented).sum(axis=0) / n_rows
-    # Highest-missing non-normalization measurements first; fully observed ones
-    # (missing rate 0) never block and are never dropped.
-    droppable = sorted(
-        (
-            slot
-            for slot in layout.measurement_slots
-            if slot not in protected and missing_rate[slot] > 0.0
-        ),
-        key=lambda slot: missing_rate[slot],
-        reverse=True,
-    )
-
-    target = max(n_components, min_complete_cases)
-    keep_mask = full_mask.copy()
-    dropped: list[int] = []
-    for slot in droppable:
-        if _n_complete(augmented, keep_mask) >= target:
-            break
-        keep_mask[slot] = False
-        dropped.append(slot)
-
-    if not dropped or _n_complete(augmented, keep_mask) < n_components:
-        # Either nothing is droppable, or even dropping every droppable
-        # measurement leaves the subset infeasible (e.g. cross-period attrition,
-        # or a normalization is the blocker). Return the inputs untouched so
-        # fit_mixture_em raises its informative complete-case error on the full
-        # set rather than on a uselessly thinned one.
-        return layout, augmented, ()
-
-    drop_set = set(dropped)
-    dropped_meta = tuple(
-        meta
-        for slot, meta in zip(
-            layout.measurement_slots, layout.measurement_meta, strict=True
-        )
-        if slot in drop_set
-    )
-    n_after = _n_complete(augmented, keep_mask)
-    pretty = ", ".join(f"{p}|{f}|{m}" for p, f, m in dropped_meta)
-    warnings.warn(
-        f"AMN Stage 1 seeding: too few complete-case rows over the full "
-        f"measurement set (< {n_components} mixture components). Greedily dropped "
-        f"{len(dropped_meta)} high-missing measurement(s) and seeded the mixture "
-        f"on the always-observed subset ({n_after} complete cases): {pretty}. "
-        f"Their loadings/SDs fall back to the start-value defaults.",
-        RuntimeWarning,
-        stacklevel=2,
-    )
-    return _subset_layout(layout, keep_mask), augmented[:, keep_mask], dropped_meta
-
-
 def _fit_complete_case(
     augmented: np.ndarray,
     *,
@@ -388,10 +223,14 @@ def _fit_complete_case(
     n_complete = int(complete_mask.sum())
     if n_complete < n_components:
         msg = (
-            f"Only {n_complete} complete-case rows available for "
-            f"{n_components}-component mixture."
+            f"AMN Stage 1 complete-case mixture EM needs at least {n_components} "
+            f"rows (one per mixture component) observed in every augmented "
+            f"measurement, but only {n_complete} of {augmented.shape[0]} rows are "
+            f"complete. This is the unbalanced-panel regime where few or no "
+            f'individuals span every period. Set mixture_em_method="missing_data" '
+            f"to fit the mixture by marginalising over each row's missing entries."
         )
-        raise ValueError(msg)
+        raise InsufficientCompleteCasesError(msg)
     n_total = int(augmented.shape[0])
     n_dropped = n_total - n_complete
     if n_dropped > 0:
@@ -437,7 +276,7 @@ def fit_mixture_em(
     seed: int = 0,
     layout: AugmentedMeasureLayout | None = None,
     init_params: Mapping[str, np.ndarray] | None = None,
-    method: str = "complete_case",
+    method: Literal["complete_case", "missing_data"] = "complete_case",
 ) -> MixtureFitResult:
     """Fit a Gaussian mixture to the augmented measure matrix via EM.
 

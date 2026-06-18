@@ -158,6 +158,51 @@ def get_spearman_start_params(
     return out
 
 
+def _amn_values_on_chs_index(
+    amn_params: pd.DataFrame,
+    chs_index: pd.Index,
+    aug_periods_to_periods: Mapping[int, int],
+) -> pd.Series:
+    """Map AMN estimates onto the CHS template index, fixing the coordinate gap.
+
+    AMN emits parameters in *calendar* time and carries the control-function
+    coefficient as a `("transition", period, factor, "cf")` row. CHS indexes by
+    *augmented* period and keeps the control function in a dedicated `kappa`
+    category. A raw index intersection therefore silently drops every AMN row on
+    a calendar period that does not coincide with its augmented period, and never
+    transfers the cf coefficient to `kappa` at all.
+
+    For each CHS template row, translate its augmented period to the calendar
+    period via `aug_periods_to_periods` and look up the matching AMN row: `kappa`
+    rows read the AMN `("transition", calendar, factor, "cf")` value, every other
+    category maps straight through on `(name1, name2)`. Because several augmented
+    periods can share a calendar period (e.g. both kappa half-periods), one AMN
+    value can seed several CHS rows -- which is the intended seeding behaviour.
+
+    Args:
+        amn_params: `AMNEstimationResult.params` (calendar-time, cf under
+            `transition`).
+        chs_index: The CHS params template index (augmented-time, dedicated
+            `kappa` category).
+        aug_periods_to_periods: `labels.aug_periods_to_periods`, mapping each
+            augmented period to its calendar period.
+
+    Return:
+        A `value` Series indexed by `chs_index`; `NaN` where AMN has no match.
+
+    """
+    amn_value = amn_params["value"]
+    out = pd.Series(np.nan, index=chs_index, name="value")
+    for loc in chs_index:
+        category, aug_period, name1, name2 = loc
+        calendar = int(aug_periods_to_periods[int(aug_period)])
+        src_category = "transition" if category == "kappa" else category
+        src_key = (src_category, calendar, name1, name2)
+        if src_key in amn_value.index:
+            out.loc[loc] = float(amn_value.loc[src_key])
+    return out
+
+
 def get_amn_start_params(
     model_spec: ModelSpec,
     data: pd.DataFrame,
@@ -167,10 +212,11 @@ def get_amn_start_params(
     """Seed start values from AMN estimates, pooling stage-tied params.
 
     Fills via `get_spearman_start_params` (covering entries AMN does not
-    produce — e.g. mixture weights and initial Cholesky diagonals), overlays
-    the AMN estimates onto the common free entries, then re-pools the
-    `transition` / `shock_sds` seeds within each stage. The re-pool is
-    essential: AMN estimates per aug_period, so its raw overlay violates the
+    produce — e.g. mixture weights and initial Cholesky diagonals), translates
+    the AMN estimates from calendar/cf coordinates onto the CHS augmented/`kappa`
+    index (see `_amn_values_on_chs_index`), overlays them onto the free entries,
+    then re-pools the `transition` / `shock_sds` seeds within each stage. The
+    re-pool is essential: AMN estimates per period, so its overlay re-breaks the
     within-stage `PairwiseEqualityConstraint`s that `optimagic` checks at the
     start point (`get_spearman_start_params` pools them, but the AMN overlay
     re-breaks the ties).
@@ -188,16 +234,18 @@ def get_amn_start_params(
         Copy of `params_template` with seeded, stage-pooled `value`s.
 
     """
+    processed_model = process_model(model_spec)
     pre_pinned = params_template["value"].notna()
     out = get_spearman_start_params(
         model_spec=model_spec, data=data, params_template=params_template
     )
-    common = amn_params.index.intersection(out.index)
-    free_common = common[~pre_pinned.reindex(common, fill_value=False)]
-    out.loc[free_common, "value"] = amn_params.loc[free_common, "value"]
-    _pool_within_stage_equality(
-        out, free=~pre_pinned, processed_model=process_model(model_spec)
+    seeded = _amn_values_on_chs_index(
+        amn_params, out.index, processed_model.labels.aug_periods_to_periods
     )
+    free = ~pre_pinned
+    fill = free & seeded.notna()
+    out.loc[fill, "value"] = seeded.loc[fill]
+    _pool_within_stage_equality(out, free=free, processed_model=processed_model)
     return out
 
 

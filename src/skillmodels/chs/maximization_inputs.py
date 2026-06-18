@@ -1,6 +1,7 @@
 """Functions to create inputs for optimization of the log-likelihood."""
 
 import functools
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -16,10 +17,12 @@ import skillmodels.chs.likelihood as lf
 import skillmodels.chs.likelihood_debug as lfd
 from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.amn.estimate import estimate_amn
+from skillmodels.amn.mixture_em import InsufficientCompleteCasesError
 from skillmodels.amn.start_values import (
     get_amn_start_params,
     get_spearman_start_params,
 )
+from skillmodels.amn.types import AMNEstimationOptions, AMNEstimationResult
 from skillmodels.chs.kalman_filters import (
     calculate_sigma_scaling_factor_and_weights,
     is_all_linear,
@@ -234,11 +237,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             params_template=params_template,
         )
     elif strategy == "amn":
-        # Seeding only: fit the linear cf term even for higher-order (translog)
-        # kappa bases; the higher-order kappa terms get the small start defaults.
-        amn_result = estimate_amn(
-            model_spec=model_spec, data=data, linearize_control_function=True
-        )
+        amn_result = _estimate_amn_for_chs_seeding(model_spec=model_spec, data=data)
         params_template = get_amn_start_params(
             model_spec=model_spec,
             data=data,
@@ -249,6 +248,8 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     params_template = project_to_probability_constraints(
         params_template=params_template, constraints=constraints
     )
+    if strategy in ("spearman", "amn"):
+        _fail_if_start_params_incomplete(params_template)
 
     return {
         "loglike": loglike,
@@ -258,6 +259,73 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         "constraints": constraints,
         "params_template": params_template,
     }
+
+
+def _estimate_amn_for_chs_seeding(
+    model_spec: ModelSpec,
+    data: pd.DataFrame,
+) -> AMNEstimationResult:
+    """Estimate AMN to seed CHS, falling back to the missing-data EM if needed.
+
+    Tries the fast complete-case Stage-1 mixture (the standalone default). On an
+    unbalanced panel with too few complete cases it retries explicitly with the
+    missing-data EM under a seed-sized budget (one restart, capped iterations,
+    capped rows). The fallback lives here, in the seeding caller, rather than
+    inside `estimate_amn`, so the standalone estimator keeps one honest interface
+    -- complete-case by default, raising when that is infeasible.
+
+    `linearize_control_function=True` fits only the linear `cf` term even for
+    higher-order (translog) kappa bases; the higher-order kappa terms then take
+    their small start defaults.
+    """
+    try:
+        return estimate_amn(
+            model_spec=model_spec,
+            data=data,
+            options=AMNEstimationOptions(mixture_em_method="complete_case"),
+            linearize_control_function=True,
+        )
+    except InsufficientCompleteCasesError:
+        warnings.warn(
+            "AMN start-value seeding: too few complete cases for the complete-case "
+            "Stage-1 mixture (unbalanced panel). Falling back to the missing-data "
+            "EM under a seed-sized budget (1 restart, <=100 iterations, <=3000 "
+            "rows).",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return estimate_amn(
+            model_spec=model_spec,
+            data=data,
+            options=AMNEstimationOptions(
+                mixture_em_method="missing_data",
+                em_n_init=1,
+                em_max_iter=100,
+                mixture_em_max_rows=3000,
+            ),
+            linearize_control_function=True,
+        )
+
+
+def _fail_if_start_params_incomplete(params_template: pd.DataFrame) -> None:
+    """Fail early if a seeded start point has any missing or non-finite value.
+
+    A `"spearman"` or `"amn"` strategy must hand the optimiser a complete, finite
+    start point. optimagic otherwise rejects it with an opaque error downstream,
+    so surface the exact offending parameter rows here, where the seeding ran.
+    """
+    value = params_template["value"].to_numpy(dtype=float)
+    bad_mask = ~np.isfinite(value)
+    if bad_mask.any():
+        bad = params_template.index[bad_mask]
+        shown = ", ".join(str(tuple(loc)) for loc in bad[:10])
+        more = "" if len(bad) <= 10 else f" (+{len(bad) - 10} more)"
+        msg = (
+            f"Start-value seeding left {len(bad)} parameter(s) without a finite "
+            f"value: {shown}{more}. This start point is infeasible for "
+            "estimation; check start_params_strategy and the model spec."
+        )
+        raise ValueError(msg)
 
 
 def _build_fixed_constraints_from_params(

@@ -1,10 +1,12 @@
 """Tests for `skillmodels.amn.estimate.estimate_amn` (end-to-end orchestration)."""
 
 import numpy as np
+import optimagic as om
 import pandas as pd
 import pytest
 
 from skillmodels.amn import estimate_amn
+from skillmodels.amn.mixture_em import InsufficientCompleteCasesError
 from skillmodels.amn.types import AMNEstimationOptions
 from skillmodels.common.model_spec import (
     FactorSpec,
@@ -112,26 +114,43 @@ def _subsample_data(n: int = 1500, seed: int = 0) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index(["caseid", "period"])
 
 
-def test_estimate_amn_seeds_on_observed_subset_with_subsample_measurement():
-    """AMN seeds on the always-observed measurements under subsample missingness.
+def test_estimate_amn_complete_case_raises_on_subsample_measurement():
+    """Default complete-case Stage 1 raises an informative error on subsamples.
 
     With a rotating-subsample measurement the full augmented vector has too few
-    complete cases to fit the mixture (the complete-case EM would otherwise
-    raise). AMN must drop the subsample measurement, seed the mixture on the
-    always-observed subset, and still return structural params -- omitting the
-    dropped measurement's loadings.
+    complete cases (1 < 2 components) to fit the mixture. The default
+    complete-case method must raise `InsufficientCompleteCasesError` pointing at
+    the missing-data method, rather than silently dropping the measurement or
+    switching methods.
     """
     model = _subsample_model()
     data = _subsample_data(n=1500)
     options = AMNEstimationOptions(n_simulation_draws=5000, seed=0)
+
+    with pytest.raises(InsufficientCompleteCasesError, match="missing_data"):
+        estimate_amn(model, data, options)
+
+
+def test_estimate_amn_missing_data_includes_subsample_measurement():
+    """The missing-data method seeds on the full set, keeping the subsample.
+
+    Marginalising over missing entries needs no complete cases, so the subsample
+    measurement `y_sub` is retained in the recovered loadings rather than
+    dropped. Same interface as the default -- only `mixture_em_method` differs.
+    """
+    model = _subsample_model()
+    data = _subsample_data(n=1500)
+    options = AMNEstimationOptions(
+        n_simulation_draws=5000, seed=0, mixture_em_method="missing_data"
+    )
 
     result = estimate_amn(model, data, options)
 
     meas = result.params.xs("loadings", level="category").index.get_level_values(
         "name1"
     )
-    assert "y_sub" not in set(meas)  # subsample measurement dropped from seeding
-    assert "y2" in set(meas)  # always-observed measurement retained
+    assert "y_sub" in set(meas)  # subsample measurement retained, not dropped
+    assert "y2" in set(meas)
 
 
 def _split_panel_data(n: int = 1000, seed: int = 0) -> pd.DataFrame:
@@ -157,35 +176,78 @@ def _split_panel_data(n: int = 1000, seed: int = 0) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index(["caseid", "period"])
 
 
-def test_estimate_amn_falls_back_to_missing_data_em_on_unbalanced_panel():
-    """With no complete-case rows, `auto` seeds via the missing-data EM."""
+def test_estimate_amn_complete_case_raises_on_unbalanced_panel():
+    """With zero complete-case rows the default method raises, no silent switch."""
     model = _tiny_model()
     data = _split_panel_data(n=1000)
     options = AMNEstimationOptions(n_simulation_draws=2000, seed=0)
 
-    with pytest.warns(RuntimeWarning, match="missing-data EM"):
+    with pytest.raises(InsufficientCompleteCasesError, match="missing_data"):
+        estimate_amn(model, data, options)
+
+
+def test_estimate_amn_missing_data_fits_unbalanced_panel():
+    """The missing-data method fits the mixture even with no complete rows.
+
+    Each individual is observed in exactly one period, so columns from the two
+    periods are never co-observed: the EM still fits (and recovers the means)
+    but warns that the cross-period covariances are unidentified.
+    """
+    model = _tiny_model()
+    data = _split_panel_data(n=1000)
+    options = AMNEstimationOptions(
+        n_simulation_draws=2000, seed=0, mixture_em_method="missing_data"
+    )
+
+    with pytest.warns(RuntimeWarning, match="co-observation"):
         result = estimate_amn(model, data, options)
 
     assert isinstance(result.success, bool)
     assert result.stages.mixture.means.shape[0] == 2
 
 
-def test_estimate_amn_honors_fixed_params():
+@pytest.mark.parametrize("override", ["start_params", "fixed_params"])
+def test_estimate_amn_rejects_param_overrides(override):
+    """estimate_amn must refuse start/fixed params it cannot honour in-stage.
+
+    The three-stage estimator has no single free optimisation to pin, so
+    overlaying values after the fact would make the reported params inconsistent
+    with the fitted stages and criterion. It raises instead of silently
+    overwriting estimates.
+    """
     model = _tiny_model()
     data = _tiny_data(n=1500)
-    options = AMNEstimationOptions(n_simulation_draws=5000, seed=0)
+    options = AMNEstimationOptions(n_simulation_draws=2000, seed=0)
 
-    pin_loc = ("loadings", 1, "y2", "skills")
-    fixed = pd.DataFrame(
+    pin = pd.DataFrame(
         {"value": [0.42]},
         index=pd.MultiIndex.from_tuples(
-            [pin_loc], names=["category", "aug_period", "name1", "name2"]
+            [("loadings", 1, "y2", "skills")],
+            names=["category", "aug_period", "name1", "name2"],
         ),
     )
 
-    result = estimate_amn(model, data, options, fixed_params=fixed)
+    callers = {
+        "start_params": lambda: estimate_amn(model, data, options, start_params=pin),
+        "fixed_params": lambda: estimate_amn(model, data, options, fixed_params=pin),
+    }
 
-    assert result.params.loc[pin_loc, "value"] == pytest.approx(0.42)
+    with pytest.raises(NotImplementedError):
+        callers[override]()
+
+
+def test_estimate_amn_rejects_constraints():
+    """A non-empty constraints list is refused; the AMN stages cannot honour it."""
+    model = _tiny_model()
+    data = _tiny_data(n=1500)
+    options = AMNEstimationOptions(n_simulation_draws=2000, seed=0)
+
+    constraint = om.EqualityConstraint(
+        selector=lambda params: params.loc[[("loadings", 1, "y2", "skills")]]
+    )
+
+    with pytest.raises(NotImplementedError):
+        estimate_amn(model, data, options, constraints=[constraint])
 
 
 def test_estimate_amn_returns_success_flag():
@@ -201,37 +263,3 @@ def test_estimate_amn_returns_success_flag():
         (0, "skills"),
         (1, "skills"),
     )
-
-
-def test_estimate_amn_honors_fixed_params_keyed_by_period():
-    """`fixed_params` keyed by `period` (the public level name) must pin.
-
-    AMN's combined `params` uses `aug_period` internally; users
-    supply overrides keyed by `period`. `align_index_names` should
-    rename the override's level so `MultiIndex.union` keeps the
-    level names intact and the pin survives. Regression for the
-    silent-strip behaviour that produced anonymous-level params
-    frames and broke `decompose_measurement_variance` downstream.
-    """
-    model = _tiny_model()
-    data = _tiny_data(n=1500)
-    options = AMNEstimationOptions(n_simulation_draws=5000, seed=0)
-
-    pin_loc = ("loadings", 1, "y2", "skills")
-    fixed = pd.DataFrame(
-        {"value": [0.42]},
-        index=pd.MultiIndex.from_tuples(
-            [pin_loc],
-            names=["category", "period", "name1", "name2"],
-        ),
-    )
-
-    result = estimate_amn(model, data, options, fixed_params=fixed)
-
-    assert list(result.params.index.names) == [
-        "category",
-        "aug_period",
-        "name1",
-        "name2",
-    ]
-    assert result.params.loc[pin_loc, "value"] == pytest.approx(0.42)

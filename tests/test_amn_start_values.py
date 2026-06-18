@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 from skillmodels.amn.start_values import (
+    _amn_values_on_chs_index,
     _apply_neutral_defaults,
     get_spearman_start_params,
     pool_equality_groups,
@@ -23,9 +24,92 @@ from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.constraints import select_by_loc
-from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.model_spec import (
+    CorrectionSpec,
+    FactorSpec,
+    ModelSpec,
+    Normalizations,
+)
+from skillmodels.common.params_index import get_params_index
+from skillmodels.common.process_model import process_model
 from skillmodels.common.utilities import reduce_n_periods
 from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
+
+
+def _cf_model() -> ModelSpec:
+    """2-period skill model with an endogenous investment factor + instrument."""
+    return ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2"), ("y1", "y2")),
+                normalizations=Normalizations(
+                    loadings=({"y1": 1}, {"y1": 1}),
+                    intercepts=({"y1": 0}, {}),
+                ),
+                transition_function="linear",
+            ),
+            "investment": FactorSpec(
+                measurements=(("i1", "i2"), ("i1", "i2")),
+                normalizations=Normalizations(
+                    loadings=({"i1": 1}, {"i1": 1}),
+                    intercepts=({"i1": 0}, {}),
+                ),
+                transition_function="linear",
+                is_endogenous=True,
+                correction=CorrectionSpec(
+                    state_predictors=("skills",),
+                    instruments=("income",),
+                    targets=("skills",),
+                ),
+            ),
+        },
+        observed_factors=("income",),
+    )
+
+
+def test_amn_values_map_cf_to_kappa_and_calendar_to_aug_period():
+    """AMN seeds (calendar-time, cf-under-transition) land on the CHS index.
+
+    Regression for the silent index mismatch: CHS uses augmented periods and a
+    dedicated `kappa` category, while AMN emits in calendar time with the
+    control-function coefficient under `transition`/`cf`. The translator must
+    (a) route the AMN cf row to *every* CHS kappa aug_period that shares its
+    calendar period, and (b) place a calendar-1 skills loading at the skills
+    *state* aug_period (2), not the investment aug_period (1).
+    """
+    processed = process_model(_cf_model())
+    chs_index = get_params_index(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        transition_info=processed.transition_info,
+        endogenous_factors_info=processed.endogenous_factors_info,
+    )
+    names = ["category", "aug_period", "name1", "name2"]
+    amn = pd.DataFrame(
+        {"value": [0.8, 0.37, 0.55]},
+        index=pd.MultiIndex.from_tuples(
+            [
+                ("transition", 0, "skills", "cf"),  # AMN kappa, calendar 0
+                ("loadings", 1, "y1", "skills"),  # calendar-1 skills loading
+                ("loadings", 0, "i2", "investment"),  # calendar-0 investment loading
+            ],
+            names=names,
+        ),
+    )
+
+    seeded = _amn_values_on_chs_index(
+        amn, chs_index, processed.labels.aug_periods_to_periods
+    )
+
+    # cf -> kappa at both aug_periods sharing calendar 0; never onto a transition.
+    assert ("transition", 0, "skills", "cf") not in chs_index
+    assert seeded.loc[("kappa", 0, "skills", "cf")] == pytest.approx(0.8)
+    assert seeded.loc[("kappa", 1, "skills", "cf")] == pytest.approx(0.8)
+    # calendar-1 skills loading -> aug_period 2 (state), not 1 (investment).
+    assert seeded.loc[("loadings", 2, "y1", "skills")] == pytest.approx(0.37)
+    # calendar-0 investment loading -> aug_period 1.
+    assert seeded.loc[("loadings", 1, "i2", "investment")] == pytest.approx(0.55)
 
 
 def test_apply_neutral_defaults_fills_correction_categories() -> None:

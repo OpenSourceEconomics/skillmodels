@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from skillmodels.chs.maximization_inputs import (
+    _fail_if_start_params_incomplete,
     _get_jnp_params_vec,
     _to_numpy,
     get_maximization_inputs,
@@ -16,6 +17,21 @@ from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.constraints import FixedConstraintWithValue
 from skillmodels.common.utilities import reduce_n_periods
 from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
+
+
+def test_fail_if_start_params_incomplete_flags_non_finite_rows() -> None:
+    """A seeded start point with a missing/non-finite value fails early + clearly."""
+    names = ["category", "period", "name1", "name2"]
+    idx = pd.MultiIndex.from_tuples(
+        [("loadings", 0, "y1", "skills"), ("meas_sds", 0, "y1", "-")], names=names
+    )
+
+    complete = pd.DataFrame({"value": [1.0, 0.5]}, index=idx)
+    _fail_if_start_params_incomplete(complete)  # all finite -> no raise
+
+    incomplete = pd.DataFrame({"value": [1.0, np.nan]}, index=idx)
+    with pytest.raises(ValueError, match="without a finite value"):
+        _fail_if_start_params_incomplete(incomplete)
 
 
 @pytest.mark.long_running

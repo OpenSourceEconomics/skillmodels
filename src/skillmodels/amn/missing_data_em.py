@@ -26,6 +26,7 @@ of which entries are missing. Rows are processed in fixed-size padded chunks so
 only `(chunk, d, d)` arrays are ever materialised.
 """
 
+import warnings
 from dataclasses import dataclass
 
 import jax
@@ -55,10 +56,41 @@ class MissingDataMixtureFit:
     converged: bool
     """Whether the best restart hit the tolerance before `max_iter`."""
 
+    cross_covariance_identified: bool
+    """Whether the column co-observation graph is connected. When `False`, some
+    blocks of dimensions are never observed together, so their cross-covariances
+    are not pinned by the data (only the means and within-block covariances are);
+    the EM still converges, but the returned cross-block covariances are
+    arbitrary and should not be trusted."""
+
 
 def _chunk_size_for(n_dim: int) -> int:
     """Rows per chunk keeping the `(chunk, d, d)` working set near 0.5 GB (f64)."""
     return int(max(32, min(1024, 6_000_000 // max(n_dim * n_dim, 1))))
+
+
+def _co_observation_connected(obs: np.ndarray) -> bool:
+    """Whether the column co-observation graph is connected.
+
+    Columns `i` and `j` are linked when at least one row observes both. If the
+    graph splits into separate components, no observation ties those blocks
+    together, so the missing-data EM cannot identify the cross-block covariances
+    (only the within-block blocks and all means are identified under MAR).
+    """
+    n_dim = obs.shape[1]
+    if n_dim <= 1:
+        return True
+    co_observed = (obs.T.astype(np.int64) @ obs.astype(np.int64)) > 0
+    seen = np.zeros(n_dim, dtype=bool)
+    stack = [0]
+    seen[0] = True
+    while stack:
+        node = stack.pop()
+        neighbours = np.nonzero(co_observed[node] & ~seen)[0]
+        for nb in neighbours:
+            seen[nb] = True
+            stack.append(int(nb))
+    return bool(seen.all())
 
 
 def _component_stats(
@@ -66,15 +98,19 @@ def _component_stats(
     mask: jax.Array,
     mean: jax.Array,
     cov: jax.Array,
-    reg_covar: float,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
-    """Per-row log-density, imputed mean and masked inverse for one component."""
+    """Per-row log-density, imputed mean and masked inverse for one component.
+
+    `cov` already carries the ridge added by the M-step, so it is used as-is.
+    Observed entries are treated as exact (no extra measurement noise), which is
+    what makes the observed-block density and the conditional moments the *exact*
+    EM identities rather than a noisy approximation.
+    """
     n_dim = x.shape[1]
     eye = jnp.eye(n_dim)
-    cov_reg = cov + reg_covar * eye
     mm = mask[:, :, None] * mask[:, None, :]
-    # G = M (cov + reg I) M + (I - M):  block-diag [[cov_oo + reg, 0], [0, I]].
-    g = mm * cov_reg[None] + (1.0 - mask)[:, :, None] * eye[None]
+    # G = M cov M + (I - M):  block-diagonal [[cov_oo, 0], [0, I]].
+    g = mm * cov[None] + (1.0 - mask)[:, :, None] * eye[None]
     chol = jnp.linalg.cholesky(g)
     diff = mask * (x - mean)
     z = jax.scipy.linalg.cho_solve((chol, True), diff)  # G^-1 (masked diff)
@@ -97,15 +133,14 @@ def _chunk_accumulate(
     log_weights: jax.Array,
     means: jax.Array,
     covs: jax.Array,
-    reg_covar: float,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     """Return this chunk's contribution to the EM sufficient statistics.
 
     `valid` is 1 for real rows and 0 for padding; padded rows contribute zero.
     """
     log_density, x_hat, masked_ginv = jax.vmap(
-        _component_stats, in_axes=(None, None, 0, 0, None)
-    )(x, mask, means, covs, reg_covar)  # (K, B), (K, B, d), (K, B, d, d)
+        _component_stats, in_axes=(None, None, 0, 0)
+    )(x, mask, means, covs)  # (K, B), (K, B, d), (K, B, d, d)
 
     weighted = log_density.T + log_weights  # (B, K)
     log_norm = jax.scipy.special.logsumexp(weighted, axis=1)  # (B,)
@@ -119,8 +154,43 @@ def _chunk_accumulate(
 
 
 # Jitted at runtime (not via a typed decorator) so the type checker sees the
-# plain tuple-returning signature above; `reg_covar` is a compile-time constant.
-_chunk_accumulate_jit = jax.jit(_chunk_accumulate, static_argnames=("reg_covar",))
+# plain tuple-returning signature above.
+_chunk_accumulate_jit = jax.jit(_chunk_accumulate)
+
+
+def _accumulate_sufficient_stats(
+    xj: jax.Array,
+    mj: jax.Array,
+    valid: jax.Array,
+    log_weights: jax.Array,
+    means: jax.Array,
+    covs: jax.Array,
+    *,
+    n_padded: int,
+    chunk: int,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Sum the chunked EM sufficient statistics over the whole padded sample.
+
+    Returns `(loglik, nk, sum_x, scatter, corr)` evaluated at the supplied
+    `(log_weights, means, covs)`. Padding rows contribute zero via `valid`.
+    """
+    n_components, n_dim = means.shape
+    loglik = jnp.array(0.0)
+    nk = jnp.zeros(n_components)
+    sum_x = jnp.zeros((n_components, n_dim))
+    scatter = jnp.zeros((n_components, n_dim, n_dim))
+    corr = jnp.zeros((n_components, n_dim, n_dim))
+    for start in range(0, n_padded, chunk):
+        sl = slice(start, start + chunk)
+        ll_c, nk_c, sx_c, sc_c, cr_c = _chunk_accumulate_jit(
+            xj[sl], mj[sl], valid[sl], log_weights, means, covs
+        )
+        loglik = loglik + ll_c
+        nk = nk + nk_c
+        sum_x = sum_x + sx_c
+        scatter = scatter + sc_c
+        corr = corr + cr_c
+    return loglik, nk, sum_x, scatter, corr
 
 
 def _run_em(
@@ -151,31 +221,18 @@ def _run_em(
     loglik = -np.inf
     converged = False
     n_iter = 0
-    n_components = means.shape[0]
     for _ in range(max_iter):
         n_iter += 1
-        log_weights = jnp.log(weights_j)
-        loglik_t = jnp.array(0.0)
-        nk = jnp.zeros(n_components)
-        sum_x = jnp.zeros((n_components, n_dim))
-        scatter = jnp.zeros((n_components, n_dim, n_dim))
-        corr = jnp.zeros((n_components, n_dim, n_dim))
-        for start in range(0, n_padded, chunk):
-            sl = slice(start, start + chunk)
-            ll_c, nk_c, sx_c, sc_c, cr_c = _chunk_accumulate_jit(
-                xj[sl],
-                mj[sl],
-                valid[sl],
-                log_weights,
-                means_j,
-                covs_j,
-                reg_covar=reg_covar,
-            )
-            loglik_t = loglik_t + ll_c
-            nk = nk + nk_c
-            sum_x = sum_x + sx_c
-            scatter = scatter + sc_c
-            corr = corr + cr_c
+        loglik_t, nk, sum_x, scatter, corr = _accumulate_sufficient_stats(
+            xj,
+            mj,
+            valid,
+            jnp.log(weights_j),
+            means_j,
+            covs_j,
+            n_padded=n_padded,
+            chunk=chunk,
+        )
         loglik = float(loglik_t)
 
         nk_safe = nk + 1e-12
@@ -195,6 +252,21 @@ def _run_em(
             converged = True
             break
         prev_ll = loglik
+
+    # Score the *returned* (post-M-step) parameters, so the reported loglik and
+    # the cross-restart ranking match what is returned rather than the pre-M-step
+    # parameters scored inside the final iteration.
+    final_loglik = _accumulate_sufficient_stats(
+        xj,
+        mj,
+        valid,
+        jnp.log(weights_j),
+        means_j,
+        covs_j,
+        n_padded=n_padded,
+        chunk=chunk,
+    )[0]
+    loglik = float(final_loglik)
 
     return (
         np.asarray(weights_j),
@@ -259,6 +331,25 @@ def fit_gaussian_mixture_missing(
     if not obs.any():
         msg = "augmented has no observed entries; cannot fit mixture."
         raise ValueError(msg)
+    never_observed = np.nonzero(~obs.any(axis=0))[0]
+    if never_observed.size:
+        msg = (
+            f"Columns {never_observed.tolist()} are never observed in any row; "
+            "their mixture means and (co)variances are unidentified. Drop these "
+            "measurements before fitting the mixture."
+        )
+        raise ValueError(msg)
+    cross_covariance_identified = _co_observation_connected(obs)
+    if not cross_covariance_identified:
+        warnings.warn(
+            "Missing-data mixture EM: the column co-observation graph is "
+            "disconnected -- no individual is observed on measurements from "
+            "different blocks (e.g. periods that no one spans). Means and "
+            "within-block covariances are identified, but the cross-block "
+            "covariances are not pinned by the data and should not be trusted.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     x_filled = np.where(obs, x, 0.0)
     mask = obs.astype(float)
@@ -285,6 +376,7 @@ def fit_gaussian_mixture_missing(
                 loglikelihood=loglik,
                 n_iter=n_iter,
                 converged=converged,
+                cross_covariance_identified=cross_covariance_identified,
             )
     if best is None:
         msg = "n_init must be at least 1."

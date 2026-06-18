@@ -65,22 +65,22 @@ class AMNEstimationOptions:
     seed: int
     """RNG seed used for Stage 3 simulation and bootstrap inference."""
 
-    seed_min_complete_cases: int
-    """Target complete-case count for the subsample-aware Stage-1 fallback. When
-    the full augmented measure vector has too few complete cases to fit the
-    mixture (fewer than `n_mixtures`), the highest-missing non-normalization
-    measurements are greedily dropped until at least this many complete cases
-    remain (or no more are droppable), and the mixture is seeded on that
-    always-observed subset. Default `50`."""
+    mixture_em_method: Literal["complete_case", "missing_data"]
+    """Stage-1 mixture EM method. `"complete_case"` (default) fits `sklearn`'s
+    `GaussianMixture` on listwise-complete rows and raises
+    `InsufficientCompleteCasesError` when fewer than `n_mixtures` rows are
+    complete in every augmented measurement -- the unbalanced-panel regime.
+    `"missing_data"` instead fits the EM that marginalises over each row's
+    missing entries, valid (under MAR) even with no complete cases at all. The
+    interface is identical for standalone estimation and for CHS seeding; only
+    the option values differ (seeding picks the method and a row cap explicitly,
+    rather than the estimator switching silently)."""
 
-    mixture_em_method: Literal["complete_case", "missing_data", "auto"]
-    """Stage-1 mixture EM method. `"complete_case"` fits `sklearn`'s
-    `GaussianMixture` on listwise-complete rows (after the subsample drop) and
-    raises when none remain. `"missing_data"` always uses the missing-data EM
-    that marginalises over each row's missing entries (valid for unbalanced
-    panels). `"auto"` (default) tries complete-case and falls back to
-    missing-data EM only when no complete-case subset is feasible, so healthy
-    models keep the faster complete-case path unchanged."""
+    mixture_em_max_rows: int | None
+    """Optional cap on the number of rows used to fit the Stage-1 mixture. `None`
+    (default) uses every row. When set, rows are subsampled with `seed` before
+    fitting. CHS seeding sets a modest cap so the per-restart cost of the
+    missing-data EM stays bounded; standalone estimation keeps the full sample."""
 
     def __init__(  # noqa: D107
         self,
@@ -96,8 +96,8 @@ class AMNEstimationOptions:
         allow_ces_overnormalization: bool = False,
         keep_synthetic_panel: bool = False,
         seed: int = 0,
-        seed_min_complete_cases: int = 50,
-        mixture_em_method: Literal["complete_case", "missing_data", "auto"] = "auto",
+        mixture_em_method: Literal["complete_case", "missing_data"] = "complete_case",
+        mixture_em_max_rows: int | None = None,
     ) -> None:
         object.__setattr__(self, "em_max_iter", em_max_iter)
         object.__setattr__(self, "em_tol", em_tol)
@@ -118,8 +118,8 @@ class AMNEstimationOptions:
         )
         object.__setattr__(self, "keep_synthetic_panel", keep_synthetic_panel)
         object.__setattr__(self, "seed", seed)
-        object.__setattr__(self, "seed_min_complete_cases", seed_min_complete_cases)
         object.__setattr__(self, "mixture_em_method", mixture_em_method)
+        object.__setattr__(self, "mixture_em_max_rows", mixture_em_max_rows)
 
 
 @dataclass(frozen=True)
