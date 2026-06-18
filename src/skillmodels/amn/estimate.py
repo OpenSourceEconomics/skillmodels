@@ -46,7 +46,7 @@ from skillmodels.common.types import ProcessedModel
 # user's `em_n_init` / `em_max_iter`.
 _MAX_MISSING_DATA_SEED_ROWS = 3000
 _MISSING_DATA_SEED_N_INIT = 1
-_MISSING_DATA_SEED_MAX_ITER = 50
+_MISSING_DATA_SEED_MAX_ITER = 100
 
 
 def _measurement_params_dataframe(
