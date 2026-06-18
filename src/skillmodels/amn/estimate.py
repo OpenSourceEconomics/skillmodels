@@ -146,7 +146,7 @@ def estimate_amn(
         augmented,
         processed_model,
         n_components=processed_model.dimensions.n_mixtures,
-        subsample_cutoff=amn_options.seed_subsample_cutoff,
+        min_complete_cases=amn_options.seed_min_complete_cases,
     )
 
     mixture = fit_mixture_em(

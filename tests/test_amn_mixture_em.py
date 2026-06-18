@@ -316,20 +316,20 @@ def test_reduce_to_seedable_measurements_is_noop_when_enough_complete_cases():
     assert dropped == ()
 
 
-def test_reduce_to_seedable_measurements_drops_subsample_keeps_normalization():
-    """Drops a mostly-missing non-normalization measurement but protects y1.
+def test_reduce_to_seedable_measurements_drops_subsample_to_reach_feasibility():
+    """Greedily drops a subsample measurement (both periods) to restore complete cases.
 
     Slots: 0=(0,y1) 1=(0,y2) 2=(0,y3) 3=(1,y1) 4=(1,y2) 5=(1,y3); y1 normalized.
-    y1 and y3 are observed only for row 0 (missing rate > 0.5); y2 is fully
-    observed. The full complete-case count is 1 < 2 components, so the reducer
-    engages: y3 is dropped (subsample, non-normalization) while y1 is kept even
-    though it is just as sparse, because it carries the loading normalization.
+    y1 and y2 are fully observed; y3 is observed only for row 0. The full
+    complete-case count is 1 < 2 components, so the reducer drops y3 at *both*
+    periods -- neither alone helps, but together they restore the 10 complete
+    cases over {y1, y2}.
     """
     processed = process_model(_reduce_model())
     layout = build_augmented_measure_layout(processed)
     augmented = np.full((10, len(layout.columns)), np.nan)
-    augmented[:, [1, 4]] = 1.0  # y2 fully observed
-    augmented[0, :] = 1.0  # row 0 observes everything (the lone complete case)
+    augmented[:, [0, 1, 3, 4]] = 1.0  # y1 and y2 fully observed
+    augmented[0, [2, 5]] = 1.0  # y3 observed only for row 0
 
     out_layout, out_aug, dropped = reduce_to_seedable_measurements(
         layout, augmented, processed, n_components=2
@@ -337,5 +337,30 @@ def test_reduce_to_seedable_measurements_drops_subsample_keeps_normalization():
 
     assert set(dropped) == {(0, "skills", "y3"), (1, "skills", "y3")}
     retained = {meta[2] for meta in out_layout.measurement_meta}
-    assert retained == {"y1", "y2"}  # y1 protected despite its missingness
+    assert retained == {"y1", "y2"}
     assert out_aug.shape[1] == len(layout.columns) - 2
+
+
+def test_reduce_to_seedable_measurements_unchanged_when_normalization_blocks():
+    """Returns the inputs untouched when only the normalization blocks completeness.
+
+    y1 (the normalization) is observed only for row 0, so it caps complete cases
+    at 1 no matter what else is dropped; y2 is droppable but dropping it cannot
+    reach feasibility. The reducer must never drop the normalization and -- since
+    no droppable subset is feasible -- returns the inputs unchanged so
+    fit_mixture_em raises on the full set.
+    """
+    processed = process_model(_reduce_model())
+    layout = build_augmented_measure_layout(processed)
+    augmented = np.full((10, len(layout.columns)), np.nan)
+    augmented[:, [2, 5]] = 1.0  # y3 fully observed
+    augmented[:2, [1, 4]] = 1.0  # y2 observed for rows 0-1 (droppable)
+    augmented[0, [0, 3]] = 1.0  # y1 (normalization) observed only for row 0
+
+    out_layout, out_aug, dropped = reduce_to_seedable_measurements(
+        layout, augmented, processed, n_components=2
+    )
+
+    assert dropped == ()
+    assert out_layout is layout
+    assert out_aug is augmented

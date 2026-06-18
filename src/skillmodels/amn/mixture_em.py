@@ -268,24 +268,34 @@ def _subset_layout(
     )
 
 
+def _n_complete(augmented: np.ndarray, keep_mask: np.ndarray) -> int:
+    """Count rows with no missing value among the kept columns."""
+    return int((~np.isnan(augmented[:, keep_mask]).any(axis=1)).sum())
+
+
 def reduce_to_seedable_measurements(
     layout: AugmentedMeasureLayout,
     augmented: np.ndarray,
     processed_model: ProcessedModel,
     *,
     n_components: int,
-    subsample_cutoff: float = 0.5,
+    min_complete_cases: int = 50,
 ) -> tuple[AugmentedMeasureLayout, np.ndarray, tuple[tuple[int, str, str], ...]]:
-    """Drop rotating-subsample measurements so Stage 1 can seed on complete cases.
+    """Drop high-missing measurements so Stage 1 can seed on complete cases.
 
     Stage 1's mixture EM is complete-case only: a row survives only if every
     augmented column is observed. Rotating-subsample measurements (missing for
-    most person-waves) can drive the complete-case count to zero. When the full
-    vector has fewer complete cases than `n_components`, drop every
-    non-normalization measurement whose missing rate exceeds `subsample_cutoff`
-    and seed the mixture on the always-observed subset. The dropped measurements
-    are simply not AMN-seeded; their params fall back to the neutral/Spearman
-    seeding defaults.
+    most person-waves) -- and, in an unbalanced panel, ordinary measurements that
+    are simply absent in some waves -- can drive the complete-case count to zero.
+
+    When the full vector has fewer complete cases than `n_components`, greedily
+    drop the highest-missing non-normalization measurement as long as the drop
+    adds complete cases, until at least `min_complete_cases` remain (or no more
+    droppable measurement helps). Each factor's normalization measurement is never
+    dropped. The dropped measurements are simply not AMN-seeded; their params fall
+    back to the neutral/Spearman seeding defaults. If even dropping every droppable
+    measurement leaves the subset infeasible, the inputs are returned as far as
+    reduced and `fit_mixture_em` raises its informative complete-case error.
 
     Returns the (possibly unchanged) layout and augmented matrix plus the meta of
     the dropped measurements. When the full vector already has enough complete
@@ -296,47 +306,66 @@ def reduce_to_seedable_measurements(
         augmented: `(n_obs, n_aug)` augmented matrix aligned with `layout`.
         processed_model: Processed model, for normalization detection.
         n_components: Mixture components; the complete-case feasibility floor.
-        subsample_cutoff: Missing-rate above which a non-normalization
-            measurement is treated as subsample and dropped.
+        min_complete_cases: Greedy drops stop once this many complete cases
+            remain (capped below by `n_components`).
 
     Return:
         `(reduced_layout, reduced_augmented, dropped_measurement_meta)`.
 
     """
-    complete_mask = ~np.isnan(augmented).any(axis=1)
-    if int(complete_mask.sum()) >= n_components:
+    n_aug = augmented.shape[1]
+    full_mask = np.ones(n_aug, dtype=bool)
+    if _n_complete(augmented, full_mask) >= n_components:
         return layout, augmented, ()
 
     protected = _normalization_measurement_slots(layout, processed_model)
     n_rows = max(augmented.shape[0], 1)
     missing_rate = np.isnan(augmented).sum(axis=0) / n_rows
-    drop_slots = {
-        slot
-        for slot in layout.measurement_slots
-        if slot not in protected and missing_rate[slot] > subsample_cutoff
-    }
-    if not drop_slots:
-        # Nothing droppable (e.g. a normalization or observed column is the
-        # blocker); let fit_mixture_em raise its informative complete-case error.
+    # Highest-missing non-normalization measurements first; fully observed ones
+    # (missing rate 0) never block and are never dropped.
+    droppable = sorted(
+        (
+            slot
+            for slot in layout.measurement_slots
+            if slot not in protected and missing_rate[slot] > 0.0
+        ),
+        key=lambda slot: missing_rate[slot],
+        reverse=True,
+    )
+
+    target = max(n_components, min_complete_cases)
+    keep_mask = full_mask.copy()
+    dropped: list[int] = []
+    for slot in droppable:
+        if _n_complete(augmented, keep_mask) >= target:
+            break
+        keep_mask[slot] = False
+        dropped.append(slot)
+
+    if not dropped or _n_complete(augmented, keep_mask) < n_components:
+        # Either nothing is droppable, or even dropping every droppable
+        # measurement leaves the subset infeasible (e.g. cross-period attrition,
+        # or a normalization is the blocker). Return the inputs untouched so
+        # fit_mixture_em raises its informative complete-case error on the full
+        # set rather than on a uselessly thinned one.
         return layout, augmented, ()
 
+    drop_set = set(dropped)
     dropped_meta = tuple(
         meta
         for slot, meta in zip(
             layout.measurement_slots, layout.measurement_meta, strict=True
         )
-        if slot in drop_slots
+        if slot in drop_set
     )
-    keep_mask = np.array([col not in drop_slots for col in range(augmented.shape[1])])
-    n_full = int(complete_mask.sum())
+    n_after = _n_complete(augmented, keep_mask)
     pretty = ", ".join(f"{p}|{f}|{m}" for p, f, m in dropped_meta)
     warnings.warn(
-        f"AMN Stage 1 seeding: only {n_full} complete-case rows over the full "
-        f"measurement set (< {n_components} mixture components). Dropped "
-        f"{len(dropped_meta)} subsample measurement(s) with >"
-        f"{subsample_cutoff:.0%} missingness and seeded the mixture on the "
-        f"always-observed subset ({pretty}). Their loadings/SDs fall back to the "
-        f"start-value defaults.",
+        f"AMN Stage 1 seeding: too few complete-case rows over the full "
+        f"measurement set (< {n_components} mixture components). Greedily dropped "
+        f"{len(dropped_meta)} high-missing measurement(s) and seeded the mixture "
+        f"on the always-observed subset ({n_after} complete cases): {pretty}. "
+        f"Their loadings/SDs fall back to the start-value defaults.",
         RuntimeWarning,
         stacklevel=2,
     )
