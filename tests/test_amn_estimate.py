@@ -134,6 +134,42 @@ def test_estimate_amn_seeds_on_observed_subset_with_subsample_measurement():
     assert "y2" in set(meas)  # always-observed measurement retained
 
 
+def _split_panel_data(n: int = 1000, seed: int = 0) -> pd.DataFrame:
+    """Unbalanced panel: each individual is observed in exactly one period.
+
+    No individual spans both periods, so the augmented vector has zero
+    complete-case rows -- the regime that forces the missing-data EM.
+    """
+    rng = np.random.default_rng(seed)
+    rows = []
+    for caseid in range(n):
+        f = rng.normal()
+        period = caseid % 2
+        rows.append(
+            {
+                "caseid": caseid,
+                "period": period,
+                "y1": f + rng.normal(0, 0.3),
+                "y2": 0.9 * f + rng.normal(0, 0.4),
+                "y3": 1.1 * f + rng.normal(0, 0.5),
+            }
+        )
+    return pd.DataFrame(rows).set_index(["caseid", "period"])
+
+
+def test_estimate_amn_falls_back_to_missing_data_em_on_unbalanced_panel():
+    """With no complete-case rows, `auto` seeds via the missing-data EM."""
+    model = _tiny_model()
+    data = _split_panel_data(n=1000)
+    options = AMNEstimationOptions(n_simulation_draws=2000, seed=0)
+
+    with pytest.warns(RuntimeWarning, match="missing-data EM"):
+        result = estimate_amn(model, data, options)
+
+    assert isinstance(result.success, bool)
+    assert result.stages.mixture.means.shape[0] == 2
+
+
 def test_estimate_amn_honors_fixed_params():
     model = _tiny_model()
     data = _tiny_data(n=1500)

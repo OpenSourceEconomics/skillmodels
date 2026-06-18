@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 from sklearn.mixture import GaussianMixture
 
+from skillmodels.amn.missing_data_em import fit_gaussian_mixture_missing
 from skillmodels.amn.types import AugmentedMeasureLayout, MixtureFitResult
 from skillmodels.common.types import ProcessedModel
 
@@ -372,64 +373,17 @@ def reduce_to_seedable_measurements(
     return _subset_layout(layout, keep_mask), augmented[:, keep_mask], dropped_meta
 
 
-def fit_mixture_em(
+def _fit_complete_case(
     augmented: np.ndarray,
     *,
     n_components: int,
-    max_iter: int = 500,
-    tol: float = 1e-6,
-    n_init: int = 5,
-    reg_covar: float = 1e-6,
-    seed: int = 0,
-    layout: AugmentedMeasureLayout | None = None,
-    init_params: Mapping[str, np.ndarray] | None = None,
-) -> MixtureFitResult:
-    """Fit a Gaussian mixture to the augmented measure matrix via EM.
-
-    Uses `sklearn.mixture.GaussianMixture` under the hood with k-means
-    initialization and multiple restarts.
-
-    Scope: this estimator is COMPLETE-CASE ONLY. Rows containing any NaN
-    in the augmented measure vector are dropped before fitting (listwise
-    deletion). The fitted mixture therefore targets the population
-    reduced-form distribution F_{M,X} (and hence the downstream Stage 2
-    `Pi_k`, `Psi_k` and all structural parameters) only under a complete-
-    data or MCAR (missing-completely-at-random) assumption. Under an
-    unbalanced panel or MAR/MNAR missingness the target shifts and the
-    recovered parameters can be biased. A `RuntimeWarning` is emitted
-    whenever any rows are dropped. A future revision will integrate over
-    missing dimensions in the E-step (observed-data EM) to relax this.
-
-    Args:
-        augmented: ``(n_obs, n_aug)`` augmented measure matrix from
-            `build_augmented_measure_matrix`.
-        n_components: Number of mixture components K.
-        max_iter: Maximum EM iterations per restart.
-        tol: Log-likelihood convergence tolerance.
-        n_init: Number of EM restarts; the best fit is kept.
-        reg_covar: Diagonal ridge added to each component covariance for
-            numerical stability.
-        seed: RNG seed.
-        layout: Slot layout to embed in the result (carried through to
-            Stage 2).
-        init_params: Optional warm-start values. Currently unused — kept
-            for forward-compatibility with a custom Spearman-seeded init
-            once Stage 1 results from the moment-init pipeline become
-            available as warm starts.
-
-    Return:
-        MixtureFitResult holding the fitted weights, means, covariances
-        and convergence diagnostics.
-
-    """
-    del init_params  # reserved for follow-up
-    if augmented.ndim != 2:
-        msg = "augmented must be a 2D array."
-        raise ValueError(msg)
-    if augmented.shape[0] == 0:
-        msg = "augmented has zero rows; cannot fit mixture."
-        raise ValueError(msg)
-
+    max_iter: int,
+    tol: float,
+    n_init: int,
+    reg_covar: float,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, int, bool]:
+    """Fit `sklearn`'s GaussianMixture on listwise-complete rows."""
     complete_mask = ~np.isnan(augmented).any(axis=1)
     n_complete = int(complete_mask.sum())
     if n_complete < n_components:
@@ -449,9 +403,8 @@ def fit_mixture_em(
             f"complete-data or MCAR assumption; under an unbalanced panel "
             f"or non-MCAR missingness the estimates may be biased."
         )
-        warnings.warn(msg, RuntimeWarning, stacklevel=2)
+        warnings.warn(msg, RuntimeWarning, stacklevel=3)
     fit_data = augmented[complete_mask]
-
     gm = GaussianMixture(
         n_components=n_components,
         covariance_type="full",
@@ -463,6 +416,95 @@ def fit_mixture_em(
         random_state=seed,
     )
     gm.fit(fit_data)
+    return (
+        np.asarray(gm.weights_, dtype=float),
+        np.asarray(gm.means_, dtype=float),
+        np.asarray(gm.covariances_, dtype=float),
+        float(gm.score(fit_data) * n_complete),
+        int(gm.n_iter_),
+        bool(gm.converged_),
+    )
+
+
+def fit_mixture_em(
+    augmented: np.ndarray,
+    *,
+    n_components: int,
+    max_iter: int = 500,
+    tol: float = 1e-6,
+    n_init: int = 5,
+    reg_covar: float = 1e-6,
+    seed: int = 0,
+    layout: AugmentedMeasureLayout | None = None,
+    init_params: Mapping[str, np.ndarray] | None = None,
+    method: str = "complete_case",
+) -> MixtureFitResult:
+    """Fit a Gaussian mixture to the augmented measure matrix via EM.
+
+    With `method="complete_case"` (the default) this fits
+    `sklearn.mixture.GaussianMixture` on the listwise-complete rows -- valid
+    only under a complete-data or MCAR assumption, and raising when fewer than
+    `n_components` complete rows remain. With `method="missing_data"` it uses
+    `missing_data_em.fit_gaussian_mixture_missing`, which marginalises over each
+    row's missing entries and so handles unbalanced panels with no complete
+    cases at all.
+
+    Args:
+        augmented: ``(n_obs, n_aug)`` augmented measure matrix from
+            `build_augmented_measure_matrix`.
+        n_components: Number of mixture components K.
+        max_iter: Maximum EM iterations per restart.
+        tol: Log-likelihood convergence tolerance.
+        n_init: Number of EM restarts; the best fit is kept.
+        reg_covar: Diagonal ridge added to each component covariance for
+            numerical stability.
+        seed: RNG seed.
+        layout: Slot layout to embed in the result (carried through to
+            Stage 2).
+        init_params: Optional warm-start values. Currently unused — kept
+            for forward-compatibility with a custom Spearman-seeded init
+            once Stage 1 results from the moment-init pipeline become
+            available as warm starts.
+        method: ``"complete_case"`` or ``"missing_data"`` (see above).
+
+    Return:
+        MixtureFitResult holding the fitted weights, means, covariances
+        and convergence diagnostics.
+
+    """
+    del init_params  # reserved for follow-up
+    if augmented.ndim != 2:
+        msg = "augmented must be a 2D array."
+        raise ValueError(msg)
+    if augmented.shape[0] == 0:
+        msg = "augmented has zero rows; cannot fit mixture."
+        raise ValueError(msg)
+
+    if method == "missing_data":
+        fit = fit_gaussian_mixture_missing(
+            augmented,
+            n_components=n_components,
+            max_iter=max_iter,
+            tol=tol,
+            n_init=n_init,
+            reg_covar=reg_covar,
+            seed=seed,
+        )
+        weights, means, covs = fit.weights, fit.means, fit.covariances
+        loglik, n_iter, converged = fit.loglikelihood, fit.n_iter, fit.converged
+    elif method == "complete_case":
+        weights, means, covs, loglik, n_iter, converged = _fit_complete_case(
+            augmented,
+            n_components=n_components,
+            max_iter=max_iter,
+            tol=tol,
+            n_init=n_init,
+            reg_covar=reg_covar,
+            seed=seed,
+        )
+    else:
+        msg = f"Unknown mixture EM method {method!r}."
+        raise ValueError(msg)
 
     if layout is None:
         # Caller didn't supply a layout; synthesize a minimal one purely
@@ -480,12 +522,12 @@ def fit_mixture_em(
         )
 
     return MixtureFitResult(
-        weights=np.asarray(gm.weights_, dtype=float),
-        means=np.asarray(gm.means_, dtype=float),
-        covariances=np.asarray(gm.covariances_, dtype=float),
-        loglikelihood=float(gm.score(fit_data) * n_complete),
-        n_iter=int(gm.n_iter_),
-        converged=bool(gm.converged_),
+        weights=weights,
+        means=means,
+        covariances=covs,
+        loglikelihood=loglik,
+        n_iter=n_iter,
+        converged=converged,
         layout=layout,
     )
 

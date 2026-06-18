@@ -73,6 +73,15 @@ class AMNEstimationOptions:
     remain (or no more are droppable), and the mixture is seeded on that
     always-observed subset. Default `50`."""
 
+    mixture_em_method: Literal["complete_case", "missing_data", "auto"]
+    """Stage-1 mixture EM method. `"complete_case"` fits `sklearn`'s
+    `GaussianMixture` on listwise-complete rows (after the subsample drop) and
+    raises when none remain. `"missing_data"` always uses the missing-data EM
+    that marginalises over each row's missing entries (valid for unbalanced
+    panels). `"auto"` (default) tries complete-case and falls back to
+    missing-data EM only when no complete-case subset is feasible, so healthy
+    models keep the faster complete-case path unchanged."""
+
     def __init__(  # noqa: D107
         self,
         em_max_iter: int = 500,
@@ -88,6 +97,7 @@ class AMNEstimationOptions:
         keep_synthetic_panel: bool = False,
         seed: int = 0,
         seed_min_complete_cases: int = 50,
+        mixture_em_method: Literal["complete_case", "missing_data", "auto"] = "auto",
     ) -> None:
         object.__setattr__(self, "em_max_iter", em_max_iter)
         object.__setattr__(self, "em_tol", em_tol)
@@ -109,6 +119,7 @@ class AMNEstimationOptions:
         object.__setattr__(self, "keep_synthetic_panel", keep_synthetic_panel)
         object.__setattr__(self, "seed", seed)
         object.__setattr__(self, "seed_min_complete_cases", seed_min_complete_cases)
+        object.__setattr__(self, "mixture_em_method", mixture_em_method)
 
 
 @dataclass(frozen=True)

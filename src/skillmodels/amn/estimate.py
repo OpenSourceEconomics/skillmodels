@@ -10,6 +10,9 @@ and merges the resulting parameter pieces into a single skillmodels
 params DataFrame.
 """
 
+import warnings
+
+import numpy as np
 import optimagic as om
 import pandas as pd
 from beartype import beartype
@@ -28,10 +31,16 @@ from skillmodels.amn.types import (
     AMNEstimationResult,
     AMNStageResults,
     MinimumDistanceResult,
+    MixtureFitResult,
 )
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 from skillmodels.common.selector import align_index_names
+from skillmodels.common.types import ProcessedModel
+
+# Row cap for the missing-data Stage-1 EM: a seed needs only a representative
+# subsample, and the EM cost scales with the number of distinct missing patterns.
+_MAX_MISSING_DATA_SEED_ROWS = 5000
 
 
 def _measurement_params_dataframe(
@@ -93,6 +102,74 @@ def _apply_overrides(
     return out.sort_index()
 
 
+def _seed_stage1_mixture(
+    processed_model: ProcessedModel,
+    data: pd.DataFrame,
+    amn_options: AMNEstimationOptions,
+) -> MixtureFitResult:
+    """Fit the Stage-1 mixture, choosing the EM method for the data's missingness.
+
+    `"complete_case"` fits on listwise-complete rows after the subsample drop;
+    `"missing_data"` always marginalises over missing entries; `"auto"` (default)
+    uses complete-case when a feasible complete-case subset exists and otherwise
+    falls back to the missing-data EM over the full measurement set -- the regime
+    of an unbalanced panel where no individual spans every period.
+    """
+    n_components = processed_model.dimensions.n_mixtures
+    full_layout = build_augmented_measure_layout(processed_model)
+    full_augmented = build_augmented_measure_matrix(data, processed_model, full_layout)
+    method = amn_options.mixture_em_method
+
+    layout, augmented, fit_method = full_layout, full_augmented, "missing_data"
+    if method in ("complete_case", "auto"):
+        layout, augmented, _dropped = reduce_to_seedable_measurements(
+            full_layout,
+            full_augmented,
+            processed_model,
+            n_components=n_components,
+            min_complete_cases=amn_options.seed_min_complete_cases,
+        )
+        n_complete = int((~np.isnan(augmented).any(axis=1)).sum())
+        if method == "complete_case" or n_complete >= n_components:
+            fit_method = "complete_case"
+        else:
+            warnings.warn(
+                "AMN Stage 1: no complete-case subset is feasible for the "
+                f"{n_components}-component mixture (unbalanced panel: too few "
+                "individuals span every period). Falling back to the missing-data "
+                "EM over the full measurement set.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            layout, augmented = full_layout, full_augmented
+
+    if (
+        fit_method == "missing_data"
+        and augmented.shape[0] > _MAX_MISSING_DATA_SEED_ROWS
+    ):
+        # The missing-data EM cost scales with the number of distinct missing
+        # patterns (worst case: one per row). A seed does not need the full
+        # sample, so cap the rows to keep Stage-1 seeding tractable on large
+        # unbalanced panels.
+        rng = np.random.default_rng(amn_options.seed)
+        keep = rng.choice(
+            augmented.shape[0], _MAX_MISSING_DATA_SEED_ROWS, replace=False
+        )
+        augmented = augmented[keep]
+
+    return fit_mixture_em(
+        augmented,
+        n_components=n_components,
+        max_iter=amn_options.em_max_iter,
+        tol=amn_options.em_tol,
+        n_init=amn_options.em_n_init,
+        reg_covar=amn_options.em_reg_covar,
+        seed=amn_options.seed,
+        layout=layout,
+        method=fit_method,
+    )
+
+
 @beartype(conf=ESTIMATION_CONF)
 def estimate_amn(
     model_spec: ModelSpec,
@@ -137,28 +214,7 @@ def estimate_amn(
     amn_options = options
 
     processed_model = process_model(model_spec)
-    layout = build_augmented_measure_layout(processed_model)
-    augmented = build_augmented_measure_matrix(data, processed_model, layout)
-    # Subsample-aware seeding: if the full augmented vector has too few complete
-    # cases to fit the mixture, seed on the always-observed measurement subset.
-    layout, augmented, _dropped = reduce_to_seedable_measurements(
-        layout,
-        augmented,
-        processed_model,
-        n_components=processed_model.dimensions.n_mixtures,
-        min_complete_cases=amn_options.seed_min_complete_cases,
-    )
-
-    mixture = fit_mixture_em(
-        augmented,
-        n_components=processed_model.dimensions.n_mixtures,
-        max_iter=amn_options.em_max_iter,
-        tol=amn_options.em_tol,
-        n_init=amn_options.em_n_init,
-        reg_covar=amn_options.em_reg_covar,
-        seed=amn_options.seed,
-        layout=layout,
-    )
+    mixture = _seed_stage1_mixture(processed_model, data, amn_options)
 
     structural = solve_minimum_distance(
         mixture,
