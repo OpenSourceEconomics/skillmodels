@@ -7,10 +7,13 @@ import pandas as pd
 import pytest
 
 from skillmodels.amn.mixture_em import (
+    _subset_layout,
     build_augmented_measure_layout,
     build_augmented_measure_matrix,
     fit_mixture_em,
+    reduce_to_seedable_measurements,
 )
+from skillmodels.amn.types import AugmentedMeasureLayout
 from skillmodels.common.model_spec import (
     FactorSpec,
     ModelSpec,
@@ -256,3 +259,83 @@ def test_fit_mixture_em_raises_when_too_few_complete_rows():
     augmented = np.array([[np.nan, 1.0], [1.0, 2.0]])
     with pytest.raises(ValueError, match="complete-case"):
         fit_mixture_em(augmented, n_components=3, n_init=1, seed=0)
+
+
+def test_subset_layout_reindexes_surviving_slots():
+    """Dropping a column renumbers the surviving measurement/obs/control slots."""
+    layout = AugmentedMeasureLayout(
+        columns=("m0", "m1", "m2", "of3", "ctrl4"),
+        measurement_slots=(0, 1, 2),
+        observed_factor_slots=(3,),
+        control_slots=(4,),
+        measurement_meta=((0, "f", "m0"), (0, "f", "m1"), (0, "f", "m2")),
+        observed_factor_meta=((0, "of"),),
+        control_meta=("ctrl",),
+    )
+    keep_mask = np.array([True, False, True, True, True])  # drop the m1 column
+
+    reduced = _subset_layout(layout, keep_mask)
+
+    assert reduced.columns == ("m0", "m2", "of3", "ctrl4")
+    assert reduced.measurement_slots == (0, 1)  # m0 -> 0, m2 -> 1
+    assert reduced.measurement_meta == ((0, "f", "m0"), (0, "f", "m2"))
+    assert reduced.observed_factor_slots == (2,)  # of3 -> 2
+    assert reduced.control_slots == (3,)  # ctrl4 -> 3
+    assert reduced.control_meta == ("ctrl",)
+
+
+def _reduce_model() -> ModelSpec:
+    """1-factor, 2-period model: y1 normalized, y2, y3."""
+    return ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2", "y3"), ("y1", "y2", "y3")),
+                normalizations=Normalizations(
+                    loadings=({"y1": 1}, {"y1": 1}),
+                    intercepts=({"y1": 0}, {}),
+                ),
+                transition_function="linear",
+            ),
+        },
+        n_mixtures=2,
+    )
+
+
+def test_reduce_to_seedable_measurements_is_noop_when_enough_complete_cases():
+    """A fully-observed matrix is returned untouched (healthy models unaffected)."""
+    processed = process_model(_reduce_model())
+    layout = build_augmented_measure_layout(processed)
+    augmented = np.random.default_rng(0).normal(size=(50, len(layout.columns)))
+
+    out_layout, out_aug, dropped = reduce_to_seedable_measurements(
+        layout, augmented, processed, n_components=2
+    )
+
+    assert out_layout is layout
+    assert out_aug is augmented
+    assert dropped == ()
+
+
+def test_reduce_to_seedable_measurements_drops_subsample_keeps_normalization():
+    """Drops a mostly-missing non-normalization measurement but protects y1.
+
+    Slots: 0=(0,y1) 1=(0,y2) 2=(0,y3) 3=(1,y1) 4=(1,y2) 5=(1,y3); y1 normalized.
+    y1 and y3 are observed only for row 0 (missing rate > 0.5); y2 is fully
+    observed. The full complete-case count is 1 < 2 components, so the reducer
+    engages: y3 is dropped (subsample, non-normalization) while y1 is kept even
+    though it is just as sparse, because it carries the loading normalization.
+    """
+    processed = process_model(_reduce_model())
+    layout = build_augmented_measure_layout(processed)
+    augmented = np.full((10, len(layout.columns)), np.nan)
+    augmented[:, [1, 4]] = 1.0  # y2 fully observed
+    augmented[0, :] = 1.0  # row 0 observes everything (the lone complete case)
+
+    out_layout, out_aug, dropped = reduce_to_seedable_measurements(
+        layout, augmented, processed, n_components=2
+    )
+
+    assert set(dropped) == {(0, "skills", "y3"), (1, "skills", "y3")}
+    retained = {meta[2] for meta in out_layout.measurement_meta}
+    assert retained == {"y1", "y2"}  # y1 protected despite its missingness
+    assert out_aug.shape[1] == len(layout.columns) - 2

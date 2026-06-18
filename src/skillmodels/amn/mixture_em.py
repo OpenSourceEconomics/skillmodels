@@ -195,6 +195,154 @@ def build_augmented_measure_matrix(
     return out
 
 
+def _normalization_measurement_slots(
+    layout: AugmentedMeasureLayout,
+    processed_model: ProcessedModel,
+) -> set[int]:
+    """Return measurement slots whose loading is normalized (must not be dropped).
+
+    Mirrors the normalization detection in
+    `minimum_distance._build_structure`: a `(period, factor, measurement)`
+    slot is protected if `measurement` carries a fixed loading in any
+    `aug_period` mapping to that calendar period.
+    """
+    normalizations = processed_model.normalizations
+    aug_to_period = processed_model.labels.aug_periods_to_periods
+    protected: set[int] = set()
+    for slot, (period, factor, meas_name) in zip(
+        layout.measurement_slots, layout.measurement_meta, strict=True
+    ):
+        if factor not in normalizations:
+            continue
+        for aug_period, cal_period in aug_to_period.items():
+            if int(cal_period) != int(period):
+                continue
+            if meas_name in normalizations[factor].loadings[aug_period]:
+                protected.add(slot)
+                break
+    return protected
+
+
+def _subset_layout(
+    layout: AugmentedMeasureLayout,
+    keep_mask: np.ndarray,
+) -> AugmentedMeasureLayout:
+    """Drop the columns where `keep_mask` is False and re-index every slot.
+
+    Slot indices are absolute positions in the augmented vector, so removing
+    columns shifts the survivors; `old -> new` is the running count of kept
+    columns. Only measurement slots are ever dropped, so the observed-factor
+    and control slots survive and are merely renumbered.
+    """
+    old_to_new = np.cumsum(keep_mask) - 1
+
+    def _remap[T](
+        slots: tuple[int, ...], metas: tuple[T, ...]
+    ) -> tuple[tuple[int, ...], tuple[T, ...]]:
+        kept = [
+            (int(old_to_new[slot]), meta)
+            for slot, meta in zip(slots, metas, strict=True)
+            if keep_mask[slot]
+        ]
+        if not kept:
+            return (), ()
+        new_slots, new_metas = zip(*kept, strict=True)
+        return tuple(new_slots), tuple(new_metas)
+
+    meas_slots, meas_meta = _remap(layout.measurement_slots, layout.measurement_meta)
+    obs_slots, obs_meta = _remap(
+        layout.observed_factor_slots, layout.observed_factor_meta
+    )
+    ctrl_slots, ctrl_meta = _remap(layout.control_slots, layout.control_meta)
+    columns = tuple(
+        c for c, keep in zip(layout.columns, keep_mask, strict=True) if keep
+    )
+    return AugmentedMeasureLayout(
+        columns=columns,
+        measurement_slots=meas_slots,
+        observed_factor_slots=obs_slots,
+        control_slots=ctrl_slots,
+        measurement_meta=meas_meta,
+        observed_factor_meta=obs_meta,
+        control_meta=ctrl_meta,
+    )
+
+
+def reduce_to_seedable_measurements(
+    layout: AugmentedMeasureLayout,
+    augmented: np.ndarray,
+    processed_model: ProcessedModel,
+    *,
+    n_components: int,
+    subsample_cutoff: float = 0.5,
+) -> tuple[AugmentedMeasureLayout, np.ndarray, tuple[tuple[int, str, str], ...]]:
+    """Drop rotating-subsample measurements so Stage 1 can seed on complete cases.
+
+    Stage 1's mixture EM is complete-case only: a row survives only if every
+    augmented column is observed. Rotating-subsample measurements (missing for
+    most person-waves) can drive the complete-case count to zero. When the full
+    vector has fewer complete cases than `n_components`, drop every
+    non-normalization measurement whose missing rate exceeds `subsample_cutoff`
+    and seed the mixture on the always-observed subset. The dropped measurements
+    are simply not AMN-seeded; their params fall back to the neutral/Spearman
+    seeding defaults.
+
+    Returns the (possibly unchanged) layout and augmented matrix plus the meta of
+    the dropped measurements. When the full vector already has enough complete
+    cases the inputs are returned untouched, so healthy models are unaffected.
+
+    Args:
+        layout: Augmented-measure layout to (possibly) reduce.
+        augmented: `(n_obs, n_aug)` augmented matrix aligned with `layout`.
+        processed_model: Processed model, for normalization detection.
+        n_components: Mixture components; the complete-case feasibility floor.
+        subsample_cutoff: Missing-rate above which a non-normalization
+            measurement is treated as subsample and dropped.
+
+    Return:
+        `(reduced_layout, reduced_augmented, dropped_measurement_meta)`.
+
+    """
+    complete_mask = ~np.isnan(augmented).any(axis=1)
+    if int(complete_mask.sum()) >= n_components:
+        return layout, augmented, ()
+
+    protected = _normalization_measurement_slots(layout, processed_model)
+    n_rows = max(augmented.shape[0], 1)
+    missing_rate = np.isnan(augmented).sum(axis=0) / n_rows
+    drop_slots = {
+        slot
+        for slot in layout.measurement_slots
+        if slot not in protected and missing_rate[slot] > subsample_cutoff
+    }
+    if not drop_slots:
+        # Nothing droppable (e.g. a normalization or observed column is the
+        # blocker); let fit_mixture_em raise its informative complete-case error.
+        return layout, augmented, ()
+
+    dropped_meta = tuple(
+        meta
+        for slot, meta in zip(
+            layout.measurement_slots, layout.measurement_meta, strict=True
+        )
+        if slot in drop_slots
+    )
+    keep_mask = np.array([col not in drop_slots for col in range(augmented.shape[1])])
+    n_full = int(complete_mask.sum())
+    pretty = ", ".join(f"{p}|{f}|{m}" for p, f, m in dropped_meta)
+    warnings.warn(
+        f"AMN Stage 1 seeding: only {n_full} complete-case rows over the full "
+        f"measurement set (< {n_components} mixture components). Dropped "
+        f"{len(dropped_meta)} subsample measurement(s) with >"
+        f"{subsample_cutoff:.0%} missingness and seeded the mixture on the "
+        f"always-observed subset ({pretty}). Their loadings/SDs fall back to the "
+        f"start-value defaults.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+    return _subset_layout(layout, keep_mask), augmented[:, keep_mask], dropped_meta
+
+
 def fit_mixture_em(
     augmented: np.ndarray,
     *,

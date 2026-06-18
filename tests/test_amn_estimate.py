@@ -68,6 +68,72 @@ def test_estimate_amn_produces_combined_params_dataframe():
     assert "controls" in cats  # measurement intercepts collapse to controls
 
 
+def _subsample_model() -> ModelSpec:
+    """Model whose `skills` factor has one rotating-subsample measurement.
+
+    Measured by full-sample y1 (normalization) and y2, plus y_sub, which is
+    missing for almost every individual.
+    """
+    return ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2", "y_sub"), ("y1", "y2", "y_sub")),
+                normalizations=Normalizations(
+                    loadings=({"y1": 1}, {"y1": 1}),
+                    intercepts=({"y1": 0}, {}),
+                ),
+                transition_function="linear",
+            ),
+        },
+        n_mixtures=2,
+    )
+
+
+def _subsample_data(n: int = 1500, seed: int = 0) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
+    rows = []
+    for caseid in range(n):
+        f0 = rng.normal()
+        f1 = 0.6 * f0 + rng.normal(0, 0.5)
+        for period, f in [(0, f0), (1, f1)]:
+            # y_sub observed only for the very first individual: the full
+            # complete-case count (1) is below the 2 mixture components, exactly
+            # the rotating-subsample regime that makes complete-case EM infeasible.
+            y_sub = f + rng.normal(0, 0.3) if caseid == 0 else np.nan
+            rows.append(
+                {
+                    "caseid": caseid,
+                    "period": period,
+                    "y1": f + rng.normal(0, 0.3),
+                    "y2": 0.9 * f + rng.normal(0, 0.4),
+                    "y_sub": y_sub,
+                }
+            )
+    return pd.DataFrame(rows).set_index(["caseid", "period"])
+
+
+def test_estimate_amn_seeds_on_observed_subset_with_subsample_measurement():
+    """AMN seeds on the always-observed measurements under subsample missingness.
+
+    With a rotating-subsample measurement the full augmented vector has too few
+    complete cases to fit the mixture (the complete-case EM would otherwise
+    raise). AMN must drop the subsample measurement, seed the mixture on the
+    always-observed subset, and still return structural params -- omitting the
+    dropped measurement's loadings.
+    """
+    model = _subsample_model()
+    data = _subsample_data(n=1500)
+    options = AMNEstimationOptions(n_simulation_draws=5000, seed=0)
+
+    result = estimate_amn(model, data, options)
+
+    meas = result.params.xs("loadings", level="category").index.get_level_values(
+        "name1"
+    )
+    assert "y_sub" not in set(meas)  # subsample measurement dropped from seeding
+    assert "y2" in set(meas)  # always-observed measurement retained
+
+
 def test_estimate_amn_honors_fixed_params():
     model = _tiny_model()
     data = _tiny_data(n=1500)

@@ -65,6 +65,14 @@ class AMNEstimationOptions:
     seed: int
     """RNG seed used for Stage 3 simulation and bootstrap inference."""
 
+    seed_subsample_cutoff: float
+    """Missingness cutoff for the subsample-aware Stage-1 fallback. When the full
+    augmented measure vector has too few complete cases to fit the mixture (fewer
+    than `n_mixtures`), non-normalization measurements whose missing rate exceeds
+    this cutoff are dropped and the mixture is seeded on the always-observed
+    subset. Set at `0.5` by default; rotating-subsample indicators (missing for
+    ~half or more of person-waves) are dropped, full-sample measurements kept."""
+
     def __init__(  # noqa: D107
         self,
         em_max_iter: int = 500,
@@ -79,6 +87,7 @@ class AMNEstimationOptions:
         allow_ces_overnormalization: bool = False,
         keep_synthetic_panel: bool = False,
         seed: int = 0,
+        seed_subsample_cutoff: float = 0.5,
     ) -> None:
         object.__setattr__(self, "em_max_iter", em_max_iter)
         object.__setattr__(self, "em_tol", em_tol)
@@ -99,6 +108,7 @@ class AMNEstimationOptions:
         )
         object.__setattr__(self, "keep_synthetic_panel", keep_synthetic_panel)
         object.__setattr__(self, "seed", seed)
+        object.__setattr__(self, "seed_subsample_cutoff", seed_subsample_cutoff)
 
 
 @dataclass(frozen=True)

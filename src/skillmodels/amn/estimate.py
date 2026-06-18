@@ -20,6 +20,7 @@ from skillmodels.amn.mixture_em import (
     build_augmented_measure_layout,
     build_augmented_measure_matrix,
     fit_mixture_em,
+    reduce_to_seedable_measurements,
 )
 from skillmodels.amn.simulate_and_regress import simulate_and_regress
 from skillmodels.amn.types import (
@@ -138,6 +139,15 @@ def estimate_amn(
     processed_model = process_model(model_spec)
     layout = build_augmented_measure_layout(processed_model)
     augmented = build_augmented_measure_matrix(data, processed_model, layout)
+    # Subsample-aware seeding: if the full augmented vector has too few complete
+    # cases to fit the mixture, seed on the always-observed measurement subset.
+    layout, augmented, _dropped = reduce_to_seedable_measurements(
+        layout,
+        augmented,
+        processed_model,
+        n_components=processed_model.dimensions.n_mixtures,
+        subsample_cutoff=amn_options.seed_subsample_cutoff,
+    )
 
     mixture = fit_mixture_em(
         augmented,
