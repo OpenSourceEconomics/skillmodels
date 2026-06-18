@@ -3,6 +3,7 @@
 import functools
 import warnings
 from collections.abc import Callable
+from types import MappingProxyType
 from typing import Any
 
 import jax
@@ -278,11 +279,18 @@ def _estimate_amn_for_chs_seeding(
     higher-order (translog) kappa bases; the higher-order kappa terms then take
     their small start defaults.
     """
+    # Cap the Stage-2 minimum-distance iterations: with the exact JAX gradient
+    # each step is cheap, but a seed does not need full convergence, and the
+    # cap bounds the cost on a large factor-period block.
+    seed_md_options = MappingProxyType({"stopping_maxiter": 500})
     try:
         return estimate_amn(
             model_spec=model_spec,
             data=data,
-            options=AMNEstimationOptions(mixture_em_method="complete_case"),
+            options=AMNEstimationOptions(
+                mixture_em_method="complete_case",
+                optimizer_options=seed_md_options,
+            ),
             linearize_control_function=True,
         )
     except InsufficientCompleteCasesError:
@@ -302,6 +310,7 @@ def _estimate_amn_for_chs_seeding(
                 em_n_init=1,
                 em_max_iter=100,
                 mixture_em_max_rows=3000,
+                optimizer_options=seed_md_options,
             ),
             linearize_control_function=True,
         )

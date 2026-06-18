@@ -14,8 +14,17 @@ between the EM-fitted moments (Pi_m, Psi_m) and the model-implied
 moments parameterized by structural quantities.
 """
 
-from dataclasses import dataclass
+# The JAX objective below uses `.at[idx].set(...)` functional array updates, which
+# ruff's pandas-vet rule misreads as pandas `.at` scalar access. This module has
+# no pandas `.at` usage, so the rule is disabled file-wide.
+# ruff: noqa: PD008
 
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import Any
+
+import jax
+import jax.numpy as jnp
 import numpy as np
 import optimagic as om
 import pandas as pd
@@ -422,6 +431,101 @@ def _objective(
     return float(np.sum(diff_mean**2) + np.sum(diff_cov**2))
 
 
+def _make_objective_and_grad(
+    struct: _Structure,
+    slices: dict[str, slice],
+    *,
+    n_components: int,
+    mixture_weights: np.ndarray,
+    target_means: np.ndarray,
+    target_covs: np.ndarray,
+) -> tuple[Callable[[np.ndarray], float], Callable[[np.ndarray], np.ndarray]]:
+    """Build jitted (value, gradient) of the identity-metric MD criterion.
+
+    The criterion is identical to `_objective`, but written in JAX so the
+    optimizer receives an *exact* analytical gradient (one backward pass) rather
+    than a finite-difference gradient that costs `n_params` objective
+    evaluations. With a large factor-period block the parameter vector runs to
+    thousands of entries, so the finite-difference cost per L-BFGS-B step is the
+    difference between seconds and hours.
+
+    Every scatter target (free-entry indices, the lower-triangular Cholesky
+    pattern, the baseline mean-zero constraint) is a static function of the model
+    structure, so the only traced input is the flat parameter vector.
+    """
+    n_factor = struct.n_factor_slots
+    n_aug = struct.n_aug
+    # Flat (single-axis) scatter indices throughout: a 2-axis `.at[rows, cols]`
+    # reads to ruff as a pandas `.at` scalar access (PD008); linear indices keep
+    # the functional update unambiguous and equally differentiable.
+    sigma2_idx = jnp.asarray(np.nonzero(struct.sigma2_free_mask)[0])
+    chol_slices = [slices[f"chol_{m}"] for m in range(n_components)]
+    tr_rows, tr_cols = np.tril_indices(n_factor)
+    tril_lin = jnp.asarray(tr_rows * n_factor + tr_cols)
+
+    baseline_set = set(struct.baseline_mean_zero_slots)
+    free_mu_positions = [
+        m * n_factor + j
+        for m in range(n_components)
+        for j in range(n_factor)
+        if not (m == n_components - 1 and j in baseline_set)
+    ]
+    mu_lin = jnp.asarray(free_mu_positions)
+    baseline_cols = jnp.asarray(list(struct.baseline_mean_zero_slots), dtype=int)
+    has_baseline = bool(struct.baseline_mean_zero_slots) and n_components > 1
+
+    lam_r, lam_c = np.nonzero(struct.lambda_free_mask)
+    lam_lin = jnp.asarray(lam_r * n_factor + lam_c)
+    inter_idx = jnp.asarray(np.nonzero(struct.intercept_free_mask)[0])
+
+    lambda_flat = jnp.asarray(struct.lambda_value).reshape(-1)
+    intercept_value = jnp.asarray(struct.intercept_value)
+    weights_j = jnp.asarray(mixture_weights)
+    tmeans = jnp.asarray(target_means)
+    tcovs = jnp.asarray(target_covs)
+
+    s_sig, s_mu = slices["sigma2"], slices["mu"]
+    s_lam, s_int = slices["lambda"], slices["intercept"]
+
+    def _value(flat: jax.Array) -> jax.Array:
+        sigma2 = jnp.zeros(n_aug).at[sigma2_idx].set(flat[s_sig.start : s_sig.stop])
+
+        omega_list = []
+        for sl in chol_slices:
+            chol = jnp.zeros(n_factor * n_factor).at[tril_lin].set(flat[sl])
+            chol = chol.reshape(n_factor, n_factor)
+            omega_list.append(chol @ chol.T)
+        omegas = jnp.stack(omega_list)
+
+        mu_flat = jnp.zeros(n_components * n_factor)
+        mu_flat = mu_flat.at[mu_lin].set(flat[s_mu.start : s_mu.stop])
+        if has_baseline:
+            mu_grid = mu_flat.reshape(n_components, n_factor)
+            num = -(weights_j[:-1] @ mu_grid[:-1][:, baseline_cols])
+            base_lin = (n_components - 1) * n_factor + baseline_cols
+            mu_flat = mu_flat.at[base_lin].set(num / weights_j[-1])
+        mu = mu_flat.reshape(n_components, n_factor)
+
+        lam = lambda_flat.at[lam_lin].set(flat[s_lam.start : s_lam.stop])
+        lam = lam.reshape(n_aug, n_factor)
+        inter = intercept_value.at[inter_idx].set(flat[s_int.start : s_int.stop])
+
+        means = inter[None, :] + mu @ lam.T  # (K, n_aug)
+        covs = jnp.einsum("af,kfg,bg->kab", lam, omegas, lam) + jnp.diag(sigma2)[None]
+        return jnp.sum((means - tmeans) ** 2) + jnp.sum((covs - tcovs) ** 2)
+
+    value_jit = jax.jit(_value)
+    grad_jit = jax.jit(jax.grad(_value))
+
+    def value_fn(flat: np.ndarray) -> float:
+        return float(value_jit(jnp.asarray(flat, dtype=float)))
+
+    def grad_fn(flat: np.ndarray) -> np.ndarray:
+        return np.asarray(grad_jit(jnp.asarray(flat, dtype=float)), dtype=float)
+
+    return value_fn, grad_fn
+
+
 def _initial_guess(
     struct: _Structure,
     slices: dict[str, slice],
@@ -485,6 +589,7 @@ def solve_minimum_distance(
     weighting: str = "identity",
     algorithm: str = "scipy_lbfgsb",
     allow_overnormalization: bool = False,
+    algo_options: Mapping[str, Any] | None = None,
 ) -> MinimumDistanceResult:
     """Recover structural parameters from the reduced-form mixture.
 
@@ -503,6 +608,10 @@ def solve_minimum_distance(
         allow_overnormalization: Opt out of the CES minimal-normalization
             guard. When True, extra normalized CES loadings are treated as a
             deliberate fixed-loadings analysis instead of an error.
+        algo_options: Optional optimagic ``algo_options`` for the L-BFGS-B
+            solver (e.g. ``{"stopping_maxiter": 500}``). CHS seeding caps the
+            iterations here so a rough structural seed stays fast on a large
+            factor-period block; standalone estimation leaves it unbounded.
 
     Return:
         MinimumDistanceResult with structural Lambda, A, Sigma, and the
@@ -545,22 +654,26 @@ def solve_minimum_distance(
     )
     lower = _lower_bounds(struct, slices, n_total)
 
-    def fun(theta: np.ndarray) -> float:
-        return _objective(
-            theta,
-            struct,
-            slices,
-            n_components=n_components,
-            mixture_weights=mixture.weights,
-            target_means=target_means,
-            target_covs=target_covs,
-        )
+    # Pass an exact JAX gradient: with a large factor-period block the parameter
+    # vector has thousands of entries, so a finite-difference gradient would cost
+    # thousands of dense objective evaluations per L-BFGS-B step (hours at panel
+    # scale). The analytical gradient is one backward pass.
+    fun, jac = _make_objective_and_grad(
+        struct,
+        slices,
+        n_components=n_components,
+        mixture_weights=mixture.weights,
+        target_means=target_means,
+        target_covs=target_covs,
+    )
 
     result = om.minimize(
         fun=fun,
+        jac=jac,
         params=flat0,
         algorithm=algorithm,
         bounds=om.Bounds(lower=lower),
+        algo_options=dict(algo_options) if algo_options else None,
     )
     success = bool(result.success)
     flat_opt = np.asarray(result.params, dtype=float)

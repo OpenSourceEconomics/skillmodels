@@ -165,6 +165,7 @@ def estimate_amn(
         weighting=amn_options.minimum_distance_weighting,
         algorithm=amn_options.optimizer_algorithm,
         allow_overnormalization=amn_options.allow_ces_overnormalization,
+        algo_options=dict(amn_options.optimizer_options) or None,
     )
 
     production = simulate_and_regress(

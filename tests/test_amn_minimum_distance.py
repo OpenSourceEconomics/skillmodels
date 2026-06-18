@@ -6,6 +6,9 @@ import pytest
 
 from skillmodels.amn.minimum_distance import (
     _build_structure,
+    _initial_guess,
+    _make_objective_and_grad,
+    _objective,
     _pack_layout,
     solve_minimum_distance,
 )
@@ -151,6 +154,90 @@ def test_pack_layout_returns_consistent_total():
     # lambda: 4 free; intercept: 5 free => 6+6+3+4+5 = 24.
     assert n_total == 24
     assert slices["sigma2"] == slice(0, 6)
+
+
+def _numpy_fd_grad(fn, x, h: float = 1e-6) -> np.ndarray:
+    """Central finite-difference gradient of a scalar function."""
+    grad = np.zeros_like(x)
+    for i in range(x.size):
+        xp = x.copy()
+        xp[i] += h
+        xm = x.copy()
+        xm[i] -= h
+        grad[i] = (fn(xp) - fn(xm)) / (2 * h)
+    return grad
+
+
+def test_md_analytical_gradient_matches_numerical():
+    """The JAX objective + gradient match the numpy criterion and its FD gradient.
+
+    `solve_minimum_distance` passes this analytical gradient to the optimizer so
+    each L-BFGS-B step costs one backward pass instead of `n_params` finite-
+    difference objective evaluations -- the difference between seconds and hours
+    once the factor-period block (and thus the parameter vector) is large.
+    """
+    model = _tiny_model()
+    processed = process_model(model)
+    layout = build_augmented_measure_layout(processed)
+    mixture, _ = _build_oracle_mixture(layout=layout)
+    struct = _build_structure(layout, processed)
+    n_components = mixture.weights.shape[0]
+    n_total, slices = _pack_layout(struct, n_components)
+
+    value_fn, grad_fn = _make_objective_and_grad(
+        struct,
+        slices,
+        n_components=n_components,
+        mixture_weights=mixture.weights,
+        target_means=mixture.means,
+        target_covs=mixture.covariances,
+    )
+
+    rng = np.random.default_rng(1)
+    flat = _initial_guess(
+        struct,
+        slices,
+        n_components=n_components,
+        n_total=n_total,
+        target_means=mixture.means,
+        target_covs=mixture.covariances,
+    ) + 0.05 * rng.standard_normal(n_total)
+
+    def numpy_obj(x: np.ndarray) -> float:
+        return _objective(
+            x,
+            struct,
+            slices,
+            n_components=n_components,
+            mixture_weights=mixture.weights,
+            target_means=mixture.means,
+            target_covs=mixture.covariances,
+        )
+
+    assert value_fn(flat) == pytest.approx(numpy_obj(flat), rel=1e-6)
+    np.testing.assert_allclose(
+        grad_fn(flat), _numpy_fd_grad(numpy_obj, flat), rtol=1e-4, atol=1e-5
+    )
+
+
+def test_solve_minimum_distance_respects_maxiter_cap():
+    """A `stopping_maxiter` cap is honoured (the seeding budget bound).
+
+    With the exact analytical gradient each L-BFGS-B step is cheap, but a seed
+    does not need full convergence; the cap bounds the Stage-2 cost on a large
+    factor-period block. A tiny cap must return a valid result, not error.
+    """
+    model = _tiny_model()
+    processed = process_model(model)
+    layout = build_augmented_measure_layout(processed)
+    mixture, _ = _build_oracle_mixture(layout=layout)
+
+    result = solve_minimum_distance(
+        mixture, processed, algo_options={"stopping_maxiter": 2}
+    )
+
+    assert isinstance(result.objective_value, float)
+    assert result.loadings.shape[0] == 6
 
 
 def test_solve_minimum_distance_recovers_oracle():
