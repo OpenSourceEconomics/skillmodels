@@ -171,22 +171,32 @@ def test_missing_data_em_fits_when_no_row_is_complete():
     assert fit.cross_covariance_identified is False
 
 
-def test_missing_data_em_raises_when_a_column_is_never_observed():
-    """A column observed in no row leaves its mean and (co)variances unidentified."""
+def test_missing_data_em_warns_but_fits_when_a_column_is_never_observed():
+    """A never-observed column is flagged, not fatal: it gets a neutral seed.
+
+    During seeding the row subsample can drop every observation of a rarely-seen
+    measurement, leaving an all-missing column. The EM must still fit the
+    identified columns, warn about the unidentified one, and report
+    `cross_covariance_identified` False rather than crash the pipeline.
+    """
     rng = np.random.default_rng(5)
     data = rng.normal(size=(200, 3))
     data[:, 1] = np.nan  # column 1 never observed
 
-    with pytest.raises(ValueError, match="never observed"):
-        fit_gaussian_mixture_missing(
+    with pytest.warns(RuntimeWarning, match="never observed"):
+        fit = fit_gaussian_mixture_missing(
             data,
             n_components=1,
-            max_iter=10,
-            tol=1e-6,
+            max_iter=50,
+            tol=1e-7,
             n_init=1,
             reg_covar=1e-6,
             seed=0,
         )
+
+    assert fit.cross_covariance_identified is False
+    assert fit.means.shape == (1, 3)
+    np.testing.assert_allclose(fit.means[0, [0, 2]], 0.0, atol=0.2)
 
 
 def test_missing_data_em_reports_identified_covariance_under_mcar():

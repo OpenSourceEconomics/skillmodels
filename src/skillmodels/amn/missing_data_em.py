@@ -284,9 +284,11 @@ def _initialise(
     """Warm-start from a mixture fitted on the mean-imputed data."""
     from sklearn.mixture import GaussianMixture  # noqa: PLC0415
 
-    col_mean = np.where(
-        obs.any(axis=0), np.nanmean(np.where(obs, x, np.nan), axis=0), 0.0
-    )
+    # Per-column observed mean, robust to all-missing columns (mean -> 0) without
+    # tripping numpy's "Mean of empty slice" warning from nanmean.
+    counts = obs.sum(axis=0)
+    sums = np.where(obs, x, 0.0).sum(axis=0)
+    col_mean = np.where(counts > 0, sums / np.maximum(counts, 1), 0.0)
     imputed = np.where(obs, x, col_mean)
     gm = GaussianMixture(
         n_components=n_components,
@@ -331,16 +333,25 @@ def fit_gaussian_mixture_missing(
     if not obs.any():
         msg = "augmented has no observed entries; cannot fit mixture."
         raise ValueError(msg)
+    # Identification diagnostics. A column observed in no row, or a co-observation
+    # graph that splits into blocks, leaves some means/covariances unidentified.
+    # These are *not* fatal: the EM still fits the identified part, and the
+    # unidentified entries fall back to a neutral (ridge) seed -- which matters
+    # because a never-observed column can be a transient artefact of subsampling
+    # rows for a seed rather than a genuinely absent measurement. We flag it so a
+    # caller never mistakes ordinary convergence for a fully identified fit.
     never_observed = np.nonzero(~obs.any(axis=0))[0]
-    if never_observed.size:
-        msg = (
-            f"Columns {never_observed.tolist()} are never observed in any row; "
-            "their mixture means and (co)variances are unidentified. Drop these "
-            "measurements before fitting the mixture."
-        )
-        raise ValueError(msg)
     cross_covariance_identified = _co_observation_connected(obs)
-    if not cross_covariance_identified:
+    if never_observed.size:
+        warnings.warn(
+            f"Missing-data mixture EM: columns {never_observed.tolist()} are "
+            "never observed in any row; their means and (co)variances are "
+            "unidentified and are seeded only at the ridge default. Drop these "
+            "measurements if this is not a transient row-subsampling artefact.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    elif not cross_covariance_identified:
         warnings.warn(
             "Missing-data mixture EM: the column co-observation graph is "
             "disconnected -- no individual is observed on measurements from "
