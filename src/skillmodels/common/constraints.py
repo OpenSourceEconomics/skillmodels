@@ -52,6 +52,32 @@ def _equality_constraint_loc(c: om.constraints.Constraint) -> pd.MultiIndex | No
     return loc if isinstance(loc, pd.MultiIndex) else None
 
 
+def _pairwise_equality_locs(
+    c: om.constraints.Constraint,
+) -> list[pd.MultiIndex] | None:
+    """Return the aligned `select_by_loc` locs of a `PairwiseEqualityConstraint`.
+
+    Each selector ties its members element-wise to the others, so the returned
+    `MultiIndex`es are equal length and position `k` forms one equality group.
+    Returns `None` for any other constraint type or selector shape.
+    """
+    if not isinstance(c, om.PairwiseEqualityConstraint):
+        return None
+    selectors = getattr(c, "selectors", None)
+    if not selectors:
+        return None
+    locs: list[pd.MultiIndex] = []
+    for sel in selectors:
+        keywords = getattr(sel, "keywords", None)
+        loc = keywords.get("loc") if keywords else None
+        if not isinstance(loc, pd.MultiIndex):
+            return None
+        locs.append(loc)
+    if len({len(loc) for loc in locs}) != 1:
+        return None
+    return locs
+
+
 def filter_within_step_constraints(
     user_constraints: list[om.constraints.Constraint] | None,
     params_index: pd.Index,
@@ -83,20 +109,28 @@ def reconcile_start_to_equality(
     """Average each equality group's `value` so the start point satisfies it.
 
     `om.minimize` raises `InvalidParamsError` when an equality
-    constraint is violated at the starting point. For each constraint
-    in `equality_constraints` whose selector is
-    `functools.partial(select_by_loc, loc=...)`, set every member's
-    `value` to the mean of the group's current values. Returns a copy;
-    `params` is not modified.
+    constraint is violated at the starting point. For each
+    `om.EqualityConstraint`, set every member's `value` to the group
+    mean. For each `om.PairwiseEqualityConstraint` (e.g. the time-
+    invariance ties on controls / loadings / meas_sds across periods),
+    average each element-wise group across the aligned selectors. Returns
+    a copy; `params` is not modified.
     """
     if not equality_constraints:
         return params
     out = params.copy()
     for c in equality_constraints:
         loc = _equality_constraint_loc(c)
-        if loc is None or not all(tup in out.index for tup in loc):
+        if loc is not None and all(tup in out.index for tup in loc):
+            out.loc[loc, "value"] = float(out.loc[loc, "value"].mean())
             continue
-        out.loc[loc, "value"] = float(out.loc[loc, "value"].mean())
+        pairwise = _pairwise_equality_locs(c)
+        if pairwise is None:
+            continue
+        for group in zip(*pairwise, strict=True):
+            members = [m for m in group if m in out.index]
+            if len(members) > 1:
+                out.loc[members, "value"] = float(out.loc[members, "value"].mean())
     return out
 
 

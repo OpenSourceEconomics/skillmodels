@@ -1,5 +1,6 @@
 """Tests for constraints."""
 
+import functools
 from types import MappingProxyType
 from typing import Any
 
@@ -21,8 +22,10 @@ from skillmodels.common.constraints import (
     _get_transition_constraints,
     add_bounds,
     get_constraints,
+    reconcile_start_to_equality,
 )
 from skillmodels.common.process_model import process_model
+from skillmodels.common.selector import select_by_loc
 from skillmodels.common.types import (
     Anchoring,
     Labels,
@@ -30,6 +33,33 @@ from skillmodels.common.types import (
     Normalizations,
 )
 from skillmodels.test_data.simplest_augmented_model import SIMPLEST_AUGMENTED_MODEL
+
+
+def test_reconcile_start_to_equality_pools_pairwise_groups():
+    """Pairwise-equality groups (e.g. time-invariant controls) are pooled too.
+
+    hc ties a measurement's control / loading / sd across periods via
+    `om.PairwiseEqualityConstraint`. A per-period seed (AMN/Spearman) fills each
+    member independently and breaks it, so the reconciler must average each
+    element-wise group, not only plain `om.EqualityConstraint`s. Regression for
+    the `InvalidParamsError` that AMN-seeded time-invariant controls triggered.
+    """
+    names = ["category", "period", "name1", "name2"]
+    index = pd.MultiIndex.from_tuples(
+        [("controls", p, "m1", "constant") for p in (0, 1, 2)], names=names
+    )
+    params = pd.DataFrame({"value": [1.0, 2.0, 3.0]}, index=index)
+    locs = [
+        pd.MultiIndex.from_tuples([("controls", p, "m1", "constant")], names=names)
+        for p in (0, 1, 2)
+    ]
+    constraint = om.PairwiseEqualityConstraint(
+        selectors=[functools.partial(select_by_loc, loc=loc) for loc in locs]
+    )
+
+    out = reconcile_start_to_equality(params, [constraint])
+
+    np.testing.assert_allclose(out["value"].to_numpy(), [2.0, 2.0, 2.0])
 
 
 def _corr_model_processed():
