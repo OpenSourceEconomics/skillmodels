@@ -102,27 +102,87 @@ def filter_within_step_constraints(
     return out
 
 
+def _fixed_loc_values(
+    constraints: Iterable[om.constraints.Constraint],
+) -> dict[tuple[Any, ...], float]:
+    """Map every `FixedConstraintWithValue.loc` tuple to its target `value`.
+
+    The companion of `collect_fixed_locs` that keeps the value, so the
+    equality reconciler can pool a group onto a fixed member's value
+    rather than the group mean. Handles the same `loc` shapes
+    (single 4-tuple, list/tuple of 4-tuples, `pd.MultiIndex`); string
+    `loc`s are skipped as in `collect_fixed_locs`.
+    """
+    out: dict[tuple[Any, ...], float] = {}
+    for c in constraints:
+        if not isinstance(c, FixedConstraintWithValue) or c.value is None:
+            continue
+        value = float(c.value)
+        loc = c.loc
+        if isinstance(loc, pd.MultiIndex):
+            for tup in loc:
+                out[tuple(tup)] = value
+        elif isinstance(loc, tuple) and loc and not isinstance(loc[0], tuple):
+            out[loc] = value
+        elif isinstance(loc, (list, tuple)):
+            for sub in loc:
+                if isinstance(sub, tuple):
+                    out[sub] = value
+    return out
+
+
+def _pooled_equality_value(
+    members: list[tuple[Any, ...]],
+    params: pd.DataFrame,
+    fixed_values: dict[tuple[Any, ...], float],
+) -> float:
+    """Return the shared value an equality group's members must take.
+
+    If any member is fixed (via a `FixedConstraintWithValue`), the group
+    must take that fixed value -- averaging would move the fixed
+    coordinate off its target. Conflicting fixed values within one group
+    are infeasible and raise. Otherwise the group is averaged.
+    """
+    fixed = {fixed_values[m] for m in members if m in fixed_values}
+    if len(fixed) > 1:
+        msg = (
+            f"Conflicting fixed values in an equality group: {sorted(fixed)}. "
+            "Members tied by equality cannot be fixed to different values."
+        )
+        raise ValueError(msg)
+    if fixed:
+        return next(iter(fixed))
+    return float(params["value"].reindex(members).mean())
+
+
 def reconcile_start_to_equality(
     params: pd.DataFrame,
     equality_constraints: list[om.constraints.Constraint],
 ) -> pd.DataFrame:
-    """Average each equality group's `value` so the start point satisfies it.
+    """Pool each equality group's `value` so the start point satisfies it.
 
     `om.minimize` raises `InvalidParamsError` when an equality
     constraint is violated at the starting point. For each
-    `om.EqualityConstraint`, set every member's `value` to the group
-    mean. For each `om.PairwiseEqualityConstraint` (e.g. the time-
-    invariance ties on controls / loadings / meas_sds across periods),
-    average each element-wise group across the aligned selectors. Returns
-    a copy; `params` is not modified.
+    `om.EqualityConstraint` and each element-wise group of an
+    `om.PairwiseEqualityConstraint` (e.g. the time-invariance ties on
+    controls / loadings / meas_sds across periods), set every member's
+    `value` to a single shared value: the value of a fixed member if the
+    group contains a `FixedConstraintWithValue` (so a previously enforced
+    fix is not averaged away), otherwise the group mean. Conflicting
+    fixed values within one group raise. Returns a copy; `params` is not
+    modified.
     """
     if not equality_constraints:
         return params
     out = params.copy()
+    fixed_values = _fixed_loc_values(equality_constraints)
     for c in equality_constraints:
         loc = _equality_constraint_loc(c)
         if loc is not None and all(tup in out.index for tup in loc):
-            out.loc[loc, "value"] = float(out.loc[loc, "value"].mean())
+            members = list(loc)
+            out.loc[members, "value"] = _pooled_equality_value(
+                members, out, fixed_values
+            )
             continue
         pairwise = _pairwise_equality_locs(c)
         if pairwise is None:
@@ -130,7 +190,9 @@ def reconcile_start_to_equality(
         for group in zip(*pairwise, strict=True):
             members = [m for m in group if m in out.index]
             if len(members) > 1:
-                out.loc[members, "value"] = float(out.loc[members, "value"].mean())
+                out.loc[members, "value"] = _pooled_equality_value(
+                    members, out, fixed_values
+                )
     return out
 
 

@@ -10,6 +10,7 @@ from skillmodels.chs.estimate import estimate_chs
 from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.chs.types import CHSEstimationResult
 from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.fixed_constraint import FixedConstraintWithValue
 from skillmodels.test_data.model2 import MODEL2
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
@@ -68,3 +69,30 @@ def test_estimate_chs_provides_ml_inference(model2_data, anchoring_start_params)
     assert result.likelihood_result is not None
     standard_errors = result.likelihood_result.se()
     assert standard_errors is not None
+
+
+def test_estimate_chs_enforces_user_fixed_constraint_value(
+    model2_data, anchoring_start_params
+):
+    """A user `FixedConstraintWithValue` fixes the param at its requested value.
+
+    `om.FixedConstraint` pins a parameter at its *start* value, so the wrapper's
+    `.value` only takes effect if `estimate_chs` writes it into the start vector.
+    User `constraints=` are merged after `get_maximization_inputs` (which only
+    enforces the internal fixed constraints), so without an explicit enforce the
+    parameter was silently fixed at the seeded start value, not the requested
+    value. Regression for audit finding F9.
+    """
+    loc = ("controls", 0, "y1", "x1")
+    start_value = float(anchoring_start_params.loc[loc, "value"])
+    target = start_value - 2.0  # clearly different from the seeded start value
+
+    result = estimate_chs(
+        MODEL2,
+        model2_data,
+        CHSEstimationOptions(start_params_strategy="none"),
+        start_params=anchoring_start_params,
+        constraints=[FixedConstraintWithValue(loc=loc, value=target)],
+    )
+
+    assert result.params.loc[loc, "value"] == pytest.approx(target)

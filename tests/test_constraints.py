@@ -62,6 +62,56 @@ def test_reconcile_start_to_equality_pools_pairwise_groups():
     np.testing.assert_allclose(out["value"].to_numpy(), [2.0, 2.0, 2.0])
 
 
+def test_reconcile_start_to_equality_propagates_fixed_member_value():
+    """A fixed member's value propagates to its equality group, not the mean.
+
+    When a pairwise-equality group contains a `FixedConstraintWithValue` member,
+    the shared start value must be that fixed value, so that enforcing the fix and
+    then reconciling do not fight each other; averaging would move the fixed
+    coordinate off its target. Regression for audit finding F10.
+    """
+    names = ["category", "period", "name1", "name2"]
+    index = pd.MultiIndex.from_tuples(
+        [("loadings", p, "m1", "fac1") for p in (0, 1, 2)], names=names
+    )
+    params = pd.DataFrame({"value": [1.0, 2.0, 9.0]}, index=index)
+    locs = [
+        pd.MultiIndex.from_tuples([("loadings", p, "m1", "fac1")], names=names)
+        for p in (0, 1, 2)
+    ]
+    pairwise = om.PairwiseEqualityConstraint(
+        selectors=[functools.partial(select_by_loc, loc=loc) for loc in locs]
+    )
+    fixed = FixedConstraintWithValue(loc=("loadings", 2, "m1", "fac1"), value=9.0)
+
+    out = reconcile_start_to_equality(params, [pairwise, fixed])
+
+    np.testing.assert_allclose(out["value"].to_numpy(), [9.0, 9.0, 9.0])
+
+
+def test_reconcile_start_to_equality_raises_on_conflicting_fixed_members():
+    """Two fixed members in one equality group with different values is infeasible."""
+    names = ["category", "period", "name1", "name2"]
+    index = pd.MultiIndex.from_tuples(
+        [("loadings", p, "m1", "fac1") for p in (0, 1)], names=names
+    )
+    params = pd.DataFrame({"value": [1.0, 2.0]}, index=index)
+    locs = [
+        pd.MultiIndex.from_tuples([("loadings", p, "m1", "fac1")], names=names)
+        for p in (0, 1)
+    ]
+    pairwise = om.PairwiseEqualityConstraint(
+        selectors=[functools.partial(select_by_loc, loc=loc) for loc in locs]
+    )
+    fixed = [
+        FixedConstraintWithValue(loc=("loadings", 0, "m1", "fac1"), value=3.0),
+        FixedConstraintWithValue(loc=("loadings", 1, "m1", "fac1"), value=4.0),
+    ]
+
+    with pytest.raises(ValueError, match="Conflicting"):
+        reconcile_start_to_equality(params, [pairwise, *fixed])
+
+
 def _corr_model_processed():
     """Process a correction model: an endogenous investment + an instrument."""
     from dataclasses import replace  # noqa: PLC0415

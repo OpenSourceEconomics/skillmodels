@@ -20,7 +20,10 @@ from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.chs.types import CHSEstimationResult
-from skillmodels.common.constraints import reconcile_start_to_equality
+from skillmodels.common.constraints import (
+    enforce_fixed_constraints,
+    reconcile_start_to_equality,
+)
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.types import to_plain_dict
 
@@ -79,10 +82,20 @@ def estimate_chs(
 
     all_constraints = [*max_inputs["constraints"], *(constraints or [])]
 
+    # Write every `FixedConstraintWithValue`'s target into the start vector.
+    # optimagic's plain "fixed" constraint pins a parameter at its *start* value,
+    # so a user constraint's `.value` only takes effect once enforced here. User
+    # `constraints=` are merged only now; `get_maximization_inputs` enforced just
+    # the internal (model-implied / `fixed_params`) constraints, so without this
+    # a user-supplied fixed parameter would be silently held at its seed instead
+    # of the requested value.
+    start = enforce_fixed_constraints(start, all_constraints)
+
     # `estimate_ml` (via `om.minimize`) raises `InvalidParamsError` if the start
     # point violates any equality constraint. Seeding strategies (AMN/Spearman)
-    # and user start_params fill each member independently, so average each
-    # equality group's seeded value onto the constraint surface first.
+    # and user start_params fill each member independently, so pool each equality
+    # group's seeded value onto the constraint surface -- honouring any fixed
+    # member's enforced value so the line above is not averaged away.
     start = reconcile_start_to_equality(start, all_constraints)
 
     optimize_options = {
