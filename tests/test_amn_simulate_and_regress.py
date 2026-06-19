@@ -410,6 +410,97 @@ def test_simulate_and_regress_control_function_recovers_psi_and_kappa():
     assert ("transition", 0, "investment", "cf") not in prod.index
 
 
+_CF_SES = 0.5  # true production coefficient on the non-instrument control `ses`
+
+
+def _cf_model_with_control() -> ModelSpec:
+    """Corrected model with an observed instrument AND a non-instrument control."""
+    return ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2"), ("y1", "y2")),
+                normalizations=Normalizations(
+                    loadings=({"y1": 1}, {"y1": 1}),
+                    intercepts=({"y1": 0}, {}),
+                ),
+                transition_function="linear",
+            ),
+            "investment": FactorSpec(
+                measurements=(("i1", "i2"), ("i1", "i2")),
+                normalizations=Normalizations(
+                    loadings=({"i1": 1}, {"i1": 1}),
+                    intercepts=({"i1": 0}, {}),
+                ),
+                transition_function="linear",
+                is_endogenous=True,
+                correction=CorrectionSpec(
+                    state_predictors=("skills",),
+                    instruments=("income",),
+                    targets=("skills",),
+                ),
+            ),
+        },
+        observed_factors=("income", "ses"),
+    )
+
+
+def _cf_control_structural() -> MinimumDistanceResult:
+    """CF DGP where skills1 also loads on the non-instrument control ses0."""
+    slots = ((0, "skills"), (0, "investment"), (0, "income"), (0, "ses"), (1, "skills"))
+    # Primitives: [theta0, Y0, eta_I, ses0, eps_C].
+    prim_var = np.array([1.0, 1.0, 0.50, 1.0, 0.30])
+    b_matrix = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0, 0.0],  # (0, skills) = theta0
+            [_CF_B_I, _CF_B_Y, 1.0, 0.0, 0.0],  # (0, investment) = I0
+            [0.0, 1.0, 0.0, 0.0, 0.0],  # (0, income) = Y0
+            [0.0, 0.0, 0.0, 1.0, 0.0],  # (0, ses) = ses0
+            [
+                _CF_LAM + _CF_PSI * _CF_B_I,
+                _CF_PSI * _CF_B_Y,
+                _CF_PSI + _CF_KAPPA,
+                _CF_SES,
+                1.0,
+            ],  # (1, skills) = theta1, with a direct ses0 effect
+        ]
+    )
+    cov = b_matrix @ np.diag(prim_var) @ b_matrix.T
+    means = np.zeros((1, len(slots)))
+    return _make_structural(means, cov[None, :, :], slots)
+
+
+def test_simulate_and_regress_keeps_non_instrument_observed_controls():
+    """A non-instrument observed factor stays a production control under a CF.
+
+    Regression for audit F8: under an active control function the production
+    design dropped ALL observed factors (treating every one as an excluded
+    instrument), so a genuine observed control silently vanished from the
+    production equation (its column index was clamped under jax.vmap). Only
+    `CorrectionSpec.instruments` must be excluded; other observed factors remain
+    production inputs and their coefficients must be recovered.
+    """
+    model = _cf_model_with_control()
+    processed = process_model(model)
+    structural = _cf_control_structural()
+
+    result = simulate_and_regress(
+        structural,
+        processed,
+        model,
+        mixture_weights=np.array([1.0]),
+        n_draws=8000,
+        seed=0,
+    )
+
+    prod = result.production_params
+    # The non-instrument control `ses` is a production input and is recovered.
+    assert ("transition", 0, "skills", "ses") in prod.index
+    ses_coef = float(prod.loc[("transition", 0, "skills", "ses"), "value"])  # ty: ignore[invalid-argument-type]
+    assert ses_coef == _pytest_approx(_CF_SES, abs_tol=0.08)
+    # The excluded instrument `income` is NOT a production input.
+    assert ("transition", 0, "skills", "income") not in prod.index
+
+
 def test_simulate_and_regress_naive_path_is_biased():
     model = _cf_model()
     structural = _cf_structural()

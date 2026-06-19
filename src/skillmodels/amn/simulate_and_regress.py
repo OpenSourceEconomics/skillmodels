@@ -216,13 +216,17 @@ def _resolve_transition_callable(
     factor: str,
     processed_model: ProcessedModel,
     model_spec: ModelSpec,
+    factor_names: tuple[str, ...],
 ) -> tuple[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray], tuple[str, ...]]:
     """Return a ``(states, params) -> scalar`` callable plus param names.
 
     For built-in transitions this is the function imported from
     `skillmodels.common.transition_functions`; for user functions it is
     `_make_user_transition_callable(...)` applied to the raw callable on
-    the model spec.
+    the model spec. `factor_names` is the ordering of the `states` vector the
+    callable will receive (i.e. the production design's columns), so a user
+    function's positional argument lookup matches the design actually passed --
+    crucial under a control function, where the design excludes the instruments.
     """
     from skillmodels.common import transition_functions as tf  # noqa: PLC0415
 
@@ -235,10 +239,6 @@ def _resolve_transition_callable(
         "log_ces_with_constant",
         "log_ces_general",
     }
-    factor_names = (
-        *processed_model.labels.latent_factors,
-        *processed_model.labels.observed_factors,
-    )
     transition_info = processed_model.transition_info
     if transition_info is None:
         msg = "ProcessedModel has no transition_info; cannot run Stage 3."
@@ -404,7 +404,11 @@ def _fit_transition(
         return _fit_log_ces(y, x_design, regressor_names, with_constant=True, cf=cf)
 
     func, param_names = _resolve_transition_callable(
-        transition_name, factor, processed_model, model_spec
+        transition_name,
+        factor,
+        processed_model,
+        model_spec,
+        factor_names=tuple(regressor_names),
     )
     return _fit_generic_nls(func, param_names, y, x_design, cf=cf)
 
@@ -498,10 +502,12 @@ class _ProductionContext:
     """All-present-factor design (non-control-function path)."""
     present_factor_names: list[str]
     """Names matching `x_design`'s columns."""
-    x_design_latent: np.ndarray
-    """Latent-only design (control-function path: observed factors excluded)."""
-    latent_present_names: list[str]
-    """Names matching `x_design_latent`'s columns."""
+    x_design_production: np.ndarray
+    """Production design under the control-function path: present factors with the
+    excluded *instruments* removed. Latent factors and any non-instrument observed
+    factors (genuine production controls) are kept."""
+    production_factor_names: list[str]
+    """Names matching `x_design_production`'s columns."""
     cf_by_factor: dict[str, np.ndarray]
     """Investment factor -> control-function residual for this period."""
 
@@ -520,10 +526,12 @@ def _fit_period_production(
 ) -> list[tuple[str, int, str, str, float]]:
     """Run the production regressions for every latent outcome at `period`.
 
-    Under `run_cf` the production inputs are the present latent factors only
-    (observed factors are the excluded instruments), and the control-function
-    residual is injected as a `kappa*cf` covariate into *state* outcomes only
-    -- not the investment factor's own transition.
+    Under `run_cf` the production inputs are the present factors with the excluded
+    *instruments* removed -- latent factors plus any non-instrument observed
+    factors (genuine production controls) -- and the control-function residual is
+    injected as a `kappa*cf` covariate into *state* outcomes only, not the
+    investment factor's own transition. Only the `CorrectionSpec` instruments are
+    excluded; other observed factors remain production inputs.
     Without `run_cf` the regressors are all present factors (legacy behaviour).
 
     Return:
@@ -531,8 +539,8 @@ def _fit_period_production(
 
     """
     if run_cf:
-        fit_x_design = context.x_design_latent
-        fit_names = context.latent_present_names
+        fit_x_design = context.x_design_production
+        fit_names = context.production_factor_names
     else:
         fit_x_design = context.x_design
         fit_names = context.present_factor_names
@@ -646,8 +654,6 @@ def simulate_and_regress(
         dict(transition_info.function_names) if transition_info is not None else {}
     )
 
-    latent_factor_set = set(processed_model.labels.latent_factors)
-
     transition_rows: list[tuple[str, int, str, str, float]] = []
     investment_rows: list[tuple[str, int, str, str, float]] = []
 
@@ -666,15 +672,16 @@ def simulate_and_regress(
         present_factor_names = [f for f, _ in present_pairs]
         x_design = panel[[c for _, c in present_pairs]].to_numpy()
 
-        # Latent-only production design (used under the control-function
-        # path: observed factors are the excluded instruments).
-        latent_present_pairs = [
-            (f, c) for f, c in present_pairs if f in latent_factor_set
-        ]
-        latent_present_names = [f for f, _ in latent_present_pairs]
-        x_design_latent = (
-            panel[[c for _, c in latent_present_pairs]].to_numpy()
-            if latent_present_pairs
+        # Production design used under the control-function path: drop only the
+        # excluded instruments, keeping latent factors and any non-instrument
+        # observed factors (genuine production controls). When every observed
+        # factor is an instrument this reduces to the latent-only design.
+        instrument_set = set(cf_instruments)
+        production_pairs = [(f, c) for f, c in present_pairs if f not in instrument_set]
+        production_factor_names = [f for f, _ in production_pairs]
+        x_design_production = (
+            panel[[c for _, c in production_pairs]].to_numpy()
+            if production_pairs
             else x_design
         )
 
@@ -700,8 +707,8 @@ def simulate_and_regress(
         context = _ProductionContext(
             x_design=x_design,
             present_factor_names=present_factor_names,
-            x_design_latent=x_design_latent,
-            latent_present_names=latent_present_names,
+            x_design_production=x_design_production,
+            production_factor_names=production_factor_names,
             cf_by_factor=cf_by_factor,
         )
         transition_rows.extend(
