@@ -4,7 +4,8 @@ The getting-started tutorial shows the same `ModelSpec` estimated by all three
 estimators on CNLSY data. This guide picks up where the tutorial leaves off and
 quantifies the uncertainty around each estimator's point estimates:
 
-1. **CHS**: analytic sandwich standard errors from `estimagic.estimate_ml`.
+1. **CHS**: analytic OPG / inverse-score standard errors from
+   `estimagic.estimate_ml`.
 2. **AF**: propagated influence-function score bootstrap
    (`compute_af_standard_errors`).
 3. **AMN**: nonparametric cluster bootstrap (`compute_amn_standard_errors`).
@@ -22,35 +23,45 @@ fixtures (`model`, `data`) are the same across all three.
 Each estimator computes the same point estimate of the same model, but the
 sampling-distribution machinery differs:
 
-| Estimator | Inference                                            | Why this and not bootstrap (CHS) / not sandwich (AF, AMN) |
+| Estimator | Inference                                            | Why this and not bootstrap (CHS) / not OPG (AF, AMN) |
 | --------- | ---------------------------------------------------- | --------------------------------------------------------- |
-| CHS       | Analytic sandwich (`estimate_ml`'s Fisher + outer)   | Closed-form is valid; bootstrap is just slower.           |
+| CHS       | Analytic OPG / inverse-score (information equality)  | Closed-form is valid under correct likelihood specification; bootstrap is just slower. |
 | AF        | Propagated influence-function score bootstrap        | The closed-form variance ignores estimation error in period-$t-1$ nuisance params, biasing every period-$t \geq 1$ SE down. The influence-function score bootstrap propagates that earlier-period uncertainty, so cross-period covariances are non-zero. |
 | AMN       | Full re-estimation cluster bootstrap                 | The three-stage estimator has no clean sandwich form; each stage's residual variance compounds.  |
 
 ## CHS: analytic standard errors
 
-`get_maximization_inputs` returns the jitted log-likelihood and gradient that
-`estimagic.estimate_ml` consumes directly. Its result carries the analytic
-sandwich variance.
+`estimate_chs` runs CHS through `estimagic.estimate_ml`, so its result carries
+ML inference directly. By default `estimate_chs` sets `hessian=False` (the
+numerical Hessian costs $O(\text{n\_params}^2)$ Kalman passes), so the reported
+covariance is the **OPG / inverse-score** form — the inverse of the
+outer-product-of-gradients information. This is valid under correct likelihood
+specification (the information-equality assumption) but is **not** the
+misspecification-robust sandwich, which would also need the Hessian.
 
 ```python
-from estimagic import estimate_ml
-
-chs_inference = estimate_ml(
-    loglike=max_inputs["loglikeobs"],
-    params=chs_result.params,
-    optimize_options=False,
-    constraints=max_inputs["constraints"],
-    loglike_kwargs={},
-)
-chs_inference.summary()
+chs_result.likelihood_result.summary()  # CHS via estimate_chs
+chs_result.likelihood_result.se()
+chs_result.likelihood_result.cov()
 ```
 
-`optimize_options=False` skips re-optimisation: `estimagic` evaluates the
-likelihood and its derivatives at `chs_result.params` and assembles the
-robust sandwich. The output's `params` column has 95% confidence intervals
-ready to plot.
+To get the Hessian-based sandwich covariance instead, override the estimagic
+keyword arguments via `CHSEstimationOptions.estimate_ml_options`:
+
+```python
+from skillmodels import CHSEstimationOptions, estimate_chs
+
+chs_result = estimate_chs(
+    model,
+    data,
+    CHSEstimationOptions(estimate_ml_options={"hessian": True}),
+)
+```
+
+If you drive the optimiser yourself via `get_maximization_inputs`, you can call
+`estimagic.estimate_ml` directly on `max_inputs["loglikeobs"]` and the
+`max_inputs["constraints"]`, choosing `hessian=True`/`False` to pick the
+sandwich or the OPG/inverse-score covariance.
 
 ## AF: propagated influence-function score bootstrap
 
@@ -79,7 +90,7 @@ af_inference = compute_af_standard_errors(
     seed=0,
 )
 af_inference.standard_errors.head()
-af_inference.vcov  # (n_params, n_params) DataFrame indexed by all_params.index
+af_inference.vcov  # (n_params, n_params) DataFrame indexed by the params MultiIndex
 af_inference.replicate_params  # (n_boot, n_params)
 ```
 
@@ -135,20 +146,20 @@ for period in (0, 1):
         "period": period,
         "estimator": "CHS",
         "estimate": chs_result.params.loc[phi_loc, "value"],
-        "lower": chs_inference.summary().loc[phi_loc, "ci_lower"],
-        "upper": chs_inference.summary().loc[phi_loc, "ci_upper"],
+        "lower": chs_result.likelihood_result.summary().loc[phi_loc, "ci_lower"],
+        "upper": chs_result.likelihood_result.summary().loc[phi_loc, "ci_upper"],
     })
     rows.append({
         "period": period,
         "estimator": "AF",
-        "estimate": af_result.all_params.loc[phi_loc, "value"],
+        "estimate": af_result.params.loc[phi_loc, "value"],
         "lower": _ci(af_inference.replicate_params, phi_loc)[0],
         "upper": _ci(af_inference.replicate_params, phi_loc)[1],
     })
     rows.append({
         "period": period,
         "estimator": "AMN",
-        "estimate": amn_result.all_params.loc[phi_loc, "value"],
+        "estimate": amn_result.params.loc[phi_loc, "value"],
         "lower": _ci(amn_inference.replicate_params, phi_loc)[0],
         "upper": _ci(amn_inference.replicate_params, phi_loc)[1],
     })
@@ -160,7 +171,7 @@ phi_comparison = pd.DataFrame(rows)
 
 The three estimators produce different posterior beliefs about the latent
 factor paths. `chs_states`, `af_states`, `amn_states` (built in the tutorial
-via `get_filtered_states`, `get_af_posterior_states`,
+via `get_individual_states`, `get_af_posterior_states`,
 `get_amn_posterior_states`) all share a `period` column and one column per
 factor, so a single melt + facet plot covers the comparison:
 

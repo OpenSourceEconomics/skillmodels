@@ -45,14 +45,13 @@ model = ModelSpec(
 data: pd.DataFrame  # long-format, indexed by (caseid, period)
 
 amn_options = AMNEstimationOptions(
-    n_mixture_components=2,
     em_max_iter=500,
     n_simulation_draws=100_000,
     seed=0,
 )
-result = estimate_amn(model, data, amn_options=amn_options)
+result = estimate_amn(model, data, amn_options)
 
-result.all_params              # canonical skillmodels params DataFrame
+result.params                  # canonical skillmodels params DataFrame
 result.stages.mixture          # Stage 1: reduced-form Pi, Psi, tau
 result.stages.structural       # Stage 2: Lambda, A, Sigma, mu, Omega
 result.stages.production       # Stage 3: production-function regression
@@ -128,14 +127,13 @@ result = estimate_amn(
     model,
     data,
     AMNEstimationOptions(
-        n_mixture_components=2,
         em_max_iter=500,
         n_simulation_draws=50_000,
         seed=0,
     ),
 )
 
-result.all_params.loc[("transition", 0, "skill", "skill"), "value"]
+result.params.loc[("transition", 0, "skill", "skill"), "value"]
 # Should be close to 0.7 (the true slope).
 
 result.stages.mixture.weights      # tau, should be near (0.6, 0.4) up to label switching
@@ -150,10 +148,11 @@ biased downward — that's the signal AMN was designed to capture.
 
 ### Number of mixture components
 
-`n_mixture_components` controls the flexibility of the Stage-1 EM fit. The
-paper fixes $K = 2$; in practice values from 2 to 4 are reasonable. Higher
-$K$ adds free parameters to the reduced-form fit but does not change the
-structural model — the minimum-distance step constrains them.
+`ModelSpec.n_mixtures` (not an `AMNEstimationOptions` field) controls the
+flexibility of the Stage-1 EM fit; AMN reads it as the number of mixture
+components $K$. The paper fixes $K = 2$; in practice values from 2 to 4 are
+reasonable. Higher $K$ adds free parameters to the reduced-form fit but does
+not change the structural model — the minimum-distance step constrains them.
 
 ### Stage-1 EM stability
 
@@ -204,31 +203,47 @@ without changing the qualitative picture.
 
 ## Endogenous investment (control-function correction)
 
-For a model with an endogenous (investment) factor, set
-`investment_endogeneity=True` on `AMNEstimationOptions` to apply the AMN (2020)
-eq. 7-8 / AF Sec. 3.5 control-function correction in Stage 3. Per period, a
-first-stage investment equation `ln I_t ~ theta_t (+ observed instruments Y_t)`
-is OLS-fit on the simulated panel; its residual
+The AMN (2020) eq. 7-8 / AF Sec. 3.5 control-function correction is configured
+declaratively, not via an estimation option: attach a `CorrectionSpec` to the
+endogenous investment `FactorSpec` (which must set `is_endogenous=True`). Its
+mere presence triggers the correction in Stage 3 — there is no
+`investment_endogeneity` flag. See
+[Endogeneity Corrections](../reference_guides/endogeneity_corrections.md) for
+the full interface; the same `CorrectionSpec` is also read by `estimate_chs`.
+
+```python
+from skillmodels import CorrectionSpec
+
+model = base_model.with_correction(
+    "investment",
+    CorrectionSpec(
+        state_predictors=("skills",),
+        instruments=("income",),
+        targets=("skills",),
+    ),
+)
+result = estimate_amn(model, data, amn_options)
+```
+
+Per period, a first-stage investment equation `ln I_t ~ theta_t (+ observed
+instruments Y_t)` is OLS-fit on the simulated panel; its residual
 `eta_{I,t} = ln I_t - E[ln I_t | theta_t, Y_t]` is added as an additive `cf`
-covariate (coefficient `kappa_t`, period- and output-specific) to each state
+covariate (coefficient `kappa_t`, period- and output-specific) to each target
 factor's production regression. Under the correction:
 
-- observed factors are EXCLUDED from the production function — they act as the
-  excluded instruments;
-- at least one observed instrument is REQUIRED (otherwise `simulate_and_regress`
-  raises a `ValueError`, because the residual would be collinear with the
-  production inputs);
+- the instruments act as excluded regressors: they enter the first-stage
+  equation only, never a target's production function;
+- at least one instrument is REQUIRED — `CorrectionSpec.__post_init__` raises
+  `ValueError` otherwise, because the residual would be collinear with the
+  production inputs and `kappa` would be unidentified;
 - the first-stage coefficients and shock SD are returned under the
   `investment_eq` / `investment_sds` categories on
   `result.stages.production.investment_params`, and the production shock SD
   (`shock_sds`) is the corrected SD(eps_C);
-- more than one present investment factor in a period is unsupported and raises
-  `NotImplementedError`.
-
-The default is `False`, because `estimate_af` calls `estimate_amn` for start
-values and the AF likelihood implements only `kappa=0`; opt into the correction
-at the application call site. The flag is a no-op for models without endogenous
-factors.
+- AMN implements only the **linear** `cf` term. A higher-order `kappa_terms`
+  request (anything other than `("cf",)` per target, e.g. a `kappa_degree=2`
+  translog basis) raises `NotImplementedError` in `simulate_and_regress`; use
+  `estimate_chs` for the full polynomial basis.
 
 ## What AMN does not (yet) do
 

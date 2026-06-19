@@ -31,11 +31,10 @@ data: pd.DataFrame  # long-format, indexed by (caseid, period)
 af_options = AFEstimationOptions(
     n_halton_points=200,        # main quadrature
     n_halton_points_shock=50,   # production-shock integration
-    n_mixture_components=2,
 )
-result = estimate_af(model, data, af_options=af_options)
+result = estimate_af(model, data, af_options)
 
-result.all_params              # canonical skillmodels params DataFrame
+result.params                  # canonical skillmodels params DataFrame
 result.period_results[0]       # per-period AFPeriodResult
 ```
 
@@ -97,9 +96,9 @@ All optimagic constraint kinds are supported: `FixedConstraintWithValue`
 `log_ces` `gamma` simplex), and `EqualityConstraint` (within-step and
 cross-period equalities passed through `estimate_af(constraints=...)`).
 
-## Initialization strategy
+## Start-values strategy
 
-`AFEstimationOptions.initialization_strategy` controls how the per-period
+`AFEstimationOptions.start_params_strategy` controls how the per-period
 parameter templates are seeded:
 
 - `"amn"` (default) — run the full AMN three-stage estimator upfront and use
@@ -108,9 +107,11 @@ parameter templates are seeded:
   Bartlett-style residual variances. Fast; good enough for most diagnostics.
 - `"constant"` — legacy 0.5 / data-scaled defaults; useful for regression
   testing and reproducing pre-fix results.
+- `"none"` — accepted for cross-estimator symmetry; behaves identically to
+  `"constant"` (AF always needs concrete per-period starts).
 
 `compute_af_standard_errors` does not re-run the optimizer per replicate, so
-the choice of `initialization_strategy` does not enter the inference path:
+the choice of `start_params_strategy` does not enter the inference path:
 the score bootstrap reuses the point estimate and only resamples the
 precomputed influence matrix.
 
@@ -147,7 +148,12 @@ example with `is_endogenous=True`.
 The AF likelihood implements only the exogenous-investment case
 ($\kappa_t = 0$): production and investment shocks are integrated as
 independent draws. The endogenous-investment control function is not part of
-the AF estimator — supplying `kappa` / `kappa_t` parameters raises
-`NotImplementedError`. The control-function correction lives in the AMN
-estimator (`AMNEstimationOptions.investment_endogeneity`); see
-[How to estimate AMN](how_to_estimate_amn.md).
+the AF estimator. If the model declares a `CorrectionSpec` (via
+`FactorSpec.correction`), `validate_af_model` raises `NotImplementedError`;
+strip it with `ModelSpec.without_correction()` to run AF, or use
+`estimate_chs` to estimate the correction. (Supplying `kappa` / `kappa_t`
+parameters directly via `start_params` / `fixed_params` likewise raises
+`NotImplementedError`.) See
+[Endogeneity Corrections](../reference_guides/endogeneity_corrections.md) for
+the full control-function interface and
+[How to estimate AMN](how_to_estimate_amn.md) for the AMN route.

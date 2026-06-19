@@ -23,13 +23,19 @@ nonlinear latent-factor model. Key features:
 
 ## Public API
 
-The top-level `skillmodels` package re-exports the four model-spec dataclasses
-that every estimator consumes:
+The top-level `skillmodels` package re-exports the model-spec dataclasses that
+every estimator consumes:
 
 - `ModelSpec`
 - `FactorSpec`
 - `AnchoringSpec`
 - `Normalizations`
+- `CorrectionSpec` — control-function correction for an endogenous investment
+  factor, read by both CHS and AMN (see
+  [Endogeneity Corrections](reference_guides/endogeneity_corrections.md)).
+
+The helper `generate_kappa_terms` (also top-level) builds the `cf`-interaction
+monomial basis you pass as a `CorrectionSpec` target's `kappa_terms`.
 
 Estimator-specific entry points live in their own subpackages so the scope of
 each call is explicit at the import site:
@@ -37,8 +43,8 @@ each call is explicit at the import site:
 ```python
 from skillmodels.chs import (
     CHSEstimationOptions,
+    estimate_chs,              # one-call CHS estimator with ML inference
     get_maximization_inputs,   # likelihood + gradients + constraints for optimagic
-    get_filtered_states,
 )
 from skillmodels.af import (
     AFEstimationOptions,
@@ -51,6 +57,14 @@ from skillmodels.amn import (
     compute_amn_standard_errors,
 )
 ```
+
+`estimate_chs` is the turnkey CHS driver: it wraps `get_maximization_inputs`
+and `estimagic.estimate_ml`, so the returned `CHSEstimationResult` carries ML
+inference (via `result.likelihood_result`). `get_maximization_inputs` remains
+the power-user escape hatch for callers who want to drive the optimiser
+themselves. The estimator entry points (`estimate_chs`, `estimate_af`,
+`estimate_amn`) and the `CorrectionSpec` / `generate_kappa_terms` helpers are
+also importable directly from the top-level `skillmodels` package.
 
 Estimator-agnostic helpers live under `skillmodels.common`:
 
@@ -77,8 +91,11 @@ worked examples.
 The CHS estimator differs from the original
 [replication files](https://tinyurl.com/yyuq2sa4) in two ways:
 
-1. Uses normalizations that account for the
-   [critique](https://tinyurl.com/y3wl43kz) of Wiswall and Agostinelli.
+1. Supports normalization schemes designed to address the
+   [critique](https://tinyurl.com/y3wl43kz) of Wiswall and Agostinelli. The
+   model checker performs only syntactic checks on the supplied normalizations;
+   it does not run a transition-specific rank/invariance analysis, so it does
+   not by itself guarantee identification of an arbitrary scheme.
 2. Uses robust square-root implementations of the Kalman filters.
 
 The AF and AMN estimators are independent rewrites of the algorithms in their
