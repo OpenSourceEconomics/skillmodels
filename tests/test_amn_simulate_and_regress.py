@@ -14,6 +14,7 @@ from skillmodels.amn.simulate_and_regress import (
     simulate_and_regress,
 )
 from skillmodels.amn.types import MinimumDistanceResult
+from skillmodels.common.decorators import register_params
 from skillmodels.common.model_spec import (
     CorrectionSpec,
     FactorSpec,
@@ -21,6 +22,16 @@ from skillmodels.common.model_spec import (
     Normalizations,
 )
 from skillmodels.common.process_model import process_model
+
+
+@register_params(params=["self_coef", "ctrl_coef", "constant"])
+def _skills_with_obs_control(skills, obs_ctrl, params):
+    """Registered transition that uses an observed control factor."""
+    return (
+        params["constant"]
+        + params["self_coef"] * skills
+        + params["ctrl_coef"] * obs_ctrl
+    )
 
 
 def _endogenous_model() -> ModelSpec:
@@ -499,6 +510,53 @@ def test_simulate_and_regress_keeps_non_instrument_observed_controls():
     assert ses_coef == _pytest_approx(_CF_SES, abs_tol=0.08)
     # The excluded instrument `income` is NOT a production input.
     assert ("transition", 0, "skills", "income") not in prod.index
+
+
+def _obs_control_model() -> ModelSpec:
+    """One latent factor whose registered transition uses an observed control."""
+    return ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2"), ("y1", "y2")),
+                normalizations=Normalizations(
+                    loadings=({"y1": 1}, {"y1": 1}),
+                    intercepts=({"y1": 0}, {}),
+                ),
+                transition_function=_skills_with_obs_control,
+            ),
+        },
+        observed_factors=("obs_ctrl",),
+    )
+
+
+def test_simulate_and_regress_tolerates_transition_arg_absent_from_panel():
+    """A registered transition may name a factor the simulated panel omits.
+
+    bw's registered production functions reference observed control factors that
+    the AMN structural panel does not simulate. Resolving such a transition must
+    look its arguments up against the full factor order (not the per-period
+    design columns) so the lookup does not raise; the absent column is read past
+    the end of the design row and clamped by jax -- a throwaway seed the CHS MLE
+    re-fits. Regression for the `tuple.index(x): x not in tuple` crash.
+    """
+    model = _obs_control_model()
+    processed = process_model(model)
+    # Panel has only the latent `skills` slots; `obs_ctrl` is not simulated.
+    slots = ((0, "skills"), (1, "skills"))
+    means = np.zeros((1, 2))
+    covs = (np.eye(2) + 0.3 * (np.ones((2, 2)) - np.eye(2)))[None]
+    structural = _make_structural(means, covs, slots)
+
+    result = simulate_and_regress(
+        structural,
+        processed,
+        model,
+        mixture_weights=np.array([1.0]),
+        n_draws=2000,
+        seed=0,
+    )
+
+    assert ("transition", 0, "skills", "self_coef") in result.production_params.index
 
 
 def test_simulate_and_regress_naive_path_is_biased():

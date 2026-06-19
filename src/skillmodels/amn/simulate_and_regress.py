@@ -216,17 +216,16 @@ def _resolve_transition_callable(
     factor: str,
     processed_model: ProcessedModel,
     model_spec: ModelSpec,
-    factor_names: tuple[str, ...],
 ) -> tuple[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray], tuple[str, ...]]:
     """Return a ``(states, params) -> scalar`` callable plus param names.
 
     For built-in transitions this is the function imported from
     `skillmodels.common.transition_functions`; for user functions it is
     `_make_user_transition_callable(...)` applied to the raw callable on
-    the model spec. `factor_names` is the ordering of the `states` vector the
-    callable will receive (i.e. the production design's columns), so a user
-    function's positional argument lookup matches the design actually passed --
-    crucial under a control function, where the design excludes the instruments.
+    the model spec. The user callable looks its positional arguments up against
+    the full `(*latent, *observed)` factor order; a factor that the simulated
+    panel does not provide is read past the end of the (narrower) design row and
+    clamped by `jax` -- a throwaway seed value the CHS MLE re-fits.
     """
     from skillmodels.common import transition_functions as tf  # noqa: PLC0415
 
@@ -239,6 +238,10 @@ def _resolve_transition_callable(
         "log_ces_with_constant",
         "log_ces_general",
     }
+    factor_names = (
+        *processed_model.labels.latent_factors,
+        *processed_model.labels.observed_factors,
+    )
     transition_info = processed_model.transition_info
     if transition_info is None:
         msg = "ProcessedModel has no transition_info; cannot run Stage 3."
@@ -404,11 +407,7 @@ def _fit_transition(
         return _fit_log_ces(y, x_design, regressor_names, with_constant=True, cf=cf)
 
     func, param_names = _resolve_transition_callable(
-        transition_name,
-        factor,
-        processed_model,
-        model_spec,
-        factor_names=tuple(regressor_names),
+        transition_name, factor, processed_model, model_spec
     )
     return _fit_generic_nls(func, param_names, y, x_design, cf=cf)
 
