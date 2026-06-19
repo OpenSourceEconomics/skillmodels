@@ -150,7 +150,7 @@ def get_transition_plots(
     filtered_states: pd.DataFrame,
     data: pd.DataFrame | None = None,
     period: int | None = None,
-    periods: Sequence[int] | None = None,
+    periods: Sequence[int] | np.ndarray | None = None,
     state_ranges: dict[str, pd.DataFrame] | None = None,
     quantiles_of_other_factors: tuple[float, ...] | list[float] | float | None = (
         0.25,
@@ -217,7 +217,10 @@ def get_transition_plots(
     states = filtered_states
     # Handle period/periods arguments
     if periods is not None:
-        periods_list = list(periods)
+        # Coerce to plain Python ints so downstream `list[int]`-typed helpers
+        # accept the values (a numpy array yields `np.int64`, which beartype
+        # rejects against `int`).
+        periods_list = [int(p) for p in periods]
     elif period is not None:
         periods_list = [period]
     else:

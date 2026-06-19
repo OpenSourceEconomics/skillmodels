@@ -58,6 +58,18 @@ def test_visualize_transition_equations_runs() -> None:
     )
     combine_transition_plots(subplots)
 
+    # `periods` may be a numpy array (apps pass `model.periods`, an ndarray).
+    # Regression for a beartype DiagnosticsCallError when the public hint was the
+    # strict `Sequence[int]`, which rejects an ndarray at the call boundary.
+    subplots = get_transition_plots(
+        model_spec=model,
+        params=params,
+        periods=np.array([0, 1]),
+        filtered_states=states,
+        data=data,
+    )
+    combine_transition_plots(subplots)
+
 
 def _correction_model() -> ModelSpec:
     """Small correction model: fac1/fac2 states, `inv` endogenous, instrument z1."""
