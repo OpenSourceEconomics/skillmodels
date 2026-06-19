@@ -168,16 +168,34 @@ def test_missing_data_em_fits_when_no_row_is_complete():
         )
 
     np.testing.assert_allclose(fit.means[0], [5.0, -3.0], atol=0.1)
-    assert fit.cross_covariance_identified is False
+    assert fit.co_observation_graph_connected is False
 
 
-def test_missing_data_em_warns_but_fits_when_a_column_is_never_observed():
-    """A never-observed column is flagged, not fatal: it gets a neutral seed.
+def test_missing_data_em_raises_on_never_observed_column_by_default():
+    """A never-observed column is unidentified -> raise unless explicitly allowed.
 
-    During seeding the row subsample can drop every observation of a rarely-seen
-    measurement, leaving an all-missing column. The EM must still fit the
-    identified columns, warn about the unidentified one, and report
-    `cross_covariance_identified` False rather than crash the pipeline.
+    A column observed in no row contributes nothing to the likelihood: its mean
+    and (co)variances are arbitrary, not estimated. Returning a neutral seed for
+    it silently feeds noise into the downstream structural moments, so standalone
+    estimation must fail loudly rather than warn. Regression for audit finding F7.
+    """
+    rng = np.random.default_rng(5)
+    data = rng.normal(size=(200, 3))
+    data[:, 1] = np.nan  # column 1 never observed
+
+    with pytest.raises(ValueError, match="never observed"):
+        fit_gaussian_mixture_missing(
+            data, n_components=1, max_iter=50, tol=1e-7, n_init=1, seed=0
+        )
+
+
+def test_missing_data_em_allows_never_observed_column_when_opted_in():
+    """`allow_never_observed=True` (the seeding path) keeps the warn+neutral-seed.
+
+    When the missing-data EM only seeds an estimator that re-fits every parameter
+    from the data (e.g. `estimate_chs`), a never-observed column dropped by row
+    subsampling must not crash the pipeline; it falls back to a neutral seed and
+    warns. Regression for audit finding F7.
     """
     rng = np.random.default_rng(5)
     data = rng.normal(size=(200, 3))
@@ -192,14 +210,15 @@ def test_missing_data_em_warns_but_fits_when_a_column_is_never_observed():
             n_init=1,
             reg_covar=1e-6,
             seed=0,
+            allow_never_observed=True,
         )
 
-    assert fit.cross_covariance_identified is False
+    assert fit.co_observation_graph_connected is False
     assert fit.means.shape == (1, 3)
     np.testing.assert_allclose(fit.means[0, [0, 2]], 0.0, atol=0.2)
 
 
-def test_missing_data_em_reports_identified_covariance_under_mcar():
+def test_missing_data_em_reports_connected_co_observation_graph_under_mcar():
     """Under MCAR every column pair is co-observed somewhere, so the flag is True."""
     data = _simulate_two_component(
         n=3000, weights=_WEIGHTS, means=_MEANS, chols=_CHOLS, seed=7
@@ -211,7 +230,7 @@ def test_missing_data_em_reports_identified_covariance_under_mcar():
         data, n_components=2, max_iter=300, tol=1e-7, n_init=2, reg_covar=1e-6, seed=7
     )
 
-    assert fit.cross_covariance_identified is True
+    assert fit.co_observation_graph_connected is True
 
 
 def test_missing_data_em_reports_convergence_and_shapes():

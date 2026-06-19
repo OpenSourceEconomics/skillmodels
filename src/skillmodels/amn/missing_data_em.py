@@ -56,12 +56,14 @@ class MissingDataMixtureFit:
     converged: bool
     """Whether the best restart hit the tolerance before `max_iter`."""
 
-    cross_covariance_identified: bool
-    """Whether the column co-observation graph is connected. When `False`, some
-    blocks of dimensions are never observed together, so their cross-covariances
-    are not pinned by the data (only the means and within-block covariances are);
-    the EM still converges, but the returned cross-block covariances are
-    arbitrary and should not be trusted."""
+    co_observation_graph_connected: bool
+    """Whether the column co-observation graph is connected. Connectivity is a
+    *necessary* condition for the cross-covariances to be identified, not a
+    sufficient one: a connected graph can still leave a pair that is never
+    *directly* co-observed unidentified (PSD only bounds it). Treat `False` as a
+    definite warning that some cross-block covariances are not pinned by the data;
+    do not treat `True` as a certificate that every cross-covariance is
+    identified. A purely advisory diagnostic -- it gates nothing downstream."""
 
 
 def _chunk_size_for(n_dim: int) -> int:
@@ -309,6 +311,7 @@ def fit_gaussian_mixture_missing(
     n_init: int = 5,
     reg_covar: float = 1e-6,
     seed: int = 0,
+    allow_never_observed: bool = False,
 ) -> MissingDataMixtureFit:
     """Fit a Gaussian mixture by missing-data EM, keeping the best of `n_init`.
 
@@ -320,6 +323,13 @@ def fit_gaussian_mixture_missing(
         n_init: Number of warm-started restarts; the best fit is kept.
         reg_covar: Diagonal ridge for numerical stability.
         seed: RNG seed for the restarts.
+        allow_never_observed: When `False` (the default), a column observed in no
+            row raises -- its moments are unidentified and feeding a neutral seed
+            into the structural moments would silently corrupt them. Set `True`
+            only when the fit merely *seeds* an estimator that re-fits every
+            parameter from the data (e.g. `estimate_chs`), so a column dropped by
+            row subsampling falls back to a neutral seed and warns instead of
+            crashing the pipeline.
 
     Return:
         `MissingDataMixtureFit` with the highest-likelihood restart.
@@ -341,7 +351,17 @@ def fit_gaussian_mixture_missing(
     # rows for a seed rather than a genuinely absent measurement. We flag it so a
     # caller never mistakes ordinary convergence for a fully identified fit.
     never_observed = np.nonzero(~obs.any(axis=0))[0]
-    cross_covariance_identified = _co_observation_connected(obs)
+    co_observation_graph_connected = _co_observation_connected(obs)
+    if never_observed.size and not allow_never_observed:
+        msg = (
+            f"Missing-data mixture EM: columns {never_observed.tolist()} are "
+            "never observed in any row; their means and (co)variances are "
+            "unidentified, so the fit would be arbitrary noise rather than an "
+            "estimate. Drop these measurements, or pass allow_never_observed=True "
+            "if this fit only seeds an estimator that re-fits every parameter "
+            "from the data (the value is then a harmless neutral seed)."
+        )
+        raise ValueError(msg)
     if never_observed.size:
         warnings.warn(
             f"Missing-data mixture EM: columns {never_observed.tolist()} are "
@@ -351,7 +371,7 @@ def fit_gaussian_mixture_missing(
             RuntimeWarning,
             stacklevel=2,
         )
-    elif not cross_covariance_identified:
+    elif not co_observation_graph_connected:
         warnings.warn(
             "Missing-data mixture EM: the column co-observation graph is "
             "disconnected -- no individual is observed on measurements from "
@@ -387,7 +407,7 @@ def fit_gaussian_mixture_missing(
                 loglikelihood=loglik,
                 n_iter=n_iter,
                 converged=converged,
-                cross_covariance_identified=cross_covariance_identified,
+                co_observation_graph_connected=co_observation_graph_connected,
             )
     if best is None:
         msg = "n_init must be at least 1."

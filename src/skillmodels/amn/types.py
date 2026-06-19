@@ -82,6 +82,14 @@ class AMNEstimationOptions:
     fitting. CHS seeding sets a modest cap so the per-restart cost of the
     missing-data EM stays bounded; standalone estimation keeps the full sample."""
 
+    allow_never_observed_measurements: bool
+    """Whether the missing-data EM may proceed when an augmented-measure column is
+    never observed in any (sub)sampled row. `False` (default) raises, since such a
+    column's moments are unidentified and would feed noise into Stage 2. CHS
+    seeding sets `True`: the row cap can drop every observation of a rare
+    measurement, and the seeded value is harmless because `estimate_chs` re-fits
+    every parameter from the data."""
+
     def __init__(  # noqa: D107
         self,
         em_max_iter: int = 500,
@@ -98,6 +106,7 @@ class AMNEstimationOptions:
         seed: int = 0,
         mixture_em_method: Literal["complete_case", "missing_data"] = "complete_case",
         mixture_em_max_rows: int | None = None,
+        allow_never_observed_measurements: bool = False,
     ) -> None:
         object.__setattr__(self, "em_max_iter", em_max_iter)
         object.__setattr__(self, "em_tol", em_tol)
@@ -120,6 +129,11 @@ class AMNEstimationOptions:
         object.__setattr__(self, "seed", seed)
         object.__setattr__(self, "mixture_em_method", mixture_em_method)
         object.__setattr__(self, "mixture_em_max_rows", mixture_em_max_rows)
+        object.__setattr__(
+            self,
+            "allow_never_observed_measurements",
+            allow_never_observed_measurements,
+        )
 
 
 @dataclass(frozen=True)

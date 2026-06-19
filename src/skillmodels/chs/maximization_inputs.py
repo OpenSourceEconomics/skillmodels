@@ -311,6 +311,11 @@ def _estimate_amn_for_chs_seeding(
                 em_max_iter=100,
                 mixture_em_max_rows=3000,
                 optimizer_options=seed_md_options,
+                # This fit only seeds estimate_chs, which re-fits every parameter
+                # from the data; the row cap can drop every observation of a rare
+                # measurement, so tolerate never-observed columns with a neutral
+                # seed rather than crashing the seeding step.
+                allow_never_observed_measurements=True,
             ),
             linearize_control_function=True,
         )

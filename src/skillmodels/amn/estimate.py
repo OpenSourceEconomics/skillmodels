@@ -102,6 +102,7 @@ def _fit_stage1_mixture(
         seed=amn_options.seed,
         layout=layout,
         method=amn_options.mixture_em_method,
+        allow_never_observed=amn_options.allow_never_observed_measurements,
     )
 
 

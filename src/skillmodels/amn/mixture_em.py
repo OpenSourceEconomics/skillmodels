@@ -277,6 +277,7 @@ def fit_mixture_em(
     layout: AugmentedMeasureLayout | None = None,
     init_params: Mapping[str, np.ndarray] | None = None,
     method: Literal["complete_case", "missing_data"] = "complete_case",
+    allow_never_observed: bool = False,
 ) -> MixtureFitResult:
     """Fit a Gaussian mixture to the augmented measure matrix via EM.
 
@@ -305,6 +306,10 @@ def fit_mixture_em(
             once Stage 1 results from the moment-init pipeline become
             available as warm starts.
         method: ``"complete_case"`` or ``"missing_data"`` (see above).
+        allow_never_observed: Forwarded to the missing-data EM. When `False`
+            (default) a never-observed augmented-measure column raises; set
+            `True` only for the seeding path where the result merely seeds an
+            estimator that re-fits every parameter from the data.
 
     Return:
         MixtureFitResult holding the fitted weights, means, covariances
@@ -328,6 +333,7 @@ def fit_mixture_em(
             n_init=n_init,
             reg_covar=reg_covar,
             seed=seed,
+            allow_never_observed=allow_never_observed,
         )
         weights, means, covs = fit.weights, fit.means, fit.covariances
         loglik, n_iter, converged = fit.loglikelihood, fit.n_iter, fit.converged
