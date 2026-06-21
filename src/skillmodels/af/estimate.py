@@ -93,7 +93,7 @@ def estimate_af(
         options = AFEstimationOptions()
     af_options = options
 
-    validate_af_model(model_spec)
+    validate_af_model(model_spec, fixed_params, constraints)
     fail_if_unsupported_kappa_params(start_params, fixed_params, constraints)
     processed_model = process_model(model_spec)
 
