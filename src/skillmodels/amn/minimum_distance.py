@@ -41,20 +41,35 @@ _CES_TRANSITION_NAMES = frozenset(
 )
 
 
-def _validate_ces_normalizations(
+def _validate_ces_stage2_anchors(
     processed_model: ProcessedModel,
     layout: AugmentedMeasureLayout,
     *,
     allow_overnormalization: bool,
 ) -> None:
-    """Enforce the Freyberger-minimal CES loading-normalization set.
+    """Check the per-period CES anchors of AMN's Stage-2 transformed factors.
 
-    For a CES-family transition, exactly one loading normalization per
-    factor-period pins the scale; CES identifies the remaining loadings.
-    More than one normalized loading silently fixes an identified loading
-    to an arbitrary value (defeating the Freyberger adaptation); zero
-    leaves the scale unidentified. Raise unless the user opts in to a
-    fixed-loadings analysis via `allow_overnormalization`.
+    This is NOT a primitive Freyberger-minimal normalization check (audit F1).
+    For the restricted CES with psi=1, Freyberger requires only ONE primitive
+    scale anchor (e.g. lambda_theta,0,1=1); the later skill and investment
+    loadings are then identified through the CES restrictions, so pinning one
+    loading per factor-period over-restricts the primitive model. AMN instead
+    works in *transformed* (tilde) factor coordinates in Stages 1-2, where one
+    anchor per factor-period is the correct scale normalization of those
+    internal coordinates. This guard enforces exactly that internal anchoring;
+    it does not certify the returned loadings as primitive estimates.
+
+    Restricted `log_ces` / `log_ces_with_constant` are rejected upstream
+    (`estimate_amn` standalone guard) because the primitive scale-recovery step
+    is not implemented, so in practice this runs for `log_ces_general` (which
+    can express the transformed CES) and for the CHS/AF seeding path. One anchor
+    per factor-period pins the transformed scale; more than one over-normalizes
+    those internal coordinates (raise unless `allow_overnormalization`); zero
+    leaves the transformed scale unidentified.
+
+    Known gap (P4): the check examines only factors whose own transition is CES,
+    so a normalized investment loading is not flagged when investment has a
+    linear transition.
     """
     labels = processed_model.labels
     transition_info = processed_model.transition_info
@@ -82,17 +97,18 @@ def _validate_ces_normalizations(
             if n_norm == 0:
                 msg = (
                     f"CES factor '{factor}' has no loading normalization in "
-                    f"period {period}; the CES scale is unidentified. Pin "
-                    "exactly one measurement loading per period."
+                    f"period {period}; the Stage-2 transformed-factor scale is "
+                    "unidentified. Pin exactly one measurement loading per "
+                    "period."
                 )
                 raise ValueError(msg)
             if n_norm > 1 and not allow_overnormalization:
                 msg = (
                     f"CES factor '{factor}' has {n_norm} loading normalizations "
-                    f"in period {period}, but CES identifies all but one "
-                    "loading. Extra normalizations silently fix identified "
-                    "loadings to arbitrary values and defeat the Freyberger "
-                    "adaptation. Pin exactly one loading per period, or pass "
+                    f"in period {period}, but one anchor per factor-period "
+                    "already pins the Stage-2 transformed-factor scale. Extra "
+                    "anchors over-normalize those internal coordinates. Pin "
+                    "exactly one loading per period, or pass "
                     "allow_ces_overnormalization=True for a deliberate "
                     "fixed-loadings analysis."
                 )
@@ -756,7 +772,7 @@ def solve_minimum_distance(
         msg = "Mixture layout has no slots; cannot run minimum distance."
         raise ValueError(msg)
 
-    _validate_ces_normalizations(
+    _validate_ces_stage2_anchors(
         processed_model, layout, allow_overnormalization=allow_overnormalization
     )
 
