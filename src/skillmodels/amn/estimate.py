@@ -50,7 +50,9 @@ _SUPPORTED_FIXED_CATEGORIES = _STAGE2_FIXED_CATEGORIES | _STAGE3_FIXED_CATEGORIE
 # Stage-3 CES regression omits Freyberger's primitive-scale recovery. The
 # generalized form `log_ces_general` is fine (it can express the transformed CES),
 # and custom `@register_params` transitions are out of scope for this guard.
-_RESTRICTED_CES_TRANSITIONS = frozenset({"log_ces", "log_ces_with_constant"})
+_RESTRICTED_CES_TRANSITIONS = frozenset(
+    {"log_ces", "log_ces_af", "log_ces_with_constant"}
+)
 
 
 def _fail_if_standalone_unsupported(

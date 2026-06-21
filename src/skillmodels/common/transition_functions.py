@@ -182,13 +182,14 @@ def log_ces(states: Array, params: Array) -> Array:
     and pass only the production factors.
 
     Location restriction (Freyberger 2025): the simplex `sum_i gamma_i = 1`
-    together with the absence of a free additive level IS the skills-location
-    normalization (Assumption a:ageinvariant_technology_skills_ces(b)). A model
-    using `log_ces` should therefore NOT also pin a measurement-intercept
-    location anchor for the produced factor -- that would impose both location
-    alternatives and over-restrict. Use `log_ces_with_constant` (free level,
-    no simplex location) when a measurement-intercept location normalization is
-    desired instead.
+    (with no free additive level) supplies the *cross-period* skills-location
+    alternative (Assumption a:ageinvariant_technology_skills_ces(b)) -- i.e. it
+    substitutes for age-invariance of the later skill measurement intercepts. It
+    does NOT supply the absolute INITIAL location anchor mu_theta,0,1=0, which is
+    still required separately: plain log_ces obeys f(x+c,i+c)=f(x,i)+c, so a
+    common shift of all latent inputs would otherwise leave observables unchanged.
+    So a `log_ces` model still pins a period-0 intercept, but need not also pin
+    the later skill intercepts to be equal across periods.
     """
     phi = params[-1]
     gammas = params[:-1]
@@ -291,10 +292,11 @@ def log_ces_with_constant(states: Array, params: Array) -> Array:
     this variant instead.
 
     Location (Freyberger 2025): unlike plain ``log_ces``, the free additive
-    constant ``A`` absorbs the level, so the simplex on the weights is only a
-    redundant parameterisation and does NOT supply the skills-location
-    restriction. With this variant the location must be pinned by a
-    measurement-intercept normalization (the AF validator requires one).
+    constant ``A`` adds a level degree of freedom, so the simplex on the weights
+    is only a redundant parameterisation here and supplies no location
+    restriction at all. Both the absolute initial location anchor and any
+    cross-period location restriction must be imposed via measurement-intercept
+    normalizations (the AF validator requires the initial intercept anchor).
     """
     constant_term = params[-1]
     phi = params[-2]

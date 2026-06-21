@@ -293,6 +293,17 @@ def _resolve_transition_callable(
     return wrapped, param_names
 
 
+def _is_elasticity_param(name: str) -> bool:
+    """Return True for CES exponent / outside-coefficient parameters.
+
+    Covers the single-exponent forms (`phi`, `rho`, `sigma`) and
+    `log_ces_general`'s per-factor exponents `sigma_<factor>` and outside
+    coefficient `tfp`. These must be seeded nonzero so the CES log expression is
+    finite at the start point.
+    """
+    return name in {"phi", "rho", "sigma", "tfp"} or name.startswith("sigma_")
+
+
 def _seed_generic_nls_theta0(
     param_names: tuple[str, ...],
     init_overrides: dict[str, float],
@@ -301,10 +312,14 @@ def _seed_generic_nls_theta0(
 ) -> np.ndarray:
     """Seed the NLS start vector for `_fit_generic_nls`.
 
-    Applies `init_overrides`, then seeds elasticity-style params ("phi",
-    "rho", "sigma") at 0.5 so CES / general-CES log expressions do not
-    divide by zero, and gives the remaining (simplex-style "gamma") params a
-    uniform initial share when the function looks CES-shaped. The trailing
+    Applies `init_overrides`, then seeds elasticity/outside-style params at 0.5
+    so CES / general-CES log expressions are finite at the start, and gives the
+    remaining (simplex-style "gamma") params a strictly positive uniform initial
+    share when the function looks CES-shaped. Elasticity-style names cover the
+    single-exponent forms (`phi`, `rho`, `sigma`) AND `log_ces_general`'s
+    per-factor exponents `sigma_<factor>` and outside coefficient `tfp` -- the
+    latter were previously unrecognized, leaving every parameter at 0 so that
+    `tfp * log(sum gamma_i ...) = 0 * log(0) = NaN` (Pro F4). The trailing
     cf-coefficient slot (if `n_unknowns > len(param_names)`) stays at zero.
     """
     theta0 = np.zeros(n_unknowns)
@@ -312,14 +327,16 @@ def _seed_generic_nls_theta0(
         if name in param_names:
             theta0[param_names.index(name)] = val
     for j, name in enumerate(param_names):
-        if name in {"phi", "rho", "sigma"} and name not in init_overrides:
+        if _is_elasticity_param(name) and name not in init_overrides:
             theta0[j] = 0.5
-    has_elasticity = any(n in {"phi", "rho", "sigma"} for n in param_names)
+    has_elasticity = any(_is_elasticity_param(n) for n in param_names)
     if has_elasticity:
         share_candidates = [
             j
             for j, n in enumerate(param_names)
-            if n not in {"phi", "rho", "sigma", "constant"}
+            if not _is_elasticity_param(n)
+            and n != "constant"
+            and n not in init_overrides
         ]
         if share_candidates:
             theta0[share_candidates] = 1.0 / len(share_candidates)
@@ -450,7 +467,10 @@ def _fit_transition(
             x_design = np.column_stack([x_design, cf])
             regressor_names = [*regressor_names, "cf"]
         return _fit_linear(y, x_design, regressor_names, fixed=fixed)
-    if transition_name in ("log_ces", "log_ces_with_constant"):
+    # log_ces_af shares log_ces's math (CES over production factors only), so it
+    # routes to the same specialised fitter (Pro F6); without this it would fall
+    # through to _resolve_transition_callable as a bare string and raise.
+    if transition_name in ("log_ces", "log_ces_af", "log_ces_with_constant"):
         if fixed:
             msg = (
                 f"fixed_params for the '{transition_name}' transition of factor "

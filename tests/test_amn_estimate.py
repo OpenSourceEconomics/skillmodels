@@ -375,6 +375,26 @@ def test_amn_seeding_bypasses_restricted_ces_guard():
         _fail_if_standalone_unsupported(ces, for_start_values=False)
 
 
+def test_estimate_amn_standalone_rejects_log_ces_af():
+    """log_ces_af is restricted CES too (Pro F6) and must trip the guard."""
+    model = ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2", "y3"), ("y1", "y2", "y3")),
+                normalizations=Normalizations(
+                    loadings=({"y1": 1}, {"y1": 1}),
+                    intercepts=({"y1": 0}, {}),
+                ),
+                transition_function="log_ces_af",
+            ),
+        },
+        n_mixtures=2,
+    )
+    processed = process_model(model)
+    with pytest.raises(NotImplementedError, match="restricted-CES"):
+        _fail_if_standalone_unsupported(processed, for_start_values=False)
+
+
 def test_estimate_amn_returns_success_flag():
     model = _tiny_model()
     data = _tiny_data(n=1500)

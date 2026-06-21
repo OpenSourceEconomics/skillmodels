@@ -64,6 +64,30 @@ def test_recover_primitive_ces_scales_inverts_known_primitives() -> None:
     assert recovered[-1].lambda_theta_next == pytest.approx(lambda_theta[-1])
 
 
+def test_recover_raises_on_zero_anchor() -> None:
+    coeffs = [
+        CESTransformedCoeffs(outside=-2.0, theta_exponent=-0.5, inv_exponent=-0.5)
+    ]
+    with pytest.raises(ValueError, match=r"nonzero|finite"):
+        recover_primitive_ces_scales(coeffs, lambda_theta_0=0.0)
+
+
+def test_recover_raises_on_zero_inv_exponent() -> None:
+    coeffs = [CESTransformedCoeffs(outside=-2.0, theta_exponent=-0.5, inv_exponent=0.0)]
+    with pytest.raises(ValueError, match=r"nonzero|finite"):
+        recover_primitive_ces_scales(coeffs, lambda_theta_0=1.0)
+
+
+def test_recover_raises_on_nonfinite_coeff() -> None:
+    coeffs = [
+        CESTransformedCoeffs(
+            outside=float("inf"), theta_exponent=-0.5, inv_exponent=-0.5
+        )
+    ]
+    with pytest.raises(ValueError, match=r"nonzero|finite"):
+        recover_primitive_ces_scales(coeffs, lambda_theta_0=1.0)
+
+
 def test_log_ces_general_represents_transformed_ces() -> None:
     # The audit counterexample: lambda_theta=2, lambda_inv=1, lambda_next=1,
     # sigma=-0.5. The single-rho form cannot represent it (best-fit max abs

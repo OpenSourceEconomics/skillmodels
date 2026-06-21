@@ -141,19 +141,17 @@ def test_validate_af_model_accepts_period0_loading_via_equality_constraint() -> 
         assert validate_af_model(model, constraints=constraints) is None
 
 
-def test_validate_af_model_log_ces_does_not_require_intercept_anchor() -> None:
-    # Plain log_ces / log_ces_af bake in the simplex gamma_1+gamma_2=1, which is
-    # the skills-location restriction (Freyberger a:ageinvariant_skills_ces(b)).
-    # So a skill-intercept location anchor must NOT be required on top (F8) --
-    # only the scale (loading) anchor at period 0.
+def test_validate_af_model_log_ces_requires_initial_intercept_anchor() -> None:
+    # The CES simplex replaces only the cross-period location alternative, not
+    # the absolute initial anchor mu_theta,0,1=0 (Pro F1). So plain log_ces /
+    # log_ces_af still need a period-0 intercept (location) anchor.
     model = _model(
         skills_loadings=({"y1": 1},) * 2,
         skills_intercepts=({}, {}),
         skills_transition="log_ces_af",
     )
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", UserWarning)
-        assert validate_af_model(model) is None
+    with pytest.raises(ValueError, match="period 0"):
+        validate_af_model(model)
 
 
 def test_validate_af_model_log_ces_still_requires_loading_anchor() -> None:

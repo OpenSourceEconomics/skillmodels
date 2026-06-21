@@ -43,29 +43,56 @@ integrator once the scales are known, are:
     beta_1t = beta~_1t * lambda_{theta,t,1} / lambda_{I,t,1}
     beta_2t = beta~_2t / lambda_{I,t,1}
     rho_0   = rho~_0
-    rho_1   = rho~_1 * lambda_{theta,T,1}
+    rho_1   = rho~_1 * lambda_{theta,T,1}       (TERMINAL skill scale; see below)
     ln theta_t = ln theta~_t / lambda_{theta,t,1}
     ln I_t     = ln I~_t     / lambda_{I,t,1}
 
-with gamma~ = gamma when all measurement locations mu are zero (eq 751).
+and, with the same scales, the scale-dependent shock and control categories
+(Pro F9):
 
-@pro: the recovery line in the paper writes `rho_1 = rho~_1 * lambda_{theta,t,1}`
-with a generic t; the anchor equation Q = rho_0 + rho_1 * ln(theta_T) is on the
-TERMINAL skill theta_T, so I read this as lambda_{theta,T,1} (the last period).
-Confirm which period's scale enters rho_1.
+    sigma_{eta_I,t}     = sigma_{eta~_I,t}     / abs(lambda_{I,t,1})
+    sigma_{eta_theta,t} = sigma_{eta~_theta,t} / abs(lambda_{theta,t+1,1})
+    kappa_t             = kappa~_t * lambda_{I,t,1} / lambda_{theta,t+1,1}
 
-@pro: this module implements ONLY the scale recursion (verified by unit test).
-The downstream rescalings above and the Stage-2 mixture/distribution rescaling
-(each latent theta_t, I_t divided by its own lambda_{*,t,1}) are NOT yet wired
-into the AMN pipeline. Because AMN is start-values-only in production (CHS/AF
-re-fit every parameter), the standalone restricted-CES guard is kept until that
-integration is implemented and verified. Is keeping the guard the right call,
-or should the standalone path return explicitly transformed-coordinate
-parameters (F2's first smallest-repair option) instead?
+and the Stage-2 joint mixture: with the block-diagonal map A whose latent
+entries are the reciprocal scales 1/lambda_{*,t,1} and whose observed (income,
+outcome) entries are 1, every component transforms as m_k = A m~_k and
+Sigma_k = A Sigma~_k A^T (this handles latent-latent AND latent-observed
+cross-covariances); the mixture weights are unchanged. gamma~ = gamma when all
+first-measure locations mu are zero (eq 751).
+
+rho_1 (Pro F10/T1): the paper's recovery paragraph writes a generic t, but the
+anchor Q = rho_0 + rho_1 ln(theta_T) is on the TERMINAL skill, and
+rho~_1 = rho_1 / lambda_{theta,T,1}, so rho_1 = rho~_1 * lambda_{theta,T,1}. The
+generic t is a source transcription artifact; the forward recursion below
+correctly produces lambda_{theta,T,1} as its last carried scale.
+
+Scope (Pro T2/F9): this module implements ONLY the scale recursion (unit-tested,
+randomized-inversion verified by the reviewer to ~9e-16). The downstream
+rescalings above -- including the shock SDs, kappa, and the full joint-mixture
+transform -- are NOT yet wired into the AMN pipeline, so a standalone restricted-
+CES result would still mix coordinate systems. Because AMN is start-values-only
+in production (CHS/AF re-fit every parameter) the standalone guard is KEPT until
+the complete affine transformation is implemented and verified; the reviewer
+agreed (returning transformed-coordinate parameters in the primitive params
+schema would be misleading and is acceptable only behind a separately named API).
 """
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+
+
+def _require_nonzero_finite(value: float, what: str) -> None:
+    """Raise ValueError unless `value` is finite and nonzero (psi_t=1 domain)."""
+    if not math.isfinite(value) or value == 0.0:
+        msg = (
+            f"recover_primitive_ces_scales requires a nonzero, finite {what} "
+            f"(got {value}); the restricted-CES recovery assumes psi_t=1 with "
+            "nonzero scales and exponents. The exact Cobb-Douglas limit sigma_t=0 "
+            "is outside this parameterization and needs a separate limit form."
+        )
+        raise ValueError(msg)
 
 
 @dataclass(frozen=True)
@@ -112,16 +139,21 @@ def recover_primitive_ces_scales(
     Return:
         One `CESPrimitiveScales` per period, in order.
     """
+    _require_nonzero_finite(lambda_theta_0, "lambda_theta_0 anchor")
     lambda_theta = lambda_theta_0
     recovered: list[CESPrimitiveScales] = []
     for coeff in coeffs:
-        # @pro: is this forward recursion faithful to paper lines 1357-1366?
+        _require_nonzero_finite(coeff.theta_exponent, "theta_exponent")
+        _require_nonzero_finite(coeff.inv_exponent, "inv_exponent")
+        _require_nonzero_finite(coeff.outside, "outside coefficient")
+        # Forward recursion (paper 1357-1366), confirmed faithful by the Pro
+        # review (randomized inversion of 1000 systems, max err ~9e-16):
         # theta_exp = sigma/lambda_theta => sigma = theta_exp * lambda_theta;
         # inv_exp = sigma/lambda_inv => lambda_inv = sigma/inv_exp;
         # outside = lambda_theta_next/sigma => lambda_theta_next = outside*sigma.
-        # Anchor is lambda_theta,0,1 = 1 (psi_t=1, paper line 831). Verify the
-        # direction (forward from t=0) and that no division-by-zero guard is
-        # needed when sigma_t -> 0 (Cobb-Douglas limit).
+        # Anchor is lambda_theta,0,1 (psi_t=1, paper line 831). The domain
+        # checks above exclude the sigma_t -> 0 Cobb-Douglas limit (separate
+        # parameterization needed).
         sigma = coeff.theta_exponent * lambda_theta
         lambda_inv = sigma / coeff.inv_exponent
         lambda_theta_next = coeff.outside * sigma
