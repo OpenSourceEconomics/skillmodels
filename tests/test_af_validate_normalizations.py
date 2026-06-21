@@ -34,6 +34,7 @@ def _model(
     *,
     skills_loadings: tuple[Mapping[str, float], ...],
     skills_intercepts: tuple[Mapping[str, float], ...],
+    skills_transition: str = "translog_af",
 ) -> ModelSpec:
     """Build a two-period AF model with controllable skills normalizations."""
     return ModelSpec(
@@ -44,7 +45,7 @@ def _model(
                     loadings=skills_loadings,
                     intercepts=skills_intercepts,
                 ),
-                transition_function="translog_af",
+                transition_function=skills_transition,
             ),
             "investment": FactorSpec(
                 measurements=(("z1", "z2", "z3"),) * 2,
@@ -138,6 +139,44 @@ def test_validate_af_model_accepts_period0_loading_via_equality_constraint() -> 
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
         assert validate_af_model(model, constraints=constraints) is None
+
+
+def test_validate_af_model_log_ces_does_not_require_intercept_anchor() -> None:
+    # Plain log_ces / log_ces_af bake in the simplex gamma_1+gamma_2=1, which is
+    # the skills-location restriction (Freyberger a:ageinvariant_skills_ces(b)).
+    # So a skill-intercept location anchor must NOT be required on top (F8) --
+    # only the scale (loading) anchor at period 0.
+    model = _model(
+        skills_loadings=({"y1": 1},) * 2,
+        skills_intercepts=({}, {}),
+        skills_transition="log_ces_af",
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        assert validate_af_model(model) is None
+
+
+def test_validate_af_model_log_ces_still_requires_loading_anchor() -> None:
+    # The scale anchor (lambda_theta,0,1=1) is still required for log_ces.
+    model = _model(
+        skills_loadings=({}, {}),
+        skills_intercepts=({}, {}),
+        skills_transition="log_ces_af",
+    )
+    with pytest.raises(ValueError, match="period 0"):
+        validate_af_model(model)
+
+
+def test_validate_af_model_log_ces_with_constant_requires_intercept_anchor() -> None:
+    # log_ces_with_constant has a free additive level (no simplex location), so
+    # the measurement-intercept location anchor IS required (F8).
+    model = _model(
+        skills_loadings=({"y1": 1},) * 2,
+        skills_intercepts=({}, {}),
+        skills_transition="log_ces_with_constant",
+    )
+    with pytest.raises(ValueError, match="period 0"):
+        validate_af_model(model)
 
 
 def test_validate_af_model_accepts_empty_normalization_at_later_period() -> None:

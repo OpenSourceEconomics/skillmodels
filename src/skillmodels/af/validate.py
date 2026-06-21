@@ -5,7 +5,7 @@ import warnings
 import optimagic as om
 import pandas as pd
 
-from skillmodels.common.constraints import _equality_constraint_loc
+from skillmodels.common.identification import check_identification
 from skillmodels.common.model_spec import FactorSpec, ModelSpec
 
 # Transition functions compatible with AF estimation (parametric, differentiable).
@@ -113,7 +113,7 @@ def validate_af_model(
     for factor_name, factor_spec in model_spec.factors.items():
         errors.extend(_validate_factor(factor_name, factor_spec))
 
-    errors.extend(_period0_anchor_errors(model_spec, fixed_params, constraints))
+    errors.extend(check_identification(model_spec, fixed_params, constraints))
 
     _warn_on_observed_factor_leakage(model_spec)
 
@@ -163,11 +163,21 @@ def _validate_factor(factor_name: str, factor_spec: FactorSpec) -> list[str]:
             f"with @register_params to be used with AF estimation."
         )
 
-    # Check normalizations exist
+    # Check normalizations exist. The required pattern is transition-specific
+    # (audit F7a): trans-log needs a per-factor affine anchor (loading=1 and
+    # intercept=0) at the initial period; restricted CES (psi=1) needs only a
+    # SINGLE scale anchor (lambda_theta,0,1=1) -- CES identifies the remaining
+    # loadings -- with location supplied by the simplex (plain log_ces) or a
+    # pinned intercept (log_ces_with_constant). So do not prescribe the trans-log
+    # "one per period" pattern for every factor.
     if factor_spec.normalizations is None:
         errors.append(
-            f"Factor '{factor_name}': AF requires explicit normalizations "
-            f"(loading=1, intercept=0 for at least one measurement per period)."
+            f"Factor '{factor_name}': AF requires explicit normalizations. "
+            f"Provide a scale anchor (loading=1) for at least one measurement, "
+            f"plus a location anchor (intercept=0, or the simplex of plain "
+            f"log_ces / the free constant of log_ces_with_constant). Trans-log "
+            f"needs both at the initial period; restricted CES needs only the "
+            f"single scale anchor lambda_theta,0,1=1."
         )
 
     # has_initial_distribution=False requires is_endogenous=True so the
@@ -194,79 +204,6 @@ def _validate_factor(factor_name: str, factor_spec: FactorSpec) -> list[str]:
             f"transition step 0->1 in a MATLAB-style reproduction."
         )
 
-    return errors
-
-
-def _anchored_param_keys(
-    fixed_params: pd.DataFrame | None,
-    constraints: list[om.constraints.Constraint] | None,
-) -> set[tuple[object, ...]]:
-    """Collect the params anchored outside the normalization maps.
-
-    A `fixed_params` row pins its parameter to a value; a member of a
-    `select_by_loc` equality group is tied to the rest of its group (treated
-    here, conservatively, as anchored). Both supply an affine anchor a
-    `Normalizations` map could otherwise be relied on for. Keys are the params'
-    index tuples `(category, period, name1, name2)`.
-    """
-    keys: set[tuple[object, ...]] = set()
-    if fixed_params is not None:
-        keys.update(tuple(idx) for idx in fixed_params.index)
-    for constraint in constraints or []:
-        loc = _equality_constraint_loc(constraint)
-        if loc is not None:
-            keys.update(tuple(idx) for idx in loc)
-    return keys
-
-
-def _period0_anchor_errors(
-    model_spec: ModelSpec,
-    fixed_params: pd.DataFrame | None,
-    constraints: list[om.constraints.Constraint] | None,
-) -> list[str]:
-    """Return errors for factors whose period-0 affine orbit is left unpinned.
-
-    For each factor with an initial distribution and measurements at period 0,
-    require both a loading anchor (scale) and an intercept anchor (location) at
-    period 0, supplied by a normalization map, a `fixed_params` pin, or an
-    equality constraint. Factors whose `normalizations is None` are skipped --
-    `_validate_factor` already flags those.
-    """
-    anchored = _anchored_param_keys(fixed_params, constraints)
-    errors: list[str] = []
-    for factor_name, spec in model_spec.factors.items():
-        norms = spec.normalizations
-        if norms is None:
-            continue
-        if not spec.has_initial_distribution:
-            continue
-        if len(spec.measurements) == 0 or len(spec.measurements[0]) == 0:
-            continue
-        measures = spec.measurements[0]
-
-        has_loading = bool(norms.loadings and norms.loadings[0]) or any(
-            ("loadings", 0, meas, factor_name) in anchored for meas in measures
-        )
-        has_intercept = bool(norms.intercepts and norms.intercepts[0]) or any(
-            ("controls", 0, meas, "constant") in anchored for meas in measures
-        )
-
-        if not has_loading:
-            errors.append(
-                f"Factor '{factor_name}' period 0: no loading normalization "
-                f"(scale anchor). The initial distribution is not produced by a "
-                f"transition, so its scale must be pinned directly. Add a "
-                f"loading=1 normalization for one period-0 measurement, a "
-                f"`fixed_params` loading pin, or an equality constraint."
-            )
-        if not has_intercept:
-            errors.append(
-                f"Factor '{factor_name}' period 0: no intercept normalization "
-                f"(location anchor). The initial distribution is not produced by "
-                f"a transition, so its location must be pinned directly. Add an "
-                f"intercept=0 normalization for one period-0 measurement, a "
-                f"`fixed_params` intercept pin, or an equality constraint."
-            )
     return errors
 
 

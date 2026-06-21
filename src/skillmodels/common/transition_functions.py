@@ -180,6 +180,15 @@ def log_ces(states: Array, params: Array) -> Array:
     estimator. For an AF production CES over the production factors only
     (skill + investment, matching the paper's equation (7)), use `log_ces_af`
     and pass only the production factors.
+
+    Location restriction (Freyberger 2025): the simplex `sum_i gamma_i = 1`
+    together with the absence of a free additive level IS the skills-location
+    normalization (Assumption a:ageinvariant_technology_skills_ces(b)). A model
+    using `log_ces` should therefore NOT also pin a measurement-intercept
+    location anchor for the produced factor -- that would impose both location
+    alternatives and over-restrict. Use `log_ces_with_constant` (free level,
+    no simplex location) when a measurement-intercept location normalization is
+    desired instead.
     """
     phi = params[-1]
     gammas = params[:-1]
@@ -280,6 +289,12 @@ def log_ces_with_constant(states: Array, params: Array) -> Array:
     intercepts. When matching the MATLAB sim parametrisation exactly
     (all skill intercepts pinned to 0, ``A_t`` free per period), use
     this variant instead.
+
+    Location (Freyberger 2025): unlike plain ``log_ces``, the free additive
+    constant ``A`` absorbs the level, so the simplex on the weights is only a
+    redundant parameterisation and does NOT supply the skills-location
+    restriction. With this variant the location must be pinned by a
+    measurement-intercept normalization (the AF validator requires one).
     """
     constant_term = params[-1]
     phi = params[-2]
