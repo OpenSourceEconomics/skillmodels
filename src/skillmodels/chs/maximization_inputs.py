@@ -292,6 +292,7 @@ def _estimate_amn_for_chs_seeding(
                 optimizer_options=seed_md_options,
             ),
             linearize_control_function=True,
+            for_start_values=True,
         )
     except InsufficientCompleteCasesError:
         warnings.warn(
@@ -318,6 +319,7 @@ def _estimate_amn_for_chs_seeding(
                 allow_never_observed_measurements=True,
             ),
             linearize_control_function=True,
+            for_start_values=True,
         )
 
 

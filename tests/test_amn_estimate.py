@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from skillmodels.amn import estimate_amn
+from skillmodels.amn.estimate import _fail_if_standalone_unsupported
 from skillmodels.amn.mixture_em import InsufficientCompleteCasesError
 from skillmodels.amn.types import AMNEstimationOptions
 from skillmodels.common.model_spec import (
@@ -13,6 +14,7 @@ from skillmodels.common.model_spec import (
     ModelSpec,
     Normalizations,
 )
+from skillmodels.common.process_model import process_model
 
 
 def _tiny_model() -> ModelSpec:
@@ -25,6 +27,27 @@ def _tiny_model() -> ModelSpec:
                     intercepts=({"y1": 0}, {}),
                 ),
                 transition_function="linear",
+            ),
+        },
+        n_mixtures=2,
+    )
+
+
+def _tiny_ces_model() -> ModelSpec:
+    """A model whose skill transition is restricted CES (`log_ces`).
+
+    AMN cannot consistently estimate this standalone (no primitive-scale
+    recovery), so estimate_amn must refuse it unless it is seeding estimate_chs.
+    """
+    return ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2", "y3"), ("y1", "y2", "y3")),
+                normalizations=Normalizations(
+                    loadings=({"y1": 1}, {"y1": 1}),
+                    intercepts=({"y1": 0}, {}),
+                ),
+                transition_function="log_ces",
             ),
         },
         n_mixtures=2,
@@ -208,12 +231,13 @@ def test_estimate_amn_missing_data_fits_unbalanced_panel():
 
 @pytest.mark.parametrize("override", ["start_params", "fixed_params"])
 def test_estimate_amn_rejects_param_overrides(override):
-    """estimate_amn must refuse start/fixed params it cannot honour in-stage.
+    """estimate_amn refuses start_params wholesale and fixed_params it cannot honour.
 
-    The three-stage estimator has no single free optimisation to pin, so
-    overlaying values after the fact would make the reported params inconsistent
-    with the fitted stages and criterion. It raises instead of silently
-    overwriting estimates.
+    `start_params` has no single free optimisation to warm-start, so any pin is
+    refused. `fixed_params` is honoured for the categories owned by the stage
+    that fits them (transition, loadings, controls, meas_sds); a pin on a
+    category AMN cannot hold in-stage (here a derived `shock_sds` residual SD)
+    still raises rather than silently overwriting the estimate.
     """
     model = _tiny_model()
     data = _tiny_data(n=1500)
@@ -222,7 +246,7 @@ def test_estimate_amn_rejects_param_overrides(override):
     pin = pd.DataFrame(
         {"value": [0.42]},
         index=pd.MultiIndex.from_tuples(
-            [("loadings", 1, "y2", "skills")],
+            [("shock_sds", 0, "skills", "-")],
             names=["category", "aug_period", "name1", "name2"],
         ),
     )
@@ -234,6 +258,72 @@ def test_estimate_amn_rejects_param_overrides(override):
 
     with pytest.raises(NotImplementedError):
         callers[override]()
+
+
+def test_estimate_amn_honours_fixed_loading():
+    """A pinned measurement loading is held in the Stage-2 minimum distance.
+
+    The free fit would estimate the y2 loading from the moments; pinning it must
+    hold it exactly while the other structural parameters adjust around it.
+    """
+    model = _tiny_model()
+    data = _tiny_data(n=1500)
+    options = AMNEstimationOptions(n_simulation_draws=2000, seed=0)
+
+    pin = pd.DataFrame(
+        {"value": [0.8]},
+        index=pd.MultiIndex.from_tuples(
+            [("loadings", 0, "y2", "skills")],
+            names=["category", "aug_period", "name1", "name2"],
+        ),
+    )
+
+    result = estimate_amn(model, data, options, fixed_params=pin)
+
+    got = result.params.loc[("loadings", 0, "y2", "skills"), "value"]
+    assert got == pytest.approx(0.8)
+
+
+def test_estimate_amn_honours_fixed_meas_sd():
+    """A pinned measurement SD is held in the Stage-2 minimum distance."""
+    model = _tiny_model()
+    data = _tiny_data(n=1500)
+    options = AMNEstimationOptions(n_simulation_draws=2000, seed=0)
+
+    pin = pd.DataFrame(
+        {"value": [0.5]},
+        index=pd.MultiIndex.from_tuples(
+            [("meas_sds", 0, "y2", "-")],
+            names=["category", "aug_period", "name1", "name2"],
+        ),
+    )
+
+    result = estimate_amn(model, data, options, fixed_params=pin)
+
+    got = result.params.loc[("meas_sds", 0, "y2", "-"), "value"]
+    assert got == pytest.approx(0.5)
+
+
+def test_estimate_amn_rejects_pinning_normalized_loading():
+    """Pinning a loading the model already normalizes is a clear error.
+
+    `y1` is the loading-normalized measure (lambda = 1), so it is not a free
+    Stage-2 parameter; trying to pin it must raise rather than silently no-op.
+    """
+    model = _tiny_model()
+    data = _tiny_data(n=1500)
+    options = AMNEstimationOptions(n_simulation_draws=2000, seed=0)
+
+    pin = pd.DataFrame(
+        {"value": [2.0]},
+        index=pd.MultiIndex.from_tuples(
+            [("loadings", 0, "y1", "skills")],
+            names=["category", "aug_period", "name1", "name2"],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="normaliz"):
+        estimate_amn(model, data, options, fixed_params=pin)
 
 
 def test_estimate_amn_rejects_constraints():
@@ -250,6 +340,41 @@ def test_estimate_amn_rejects_constraints():
         estimate_amn(model, data, options, constraints=[constraint])
 
 
+def test_estimate_amn_standalone_rejects_restricted_ces():
+    """Standalone AMN refuses a restricted-CES model it cannot consistently estimate.
+
+    The restricted-CES (`log_ces`) Stage-3 regression omits Freyberger's
+    primitive-scale recovery, so a standalone fit would return inconsistent CES
+    parameters. estimate_amn must raise instead, pointing to log_ces_general or
+    seeding estimate_chs.
+    """
+    model = _tiny_ces_model()
+    data = _tiny_data(n=500)
+    options = AMNEstimationOptions(n_simulation_draws=2000, seed=0)
+
+    with pytest.raises(NotImplementedError, match="restricted-CES"):
+        estimate_amn(model, data, options)
+
+
+def test_amn_seeding_bypasses_restricted_ces_guard():
+    """The standalone guard does not fire when AMN is seeding estimate_chs.
+
+    `linearize_control_function=True` marks the CHS-seeding context (CHS re-fits
+    every parameter), so a rough restricted-CES seed is acceptable; the guard
+    must let it through. A non-CES model never trips the guard either.
+    """
+    ces = process_model(_tiny_ces_model())
+    # Seeding context: no raise even though the transition is restricted CES.
+    _fail_if_standalone_unsupported(ces, for_start_values=True)
+    # Standalone non-CES model: no raise.
+    _fail_if_standalone_unsupported(
+        process_model(_tiny_model()), for_start_values=False
+    )
+    # Standalone CES: raises (mirrors the integration test above).
+    with pytest.raises(NotImplementedError, match="restricted-CES"):
+        _fail_if_standalone_unsupported(ces, for_start_values=False)
+
+
 def test_estimate_amn_returns_success_flag():
     model = _tiny_model()
     data = _tiny_data(n=1500)
@@ -263,3 +388,48 @@ def test_estimate_amn_returns_success_flag():
         (0, "skills"),
         (1, "skills"),
     )
+
+
+def test_estimate_amn_honours_fixed_transition_constant():
+    """A pinned transition constant is held exactly in the Stage-3 regression.
+
+    The free fit would put a nonzero intercept on the skills production
+    regression; pinning it to 0 must partial the intercept out and report
+    exactly 0, leaving the other coefficients free.
+    """
+    model = _tiny_model()
+    data = _tiny_data(n=1500)
+    options = AMNEstimationOptions(n_simulation_draws=5000, seed=0)
+
+    pin = pd.DataFrame(
+        {"value": [0.0]},
+        index=pd.MultiIndex.from_tuples(
+            [("transition", 0, "skills", "constant")],
+            names=["category", "aug_period", "name1", "name2"],
+        ),
+    )
+
+    result = estimate_amn(model, data, options, fixed_params=pin)
+
+    got = result.params.loc[("transition", 0, "skills", "constant"), "value"]
+    assert got == 0.0
+
+
+def test_estimate_amn_honours_fixed_transition_slope():
+    """A pinned transition slope is held at its value, not re-estimated."""
+    model = _tiny_model()
+    data = _tiny_data(n=1500)
+    options = AMNEstimationOptions(n_simulation_draws=5000, seed=0)
+
+    pin = pd.DataFrame(
+        {"value": [0.3]},
+        index=pd.MultiIndex.from_tuples(
+            [("transition", 0, "skills", "skills")],
+            names=["category", "aug_period", "name1", "name2"],
+        ),
+    )
+
+    result = estimate_amn(model, data, options, fixed_params=pin)
+
+    got = result.params.loc[("transition", 0, "skills", "skills"), "value"]
+    assert got == pytest.approx(0.3)

@@ -105,7 +105,9 @@ def estimate_af(
     # skipped (AMN's values are already in the optimizer's starting
     # neighbourhood).
     if af_options.start_params_strategy == "amn":
-        amn_result = estimate_amn(model_spec=model_spec, data=data)
+        amn_result = estimate_amn(
+            model_spec=model_spec, data=data, for_start_values=True
+        )
         amn_start = amn_result.params[["value"]]
         if start_params is not None:
             user_idx = start_params.index

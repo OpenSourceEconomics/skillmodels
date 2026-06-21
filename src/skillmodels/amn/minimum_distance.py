@@ -582,6 +582,122 @@ def _lower_bounds(
     return bounds
 
 
+# Parameter categories whose pins solve_minimum_distance can hold: the
+# structural measurement system fit in Stage 2. Each maps to a free entry of
+# the packed optimiser vector (loadings -> Lambda, controls -> intercepts,
+# meas_sds -> sqrt of the measurement variances).
+_STAGE2_FIXED_CATEGORIES = frozenset({"loadings", "controls", "meas_sds"})
+
+
+def _free_flat_index(
+    rank: int,
+    slice_start: int,
+    label: object,
+    what: str,
+    *,
+    is_free: bool,
+) -> int:
+    """Return the packed-vector index of a free structural entry, or raise.
+
+    ``is_free`` / ``rank`` come from the entry's free-mask and its cumulative
+    rank among free entries; ``slice_start`` is the start of the owning vector
+    section. A non-free entry is normalized or pinned by the model spec and so
+    cannot be pinned again.
+    """
+    if not is_free:
+        msg = (
+            f"Cannot pin {what} {label!r}: it is normalized or fixed by the model "
+            "spec, so it is not a free Stage-2 parameter."
+        )
+        raise ValueError(msg)
+    return slice_start + int(rank)
+
+
+def _stage2_fixed_indices(
+    fixed_params: pd.DataFrame | None,
+    struct: _Structure,
+    layout: AugmentedMeasureLayout,
+    slices: dict[str, slice],
+) -> list[tuple[int, float]]:
+    """Map Stage-2 ``fixed_params`` rows to ``(flat_index, value)`` pairs.
+
+    Handles the structural measurement categories: ``loadings`` (a free entry
+    of the Lambda matrix), ``controls`` (a free measurement intercept), and
+    ``meas_sds`` (a free measurement-error SD; stored internally as the
+    variance, so the squared value is pinned). Rows of other categories are
+    ignored -- they belong to other stages. Raises if a row targets a
+    measurement that does not exist or a parameter the model spec already
+    normalizes/pins (hence not a free Stage-2 parameter).
+    """
+    if fixed_params is None or fixed_params.empty:
+        return []
+
+    meas_slot = {
+        (int(period), meas): aug
+        for aug, (period, _factor, meas) in zip(
+            layout.measurement_slots, layout.measurement_meta, strict=True
+        )
+    }
+    slot_col = {pf: i for i, pf in enumerate(struct.factor_period_slots)}
+    n_slots = struct.n_factor_slots
+    lambda_flat_mask = struct.lambda_free_mask.ravel()
+    lambda_rank = np.cumsum(lambda_flat_mask) - 1
+    intercept_rank = np.cumsum(struct.intercept_free_mask) - 1
+    sigma2_rank = np.cumsum(struct.sigma2_free_mask) - 1
+
+    out: list[tuple[int, float]] = []
+    for label, value in fixed_params["value"].items():
+        category, period, name1, name2 = label  # ty: ignore[not-iterable]
+        if category not in _STAGE2_FIXED_CATEGORIES:
+            continue
+        period = int(period)
+        meas = str(name1)
+        aug = meas_slot.get((period, meas))
+        if aug is None:
+            msg = (
+                f"fixed_params row {label!r} targets measurement '{meas}' at "
+                f"period {period}, which is not in the model's measurement system."
+            )
+            raise ValueError(msg)
+        if category == "loadings":
+            factor = str(name2)
+            col = slot_col.get((period, factor))
+            if col is None:
+                msg = (
+                    f"fixed_params row {label!r} targets factor '{factor}', which "
+                    f"has no structural slot at period {period}."
+                )
+                raise ValueError(msg)
+            pos = aug * n_slots + col
+            flat_i = _free_flat_index(
+                int(lambda_rank[pos]),
+                slices["lambda"].start,
+                label,
+                "loading",
+                is_free=bool(lambda_flat_mask[pos]),
+            )
+            out.append((flat_i, float(value)))
+        elif category == "controls":
+            flat_i = _free_flat_index(
+                int(intercept_rank[aug]),
+                slices["intercept"].start,
+                label,
+                "intercept",
+                is_free=bool(struct.intercept_free_mask[aug]),
+            )
+            out.append((flat_i, float(value)))
+        else:  # meas_sds: stored as a variance, so pin the squared value.
+            flat_i = _free_flat_index(
+                int(sigma2_rank[aug]),
+                slices["sigma2"].start,
+                label,
+                "measurement SD",
+                is_free=bool(struct.sigma2_free_mask[aug]),
+            )
+            out.append((flat_i, float(value) ** 2))
+    return out
+
+
 def solve_minimum_distance(
     mixture: MixtureFitResult,
     processed_model: ProcessedModel,
@@ -590,6 +706,7 @@ def solve_minimum_distance(
     algorithm: str = "scipy_lbfgsb",
     allow_overnormalization: bool = False,
     algo_options: Mapping[str, Any] | None = None,
+    fixed_params: pd.DataFrame | None = None,
 ) -> MinimumDistanceResult:
     """Recover structural parameters from the reduced-form mixture.
 
@@ -612,6 +729,12 @@ def solve_minimum_distance(
             solver (e.g. ``{"stopping_maxiter": 500}``). CHS seeding caps the
             iterations here so a rough structural seed stays fast on a large
             factor-period block; standalone estimation leaves it unbounded.
+        fixed_params: optional params frame whose structural measurement rows
+            (``loadings`` / ``controls`` / ``meas_sds``) pin the corresponding
+            free entries of the packed optimiser vector. The pinned entries are
+            seeded to their values and held there via an optimagic
+            ``FixedConstraint`` so the remaining structural parameters are fit
+            conditional on the pins. Rows of other categories are ignored.
 
     Return:
         MinimumDistanceResult with structural Lambda, A, Sigma, and the
@@ -667,12 +790,21 @@ def solve_minimum_distance(
         target_covs=target_covs,
     )
 
+    fixed_idx = _stage2_fixed_indices(fixed_params, struct, layout, slices)
+    constraints: list[om.constraints.Constraint] | None = None
+    if fixed_idx:
+        for flat_i, value in fixed_idx:
+            flat0[flat_i] = value
+        fixed_positions = np.array([i for i, _ in fixed_idx], dtype=int)
+        constraints = [om.FixedConstraint(selector=lambda x, p=fixed_positions: x[p])]
+
     result = om.minimize(
         fun=fun,
         jac=jac,
         params=flat0,
         algorithm=algorithm,
         bounds=om.Bounds(lower=lower),
+        constraints=constraints,
         algo_options=dict(algo_options) if algo_options else None,
     )
     success = bool(result.success)

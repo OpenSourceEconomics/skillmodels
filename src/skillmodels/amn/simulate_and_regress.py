@@ -16,7 +16,7 @@ but generalises beyond the paper's CES-only case.
 """
 
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 import jax
@@ -79,20 +79,42 @@ def _fit_linear(
     y: np.ndarray,
     x_design: np.ndarray,
     regressor_names: list[str],
+    fixed: Mapping[str, float] | None = None,
 ) -> tuple[dict[str, float], float]:
     """OLS regression with an intercept (added as the last column).
+
+    When ``fixed`` pins some coefficients to values, those columns are
+    partialled out -- ``fixed_value * column`` is moved to the LHS and the
+    column dropped -- so the remaining free coefficients are fit conditional
+    on the pins. The pinned coefficients are reported at their fixed values and
+    the residual SD reflects the full (free + pinned) prediction.
 
     Returns:
         ``(params_by_name, residual_sd)`` with `constant` included as
         the trailing parameter.
 
     """
+    fixed = fixed or {}
     n = x_design.shape[0]
     full_design = np.column_stack([x_design, np.ones(n)])
-    coefs, *_ = np.linalg.lstsq(full_design, y, rcond=None)
-    resid = y - full_design @ coefs
-    sd = float(np.sqrt(np.mean(resid**2)))
-    out = dict(zip([*regressor_names, "constant"], coefs.tolist(), strict=True))
+    names = [*regressor_names, "constant"]
+
+    y_adj = y.astype(float).copy()
+    free_idx: list[int] = []
+    out: dict[str, float] = {}
+    for j, name in enumerate(names):
+        if name in fixed:
+            out[name] = float(fixed[name])
+            y_adj = y_adj - out[name] * full_design[:, j]
+        else:
+            free_idx.append(j)
+    if free_idx:
+        coefs, *_ = np.linalg.lstsq(full_design[:, free_idx], y_adj, rcond=None)
+        for k, j in enumerate(free_idx):
+            out[names[j]] = float(coefs[k])
+
+    pred = full_design @ np.array([out[name] for name in names])
+    sd = float(np.sqrt(np.mean((y - pred) ** 2)))
     return out, sd
 
 
@@ -312,6 +334,7 @@ def _fit_generic_nls(
     *,
     init_overrides: dict[str, float] | None = None,
     cf: np.ndarray | None = None,
+    fixed: Mapping[str, float] | None = None,
 ) -> tuple[dict[str, float], float]:
     """Generic Levenberg-Marquardt NLS via `jax.vmap` over the panel.
 
@@ -335,11 +358,23 @@ def _fit_generic_nls(
             (AMN's ``+ alpha*cf``); ``kappa`` is appended as an unknown
             (init 0) and returned under the ``"cf"`` key. ``states_panel``
             stays the production states (cf is a separate, additive term).
+        fixed: optional ``{name: value}`` pinning a subset of
+            ``param_names``. Pinned entries are held at their values and only
+            the remaining (free) parameters are optimised; the pinned values
+            are reconstructed into the full param vector at every residual
+            evaluation so the free fit is conditional on the pins.
 
     """
     init_overrides = init_overrides or {}
+    fixed = fixed or {}
     has_cf = cf is not None
-    kappa_idx = len(param_names)
+    free_names = [n for n in param_names if n not in fixed]
+    n_free = len(free_names)
+    kappa_idx = n_free
+    # Baseline full param vector carrying the pinned values; free positions
+    # are overwritten from the optimiser's vector at each evaluation.
+    base_theta = np.array([float(fixed.get(n, 0.0)) for n in param_names])
+    free_positions = [i for i, n in enumerate(param_names) if n not in fixed]
 
     @jax.jit
     def predict_batch(theta: jnp.ndarray, states: jnp.ndarray) -> jnp.ndarray:
@@ -348,24 +383,31 @@ def _fit_generic_nls(
     states_jnp = jnp.asarray(states_panel)
 
     def residuals(theta_np: np.ndarray) -> np.ndarray:
-        trans_theta = jnp.asarray(theta_np[: len(param_names)])
-        preds = np.asarray(predict_batch(trans_theta, states_jnp))
+        full = base_theta.copy()
+        full[free_positions] = theta_np[:n_free]
+        preds = np.asarray(predict_batch(jnp.asarray(full), states_jnp))
         if has_cf:
             preds = preds + theta_np[kappa_idx] * cf
         return preds - y
 
-    n_unknowns = len(param_names) + (1 if has_cf else 0)
-    theta0 = _seed_generic_nls_theta0(
-        param_names, init_overrides, n_unknowns=n_unknowns
+    # Seed using the full param layout (preserves elasticity / CES-share
+    # seeding) then select the free positions plus the trailing cf slot.
+    full_seed = _seed_generic_nls_theta0(
+        param_names,
+        init_overrides,
+        n_unknowns=len(param_names) + (1 if has_cf else 0),
+    )
+    theta0 = np.array(
+        [full_seed[i] for i in free_positions] + ([0.0] if has_cf else [])
     )
 
     result = least_squares(residuals, theta0, method="lm", max_nfev=5000)
     theta = result.x
     resid = residuals(theta)
     sd = float(np.sqrt(np.mean(resid**2)))
-    out = dict(
-        zip(param_names, [float(v) for v in theta[: len(param_names)]], strict=True)
-    )
+    out = {n: float(fixed[n]) for n in param_names if n in fixed}
+    for i, n in enumerate(free_names):
+        out[n] = float(theta[i])
     if has_cf:
         out["cf"] = float(theta[kappa_idx])
     return out, sd
@@ -381,6 +423,7 @@ def _fit_transition(
     regressor_names: list[str],
     *,
     cf: np.ndarray | None = None,
+    fixed: Mapping[str, float] | None = None,
 ) -> tuple[dict[str, float], float]:
     """Dispatch to the right per-transition fitter.
 
@@ -395,21 +438,59 @@ def _fit_transition(
     `linear` the residual is just an extra design column; for the
     `log_ces`-family and the generic NLS path it is added OUTSIDE the
     aggregator (AMN 2020 eq. 7-8 / AF Sec. 3.5).
+
+    When ``fixed`` pins a subset of the transition coefficients (by their
+    parameter name), those are held at their values inside the regression and
+    only the remaining coefficients are fit. The `log_ces`-family fitters do
+    not yet support pinning and raise if asked to.
     """
+    fixed = dict(fixed) if fixed else {}
     if transition_name == "linear":
         if cf is not None:
             x_design = np.column_stack([x_design, cf])
             regressor_names = [*regressor_names, "cf"]
-        return _fit_linear(y, x_design, regressor_names)
-    if transition_name == "log_ces":
-        return _fit_log_ces(y, x_design, regressor_names, with_constant=False, cf=cf)
-    if transition_name == "log_ces_with_constant":
-        return _fit_log_ces(y, x_design, regressor_names, with_constant=True, cf=cf)
+        return _fit_linear(y, x_design, regressor_names, fixed=fixed)
+    if transition_name in ("log_ces", "log_ces_with_constant"):
+        if fixed:
+            msg = (
+                f"fixed_params for the '{transition_name}' transition of factor "
+                f"'{factor}' is not supported; pinning is implemented for linear "
+                "and the generic NLS transitions (translog etc.)."
+            )
+            raise NotImplementedError(msg)
+        with_constant = transition_name == "log_ces_with_constant"
+        return _fit_log_ces(
+            y, x_design, regressor_names, with_constant=with_constant, cf=cf
+        )
 
     func, param_names = _resolve_transition_callable(
         transition_name, factor, processed_model, model_spec
     )
-    return _fit_generic_nls(func, param_names, y, x_design, cf=cf)
+    return _fit_generic_nls(func, param_names, y, x_design, cf=cf, fixed=fixed)
+
+
+def _transition_fixes_for_period(
+    fixed_params: pd.DataFrame | None,
+    period: int,
+) -> dict[str, dict[str, float]]:
+    """Collect ``transition`` pins for ``period`` as ``{factor: {regname: value}}``.
+
+    Reads the rows of ``fixed_params`` whose category is ``"transition"`` and
+    whose period equals ``period`` (the AMN params index labels this level
+    ``aug_period``, but AMN keys it by calendar period). Returns an empty dict
+    when there is nothing to pin.
+    """
+    if fixed_params is None or fixed_params.empty:
+        return {}
+    idx = fixed_params.index
+    mask = (idx.get_level_values(0) == "transition") & (
+        idx.get_level_values(1) == period
+    )
+    out: dict[str, dict[str, float]] = {}
+    for label, value in fixed_params.loc[mask, "value"].items():
+        _cat, _p, factor, regname = label  # ty: ignore[not-iterable]
+        out.setdefault(factor, {})[regname] = float(value)
+    return out
 
 
 def _factors_at_period(processed_model: ProcessedModel) -> tuple[str, ...]:
@@ -522,6 +603,7 @@ def _fit_period_production(
     context: _ProductionContext,
     run_cf: bool,
     targets: list[str],
+    fixed_by_factor: Mapping[str, Mapping[str, float]] | None = None,
 ) -> list[tuple[str, int, str, str, float]]:
     """Run the production regressions for every latent outcome at `period`.
 
@@ -568,6 +650,7 @@ def _fit_period_production(
             fit_x_design,
             fit_names,
             cf=cf,
+            fixed=fixed_by_factor.get(factor) if fixed_by_factor else None,
         )
         for regname, value in params.items():
             transition_rows.append(
@@ -586,6 +669,7 @@ def simulate_and_regress(
     n_draws: int = 100_000,
     seed: int = 0,
     linearize_control_function: bool = False,
+    fixed_params: pd.DataFrame | None = None,
 ) -> ProductionFitResult:
     """Simulate the joint latent-factor distribution and run Stage-3 regressions.
 
@@ -600,6 +684,11 @@ def simulate_and_regress(
         linearize_control_function: When True, fit only the single linear `cf`
             term and skip the higher-order `kappa_terms`
             `NotImplementedError` gate (used when AMN seeds `estimate_chs`).
+        fixed_params: optional params frame whose ``transition`` rows pin
+            production-function coefficients. Each pinned coefficient is held at
+            its value inside the per-period production regression while the
+            remaining coefficients are fit conditional on the pins. Rows of
+            other categories are ignored here (they belong to other stages).
 
     The AMN eq.-7-8 investment control-function correction (AF Sec. 3.5) runs iff
     the model declares a `CorrectionSpec` (presence is the single trigger). A
@@ -721,6 +810,7 @@ def simulate_and_regress(
                 context=context,
                 run_cf=run_cf,
                 targets=cf_targets,
+                fixed_by_factor=_transition_fixes_for_period(fixed_params, t),
             )
         )
 
