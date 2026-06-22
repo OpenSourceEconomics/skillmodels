@@ -40,11 +40,27 @@ The connected-component scale accounting belongs to the full identification
 diagnostic.
 """
 
+import math
+
 import optimagic as om
 import pandas as pd
 
 from skillmodels.common.constraints import _equality_constraint_loc
 from skillmodels.common.model_spec import ModelSpec
+
+
+def _is_scale_anchor_value(value: float) -> bool:
+    """A loading (scale) anchor must be finite and nonzero (Pro F1).
+
+    A zero loading is invariant to every rescaling of the latent factor and so
+    cannot pin its scale; non-finite values do not define a valid model.
+    """
+    return math.isfinite(value) and value != 0.0
+
+
+def _is_location_anchor_value(value: float) -> bool:
+    """An intercept (location) anchor must be finite (Pro F1)."""
+    return math.isfinite(value)
 
 
 def _normalized_keys(model_spec: ModelSpec) -> set[tuple[object, ...]]:
@@ -60,40 +76,66 @@ def _normalized_keys(model_spec: ModelSpec) -> set[tuple[object, ...]]:
         if norms is None:
             continue
         for period, loadings in enumerate(norms.loadings or ()):
-            for meas in loadings:
-                keys.add(("loadings", period, meas, factor))
+            for meas, value in loadings.items():
+                if _is_scale_anchor_value(value):
+                    keys.add(("loadings", period, meas, factor))
         for period, intercepts in enumerate(norms.intercepts or ()):
-            for meas in intercepts:
-                keys.add(("controls", period, meas, "constant"))
+            for meas, value in intercepts.items():
+                if _is_location_anchor_value(value):
+                    keys.add(("controls", period, meas, "constant"))
     return keys
 
 
-def _anchored_param_keys(
-    fixed_params: pd.DataFrame | None,
+def _valid_fixed_keys(fixed_params: pd.DataFrame | None) -> set[tuple[object, ...]]:
+    """Return the `fixed_params` keys that are VALID anchors by value (Pro F1).
+
+    Loading pins count only when finite and nonzero; intercept (controls) pins
+    count when finite; other categories pass through unchecked (they are not
+    consulted as period-0 anchors).
+    """
+    keys: set[tuple[object, ...]] = set()
+    if fixed_params is None:
+        return keys
+    values = fixed_params["value"].to_numpy()
+    for idx, value in zip(fixed_params.index, values, strict=True):
+        category = idx[0]
+        if category == "loadings":
+            if _is_scale_anchor_value(float(value)):
+                keys.add(tuple(idx))
+        elif category == "controls":
+            if _is_location_anchor_value(float(value)):
+                keys.add(tuple(idx))
+        else:
+            keys.add(tuple(idx))
+    return keys
+
+
+def _equality_closure(
     constraints: list[om.constraints.Constraint] | None,
     anchor_sources: set[tuple[object, ...]],
 ) -> set[tuple[object, ...]]:
-    """Collect the params anchored outside the period-0 normalization maps.
+    """Propagate anchors transitively through equality groups (Pro F2).
 
-    A `fixed_params` row pins its parameter to a value. A `select_by_loc`
-    equality group only *transfers* an anchor: it ties its members equal, which
-    fixes their common value to a number ONLY when the group already contains a
-    numerically fixed or normalized member (`anchor_sources`). An equality among
-    otherwise-free loadings leaves their common scale free and is NOT an anchor
-    (Pro F3). Keys are the params' index tuples `(category, period, name1,
-    name2)`.
+    A `select_by_loc` equality group ties its members equal. A group fixes its
+    members to a number only when it is connected -- possibly through a chain of
+    groups -- to a numerically fixed or normalized member. Iterate to a fixed
+    point so that A fixed, A=B, B=C all anchor C regardless of how the single
+    logical component is split across constraints.
     """
-    keys: set[tuple[object, ...]] = set()
-    if fixed_params is not None:
-        keys.update(tuple(idx) for idx in fixed_params.index)
-    for constraint in constraints or []:
-        loc = _equality_constraint_loc(constraint)
-        if loc is None:
-            continue
-        members = {tuple(idx) for idx in loc}
-        if members & anchor_sources:
-            keys.update(members)
-    return keys
+    groups = [
+        {tuple(idx) for idx in loc}
+        for constraint in constraints or []
+        if (loc := _equality_constraint_loc(constraint)) is not None
+    ]
+    anchored = set(anchor_sources)
+    changed = True
+    while changed:
+        changed = False
+        for group in groups:
+            if group & anchored and not group <= anchored:
+                anchored |= group
+                changed = True
+    return anchored
 
 
 def check_identification(
@@ -108,11 +150,10 @@ def check_identification(
     rules). Factors whose `normalizations is None` are skipped -- that is a
     separate, estimator-specific error.
     """
-    fixed_keys: set[tuple[object, ...]] = set()
-    if fixed_params is not None:
-        fixed_keys = {tuple(idx) for idx in fixed_params.index}
-    anchor_sources = fixed_keys | _normalized_keys(model_spec)
-    anchored = _anchored_param_keys(fixed_params, constraints, anchor_sources)
+    # Anchor sources are the VALID (by-value) fixed pins and normalizations;
+    # equality groups then transfer those anchors transitively.
+    anchor_sources = _valid_fixed_keys(fixed_params) | _normalized_keys(model_spec)
+    anchored = _equality_closure(constraints, anchor_sources)
     problems: list[str] = []
     for factor_name, spec in model_spec.factors.items():
         norms = spec.normalizations
@@ -124,15 +165,15 @@ def check_identification(
             continue
         measures = spec.measurements[0]
 
-        has_loading = bool(norms.loadings and norms.loadings[0]) or any(
+        # Every factor with an initial distribution needs an absolute initial
+        # location anchor mu_theta,0,1=0 (the CES simplex does NOT supply it --
+        # f(x+c,i+c)=f(x,i)+c leaves a common-shift orbit) and a scale anchor.
+        # Both must be VALID by value (Pro F1) -- normalizations and fixed pins
+        # are filtered above, so a plain set-membership test suffices here.
+        has_loading = any(
             ("loadings", 0, meas, factor_name) in anchored for meas in measures
         )
-        # Every factor with an initial distribution needs an absolute initial
-        # location anchor mu_theta,0,1=0. The CES simplex does NOT supply it
-        # (Pro F1: f(x+c,i+c)=f(x,i)+c leaves a common-shift orbit); the simplex
-        # only replaces the *cross-period* location alternative, which this
-        # period-0 precheck does not police.
-        has_intercept = bool(norms.intercepts and norms.intercepts[0]) or any(
+        has_intercept = any(
             ("controls", 0, meas, "constant") in anchored for meas in measures
         )
 

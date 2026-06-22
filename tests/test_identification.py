@@ -107,6 +107,63 @@ def test_check_identification_equality_of_free_loadings_does_not_anchor() -> Non
     assert any("period 0" in p and "scale" in p for p in problems)
 
 
+def test_check_identification_zero_loading_pin_is_not_a_scale_anchor() -> None:
+    # A loading fixed to 0 is invariant to every rescaling of the factor and
+    # cannot pin its scale (Pro F1). It must NOT count as a scale anchor.
+    model = _model(
+        skills_loadings=({}, {"y1": 1}),
+        skills_intercepts=({"y1": 0},) * 2,
+    )
+    fixed = pd.DataFrame(
+        {"value": [0.0]},
+        index=pd.MultiIndex.from_tuples(
+            [("loadings", 0, "y1", "skills")],
+            names=["category", "period", "name1", "name2"],
+        ),
+    )
+    problems = check_identification(model, fixed_params=fixed)
+    assert any("period 0" in p and "scale" in p for p in problems)
+
+
+def test_check_identification_nonfinite_loading_pin_is_not_an_anchor() -> None:
+    model = _model(
+        skills_loadings=({}, {"y1": 1}),
+        skills_intercepts=({"y1": 0},) * 2,
+    )
+    fixed = pd.DataFrame(
+        {"value": [float("inf")]},
+        index=pd.MultiIndex.from_tuples(
+            [("loadings", 0, "y1", "skills")],
+            names=["category", "period", "name1", "name2"],
+        ),
+    )
+    problems = check_identification(model, fixed_params=fixed)
+    assert any("period 0" in p and "scale" in p for p in problems)
+
+
+def test_check_identification_equality_anchor_is_transitive() -> None:
+    # A=normalized, A=B, B=C across two constraints: the anchor must propagate
+    # transitively to C (Pro F2). Here the only period-0 loading anchor is
+    # reachable only through a two-hop equality chain.
+    model = _model(
+        skills_loadings=({}, {"y1": 1}),
+        skills_intercepts=({"y1": 0},) * 2,
+    )
+    g1 = pd.MultiIndex.from_tuples(
+        [("loadings", 1, "y1", "skills"), ("loadings", 1, "y2", "skills")],
+        names=["category", "period", "name1", "name2"],
+    )
+    g2 = pd.MultiIndex.from_tuples(
+        [("loadings", 1, "y2", "skills"), ("loadings", 0, "y1", "skills")],
+        names=["category", "period", "name1", "name2"],
+    )
+    constraints: list[om.constraints.Constraint] = [
+        om.EqualityConstraint(selector=functools.partial(select_by_loc, loc=g1)),
+        om.EqualityConstraint(selector=functools.partial(select_by_loc, loc=g2)),
+    ]
+    assert check_identification(model, constraints=constraints) == []
+
+
 def test_check_identification_honours_fixed_params_anchor() -> None:
     model = _model(
         skills_loadings=({}, {"y1": 1}),

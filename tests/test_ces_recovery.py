@@ -88,6 +88,14 @@ def test_recover_raises_on_nonfinite_coeff() -> None:
         recover_primitive_ces_scales(coeffs, lambda_theta_0=1.0)
 
 
+def test_recover_raises_on_overflowing_derived_scale() -> None:
+    # Finite nonzero inputs whose products overflow to inf must raise, not
+    # silently return infinite primitive scales (Pro F5).
+    coeffs = [CESTransformedCoeffs(outside=2.0, theta_exponent=2.0, inv_exponent=1.0)]
+    with pytest.raises(ValueError, match=r"nonzero|finite"):
+        recover_primitive_ces_scales(coeffs, lambda_theta_0=1e308)
+
+
 def test_log_ces_general_represents_transformed_ces() -> None:
     # The audit counterexample: lambda_theta=2, lambda_inv=1, lambda_next=1,
     # sigma=-0.5. The single-rho form cannot represent it (best-fit max abs

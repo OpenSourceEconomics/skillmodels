@@ -173,11 +173,14 @@ def _validate_factor(factor_name: str, factor_spec: FactorSpec) -> list[str]:
     if factor_spec.normalizations is None:
         errors.append(
             f"Factor '{factor_name}': AF requires explicit normalizations. "
-            f"Provide a scale anchor (loading=1) for at least one measurement, "
-            f"plus a location anchor (intercept=0, or the simplex of plain "
-            f"log_ces / the free constant of log_ces_with_constant). Trans-log "
-            f"needs both at the initial period; restricted CES needs only the "
-            f"single scale anchor lambda_theta,0,1=1."
+            f"Provide a scale anchor (a finite nonzero loading=1) for one "
+            f"measurement, plus a finite period-0 measurement-intercept (or "
+            f"equivalent latent-location pin) as the absolute initial location "
+            f"anchor mu_theta,0,1=0. The CES simplex and the free constant of "
+            f"log_ces_with_constant do NOT supply that initial location anchor. "
+            f"Trans-log needs the affine anchor at the initial period; restricted "
+            f"CES needs only the single scale anchor lambda_theta,0,1=1 (the "
+            f"later loadings are then identified)."
         )
 
     # has_initial_distribution=False requires is_endogenous=True so the

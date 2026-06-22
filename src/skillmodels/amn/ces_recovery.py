@@ -157,6 +157,11 @@ def recover_primitive_ces_scales(
         sigma = coeff.theta_exponent * lambda_theta
         lambda_inv = sigma / coeff.inv_exponent
         lambda_theta_next = coeff.outside * sigma
+        # Validate the DERIVED values too (Pro F5): finite nonzero inputs can
+        # still overflow/underflow their products and ratios.
+        _require_nonzero_finite(sigma, "derived sigma_t")
+        _require_nonzero_finite(lambda_inv, "derived lambda_I,t,1")
+        _require_nonzero_finite(lambda_theta_next, "derived lambda_theta,t+1,1")
         recovered.append(
             CESPrimitiveScales(
                 sigma=sigma,
