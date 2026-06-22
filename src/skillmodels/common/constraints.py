@@ -318,7 +318,9 @@ def get_constraints(
         stagemap=labels.aug_stagemap,
         stages=labels.aug_stages,
     )
-    constraints += _get_constant_factors_constraints(labels=labels)
+    constraints += _get_constant_factors_constraints(
+        labels=labels, endogenous_factors_info=endogenous_factors_info
+    )
     constraints += _get_initial_states_constraints(
         n_mixtures=dimensions.n_mixtures,
         factors=labels.latent_factors,
@@ -477,21 +479,30 @@ def _get_stage_constraints(
 
 def _get_constant_factors_constraints(
     labels: Labels,
+    endogenous_factors_info: EndogenousFactorsInfo,
 ) -> list[om.constraints.Constraint]:
     """Fix shock variances of constant factors to zero.
 
     Args:
         labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
+        endogenous_factors_info: Information about endogenous factors. Used to
+            mirror `get_transition_index_tuples`, which stops at
+            `aug_periods[:-2]` when endogenous factors are present (otherwise
+            `[:-1]`). The params index has no transition/shock entries at the
+            final transition aug-period, so a naive `[:-1]` loop would emit one
+            orphan `shock_sds` loc that trips the optimagic selector.
 
     Returns:
         List of constraint objects.
 
     """
+    last = -2 if endogenous_factors_info.has_endogenous_factors else -1
+    transition_augs = labels.aug_periods[:last]
     constraints: list[om.constraints.Constraint] = []
     for f, factor in enumerate(labels.latent_factors):
         if labels.transition_names[f] == "constant":
-            for aug_period in labels.aug_periods[:-1]:
+            for aug_period in transition_augs:
                 loc = ("shock_sds", aug_period, factor, "-")
                 constraints.append(
                     FixedConstraintWithValue(loc=loc, value=0.0),

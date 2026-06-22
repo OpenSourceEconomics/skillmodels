@@ -28,6 +28,7 @@ from skillmodels.common.process_model import process_model
 from skillmodels.common.selector import select_by_loc
 from skillmodels.common.types import (
     Anchoring,
+    EndogenousFactorsInfo,
     Labels,
     MeasurementType,
     Normalizations,
@@ -158,6 +159,60 @@ def test_get_constraints_pins_kappa_to_zero_on_carry_forward_periods() -> None:
         _category, aug_period, target, _term = c.loc
         assert target in ("fac1", "fac2")
         assert meas_types[aug_period] == MeasurementType.STATES
+
+
+def test_constant_factor_shock_constraints_only_target_existing_rows() -> None:
+    # A constant-transition state factor combined with an endogenous factor must
+    # not emit shock-fix constraints at aug periods where the factor does not
+    # transition. With endogenous factors the transition index stops at
+    # aug_periods[:-2], so a naive aug_periods[:-1] loop emits one orphan
+    # ("shock_sds", last_aug, factor, "-") loc that trips the optimagic selector.
+    from dataclasses import replace  # noqa: PLC0415
+
+    from skillmodels.common.model_spec import CorrectionSpec  # noqa: PLC0415
+    from skillmodels.common.params_index import get_params_index  # noqa: PLC0415
+    from skillmodels.test_data.model2 import MODEL2  # noqa: PLC0415
+
+    fac1 = MODEL2.factors["fac1"]
+    fac3 = MODEL2.factors["fac3"]
+    new_factors = dict(MODEL2.factors) | {
+        "fac1": replace(fac1, transition_function="constant"),
+        "fac3": replace(
+            fac3, is_endogenous=True, correction=CorrectionSpec(instruments=("inv_z",))
+        ),
+    }
+    model = (
+        MODEL2._replace(factors=new_factors)
+        ._replace(stagemap=None)
+        ._replace(observed_factors=("inv_z",))
+    )
+    processed = process_model(model)
+    index = get_params_index(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        transition_info=processed.transition_info,
+        endogenous_factors_info=processed.endogenous_factors_info,
+    )
+    constraints = get_constraints(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        anchoring_info=processed.anchoring,
+        normalizations=processed.normalizations,
+        endogenous_factors_info=processed.endogenous_factors_info,
+        bounds_distance=1e-8,
+    )
+    shock_fixes = [
+        c
+        for c in constraints
+        if isinstance(c, FixedConstraintWithValue)
+        and isinstance(c.loc, tuple)
+        and c.loc[0] == "shock_sds"
+    ]
+    assert shock_fixes, "the constant factor must have its shocks pinned to 0"
+    for c in shock_fixes:
+        assert c.loc in index, f"orphan shock constraint {c.loc} not in params index"
 
 
 def test_get_constraints_pins_instrument_out_of_production() -> None:
@@ -395,7 +450,13 @@ def test_constant_factor_constraints() -> None:
         {"loc": ("shock_sds", 1, "fac2", "-"), "type": "fixed", "value": 0.0},
     ]
 
-    calculated = _get_constant_factors_constraints(labels)
+    no_endog = EndogenousFactorsInfo(
+        has_endogenous_factors=False,
+        aug_periods_to_aug_period_meas_types=MappingProxyType({}),
+        aug_periods_from_period=lambda p: [p],
+        factor_info=MappingProxyType({}),
+    )
+    calculated = _get_constant_factors_constraints(labels, no_endog)
     as_dicts = [_to_dict(c) for c in calculated]
     assert_list_equal_except_for_order(as_dicts, expected)
 
