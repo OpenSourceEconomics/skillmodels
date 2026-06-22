@@ -17,6 +17,7 @@ import pytest
 from skillmodels.amn.start_values import (
     _amn_values_on_chs_index,
     _apply_neutral_defaults,
+    _kmeans_labels,
     get_spearman_start_params,
     pool_equality_groups,
 )
@@ -65,6 +66,25 @@ def _cf_model() -> ModelSpec:
         },
         observed_factors=("income",),
     )
+
+
+def test_kmeans_labels_separates_bimodal_data() -> None:
+    rng = np.random.default_rng(0)
+    low = rng.normal(-4.0, 0.5, size=300)
+    high = rng.normal(6.0, 0.5, size=200)
+    features = np.concatenate([low, high]).reshape(-1, 1)
+    labels = _kmeans_labels(features, 2)
+    cluster_means = sorted(float(features[labels == k].mean()) for k in (0, 1))
+    assert cluster_means[0] < -2.0
+    assert cluster_means[1] > 4.0
+
+
+def test_kmeans_labels_is_deterministic() -> None:
+    rng = np.random.default_rng(1)
+    features = rng.normal(size=(200, 2))
+    a = _kmeans_labels(features, 3)
+    b = _kmeans_labels(features, 3)
+    assert np.array_equal(a, b)
 
 
 def test_amn_values_map_cf_to_kappa_and_calendar_to_aug_period():

@@ -96,6 +96,15 @@ def get_spearman_start_params(
     free = out["value"].isna()
 
     _apply_neutral_defaults(out, free, n_mixtures=n_mixtures)
+    _seed_initial_states_by_clustering(
+        out,
+        free,
+        measurements=measurements,
+        update_info=update_info,
+        latent_factors=latent_factors,
+        n_mixtures=n_mixtures,
+        loading_norms=loading_norms,
+    )
 
     update_info_periods = set(update_info.index.get_level_values("aug_period"))
     spearman_per_period: dict[tuple[int, str], SpearmanResult] = {}
@@ -321,6 +330,108 @@ def pool_equality_groups(  # noqa: C901
             if keep_pinned_values is None or not bool(keep_pinned_values.loc[m]):
                 out.loc[m, "value"] = target
     return out
+
+
+def _kmeans_labels(
+    features: np.ndarray, n_clusters: int, *, n_iter: int = 25
+) -> np.ndarray:
+    """Return deterministic k-means cluster labels for `features` (n_obs, n_dim).
+
+    Centers are initialised at evenly spaced quantiles of the data (no random
+    seeds, so the result is reproducible), then refined with Lloyd iterations.
+    Used to break the symmetry of the initial-mixture start values: a mixture
+    seeded with identical components is a stationary collapsed subspace for a
+    deterministic optimizer, so the components must start separated.
+    """
+    quantiles = np.linspace(0.0, 1.0, n_clusters + 2)[1:-1]
+    centers = np.quantile(features, quantiles, axis=0)
+    labels = np.zeros(features.shape[0], dtype=int)
+    for it in range(n_iter):
+        distances = ((features[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
+        new_labels = distances.argmin(axis=1)
+        if it > 0 and np.array_equal(new_labels, labels):
+            break
+        labels = new_labels
+        for k in range(n_clusters):
+            if np.any(labels == k):
+                centers[k] = features[labels == k].mean(axis=0)
+    return labels
+
+
+def _period0_anchor_columns(
+    update_info: pd.DataFrame,
+    *,
+    latent_factors: tuple[str, ...],
+    loading_norms: dict[tuple[str, str], float],
+) -> dict[str, int]:
+    """Return `{factor: measurement column}` for each period-0 anchor measurement."""
+    period_meas_index = _measurement_row_index(update_info, 0)
+    anchor_cols: dict[str, int] = {}
+    for factor in latent_factors:
+        factor_meas = _single_factor_measurements(
+            update_info, aug_period=0, factor=factor, all_factors=latent_factors
+        )
+        if not factor_meas:
+            continue
+        anchor_local, _ = _pick_anchor(
+            factor_meas=factor_meas, factor=factor, loading_norms=loading_norms
+        )
+        anchor_cols[factor] = period_meas_index[factor_meas[anchor_local]]
+    return anchor_cols
+
+
+def _seed_initial_states_by_clustering(
+    params: pd.DataFrame,
+    free: pd.Series,
+    *,
+    measurements: np.ndarray,
+    update_info: pd.DataFrame,
+    latent_factors: tuple[str, ...],
+    n_mixtures: int,
+    loading_norms: dict[tuple[str, str], float],
+) -> None:
+    """Seed the initial-mixture component means by clustering period-0 anchors.
+
+    For each latent factor with a period-0 anchor (unit-loading) measurement,
+    cluster individuals on the joint of those anchors into `n_mixtures` groups and
+    set each component's initial mean to its cluster mean, ordered so the FIRST
+    factor's component means increase (matching the identification constraint).
+    Mixture weights are seeded to the cluster proportions. This replaces the
+    symmetric all-zeros mean seed that traps a deterministic optimizer at the
+    collapsed one-Gaussian solution. Cross/diagonal covariances are left to the
+    Spearman / neutral seeds.
+    """
+    if n_mixtures < 2:
+        return
+    if 0 not in set(update_info.index.get_level_values("aug_period")):
+        return
+    anchor_cols = _period0_anchor_columns(
+        update_info, latent_factors=latent_factors, loading_norms=loading_norms
+    )
+    if not anchor_cols:
+        return
+
+    features = measurements[list(anchor_cols.values()), :].T  # (n_obs, n_anchors)
+    keep = ~np.isnan(features).any(axis=1)
+    features = features[keep]
+    if features.shape[0] < n_mixtures:
+        return
+    labels = _kmeans_labels(features, n_mixtures)
+    present = [k for k in range(n_mixtures) if np.any(labels == k)]
+    if len(present) < n_mixtures:
+        return  # degenerate clustering; keep the neutral seed
+    # Order components by the first anchor factor's cluster mean (ascending), to
+    # satisfy the increasing-first-factor-mean identification constraint.
+    order = sorted(present, key=lambda k: float(features[labels == k, 0].mean()))
+    for comp, cluster in enumerate(order):
+        rows = labels == cluster
+        for f_idx, factor in enumerate(anchor_cols):
+            loc = ("initial_states", 0, f"mixture_{comp}", factor)
+            if loc in params.index and bool(free.loc[loc]):
+                params.loc[loc, "value"] = float(features[rows, f_idx].mean())
+        w_loc = ("mixture_weights", 0, f"mixture_{comp}", "-")
+        if w_loc in params.index and bool(free.loc[w_loc]):
+            params.loc[w_loc, "value"] = float(rows.mean())
 
 
 def _apply_neutral_defaults(
