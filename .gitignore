@@ -1,6 +1,9 @@
 # Claude Code
 .claude/
 
+# roborev local config
+.roborev.toml
+
 # Distribution / packaging
 *.egg
 *.egg-info/

@@ -28,19 +28,40 @@ def anchoring_start_params():
     return start_params.set_index(["category", "period", "name1", "name2"])
 
 
+def test_estimate_chs_rejects_unidentified_model_by_default(model2_data):
+    """The identification gate fires before estimation on an unanchored model.
+
+    MODEL2 normalizes its period-0 loadings but leaves the measurement
+    intercepts free and runs a single mixture component, so its initial latent
+    mean is a free parameter with no location anchor — a common shift of the
+    latent mean against the intercepts leaves the likelihood unchanged. With the
+    default `require_identification=True`, `estimate_chs` refuses to run it.
+    """
+    with pytest.raises(ValueError, match="not identified"):
+        estimate_chs(
+            MODEL2,
+            model2_data,
+            CHSEstimationOptions(start_params_strategy="none"),
+        )
+
+
 def test_estimate_chs_returns_conforming_result(model2_data, anchoring_start_params):
     """Converge from the known optimum to a conforming `CHSEstimationResult`.
 
     Starting at the regression-vault optimum keeps the run cheap: the
     optimiser terminates almost immediately. `start_params_strategy="none"`
     skips the (slow) AMN/Spearman seeding since full start values are
-    supplied.
+    supplied. MODEL2 follows the CHS convention of a free initial latent mean
+    (seeded to 0) rather than an intercept normalization, so it is
+    intentionally location-under-identified and the identification gate is
+    disabled via `require_identification=False`.
     """
     result = estimate_chs(
         MODEL2,
         model2_data,
         CHSEstimationOptions(start_params_strategy="none"),
         start_params=anchoring_start_params,
+        require_identification=False,
     )
 
     assert isinstance(result, CHSEstimationResult)
@@ -58,12 +79,16 @@ def test_estimate_chs_provides_ml_inference(model2_data, anchoring_start_params)
     errors (and covariances, summaries) are available — the reason apps that
     need inference can adopt `estimate_chs` instead of hand-rolling
     `estimate_ml` on top of `get_maximization_inputs`.
+
+    MODEL2 is intentionally location-under-identified (free initial mean,
+    CHS convention), so the identification gate is disabled here.
     """
     result = estimate_chs(
         MODEL2,
         model2_data,
         CHSEstimationOptions(start_params_strategy="none"),
         start_params=anchoring_start_params,
+        require_identification=False,
     )
 
     assert result.likelihood_result is not None
@@ -82,6 +107,9 @@ def test_estimate_chs_enforces_user_fixed_constraint_value(
     enforces the internal fixed constraints), so without an explicit enforce the
     parameter was silently fixed at the seeded start value, not the requested
     value. Regression for audit finding F9.
+
+    MODEL2 is intentionally location-under-identified (free initial mean,
+    CHS convention), so the identification gate is disabled here.
     """
     loc = ("controls", 0, "y1", "x1")
     start_value = float(anchoring_start_params.loc[loc, "value"])
@@ -93,6 +121,7 @@ def test_estimate_chs_enforces_user_fixed_constraint_value(
         CHSEstimationOptions(start_params_strategy="none"),
         start_params=anchoring_start_params,
         constraints=[FixedConstraintWithValue(loc=loc, value=target)],
+        require_identification=False,
     )
 
     assert result.params.loc[loc, "value"] == pytest.approx(target)

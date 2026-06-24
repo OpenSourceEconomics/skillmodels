@@ -20,9 +20,16 @@ those needs a full transition-aware diagnostic (a larger, separate piece). This
 is therefore an INITIAL-ANCHOR PRECHECK, not a complete identification proof: an
 empty result means `initial_anchor_ok`, with later identification unverified.
 
-This is the estimator-agnostic core used by `validate_af_model`. It is exposed
-for CHS/common tooling but is deliberately NOT wired into the default
-`process_model` path, so it does not gate the application PyTask pipelines.
+This is the estimator-agnostic core: identification of the initial latent
+distribution is a property of the model, not of any estimator. `fail_if_not_identified`
+wraps it as a hard gate that `estimate_af` (via `validate_af_model`), `estimate_chs`
+and `estimate_amn` all run by default, so an unanchored initial distribution raises in
+every estimator. The gate lives at the estimator entry (not in `process_model`) because
+the alternative anchor sources (`fixed_params`, equality `constraints`) are only known
+there, not from the bare `ModelSpec`. Each estimator exposes a `require_identification`
+switch to turn the gate off for models that are intentionally location-under-identified
+-- e.g. the original CHS replication convention, where the initial latent mean is a free
+parameter seeded to 0 rather than pinned by an intercept normalization.
 
 KNOWN LIMITATION -- restricted-CES scale is per-COMPONENT, not per-factor (Pro
 F2). For a restricted-CES skill factor, the production restrictions identify the
@@ -136,6 +143,33 @@ def _equality_closure(
                 anchored |= group
                 changed = True
     return anchored
+
+
+def fail_if_not_identified(
+    model_spec: ModelSpec,
+    fixed_params: pd.DataFrame | None = None,
+    constraints: list[om.constraints.Constraint] | None = None,
+) -> None:
+    """Raise if any factor's initial-period affine orbit is unanchored.
+
+    The estimator-agnostic gate every entry point runs by default:
+    `check_identification` collects the missing period-0 scale/location anchors
+    and this wrapper turns a non-empty result into a `ValueError`. Identification
+    of the initial latent distribution is a property of the model, not of the
+    estimator, so AF, CHS and AMN all enforce it. Anchors may come from
+    `Normalizations`, `fixed_params`, or a connected equality constraint (all
+    passed through to `check_identification`).
+
+    Raises:
+        ValueError: If the initial-anchor precheck reports any problem.
+
+    """
+    problems = check_identification(model_spec, fixed_params, constraints)
+    if problems:
+        msg = "ModelSpec is not identified:\n" + "\n".join(
+            f"  - {problem}" for problem in problems
+        )
+        raise ValueError(msg)
 
 
 def check_identification(

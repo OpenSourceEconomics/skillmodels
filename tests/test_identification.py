@@ -14,9 +14,13 @@ from collections.abc import Mapping
 
 import optimagic as om
 import pandas as pd
+import pytest
 
 from skillmodels.common.constraints import select_by_loc
-from skillmodels.common.identification import check_identification
+from skillmodels.common.identification import (
+    check_identification,
+    fail_if_not_identified,
+)
 from skillmodels.common.model_spec import (
     FactorSpec,
     ModelSpec,
@@ -177,3 +181,22 @@ def test_check_identification_honours_fixed_params_anchor() -> None:
         ),
     )
     assert check_identification(model, fixed_params=fixed) == []
+
+
+def test_fail_if_not_identified_raises_when_location_unanchored() -> None:
+    """A factor with a scale anchor but no period-0 location anchor is rejected."""
+    model = _model(
+        skills_loadings=({"y1": 1},) * 2,
+        skills_intercepts=({}, {}),
+    )
+    with pytest.raises(ValueError, match="not identified"):
+        fail_if_not_identified(model)
+
+
+def test_fail_if_not_identified_passes_a_fully_anchored_model() -> None:
+    """A model with both period-0 scale and location anchors passes silently."""
+    model = _model(
+        skills_loadings=({"y1": 1},) * 2,
+        skills_intercepts=({"y1": 0},) * 2,
+    )
+    fail_if_not_identified(model)

@@ -33,6 +33,7 @@ from skillmodels.amn.types import (
     MinimumDistanceResult,
     MixtureFitResult,
 )
+from skillmodels.common.identification import fail_if_not_identified
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 from skillmodels.common.types import ProcessedModel
@@ -171,6 +172,7 @@ def estimate_amn(
     fixed_params: pd.DataFrame | None = None,
     constraints: list[om.constraints.Constraint] | None = None,
     *,
+    require_identification: bool = True,
     linearize_control_function: bool = False,
     for_start_values: bool = False,
 ) -> AMNEstimationResult:
@@ -194,6 +196,15 @@ def estimate_amn(
         constraints: Not honoured -- raises `NotImplementedError` when a
             non-empty list is passed. The AMN stages have no optimiser in
             which to impose equality/other constraints.
+        require_identification: When True (the default), run the
+            estimator-agnostic period-0 anchor check (`fail_if_not_identified`)
+            and raise `ValueError` if the initial latent distribution has no
+            scale or location anchor. Set False only for models that are
+            intentionally location-under-identified (e.g. the original CHS
+            replication convention with a free initial mean seeded to 0). The
+            check is also skipped automatically when `for_start_values=True`,
+            since the seeding estimator owns identification and runs its own
+            gate.
         linearize_control_function: When True, fit only the linear `cf` term
             of any `CorrectionSpec` and skip the higher-order
             `NotImplementedError` gate. Used when AMN seeds `estimate_chs`:
@@ -210,6 +221,8 @@ def estimate_amn(
         params DataFrame.
 
     """
+    if require_identification and not for_start_values:
+        fail_if_not_identified(model_spec, fixed_params, constraints)
     if start_params is not None or constraints:
         raise NotImplementedError(
             "estimate_amn does not honour start_params or constraints. The "
