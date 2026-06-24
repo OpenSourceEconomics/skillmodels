@@ -723,6 +723,12 @@ def af_per_obs_loglike_transition(
     n_shock_factors: int | None = None,
     shock_factor_indices: Array | None = None,
     n_obs_per_batch: int | None = None,
+    measurement_families: Array | None = None,
+    measurement_lowers: Array | None = None,
+    measurement_uppers: Array | None = None,
+    prev_measurement_families: Array | None = None,
+    prev_measurement_lowers: Array | None = None,
+    prev_measurement_uppers: Array | None = None,
 ) -> Array:
     """Per-observation log-likelihood for a transition period (Step t).
 
@@ -775,6 +781,7 @@ def af_per_obs_loglike_transition(
         controls=controls,
         loading_mask=loading_mask,
         prev_residuals_base=prev_residuals_base,
+        prev_measurements_safe=safe_prev_measurements,
         prev_meas_mask=prev_meas_mask,
         prev_full_loadings=prev_full_loadings,
         prev_meas_sds=prev_meas_sds,
@@ -792,6 +799,12 @@ def af_per_obs_loglike_transition(
         observed_factor_values=observed_factor_values,
         stability_floor=stability_floor,
         n_obs_per_batch=n_obs_per_batch,
+        measurement_families=measurement_families,
+        measurement_lowers=measurement_lowers,
+        measurement_uppers=measurement_uppers,
+        prev_measurement_families=prev_measurement_families,
+        prev_measurement_lowers=prev_measurement_lowers,
+        prev_measurement_uppers=prev_measurement_uppers,
     )
 
 
@@ -826,6 +839,12 @@ def af_loglike_transition(
     n_shock_factors: int | None = None,
     shock_factor_indices: Array | None = None,
     n_obs_per_batch: int | None = None,
+    measurement_families: Array | None = None,
+    measurement_lowers: Array | None = None,
+    measurement_uppers: Array | None = None,
+    prev_measurement_families: Array | None = None,
+    prev_measurement_lowers: Array | None = None,
+    prev_measurement_uppers: Array | None = None,
 ) -> Array:
     """Negative log-likelihood for a transition period (Step t).
 
@@ -908,6 +927,16 @@ def af_loglike_transition(
             ``None`` falls back to ``jax.vmap`` (single kernel); a positive
             integer uses ``jax.lax.map`` so the backward-pass tape only
             retains one chunk at a time.
+        measurement_families: Optional shape-``(n_measures,)`` `MeasurementFamily`
+            codes for the current period. ``None`` is all-Gaussian (parity).
+        measurement_lowers: Optional shape-``(n_measures,)`` current-period Tobit
+            lower bounds (``-inf`` where not censored below).
+        measurement_uppers: Optional shape-``(n_measures,)`` current-period Tobit
+            upper bounds (``+inf`` where not censored above).
+        prev_measurement_families: Optional shape-``(n_prev_measures,)`` family
+            codes for the previous-period measurement block. ``None`` is Gaussian.
+        prev_measurement_lowers: Optional previous-period Tobit lower bounds.
+        prev_measurement_uppers: Optional previous-period Tobit upper bounds.
 
     Return:
         Scalar negative log-likelihood.
@@ -943,6 +972,12 @@ def af_loglike_transition(
         n_shock_factors=n_shock_factors,
         shock_factor_indices=shock_factor_indices,
         n_obs_per_batch=n_obs_per_batch,
+        measurement_families=measurement_families,
+        measurement_lowers=measurement_lowers,
+        measurement_uppers=measurement_uppers,
+        prev_measurement_families=prev_measurement_families,
+        prev_measurement_lowers=prev_measurement_lowers,
+        prev_measurement_uppers=prev_measurement_uppers,
     )
     return -jnp.mean(log_likes)
 
@@ -1016,6 +1051,7 @@ def _transition_loglike_per_obs(
     controls: Array,
     loading_mask: Array,
     prev_residuals_base: Array,
+    prev_measurements_safe: Array,
     prev_meas_mask: Array,
     prev_full_loadings: Array,
     prev_meas_sds: Array,
@@ -1033,6 +1069,12 @@ def _transition_loglike_per_obs(
     observed_factor_values: Array,
     stability_floor: float,
     n_obs_per_batch: int | None = None,
+    measurement_families: Array | None = None,
+    measurement_lowers: Array | None = None,
+    measurement_uppers: Array | None = None,
+    prev_measurement_families: Array | None = None,
+    prev_measurement_lowers: Array | None = None,
+    prev_measurement_uppers: Array | None = None,
 ) -> Array:
     """Compute per-observation log-likelihood for a transition period.
 
@@ -1056,6 +1098,17 @@ def _transition_loglike_per_obs(
     full_loadings = jnp.zeros((n_measures, n_loading_factors))
     full_loadings = full_loadings.at[loading_mask].set(loadings_flat)
 
+    families, lowers, uppers = _resolve_families(
+        n_measures, measurement_families, measurement_lowers, measurement_uppers
+    )
+    n_prev_measures = prev_full_loadings.shape[0]
+    prev_families, prev_lowers, prev_uppers = _resolve_families(
+        n_prev_measures,
+        prev_measurement_families,
+        prev_measurement_lowers,
+        prev_measurement_uppers,
+    )
+
     # NaN-safety for current-period measurements (see `_initial_loglike_per_obs`).
     meas_mask = jnp.isfinite(measurements)
     safe_measurements = jnp.where(meas_mask, measurements, 0.0)
@@ -1073,7 +1126,9 @@ def _transition_loglike_per_obs(
     @jax.checkpoint
     def _single_obs(
         residual_base: Array,
+        y_meas: Array,
         prev_residual_base: Array,
+        prev_y_meas: Array,
         obs_cond_weights: Array,
         obs_factor_values: Array,
         obs_cond_means: Array,
@@ -1083,13 +1138,21 @@ def _transition_loglike_per_obs(
     ) -> Array:
         return _integrate_transition_single_obs(
             residual_base=residual_base,
+            y_meas=y_meas,
             meas_mask=meas_mask_i,
             full_loadings=full_loadings,
             meas_sds=meas_sds,
+            measurement_families=families,
+            measurement_lowers=lowers,
+            measurement_uppers=uppers,
             prev_residual_base=prev_residual_base,
+            prev_y_meas=prev_y_meas,
             prev_meas_mask=prev_meas_mask_i,
             prev_full_loadings=prev_full_loadings,
             prev_meas_sds=prev_meas_sds,
+            prev_measurement_families=prev_families,
+            prev_measurement_lowers=prev_lowers,
+            prev_measurement_uppers=prev_uppers,
             obs_cond_weights=obs_cond_weights,
             obs_cond_means=obs_cond_means,
             cond_chols=cond_chols,
@@ -1114,7 +1177,9 @@ def _transition_loglike_per_obs(
     return _map_over_obs(
         _single_obs,
         residuals_base,
+        safe_measurements,
         prev_residuals_base,
+        prev_measurements_safe,
         cond_weights,
         observed_factor_values,
         cond_means_by_obs,
@@ -1234,13 +1299,21 @@ def _rebuild_chain_at_period(
 def _integrate_transition_single_obs(
     *,
     residual_base: Array,
+    y_meas: Array,
     meas_mask: Array,
     full_loadings: Array,
     meas_sds: Array,
+    measurement_families: Array,
+    measurement_lowers: Array,
+    measurement_uppers: Array,
     prev_residual_base: Array,
+    prev_y_meas: Array,
     prev_meas_mask: Array,
     prev_full_loadings: Array,
     prev_meas_sds: Array,
+    prev_measurement_families: Array,
+    prev_measurement_lowers: Array,
+    prev_measurement_uppers: Array,
     obs_cond_weights: Array | np.ndarray,
     obs_cond_means: Array | np.ndarray,
     cond_chols: Array | np.ndarray,
@@ -1365,10 +1438,13 @@ def _integrate_transition_single_obs(
             # a per-obs constant that is invariant under the parameters.
             prev_state_loadings = prev_full_loadings[:, state_factor_indices_in_latent]
             prev_residuals = prev_residual_base - prev_state_loadings @ theta_prev
-            prev_log_pdf = _log_normal_pdf(
+            prev_log_pdf = _measurement_log_density(
+                prev_y_meas,
                 prev_residuals,
-                jnp.zeros_like(prev_residuals),
                 prev_meas_sds,
+                prev_measurement_families,
+                prev_measurement_lowers,
+                prev_measurement_uppers,
             )
             log_prev_inv_meas = jnp.sum(jnp.where(prev_meas_mask, prev_log_pdf, 0.0))
 
@@ -1393,7 +1469,14 @@ def _integrate_transition_single_obs(
             # CHS/AMN reading (period-t indicators measure I_t).
             all_factors_t = jnp.concatenate([theta_t, inv])
             residuals = residual_base - full_loadings @ all_factors_t
-            log_pdf = _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
+            log_pdf = _measurement_log_density(
+                y_meas,
+                residuals,
+                meas_sds,
+                measurement_families,
+                measurement_lowers,
+                measurement_uppers,
+            )
             log_meas = jnp.sum(jnp.where(meas_mask, log_pdf, 0.0))
 
             log_kernel = (
