@@ -35,10 +35,7 @@ from skillmodels.af.params import (
     get_normalizations_for_period,
     get_transition_period_params_index,
 )
-from skillmodels.af.step_data import (
-    build_block_loading_mask,
-    build_step_measurement_array,
-)
+from skillmodels.af.step_assembly import AFStepArrays, assemble_step_arrays
 from skillmodels.af.step_layout import (
     AFFactorInfo,
     AFFactorRole,
@@ -84,7 +81,7 @@ def estimate_transition_period(
     fixed_params: pd.DataFrame | None = None,
     user_constraints: list[om.constraints.Constraint] | None = None,
     frames_by_period: Mapping[int, pd.DataFrame] | None = None,
-    historical: HistoricalParams | None = None,  # noqa: ARG001
+    historical: HistoricalParams | None = None,
 ) -> tuple[AFPeriodResult, ConditionalDistribution]:
     """Estimate a transition period (Step t, t >= 1) of the AF procedure.
 
@@ -118,8 +115,9 @@ def estimate_transition_period(
         frames_by_period: Per-period individual-ID-indexed measurement frames,
             required for endogenous / static-persistent models (the source/
             destination calendar adapter sources the target block from them).
-        historical: Cumulative parameter registry; reserved for the
-            static-persistent importance block.
+        historical: Cumulative parameter registry; supplies the fixed importance
+            block (source skills + static-persistent period-0 rows) when the
+            calendar adapter is active.
 
     Return:
         Tuple of (AFPeriodResult, ConditionalDistribution). The returned
@@ -166,7 +164,7 @@ def estimate_transition_period(
 
     normalizations = get_normalizations_for_period(model_spec.factors, period=period)
 
-    measurements, all_measures, loading_mask, params_template = (
+    measurements, all_measures, loading_mask, params_template, step_arrays = (
         _assemble_target_measurements(
             period=period,
             model_spec=model_spec,
@@ -179,6 +177,7 @@ def estimate_transition_period(
             observed_factors=observed_factors,
             measurements=measurements,
             frames_by_period=frames_by_period,
+            historical=historical,
             normalizations=normalizations,
         )
     )
@@ -333,6 +332,7 @@ def estimate_transition_period(
         transition_constraints=transition_constraints,
         fixed_params=fixed_params,
         user_constraints=user_constraints,
+        importance=step_arrays,
     )
 
     # Build the next ChainLink from the just-fitted period parameters and
@@ -392,9 +392,10 @@ def _assemble_target_measurements(
     observed_factors: tuple[str, ...],
     measurements: Array,
     frames_by_period: Mapping[int, pd.DataFrame] | None,
+    historical: HistoricalParams | None,
     normalizations: dict[str, dict[tuple[str, str], float]],
-) -> tuple[Array, list[str], np.ndarray, pd.DataFrame]:
-    """Build the target measurements, names, loading mask, and params template.
+) -> tuple[Array, list[str], np.ndarray, pd.DataFrame, AFStepArrays | None]:
+    """Build the target measurements, names, loading mask, params template, arrays.
 
     With endogenous or static-persistent factors the target block mixes calendars
     (destination skills at period d, source investment at period s), sourced from the
@@ -430,12 +431,12 @@ def _assemble_target_measurements(
         params_template = create_af_params_template(
             params_index, normalizations, period=period
         )
-        return measurements, all_measures, loading_mask, params_template
+        return measurements, all_measures, loading_mask, params_template, None
 
-    if frames_by_period is None:
+    if frames_by_period is None or historical is None:
         msg = (
-            "frames_by_period is required for AF models with endogenous or "
-            "static-persistent factors."
+            "frames_by_period and historical are required for AF models with "
+            "endogenous or static-persistent factors."
         )
         raise ValueError(msg)
     n_calendar_periods = max(
@@ -446,12 +447,12 @@ def _assemble_target_measurements(
         n_periods=n_calendar_periods,
     )[period - 1]
     target_terms = layout.target_terms()
-    _ids, target_values, _order = build_step_measurement_array(
-        target_terms, frames_by_period
+    step_arrays = assemble_step_arrays(
+        layout, frames_by_period, factors, historical, controls_names
     )
-    measurements = jnp.asarray(target_values)
+    measurements = jnp.asarray(step_arrays.target_measurements)
     all_measures = [term.measurement for term in target_terms]
-    loading_mask = build_block_loading_mask(target_terms, factors)
+    loading_mask = step_arrays.target_loading_mask
     params_index = get_transition_period_params_index(
         period=period,
         latent_factors=state_factors,
@@ -469,7 +470,7 @@ def _assemble_target_measurements(
     params_template = _apply_layout_normalizations(
         params_template, model_spec, target_terms
     )
-    return measurements, all_measures, loading_mask, params_template
+    return measurements, all_measures, loading_mask, params_template, step_arrays
 
 
 def _factor_infos_from_spec(
@@ -555,6 +556,7 @@ def _run_transition_optimization(
     transition_constraints: list[om.constraints.Constraint],
     fixed_params: pd.DataFrame | None,
     user_constraints: list[om.constraints.Constraint] | None = None,
+    importance: AFStepArrays | None = None,
 ) -> tuple[pd.DataFrame, om.OptimizeResult]:
     """Build likelihood, run the optimizer, and return updated params.
 
@@ -570,12 +572,25 @@ def _run_transition_optimization(
         params_template, fixed_params
     )
 
-    prev_meas_info = _extract_prev_measurement_params(
-        prev_period_params,
-        model_spec,
-        factors,
-        period - 1,
-    )
+    # Importance/previous block. With the calendar adapter, the importance block is
+    # the layout's fixed source-skills (+ static-persistent period-0) rows from
+    # history -- it excludes the source investment (which is the free target). Without
+    # the adapter, fall back to extracting all previous-period measurement params.
+    if importance is not None:
+        prev_measurements = jnp.asarray(importance.importance_measurements)
+        prev_meas_info = {
+            "loading_mask": importance.importance_loading_mask,
+            "control_params": importance.importance_control_params,
+            "loadings_flat": importance.importance_loadings_flat,
+            "meas_sds": importance.importance_meas_sds,
+        }
+    else:
+        prev_meas_info = _extract_prev_measurement_params(
+            prev_period_params,
+            model_spec,
+            factors,
+            period - 1,
+        )
 
     n_obs_per_batch = af_options.n_obs_per_batch
     if n_obs_per_batch is None:

@@ -212,11 +212,12 @@ def estimate_af(
             break
 
         prev_period_params = period_results[-1].params
-        # The cumulative registry is only consumed by the static-persistent
-        # importance block; build it only then (and only then is its
-        # unique-index invariant guaranteed to hold).
+        # The cumulative registry feeds the calendar adapter's fixed importance
+        # block (source skills + static-persistent period-0 rows). Build it whenever
+        # the layout path is active (reconstructed investment or static factors).
         needs_historical = any(
-            spec.af_state_role == "static_persistent"
+            (spec.is_endogenous and not spec.has_initial_distribution)
+            or spec.af_state_role == "static_persistent"
             for spec in model_spec.factors.values()
         )
         historical = (
