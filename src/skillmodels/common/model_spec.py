@@ -12,10 +12,45 @@ from types import MappingProxyType
 from typing import Any, Self
 
 from skillmodels._beartype_conf import MODEL_SPEC_CONF, beartype_init
+from skillmodels.common.measurement_models import (
+    GaussianMeasurement,
+    MeasurementModel,
+    ProbitMeasurement,
+    TobitMeasurement,
+)
 from skillmodels.common.types import (
     Normalizations,
     ensure_containers_are_immutable,
 )
+
+
+def _parse_measurement_models(
+    spec: Mapping[str, Mapping[str, Any]] | None,
+) -> dict[str, MeasurementModel]:
+    """Build `MeasurementModel` instances from a `from_dict` measurement_models map.
+
+    Each entry is `{family: "gaussian" | "probit" | "tobit", lower?, upper?}`.
+    """
+    if not spec:
+        return {}
+    models: dict[str, MeasurementModel] = {}
+    for name, cfg in spec.items():
+        family = cfg.get("family", "gaussian")
+        if family == "gaussian":
+            models[name] = GaussianMeasurement()
+        elif family == "probit":
+            models[name] = ProbitMeasurement()
+        elif family == "tobit":
+            models[name] = TobitMeasurement(
+                lower=cfg.get("lower", 0.0), upper=cfg.get("upper")
+            )
+        else:
+            msg = (
+                f"measurement_models['{name}'] has unknown family '{family}'; "
+                "expected 'gaussian', 'probit', or 'tobit'."
+            )
+            raise ValueError(msg)
+    return models
 
 
 @beartype_init(MODEL_SPEC_CONF)
@@ -161,6 +196,11 @@ class ModelSpec:
     """Anchoring specification."""
     n_mixtures: int = 1
     """Number of Gaussian-mixture components in the latent-factor distribution."""
+    measurement_models: MappingProxyType[str, MeasurementModel] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    """Per-variable observation model (probit / Tobit / Gaussian). A measurement
+    omitted from this mapping is Gaussian, so existing specs are unchanged."""
 
     def __init__(
         self,
@@ -170,6 +210,7 @@ class ModelSpec:
         stagemap: tuple[int, ...] | None = None,
         anchoring: AnchoringSpec | None = None,
         n_mixtures: int = 1,
+        measurement_models: Mapping[str, MeasurementModel] | None = None,
     ) -> None:
         """Create ModelSpec, wrapping factors dict in MappingProxyType."""
         object.__setattr__(self, "_factors", ensure_containers_are_immutable(factors))
@@ -178,6 +219,37 @@ class ModelSpec:
         object.__setattr__(self, "stagemap", stagemap)
         object.__setattr__(self, "anchoring", anchoring)
         object.__setattr__(self, "n_mixtures", n_mixtures)
+        self._set_measurement_models(measurement_models)
+
+    def _set_measurement_models(
+        self, measurement_models: Mapping[str, MeasurementModel] | None
+    ) -> None:
+        """Validate measurement-model keys against the model's measures and store."""
+        models = dict(measurement_models or {})
+        known = self._measurement_names()
+        unknown = sorted(name for name in models if name not in known)
+        if unknown:
+            msg = (
+                f"measurement_models references {unknown}, which is not a measurement "
+                f"variable in the model. Known measurements: {sorted(known)}."
+            )
+            raise ValueError(msg)
+        object.__setattr__(
+            self, "measurement_models", ensure_containers_are_immutable(models)
+        )
+
+    def _measurement_names(self) -> set[str]:
+        """Return every measurement-variable name across all factors and periods."""
+        return {
+            meas
+            for spec in self._factors.values()
+            for period in spec.measurements
+            for meas in period
+        }
+
+    def measurement_model(self, name: str) -> MeasurementModel:
+        """Return the observation model for a measurement (Gaussian if unlisted)."""
+        return self.measurement_models.get(name, GaussianMeasurement())
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Self:
@@ -240,6 +312,8 @@ class ModelSpec:
         observed = tuple(d.get("observed_factors", []))
         observed += tuple(i for i in auto_instruments if i not in observed)
 
+        measurement_models = _parse_measurement_models(d.get("measurement_models"))
+
         return cls(
             factors=factors,
             observed_factors=observed,
@@ -247,6 +321,7 @@ class ModelSpec:
             stagemap=tuple(stagemap) if stagemap is not None else None,
             anchoring=anchoring,
             n_mixtures=d.get("n_mixtures", 1),
+            measurement_models=measurement_models,
         )
 
     @property
@@ -263,6 +338,9 @@ class ModelSpec:
             stagemap=changes.get("stagemap", self.stagemap),
             anchoring=changes.get("anchoring", self.anchoring),
             n_mixtures=changes.get("n_mixtures", self.n_mixtures),
+            measurement_models=changes.get(
+                "measurement_models", self.measurement_models
+            ),
         )
 
     def with_transition_functions(

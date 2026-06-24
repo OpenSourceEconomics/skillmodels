@@ -19,12 +19,58 @@ The three families:
 """
 
 import enum
+import math
+from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
 from jax import Array
 from jax.scipy.special import log_ndtr
 from jax.scipy.stats import norm
+
+
+@dataclass(frozen=True)
+class GaussianMeasurement:
+    """Continuous measure with a free normal measurement-error SD (the default)."""
+
+
+@dataclass(frozen=True)
+class ProbitMeasurement:
+    """Binary 0/1 measure with a standard-normal latent error (scale fixed to 1)."""
+
+
+@dataclass(frozen=True)
+class TobitMeasurement:
+    """Censored-normal measure (not truncated, selected, or zero-inflated).
+
+    `lower` / `upper` are the known censoring bounds; `None` disables that side.
+    At least one bound must be finite. Observations equal to a bound are treated as
+    censored (tail mass); interior observations use the normal density.
+    """
+
+    lower: float | None = 0.0
+    """Lower censoring bound, or `None` for no lower censoring."""
+    upper: float | None = None
+    """Upper censoring bound, or `None` for no upper censoring."""
+
+    def __post_init__(self) -> None:  # noqa: D105
+        if self.lower is None and self.upper is None:
+            msg = "TobitMeasurement needs at least one finite censoring bound."
+            raise ValueError(msg)
+        if (
+            self.lower is not None
+            and self.upper is not None
+            and self.lower >= self.upper
+        ):
+            msg = (
+                f"TobitMeasurement lower bound ({self.lower}) must be strictly below "
+                f"the upper bound ({self.upper})."
+            )
+            raise ValueError(msg)
+
+
+# A measurement's observation model, attached per variable on `ModelSpec`.
+MeasurementModel = GaussianMeasurement | ProbitMeasurement | TobitMeasurement
 
 
 class MeasurementFamily(enum.IntEnum):
@@ -38,6 +84,23 @@ class MeasurementFamily(enum.IntEnum):
     GAUSSIAN = 0
     PROBIT = 1
     TOBIT = 2
+
+
+def resolve_measurement_family(
+    model: MeasurementModel,
+) -> tuple[MeasurementFamily, float, float]:
+    """Map a public `MeasurementModel` to its internal `(family, lower, upper)`.
+
+    `lower` / `upper` are the censoring bounds threaded to `measurement_loglik`;
+    non-Tobit families and open Tobit sides use `-inf` / `+inf`.
+    """
+    if isinstance(model, ProbitMeasurement):
+        return MeasurementFamily.PROBIT, -math.inf, math.inf
+    if isinstance(model, TobitMeasurement):
+        lower = -math.inf if model.lower is None else float(model.lower)
+        upper = math.inf if model.upper is None else float(model.upper)
+        return MeasurementFamily.TOBIT, lower, upper
+    return MeasurementFamily.GAUSSIAN, -math.inf, math.inf
 
 
 def measurement_loglik(

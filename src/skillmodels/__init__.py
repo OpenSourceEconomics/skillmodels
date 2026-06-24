@@ -35,6 +35,11 @@ from skillmodels.common.individual_states import (  # noqa: E402
     get_individual_states,
     get_individual_states_from_params,
 )
+from skillmodels.common.measurement_models import (  # noqa: E402
+    GaussianMeasurement,
+    ProbitMeasurement,
+    TobitMeasurement,
+)
 from skillmodels.common.model_spec import (  # noqa: E402
     AnchoringSpec,
     CorrectionSpec,
@@ -55,8 +60,11 @@ __all__ = [
     "CommonEstimationResult",
     "CorrectionSpec",
     "FactorSpec",
+    "GaussianMeasurement",
     "ModelSpec",
     "Normalizations",
+    "ProbitMeasurement",
+    "TobitMeasurement",
     "estimate_af",
     "estimate_amn",
     "estimate_chs",
