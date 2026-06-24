@@ -24,7 +24,10 @@ from skillmodels.common.constraints import (
     enforce_fixed_constraints,
     reconcile_start_to_equality,
 )
-from skillmodels.common.identification import fail_if_not_identified
+from skillmodels.common.identification import (
+    fail_if_not_identified,
+    warn_if_overrestricted,
+)
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.types import to_plain_dict
 
@@ -68,7 +71,10 @@ def estimate_chs(
             intentionally location-under-identified -- e.g. the original CHS
             replication convention, where the initial latent mean is a free
             parameter seeded to 0 rather than pinned by an intercept
-            normalization.
+            normalization. When True it also emits a `UserWarning`
+            (`warn_if_overrestricted`) for any period-0 orbit direction pinned
+            more than once, since such surplus pins are testable restrictions
+            rather than free normalizations.
 
     Return:
         `CHSEstimationResult` with the estimated `params`, the `success`
@@ -80,6 +86,7 @@ def estimate_chs(
     options = options or CHSEstimationOptions()
     if require_identification:
         fail_if_not_identified(model_spec, fixed_params, constraints)
+        warn_if_overrestricted(model_spec, fixed_params, constraints)
 
     max_inputs = get_maximization_inputs(
         model_spec=model_spec,

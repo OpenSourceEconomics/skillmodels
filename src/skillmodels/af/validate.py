@@ -5,7 +5,10 @@ import warnings
 import optimagic as om
 import pandas as pd
 
-from skillmodels.common.identification import check_identification
+from skillmodels.common.identification import (
+    check_identification,
+    warn_if_overrestricted,
+)
 from skillmodels.common.model_spec import FactorSpec, ModelSpec
 
 # Transition functions compatible with AF estimation (parametric, differentiable).
@@ -115,6 +118,7 @@ def validate_af_model(
 
     errors.extend(check_identification(model_spec, fixed_params, constraints))
 
+    warn_if_overrestricted(model_spec, fixed_params, constraints)
     _warn_on_observed_factor_leakage(model_spec)
 
     if errors:

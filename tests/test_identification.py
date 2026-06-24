@@ -20,6 +20,7 @@ from skillmodels.common.constraints import select_by_loc
 from skillmodels.common.identification import (
     check_identification,
     fail_if_not_identified,
+    find_excess_initial_restrictions,
 )
 from skillmodels.common.model_spec import (
     FactorSpec,
@@ -281,3 +282,45 @@ def test_check_identification_rejects_zero_loading_tied_to_intercept() -> None:
     ]
     problems = check_identification(model, constraints=constraints)
     assert any("scale anchor" in problem for problem in problems)
+
+
+def test_find_excess_initial_restrictions_flags_second_scale_and_location_pin() -> None:
+    """A second loading pin and an extra initial-mean pin are testable restrictions.
+
+    The factor pins two period-0 loadings (`y1`, `y2`) and both a measurement
+    intercept and an initial-component mean, so each one-dimensional orbit direction
+    is pinned twice; the surplus pins are testable, not normalizations.
+    """
+    model = _model(
+        skills_loadings=({"y1": 1.0, "y2": 1.0}, {"y1": 1.0}),
+        skills_intercepts=({"y1": 0.0}, {"y1": 0.0}),
+    )
+    fixed = _fixed([(("initial_states", 0, "mixture_0", "skills"), 0.0)])
+    excess = find_excess_initial_restrictions(model, fixed_params=fixed)
+    assert any("scale" in item and "testable" in item for item in excess)
+    assert any("location" in item and "testable" in item for item in excess)
+
+
+def test_find_excess_initial_restrictions_clean_model_is_empty() -> None:
+    """One scale pin and one location pin per factor are normalizations, not excess."""
+    model = _model(
+        skills_loadings=({"y1": 1.0}, {"y1": 1.0}),
+        skills_intercepts=({"y1": 0.0}, {"y1": 0.0}),
+    )
+    assert find_excess_initial_restrictions(model) == []
+
+
+def test_find_excess_initial_restrictions_ignores_equality_tied_pins() -> None:
+    """Two loadings tied equal are one restriction, so they are not flagged."""
+    model = _model(
+        skills_loadings=({"y1": 1.0, "y2": 1.0}, {"y1": 1.0}),
+        skills_intercepts=({"y1": 0.0}, {"y1": 0.0}),
+    )
+    constraints = [
+        _equality(
+            ("loadings", 0, "y1", "skills"),
+            ("loadings", 0, "y2", "skills"),
+        )
+    ]
+    excess = find_excess_initial_restrictions(model, constraints=constraints)
+    assert not any("scale" in item for item in excess)

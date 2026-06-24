@@ -54,6 +54,8 @@ diagnostic.
 """
 
 import math
+import warnings
+from collections.abc import Iterable
 
 import optimagic as om
 import pandas as pd
@@ -246,3 +248,103 @@ def check_identification(
                 f"(`initial_states`, the CHS convention), or an equality constraint."
             )
     return problems
+
+
+def find_excess_initial_restrictions(
+    model_spec: ModelSpec,
+    fixed_params: pd.DataFrame | None = None,
+    constraints: list[om.constraints.Constraint] | None = None,
+) -> list[str]:
+    """Report period-0 anchoring restrictions that exceed the affine orbit (Pro F4).
+
+    `check_identification` is one-sided: it flags *too few* anchors. This is the
+    complementary side -- it flags *too many*. Each factor's initial affine orbit
+    has exactly two free directions, one scale and one location, so exactly one
+    independent scale pin and one independent location pin are normalizations. Any
+    further independent pin is a *testable* restriction: it constrains an identified
+    feature of the model and can move the pseudo-true estimate under misspecification,
+    rather than merely choosing units or origin. A second period-0 loading pin and a
+    simultaneous measurement-intercept + initial-mean pin are the common cases.
+
+    Returns one human-readable string per over-restricted scale/location block; an
+    empty list means each orbit direction is pinned at most once. Pins tied together
+    by an equality constraint count as a single restriction, so consistent equality
+    chains never trip the check.
+    """
+    pinned = _pinned_values(model_spec, fixed_params)
+    components = _equality_components(constraints)
+    component_of: dict[tuple[object, ...], int] = {}
+    for index, component in enumerate(components):
+        for key in component:
+            component_of[key] = index
+
+    def _independent_count(keys: Iterable[tuple[object, ...]]) -> int:
+        return len({component_of.get(key, key) for key in keys})
+
+    messages: list[str] = []
+    for factor_name, spec in model_spec.factors.items():
+        if not spec.has_initial_distribution:
+            continue
+        if len(spec.measurements) == 0 or len(spec.measurements[0]) == 0:
+            continue
+        measures = spec.measurements[0]
+
+        scale_keys = [
+            key
+            for meas in measures
+            if (key := ("loadings", 0, meas, factor_name)) in pinned
+            and _is_scale_anchor_value(pinned[key])
+        ]
+        location_keys = [
+            key
+            for meas in measures
+            if (key := ("controls", 0, meas, "constant")) in pinned
+            and _is_location_anchor_value(pinned[key])
+        ] + [
+            key
+            for component in range(model_spec.n_mixtures)
+            if (key := ("initial_states", 0, f"mixture_{component}", factor_name))
+            in pinned
+            and _is_location_anchor_value(pinned[key])
+        ]
+
+        n_scale = _independent_count(scale_keys)
+        if n_scale > 1:
+            messages.append(
+                f"Factor '{factor_name}' period 0: {n_scale} independent scale pins "
+                f"(loadings), but the initial scale orbit has one direction. "
+                f"{n_scale - 1} of them are testable restrictions, not "
+                f"normalizations -- they constrain identified features and can move "
+                f"the estimate under misspecification."
+            )
+        n_location = _independent_count(location_keys)
+        if n_location > 1:
+            messages.append(
+                f"Factor '{factor_name}' period 0: {n_location} independent location "
+                f"pins (measurement intercept and/or initial-component mean), but the "
+                f"initial location orbit has one direction. {n_location - 1} of them "
+                f"are testable restrictions, not normalizations."
+            )
+    return messages
+
+
+def warn_if_overrestricted(
+    model_spec: ModelSpec,
+    fixed_params: pd.DataFrame | None = None,
+    constraints: list[om.constraints.Constraint] | None = None,
+    *,
+    stacklevel: int = 3,
+) -> None:
+    """Emit a `UserWarning` for each period-0 restriction beyond a normalization.
+
+    The mirror image of `fail_if_not_identified`: that gate fires when an initial
+    orbit direction is UNPINNED (under-identification); this one fires when a
+    direction is pinned MORE THAN ONCE. A surplus pin constrains an identified
+    feature, so it is a testable restriction rather than a free normalization and can
+    move the estimate under misspecification. Warning (not raising) keeps such models
+    estimable while flagging the implicit restriction to the user.
+    """
+    for restriction in find_excess_initial_restrictions(
+        model_spec, fixed_params, constraints
+    ):
+        warnings.warn(restriction, UserWarning, stacklevel=stacklevel)

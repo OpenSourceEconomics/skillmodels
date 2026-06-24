@@ -33,7 +33,10 @@ from skillmodels.amn.types import (
     MinimumDistanceResult,
     MixtureFitResult,
 )
-from skillmodels.common.identification import fail_if_not_identified
+from skillmodels.common.identification import (
+    fail_if_not_identified,
+    warn_if_overrestricted,
+)
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 from skillmodels.common.types import ProcessedModel
@@ -204,7 +207,10 @@ def estimate_amn(
             replication convention with a free initial mean seeded to 0). The
             check is also skipped automatically when `for_start_values=True`,
             since the seeding estimator owns identification and runs its own
-            gate.
+            gate. When True it also emits a `UserWarning`
+            (`warn_if_overrestricted`) for any period-0 orbit direction pinned
+            more than once, since such surplus pins are testable restrictions
+            rather than free normalizations.
         linearize_control_function: When True, fit only the linear `cf` term
             of any `CorrectionSpec` and skip the higher-order
             `NotImplementedError` gate. Used when AMN seeds `estimate_chs`:
@@ -223,6 +229,7 @@ def estimate_amn(
     """
     if require_identification and not for_start_values:
         fail_if_not_identified(model_spec, fixed_params, constraints)
+        warn_if_overrestricted(model_spec, fixed_params, constraints)
     if start_params is not None or constraints:
         raise NotImplementedError(
             "estimate_amn does not honour start_params or constraints. The "
