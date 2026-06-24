@@ -11,7 +11,6 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 import pandas as pd
-from numpy.typing import NDArray
 
 from skillmodels.af.step_layout import AFMeasurementTerm
 
@@ -19,7 +18,7 @@ from skillmodels.af.step_layout import AFMeasurementTerm
 def build_step_measurement_array(
     terms: Sequence[AFMeasurementTerm],
     frames_by_period: Mapping[int, pd.DataFrame],
-) -> tuple[NDArray[np.int64], NDArray[np.float64], list[tuple[str, int]]]:
+) -> tuple[np.ndarray, np.ndarray, list[tuple[str, int]]]:
     """Assemble one ID-aligned measurement value array for a set of step terms.
 
     Each term's column is read from `frames_by_period[term.data_period]` at the term's
@@ -68,11 +67,12 @@ def build_step_measurement_array(
 def build_block_loading_mask(
     terms: Sequence[AFMeasurementTerm],
     latent_factors: Sequence[str],
-) -> NDArray[np.bool_]:
+) -> np.ndarray:
     """Build the `(n_terms, n_latent_factors)` boolean loading mask for a block.
 
     Row `j` is `True` in the `latent_factors` columns that term `j` loads on, matching
-    the latent-factor ordering the integrand dots loadings against.
+    the latent-factor ordering the integrand dots loadings against. The returned array
+    has boolean dtype and shape `(len(terms), len(latent_factors))`.
     """
     factor_index = {name: i for i, name in enumerate(latent_factors)}
     mask = np.zeros((len(terms), len(latent_factors)), dtype=np.bool_)
