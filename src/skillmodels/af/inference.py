@@ -968,7 +968,6 @@ def _build_prev_dist_arrays(
     flat_super: Array,
     target_t: int,
     metas: tuple[_PeriodMeta, ...],
-    cond_weights_override: Array | None = None,
 ) -> tuple[dict[str, Array], tuple[ChainLink, ...], Array]:
     """Build the period-0 conditional payload and chain history for period ``t``.
 
@@ -995,9 +994,7 @@ def _build_prev_dist_arrays(
         flat_params_s = flat_super[meta_s.slice_start : meta_s.slice_stop]
         chain_links.append(_extract_chain_link_jax(flat_params_s, meta_s))
 
-    if cond_weights_override is not None:
-        cond_weights = cond_weights_override
-    elif meta0.n_observed_factors > 0:
+    if meta0.n_observed_factors > 0:
         cond_weights = jax.nn.softmax(log_unnorms, axis=0).T
     else:
         meta_target = metas[target_t]
@@ -1036,13 +1033,18 @@ def _period_t_per_obs_loglike_full(
     if meta_t.is_initial:
         return af_per_obs_loglike_initial(flat_params_t, **meta_t.loglike_kwargs)
 
-    # Reuse the baked cond_weights from the meta (it was built via the same
-    # ``_prepare_transition_inputs`` path as estimation and already honours
-    # any stored ``conditional_weights``; when ``conditional_weights`` is
-    # ``None`` it is a broadcast of the initial-period mixture weights).
-    stored_cond_weights = meta_t.loglike_kwargs["prev_distribution"]["cond_weights"]
+    # Rebuild the posterior mixture weights from ``flat_super`` rather than
+    # reusing the cond_weights baked at the optimum (audit F9). The full-chain
+    # influence function differentiates this period-t loglike wrt EVERY period's
+    # params, and the period-0 mixture weights (softmax of the mixture-weight
+    # params, conditioned on Y_0 when observed factors are present) are one
+    # channel through which period-0 estimation error propagates into period t.
+    # Freezing them to their optimum value zeroes that derivative and drops the
+    # corresponding cross-period covariance block. Recomputing reproduces the
+    # baked value exactly at the optimum (so point estimates and the linearised
+    # likelihood are unchanged) while restoring the missing derivative path.
     prev_dist_arrays, chain_links, obs_factor_values_chain = _build_prev_dist_arrays(
-        flat_super, t, metas, cond_weights_override=stored_cond_weights
+        flat_super, t, metas
     )
     meta_prev = metas[t - 1]
     flat_params_prev = flat_super[meta_prev.slice_start : meta_prev.slice_stop]

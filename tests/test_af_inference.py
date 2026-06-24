@@ -411,3 +411,94 @@ def test_af_inference_period1_information_matches_fullchain_ownblock(
     fullchain_own = np.asarray(hess_full[own_global][:, own_global])
 
     np.testing.assert_allclose(fullchain_own, own_block_info, rtol=1e-4, atol=1e-8)
+
+
+def _make_two_mixture_model(n_periods: int = 2) -> ModelSpec:
+    return ModelSpec(
+        factors={
+            "skill": FactorSpec(
+                measurements=(("m1", "m2", "m3"),) * n_periods,
+                normalizations=Normalizations(
+                    loadings=({"m1": 1},) * n_periods,
+                    intercepts=({"m1": 0},) * n_periods,
+                ),
+                transition_function="linear",
+            ),
+        },
+        n_mixtures=2,
+    )
+
+
+def _simulate_bimodal_data(*, n_obs: int, seed: int = 0) -> pd.DataFrame:
+    """Two-cluster initial distribution so the mixture weights are identified."""
+    rng = np.random.default_rng(seed)
+    theta = np.zeros((n_obs, 2))
+    in_high = rng.random(n_obs) < 0.5
+    theta[:, 0] = np.where(
+        in_high, rng.normal(1.0, 0.7, n_obs), rng.normal(-1.0, 0.7, n_obs)
+    )
+    theta[:, 1] = 0.1 + 0.7 * theta[:, 0] + rng.normal(0.0, 0.3, n_obs)
+    loadings = (1.0, 0.9, 1.1)
+    intercepts = (0.0, 0.2, -0.1)
+    sds = (0.3, 0.4, 0.35)
+    rows = []
+    for i in range(n_obs):
+        for t in range(2):
+            row = {"caseid": i, "period": t}
+            for m_idx, meas in enumerate(("m1", "m2", "m3")):
+                row[meas] = (
+                    intercepts[m_idx]
+                    + loadings[m_idx] * theta[i, t]
+                    + rng.normal(0, sds[m_idx])
+                )
+            rows.append(row)
+    return pd.DataFrame(rows).set_index(["caseid", "period"])
+
+
+@pytest.fixture(scope="module")
+def two_mixture_fit_and_metas():
+    """Fit a 2-mixture linear model and build inference metas; reused across tests."""
+    data = _simulate_bimodal_data(n_obs=300, seed=0)
+    model = _make_two_mixture_model(n_periods=2)
+    af_opts = AFEstimationOptions(
+        n_halton_points=20,
+        n_halton_points_shock=12,
+        optimizer_algorithm="scipy_lbfgsb",
+    )
+    fit = estimate_af(model_spec=model, data=data, options=af_opts)
+    metas = _build_metas_for_test(fit, data, af_opts)
+    return fit, metas
+
+
+@pytest.mark.end_to_end
+def test_af_fullchain_loglike_depends_on_initial_mixture_weights(
+    two_mixture_fit_and_metas,
+) -> None:
+    """The full-chain period-1 loglike differentiates wrt the period-0 weights.
+
+    With more than one mixture component, the period-0 posterior mixture weights
+    are a (softmax) function of the initial mixture-weight parameters, and the
+    full-chain influence function must carry that dependence so the cross-period
+    covariance with the mixture-weight params is non-zero (audit F9). Freezing
+    the weights at their optimum value would zero this gradient while leaving the
+    likelihood value unchanged, so a faithful full-chain loglike has a non-zero
+    gradient at the mixture-weight positions.
+    """
+    fit, metas = two_mixture_fit_and_metas
+    flat_super = jnp.asarray(fit.params["value"].to_numpy())
+
+    def mean_loglike(fs):
+        return jnp.mean(_period_t_per_obs_loglike_full(fs, 1, metas))
+
+    grad = np.asarray(jax.grad(mean_loglike)(flat_super))
+
+    mw_positions = [
+        i
+        for i, loc in enumerate(fit.params.index)
+        if loc[0] == "mixture_weights" and loc[1] == 0
+    ]
+    assert mw_positions, "expected free period-0 mixture-weight parameters"
+    assert np.max(np.abs(grad[mw_positions])) > 1e-6, (
+        "period-1 full-chain loglike must depend on the period-0 mixture weights; "
+        f"got gradient {grad[mw_positions]} at the mixture-weight positions."
+    )
