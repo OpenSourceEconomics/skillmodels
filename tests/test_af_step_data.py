@@ -10,7 +10,10 @@ from its own `data_period`.
 import numpy as np
 import pandas as pd
 
-from skillmodels.af.step_data import build_step_measurement_array
+from skillmodels.af.step_data import (
+    build_block_loading_mask,
+    build_step_measurement_array,
+)
 from skillmodels.af.step_layout import (
     AFFactorInfo,
     AFFactorRole,
@@ -76,3 +79,15 @@ def test_step_measurement_array_does_not_mispair_positionally() -> None:
     assert ids.tolist() == [1, 2]
     np.testing.assert_array_equal(values[:, inv_col], [7.0, 99.0])
     np.testing.assert_array_equal(values[:, sk_col], [100.0, 500.0])
+
+
+def test_block_loading_mask_marks_each_term_factor() -> None:
+    targets = _step_0_to_1_targets()  # sk_a -> skills, inv_a -> investment
+    # Latent order is [skills, investment]; the integrand dots loadings against it.
+    mask = build_block_loading_mask(targets, latent_factors=("skills", "investment"))
+    term_order = [(t.measurement, t.eval_node.value) for t in targets]
+    sk_row = term_order.index(("sk_a", "theta_dest"))
+    inv_row = term_order.index(("inv_a", "inv_src"))
+    # skills row loads only on the skills column; investment row only on investment.
+    np.testing.assert_array_equal(mask[sk_row], [True, False])
+    np.testing.assert_array_equal(mask[inv_row], [False, True])

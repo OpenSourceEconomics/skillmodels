@@ -63,3 +63,20 @@ def build_step_measurement_array(
         else np.zeros((len(ids), 0), dtype=np.float64)
     )
     return ids, values, term_order
+
+
+def build_block_loading_mask(
+    terms: Sequence[AFMeasurementTerm],
+    latent_factors: Sequence[str],
+) -> NDArray[np.bool_]:
+    """Build the `(n_terms, n_latent_factors)` boolean loading mask for a block.
+
+    Row `j` is `True` in the `latent_factors` columns that term `j` loads on, matching
+    the latent-factor ordering the integrand dots loadings against.
+    """
+    factor_index = {name: i for i, name in enumerate(latent_factors)}
+    mask = np.zeros((len(terms), len(latent_factors)), dtype=np.bool_)
+    for row, term in enumerate(terms):
+        for factor in term.factor_loadings:
+            mask[row, factor_index[factor]] = True
+    return mask
