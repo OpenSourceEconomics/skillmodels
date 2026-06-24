@@ -13,6 +13,53 @@ import numpy as np
 from jax import Array
 
 from skillmodels.af.types import ChainLink
+from skillmodels.common.measurement_models import (
+    MeasurementFamily,
+    measurement_loglik_vec,
+)
+
+
+def _gaussian_family_arrays(n_measures: int) -> tuple[Array, Array, Array]:
+    """All-Gaussian `(families, lowers, uppers)` -- exact parity with `_log_normal_pdf`.
+
+    The default when a caller does not supply measurement families, so every
+    existing AF call evaluates each measurement as a Gaussian density unchanged.
+    """
+    return (
+        jnp.full(n_measures, int(MeasurementFamily.GAUSSIAN)),
+        jnp.full(n_measures, -jnp.inf),
+        jnp.full(n_measures, jnp.inf),
+    )
+
+
+def _resolve_families(
+    n_measures: int,
+    families: Array | None,
+    lowers: Array | None,
+    uppers: Array | None,
+) -> tuple[Array, Array, Array]:
+    """Return supplied family arrays, or all-Gaussian defaults when absent."""
+    if families is None or lowers is None or uppers is None:
+        return _gaussian_family_arrays(n_measures)
+    return families, lowers, uppers
+
+
+def _measurement_log_density(
+    y_meas: Array,
+    residual: Array,
+    meas_sds: Array,
+    families: Array,
+    lowers: Array,
+    uppers: Array,
+) -> Array:
+    """Per-measurement log density/probability through the shared family kernel.
+
+    `residual = y - eta` is the Gaussian residual, so `eta = y_meas - residual`.
+    For the Gaussian family this reduces exactly to `N(residual; 0, meas_sds)`, so
+    swapping `_log_normal_pdf(residual, 0, sd)` for this call is parity-preserving.
+    """
+    eta = y_meas - residual
+    return measurement_loglik_vec(y_meas, eta, meas_sds, families, lowers, uppers)
 
 
 def af_per_obs_loglike_initial(
@@ -31,6 +78,9 @@ def af_per_obs_loglike_initial(
     n_latent_factors: int | None = None,
     observed_factor_values: Array | None = None,
     n_obs_per_batch: int | None = None,
+    measurement_families: Array | None = None,
+    measurement_lowers: Array | None = None,
+    measurement_uppers: Array | None = None,
 ) -> Array:
     """Per-observation log-likelihood for the initial period (Step 0).
 
@@ -64,6 +114,9 @@ def af_per_obs_loglike_initial(
             weights=weights,
             stability_floor=stability_floor,
             n_obs_per_batch=n_obs_per_batch,
+            measurement_families=measurement_families,
+            measurement_lowers=measurement_lowers,
+            measurement_uppers=measurement_uppers,
         )
     assert observed_factor_values is not None  # noqa: S101
     return _initial_loglike_per_obs_conditional(
@@ -82,6 +135,9 @@ def af_per_obs_loglike_initial(
         n_latent=n_latent,
         stability_floor=stability_floor,
         n_obs_per_batch=n_obs_per_batch,
+        measurement_families=measurement_families,
+        measurement_lowers=measurement_lowers,
+        measurement_uppers=measurement_uppers,
     )
 
 
@@ -101,6 +157,9 @@ def af_loglike_initial(
     n_latent_factors: int | None = None,
     observed_factor_values: Array | None = None,
     n_obs_per_batch: int | None = None,
+    measurement_families: Array | None = None,
+    measurement_lowers: Array | None = None,
+    measurement_uppers: Array | None = None,
 ) -> Array:
     """Negative log-likelihood for the initial period (Step 0).
 
@@ -174,6 +233,13 @@ def af_loglike_initial(
             ``None`` falls back to ``jax.vmap`` (single kernel); a positive
             integer uses ``jax.lax.map`` so the backward-pass tape only
             retains one chunk at a time.
+        measurement_families: Optional shape-``(n_measures,)`` `MeasurementFamily`
+            codes per period-0 measurement. ``None`` evaluates every measurement as
+            Gaussian (exact parity with the previous behaviour).
+        measurement_lowers: Optional shape-``(n_measures,)`` Tobit lower bounds
+            (``-inf`` where not Tobit / not censored below).
+        measurement_uppers: Optional shape-``(n_measures,)`` Tobit upper bounds
+            (``+inf`` where not Tobit / not censored above).
 
     Return:
         Scalar negative log-likelihood.
@@ -194,6 +260,9 @@ def af_loglike_initial(
         n_latent_factors=n_latent_factors,
         observed_factor_values=observed_factor_values,
         n_obs_per_batch=n_obs_per_batch,
+        measurement_families=measurement_families,
+        measurement_lowers=measurement_lowers,
+        measurement_uppers=measurement_uppers,
     )
     return -jnp.mean(log_likes)
 
@@ -290,6 +359,9 @@ def _initial_loglike_per_obs(
     weights: Array,
     n_obs_per_batch: int | None = None,
     stability_floor: float,
+    measurement_families: Array | None = None,
+    measurement_lowers: Array | None = None,
+    measurement_uppers: Array | None = None,
 ) -> Array:
     """Compute log-likelihood for each observation at the initial period.
 
@@ -301,6 +373,10 @@ def _initial_loglike_per_obs(
     n_measures, n_factors = loading_mask.shape
     full_loadings = jnp.zeros((n_measures, n_factors))
     full_loadings = full_loadings.at[loading_mask].set(loadings)
+
+    families, lowers, uppers = _resolve_families(
+        n_measures, measurement_families, measurement_lowers, measurement_uppers
+    )
 
     # NaN-safety: build per-obs measurement mask and replace NaN entries
     # with 0 so residuals stay finite. The mask is used inside the
@@ -315,7 +391,9 @@ def _initial_loglike_per_obs(
     residuals_base = safe_measurements - control_contrib
 
     @jax.checkpoint
-    def _single_obs_loglike(residual_base: Array, mask_i: Array) -> Array:
+    def _single_obs_loglike(
+        residual_base: Array, y_meas: Array, mask_i: Array
+    ) -> Array:
         """Log-likelihood for a single observation, integrated over factors.
 
         `jax.checkpoint` keeps the forward pass small: the per-observation
@@ -325,9 +403,13 @@ def _initial_loglike_per_obs(
         """
         return _integrate_initial_single_obs(
             residual_base=residual_base,
+            y_meas=y_meas,
             meas_mask=mask_i,
             full_loadings=full_loadings,
             meas_sds=meas_sds,
+            measurement_families=families,
+            measurement_lowers=lowers,
+            measurement_uppers=uppers,
             mixture_weights=mixture_weights,
             mixture_means=mixture_means,
             mixture_chol_covs=mixture_chol_covs,
@@ -339,6 +421,7 @@ def _initial_loglike_per_obs(
     return _map_over_obs(
         _single_obs_loglike,
         residuals_base,
+        safe_measurements,
         meas_mask,
         n_obs_per_batch=n_obs_per_batch,
     )
@@ -361,6 +444,9 @@ def _initial_loglike_per_obs_conditional(
     n_latent: int,
     stability_floor: float,
     n_obs_per_batch: int | None = None,
+    measurement_families: Array | None = None,
+    measurement_lowers: Array | None = None,
+    measurement_uppers: Array | None = None,
 ) -> Array:
     """Per-observation log-likelihood with Schur-complement conditioning.
 
@@ -388,6 +474,10 @@ def _initial_loglike_per_obs_conditional(
     full_loadings = jnp.zeros((n_measures, n_latent))
     full_loadings = full_loadings.at[loading_mask].set(loadings)
 
+    families, lowers, uppers = _resolve_families(
+        n_measures, measurement_families, measurement_lowers, measurement_uppers
+    )
+
     # NaN-safety for measurements (see `_initial_loglike_per_obs`).
     meas_mask = jnp.isfinite(measurements)
     safe_measurements = jnp.where(meas_mask, measurements, 0.0)
@@ -396,13 +486,19 @@ def _initial_loglike_per_obs_conditional(
     residuals_base = safe_measurements - control_contrib
 
     @jax.checkpoint
-    def _single_obs_loglike(residual_base: Array, y_i: Array, mask_i: Array) -> Array:
+    def _single_obs_loglike(
+        residual_base: Array, y_meas: Array, y_i: Array, mask_i: Array
+    ) -> Array:
         return _integrate_initial_single_obs_conditional(
             residual_base=residual_base,
             y_i=y_i,
+            y_meas=y_meas,
             meas_mask=mask_i,
             full_loadings=full_loadings,
             meas_sds=meas_sds,
+            measurement_families=families,
+            measurement_lowers=lowers,
+            measurement_uppers=uppers,
             mixture_weights=mixture_weights,
             mixture_means=mixture_means,
             mixture_chol_covs=mixture_chol_covs,
@@ -415,6 +511,7 @@ def _initial_loglike_per_obs_conditional(
     return _map_over_obs(
         _single_obs_loglike,
         residuals_base,
+        safe_measurements,
         observed_factor_values,
         meas_mask,
         n_obs_per_batch=n_obs_per_batch,
@@ -425,9 +522,13 @@ def _integrate_initial_single_obs_conditional(
     *,
     residual_base: Array,
     y_i: Array,
+    y_meas: Array,
     meas_mask: Array,
     full_loadings: Array,
     meas_sds: Array,
+    measurement_families: Array,
+    measurement_lowers: Array,
+    measurement_uppers: Array,
     mixture_weights: Array,
     mixture_means: Array,
     mixture_chol_covs: Array,
@@ -481,7 +582,14 @@ def _integrate_initial_single_obs_conditional(
         def _log_node(z_q: Array) -> Array:
             theta_q = cond_mean + cond_chol @ z_q
             residuals = residual_base - full_loadings @ theta_q
-            log_pdf = _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
+            log_pdf = _measurement_log_density(
+                y_meas,
+                residuals,
+                meas_sds,
+                measurement_families,
+                measurement_lowers,
+                measurement_uppers,
+            )
             return jnp.sum(jnp.where(meas_mask, log_pdf, 0.0))
 
         log_meas = jax.vmap(_log_node)(nodes)
@@ -509,9 +617,13 @@ def _log_mvn_pdf_chol(x: Array, mean: Array, chol: Array) -> Array:
 def _integrate_initial_single_obs(
     *,
     residual_base: Array,
+    y_meas: Array,
     meas_mask: Array,
     full_loadings: Array,
     meas_sds: Array,
+    measurement_families: Array,
+    measurement_lowers: Array,
+    measurement_uppers: Array,
     mixture_weights: Array,
     mixture_means: Array,
     mixture_chol_covs: Array,
@@ -556,9 +668,17 @@ def _integrate_initial_single_obs(
             # Measurement residuals: obs - control_contrib - loadings @ theta
             residuals = residual_base - full_loadings @ theta_q
 
-            # Log measurement density: sum of log N(residual_m, 0, sd_m),
-            # masking out missing measurements (NaN replaced by 0 upstream).
-            log_pdf = _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
+            # Log measurement density per family (Gaussian density, probit/Tobit
+            # probability), masking out missing measurements (NaN replaced by 0
+            # upstream so a masked row's contribution is dropped by `jnp.where`).
+            log_pdf = _measurement_log_density(
+                y_meas,
+                residuals,
+                meas_sds,
+                measurement_families,
+                measurement_lowers,
+                measurement_uppers,
+            )
             log_meas_density = jnp.sum(jnp.where(meas_mask, log_pdf, 0.0))
 
             total = total + mixture_weights[l_idx] * jnp.exp(log_meas_density)

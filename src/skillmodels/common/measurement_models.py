@@ -183,8 +183,10 @@ def _tobit_loglik(
     return jnp.where(at_lower, left, jnp.where(at_upper, right, interior))
 
 
-# Pre-jitted, vmapped batch form over a 1-D measurement vector. Callers that already
-# operate inside their own jit/vmap can use `measurement_loglik` directly.
-measurement_loglik_batch = jax.jit(
-    jax.vmap(measurement_loglik, in_axes=(0, 0, 0, 0, 0, 0))
-)
+# Vmapped over a 1-D measurement vector (all six arguments share axis 0). Use this
+# form INSIDE another jitted/vmapped function (e.g. the AF integrand); it is not
+# itself jitted, so it composes without nesting `jax.jit`.
+measurement_loglik_vec = jax.vmap(measurement_loglik, in_axes=(0, 0, 0, 0, 0, 0))
+
+# Standalone pre-jitted batch form for callers not already inside a jit.
+measurement_loglik_batch = jax.jit(measurement_loglik_vec)
