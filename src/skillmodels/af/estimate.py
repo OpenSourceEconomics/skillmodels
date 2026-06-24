@@ -46,6 +46,14 @@ def estimate_af(
     - Step t (t >= 1): Estimate transition and measurement params using the
       estimated distribution from previous periods
 
+    With observed factors, the Step-0 objective is the JOINT likelihood of the
+    period-0 latent measurements and the observed factors (a single Gaussian
+    mixture over both) -- a deliberate extension that also models the marginal of
+    the observed factors, not the paper's conditional likelihood given observed
+    factors. It coincides with the conditional estimand when that joint mixture is
+    correctly specified (see `af.likelihood.af_loglike_initial` for the estimand
+    and its assumption).
+
     Args:
         model_spec: Model specification (same as for CHS estimation).
         data: Dataset in long format with MultiIndex (id, period).
