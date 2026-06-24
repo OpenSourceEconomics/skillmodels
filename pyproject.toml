@@ -132,10 +132,7 @@ mem-on-clean-repo = """\
 [tool.pixi.feature.type-checking.pypi-dependencies]
 matplotlib = "*"  # required because of pandas
 pandas-stubs = "*"
-ty = "==0.0.23"  # pinned: 0.0.52 regressed, mass-flagging dataclass-typed params
 types-pytz = "*"
-[tool.pixi.feature.type-checking.tasks]
-ty = "ty check src tests docs"
 [tool.pixi.pypi-dependencies]
 jaxopt = ">=0.8.5"
 optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "probability-allow-fixed-entries" }
@@ -211,7 +208,6 @@ expand_tables = [
   "tool.pixi.feature.tests.tasks",
   "tool.pixi.feature.type-checking",
   "tool.pixi.feature.type-checking.pypi-dependencies",
-  "tool.pixi.feature.type-checking.tasks",
   "tool.pixi.pypi-dependencies",
   "tool.pixi.pypi-dependencies.optimagic",
   "tool.pixi.pypi-dependencies.skillmodels",
@@ -219,6 +215,10 @@ expand_tables = [
 ]
 
 [tool.ty]
+# ty resolves third-party imports from this pixi env (the official ty-pre-commit hook
+# runs `ty check --no-project`, so uv neither creates a `.venv` nor resolves deps). Run
+# `pixi install` once.
+environment.python = ".pixi/envs/type-checking"
 rules.ambiguous-protocol-member = "error"
 rules.deprecated = "error"
 rules.division-by-zero = "error"

@@ -210,4 +210,4 @@ def test_spearman_result_dataclass_is_frozen():
     )
 
     with pytest.raises(AttributeError):
-        result.valid = True  # type: ignore[misc]
+        result.valid = True  # ty: ignore[invalid-assignment]

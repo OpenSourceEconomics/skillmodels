@@ -37,6 +37,17 @@ from skillmodels.common.process_model import process_model
 from skillmodels.common.state_ranges import create_state_ranges
 
 
+def _to_float(value: object) -> float:
+    """Coerce a pandas `.loc` scalar to `float`.
+
+    `DataFrame.loc[(...), col]` is typed by pandas-stubs as a broad `Scalar`
+    union (it could in general hold dates/bytes), which `float()` formally
+    rejects even though these columns hold floats. Centralise the unavoidable
+    narrowing here rather than scattering ignores across the call sites.
+    """
+    return float(value)  # ty: ignore[invalid-argument-type]
+
+
 @beartype(conf=ESTIMATION_CONF)
 def get_amn_posterior_states(  # noqa: C901, PLR0912, PLR0915
     amn_result: AMNEstimationResult,
@@ -82,7 +93,7 @@ def get_amn_posterior_states(  # noqa: C901, PLR0912, PLR0915
             loading = structural.loadings.loc[(period, meas, factor), "loading"]
         except KeyError:
             loading = 1.0
-        lambda_mat[aug_idx, col] = float(loading)
+        lambda_mat[aug_idx, col] = _to_float(loading)
 
     for aug_idx, (period, of_name) in zip(
         layout.observed_factor_slots, layout.observed_factor_meta, strict=True
@@ -101,7 +112,7 @@ def get_amn_posterior_states(  # noqa: C901, PLR0912, PLR0915
         layout.measurement_slots, layout.measurement_meta, strict=True
     ):
         try:
-            intercept[aug_idx] = float(
+            intercept[aug_idx] = _to_float(
                 structural.measurement_intercepts.loc[(period, meas), "intercept"]
             )
         except KeyError:
@@ -112,7 +123,7 @@ def get_amn_posterior_states(  # noqa: C901, PLR0912, PLR0915
         layout.measurement_slots, layout.measurement_meta, strict=True
     ):
         try:
-            sd = float(structural.measurement_sds.loc[(period, meas), "sd"])
+            sd = _to_float(structural.measurement_sds.loc[(period, meas), "sd"])
         except KeyError:
             sd = 0.0
         sigma2[aug_idx] = sd * sd

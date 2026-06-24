@@ -60,5 +60,5 @@ jobs:
           frozen: true
           environments: type-checking
       - name: Run ty
-        run: pixi run -e type-checking ty
+        run: pixi run --locked -e type-checking prek run ty --all-files
         shell: bash -el {0}

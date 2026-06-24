@@ -30,10 +30,10 @@ pixi run -e tests-cpu pytest tests/test_kalman_filters.py
 # Run a single test
 pixi run -e tests-cpu pytest tests/test_kalman_filters.py::test_function_name
 
-# Type checking
-pixi run ty
+# Type checking (ty runs as a pre-commit hook, not a pixi task)
+prek run ty --all-files
 
-# Quality checks (linting, formatting)
+# Quality checks (linting, formatting, type checking)
 prek run --all-files
 
 # Build documentation (mystmd, from docs/ directory)
@@ -45,16 +45,16 @@ myst build
 Always use these command mappings:
 
 - **Python**: Use `pixi run python` instead of `python` or `python3`
-- **Type checker**: Use `pixi run ty` instead of running ty/mypy/pyright directly
+- **Type checker**: ty runs as a pre-commit hook (`prek run ty --all-files`), not as a
+  pixi task — it resolves imports from the env in `[tool.ty] environment.python`
 - **Tests**: Use `pixi run -e tests-cpu tests` instead of `pytest` directly
 - **Linting/formatting**: Use `prek run --all-files` instead of `ruff` directly
 - **All quality checks**: Use `prek run --all-files`
 
 Before finishing any task that modifies code, always run:
 
-1. `pixi run ty` (type checker)
 1. `pixi run -e tests-cpu tests` (tests)
-1. `prek run --all-files` (quality checks)
+1. `prek run --all-files` (quality checks, including the ty pre-commit hook)
 
 ## Architecture
 
