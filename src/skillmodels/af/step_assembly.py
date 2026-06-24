@@ -19,7 +19,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from numpy.typing import NDArray
 
 from skillmodels.af.step_data import build_block_loading_mask
 from skillmodels.af.step_layout import (
@@ -33,25 +32,25 @@ from skillmodels.af.step_layout import (
 class AFStepArrays:
     """Target + importance measurement arrays for one AF transition step."""
 
-    ids: NDArray[np.int64]
+    ids: np.ndarray
     """The step's common individual-ID vector (sorted intersection)."""
-    target_measurements: NDArray[np.float64]
+    target_measurements: np.ndarray
     """`(n_ids, n_target)` free target measurement values."""
-    target_loading_mask: NDArray[np.bool_]
+    target_loading_mask: np.ndarray
     """`(n_target, n_latent)` target loading mask."""
     target_order: list[tuple[int, tuple[str, int]]]
     """`(column, (measurement, data_period))` for each target column."""
-    importance_measurements: NDArray[np.float64]
+    importance_measurements: np.ndarray
     """`(n_ids, n_importance)` fixed importance measurement values."""
-    importance_loading_mask: NDArray[np.bool_]
+    importance_loading_mask: np.ndarray
     """`(n_importance, n_latent)` importance loading mask."""
     imp_order: list[tuple[int, tuple[str, int]]]
     """`(column, (measurement, data_period))` for each importance column."""
-    importance_loadings_flat: NDArray[np.float64]
+    importance_loadings_flat: np.ndarray
     """Fixed importance loadings, packed in loading-mask order, from history."""
-    importance_control_params: NDArray[np.float64]
+    importance_control_params: np.ndarray
     """`(n_importance, n_controls)` fixed importance control params, from history."""
-    importance_meas_sds: NDArray[np.float64]
+    importance_meas_sds: np.ndarray
     """`(n_importance,)` fixed importance measurement SDs, from history."""
 
 
@@ -134,8 +133,8 @@ def assemble_step_arrays(
 def _source_block(
     terms: Sequence[AFMeasurementTerm],
     frames_by_period: Mapping[int, pd.DataFrame],
-    ids: NDArray[np.int64],
-) -> tuple[list[tuple[str, int]], NDArray[np.float64]]:
+    ids: np.ndarray,
+) -> tuple[list[tuple[str, int]], np.ndarray]:
     """Source a block's columns on a shared ID set, each from its term's data period."""
     order = [(term.measurement, term.data_period) for term in terms]
     if not terms:
