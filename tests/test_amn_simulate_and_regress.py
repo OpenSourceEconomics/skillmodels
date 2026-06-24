@@ -1,13 +1,17 @@
 """Tests for `skillmodels.amn.simulate_and_regress` (AMN Stage 3)."""
 
+import math
 from dataclasses import replace
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import pytest
 
 from skillmodels.amn.simulate_and_regress import (
     _draw_factor_panel,
+    _fit_generic_nls,
     _fit_investment_residual,
     _fit_linear,
     _fit_log_ces,
@@ -22,6 +26,7 @@ from skillmodels.common.model_spec import (
     Normalizations,
 )
 from skillmodels.common.process_model import process_model
+from skillmodels.common.transition_functions import log_ces_general
 
 
 @register_params(params=["self_coef", "ctrl_coef", "constant"])
@@ -619,3 +624,28 @@ def test_simulate_and_regress_raises_on_higher_order_kappa():
             n_draws=200,
             seed=0,
         )
+
+
+def test_fit_generic_nls_keeps_generalized_ces_shares_positive() -> None:
+    """The generalized-CES NLS keeps share coordinates strictly positive.
+
+    `log_ces_general` evaluates `tfp * log(sum_i gamma_i exp(sigma_i s_i))`, which is
+    non-finite once a share `gamma_i` turns non-positive. Optimising the shares in
+    log space keeps them positive across every unconstrained Levenberg-Marquardt
+    step, so a noiseless CES target is fit to near-zero residual with positive
+    fitted shares.
+    """
+    rng = np.random.default_rng(20260624)
+    param_names = ("skills", "inv", "sigma_skills", "sigma_inv", "tfp")
+    true_params = jnp.asarray([0.6, 0.4, 0.5, 0.3, 1.0])
+    states = rng.normal(size=(200, 2)) * 0.3
+    target = np.asarray(
+        jax.vmap(log_ces_general, in_axes=(0, None))(jnp.asarray(states), true_params)
+    )
+
+    fitted, sd = _fit_generic_nls(log_ces_general, param_names, target, states)
+
+    assert math.isfinite(sd)
+    assert sd < 1e-3
+    assert fitted["skills"] > 0.0
+    assert fitted["inv"] > 0.0

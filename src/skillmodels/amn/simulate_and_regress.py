@@ -393,40 +393,64 @@ def _fit_generic_nls(
     base_theta = np.array([float(fixed.get(n, 0.0)) for n in param_names])
     free_positions = [i for i, n in enumerate(param_names) if n not in fixed]
 
+    # CES share ("gamma") coordinates are optimised in log space so the
+    # unconstrained Levenberg-Marquardt step cannot drive a share <= 0 and make
+    # the CES aggregator `log(sum_i gamma_i exp(...))` non-finite (Pro F11). Shares
+    # are the non-elasticity, non-constant free parameters of a CES-shaped
+    # transition; for a non-CES transition (no elasticity param) the mask is
+    # all-False and the fit is byte-for-byte unchanged.
+    is_ces_shaped = any(_is_elasticity_param(n) for n in param_names)
+    log_share_mask = np.array(
+        [
+            is_ces_shaped and not _is_elasticity_param(n) and n != "constant"
+            for n in free_names
+        ],
+        dtype=bool,
+    )
+
     @jax.jit
     def predict_batch(theta: jnp.ndarray, states: jnp.ndarray) -> jnp.ndarray:
         return jax.vmap(transition_func, in_axes=(0, None))(states, theta)
 
     states_jnp = jnp.asarray(states_panel)
 
+    def _free_in_linear_space(free: np.ndarray) -> np.ndarray:
+        linear = np.asarray(free, dtype=float).copy()
+        linear[log_share_mask] = np.exp(linear[log_share_mask])
+        return linear
+
     def residuals(theta_np: np.ndarray) -> np.ndarray:
         full = base_theta.copy()
-        full[free_positions] = theta_np[:n_free]
+        full[free_positions] = _free_in_linear_space(theta_np[:n_free])
         preds = np.asarray(predict_batch(jnp.asarray(full), states_jnp))
         if has_cf:
             preds = preds + theta_np[kappa_idx] * cf
         return preds - y
 
     # Seed using the full param layout (preserves elasticity / CES-share
-    # seeding) then select the free positions plus the trailing cf slot.
+    # seeding) then select the free positions plus the trailing cf slot. The
+    # strictly-positive share seeds move to log space to match the optimiser
+    # vector.
     full_seed = _seed_generic_nls_theta0(
         param_names,
         init_overrides,
         n_unknowns=len(param_names) + (1 if has_cf else 0),
     )
-    theta0 = np.array(
-        [full_seed[i] for i in free_positions] + ([0.0] if has_cf else [])
+    theta0_free = np.array([full_seed[i] for i in free_positions], dtype=float)
+    theta0_free[log_share_mask] = np.log(
+        np.clip(theta0_free[log_share_mask], 1e-8, None)
     )
+    theta0 = np.concatenate([theta0_free, [0.0]]) if has_cf else theta0_free
 
     result = least_squares(residuals, theta0, method="lm", max_nfev=5000)
-    theta = result.x
-    resid = residuals(theta)
+    free_linear = _free_in_linear_space(result.x[:n_free])
+    resid = residuals(result.x)
     sd = float(np.sqrt(np.mean(resid**2)))
     out = {n: float(fixed[n]) for n in param_names if n in fixed}
     for i, n in enumerate(free_names):
-        out[n] = float(theta[i])
+        out[n] = float(free_linear[i])
     if has_cf:
-        out["cf"] = float(theta[kappa_idx])
+        out["cf"] = float(result.x[kappa_idx])
     return out, sd
 
 
