@@ -81,6 +81,14 @@ def validate_af_model(
     `estimate_af`) supply the alternative anchors. They default to None so the
     measurement-system and transition checks can be run on a bare ModelSpec.
 
+    Also emit a `UserWarning` (audit F8) when an endogenous factor (investment)
+    carries measurements: AF reconstructs it from the previous period's skills, so
+    its period-t indicators score the investment generated from period t-1
+    (`I_{t-1}`), whereas CHS/AMN read the same period-t indicators as the
+    contemporaneous `I_t`. The same `ModelSpec` therefore denotes different
+    investment calendars across estimators; model investment as a standard
+    (non-endogenous) factor to score the contemporaneous value under AF too.
+
     Also emit a loud `UserWarning` (not an error) when a built-in production
     transition function would silently absorb observed factors (income).
     Built-in transitions enumerate parameters over ALL factors (latent +
@@ -120,6 +128,7 @@ def validate_af_model(
 
     warn_if_overrestricted(model_spec, fixed_params, constraints)
     _warn_on_observed_factor_leakage(model_spec)
+    _warn_on_endogenous_investment_calendar(model_spec)
 
     if errors:
         msg = "ModelSpec is not compatible with AF estimation:\n" + "\n".join(
@@ -249,6 +258,45 @@ def _warn_on_observed_factor_leakage(model_spec: ModelSpec) -> None:
                 f"'log_ces_af'), or pin every observed-factor transition "
                 f"coefficient to 0.0 via `fixed_params`, to avoid changing "
                 f"the production estimand.",
+                stacklevel=3,
+            )
+
+
+def _warn_on_endogenous_investment_calendar(model_spec: ModelSpec) -> None:
+    """Warn that an endogenous factor's measurements attach to the SOURCE period.
+
+    AF reconstructs an endogenous factor (investment) from the PREVIOUS period's
+    latent skills via the investment equation: at the (t-1)->t step the generated
+    investment `I` is a function of theta_{t-1} (and period-(t-1) income), and it
+    is that same `I` that the period-t measurement block scores. So measurements
+    declared at period t for an endogenous factor measure the investment GENERATED
+    FROM period t-1 (`I_{t-1}`), not the contemporaneous `I_t`. This is the
+    MATLAB-faithful AF calendar (the investment generated alongside theta_{t-1}).
+
+    CHS / AMN read the identical period-t measurements as the contemporaneous
+    `I_t` -- a standard latent factor with its own initial distribution -- so the
+    same `ModelSpec` denotes different investment calendars across estimators.
+    Warn (not error) so cross-estimator comparison is an explicit choice: to score
+    the contemporaneous investment under AF too, model it as a standard
+    (non-endogenous) latent factor with its own initial distribution instead of an
+    endogenous one.
+    """
+    for name, spec in model_spec.factors.items():
+        # The calendar offset is the canonical AF endogenous reconstruction: the
+        # factor has no initial distribution and is rebuilt each step from the
+        # prior period's skills via the investment equation.
+        if not (spec.is_endogenous and not spec.has_initial_distribution):
+            continue
+        if any(len(measures) > 0 for measures in spec.measurements):
+            warnings.warn(
+                f"Factor '{name}' is endogenous: AF generates it from the previous "
+                f"period's skills, so its period-t measurements score the investment "
+                f"generated from period t-1 (I_{{t-1}}), not the contemporaneous "
+                f"I_t. CHS/AMN read the same measurements as I_t, so this ModelSpec "
+                f"denotes different investment calendars across estimators. This is "
+                f"the MATLAB-faithful AF convention; to score the contemporaneous "
+                f"investment under AF as well, model it as a standard "
+                f"(non-endogenous) latent factor with its own initial distribution.",
                 stacklevel=3,
             )
 

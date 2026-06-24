@@ -1264,6 +1264,13 @@ def _integrate_transition_single_obs(
                 transition_func(full_prev_with_obs, transition_params)
                 + state_shock_contrib
             )
+            # Investment calendar (audit F8): `inv` is the endogenous investment
+            # GENERATED from theta_{t-1} (it just drove the transition to theta_t),
+            # i.e. I_{t-1}. The period-t measurement block below scores it, so an
+            # endogenous factor's period-t indicators measure I_{t-1}, not the
+            # contemporaneous I_t. This is the MATLAB-faithful AF convention;
+            # `validate_af_model` warns so it is not silently compared against the
+            # CHS/AMN reading (period-t indicators measure I_t).
             all_factors_t = jnp.concatenate([theta_t, inv])
             residuals = residual_base - full_loadings @ all_factors_t
             log_pdf = _log_normal_pdf(residuals, jnp.zeros_like(residuals), meas_sds)
