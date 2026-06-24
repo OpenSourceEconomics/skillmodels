@@ -29,7 +29,6 @@ import numpy as np
 from jax import Array
 from jax.scipy.special import log_ndtr
 from jax.scipy.stats import norm
-from numpy.typing import NDArray
 
 
 @dataclass(frozen=True)
@@ -109,7 +108,7 @@ def resolve_measurement_family(
 def measurement_family_arrays(
     measurement_models: Mapping[str, MeasurementModel],
     measure_names: Sequence[str],
-) -> tuple[NDArray[np.integer], NDArray[np.floating], NDArray[np.floating]]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return `(family_codes, lowers, uppers)` aligned to `measure_names`.
 
     A name absent from `measurement_models` resolves to Gaussian. The arrays line
