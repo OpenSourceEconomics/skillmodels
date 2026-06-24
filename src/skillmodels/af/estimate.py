@@ -1,5 +1,7 @@
 """Main driver for the AF estimation procedure."""
 
+from typing import cast
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -11,6 +13,7 @@ from jax import Array
 from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.af.initial_period import estimate_initial_period
 from skillmodels.af.params import get_measurements_per_factor
+from skillmodels.af.step_layout import HistoricalParams
 from skillmodels.af.transition_period import estimate_transition_period
 from skillmodels.af.types import (
     AFEstimationOptions,
@@ -166,6 +169,16 @@ def estimate_af(
         observed_factors=observed_factors,
     )
 
+    # Per-period individual-ID-indexed frames for the source/destination calendar
+    # adapter (used only for models with endogenous / static-persistent factors).
+    # Level 1 is the period level (level 0 is the individual ID).
+    available_periods = set(data.index.get_level_values(1))
+    frames_by_period: dict[int, pd.DataFrame] = {
+        p: cast("pd.DataFrame", data.xs(p, level=1))
+        for p in range(n_periods)
+        if p in available_periods
+    }
+
     equality_groups = _extract_equality_groups(constraints)
     step_constraints = constraints
 
@@ -199,6 +212,9 @@ def estimate_af(
             break
 
         prev_period_params = period_results[-1].params
+        historical = HistoricalParams.from_param_frames(
+            [r.params for r in period_results]
+        )
 
         period_t_result, cond_dist = estimate_transition_period(
             period=t,
@@ -210,6 +226,8 @@ def estimate_af(
             prev_controls=period_data[t - 1]["controls"],
             prev_period_params=prev_period_params,
             prev_distribution=cond_dist,
+            frames_by_period=frames_by_period,
+            historical=historical,
             af_options=af_options,
             endogenous_factors=endogenous_factors,
             observed_factors=observed_factors,

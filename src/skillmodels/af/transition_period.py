@@ -35,6 +35,17 @@ from skillmodels.af.params import (
     get_normalizations_for_period,
     get_transition_period_params_index,
 )
+from skillmodels.af.step_data import (
+    build_block_loading_mask,
+    build_step_measurement_array,
+)
+from skillmodels.af.step_layout import (
+    AFFactorInfo,
+    AFFactorRole,
+    HistoricalParams,
+    compile_af_step_layouts,
+    compile_target_measurement_index,
+)
 from skillmodels.af.types import (
     AFEstimationOptions,
     AFPeriodResult,
@@ -72,6 +83,8 @@ def estimate_transition_period(
     start_params: pd.DataFrame | None = None,
     fixed_params: pd.DataFrame | None = None,
     user_constraints: list[om.constraints.Constraint] | None = None,
+    frames_by_period: Mapping[int, pd.DataFrame] | None = None,
+    historical: HistoricalParams | None = None,  # noqa: ARG001
 ) -> tuple[AFPeriodResult, ConditionalDistribution]:
     """Estimate a transition period (Step t, t >= 1) of the AF procedure.
 
@@ -102,6 +115,11 @@ def estimate_transition_period(
             from `estimate_af(constraints=...)`. Entries whose members
             all sit in this step's params index are appended to the
             step's `om.minimize` call (within-step equalities).
+        frames_by_period: Per-period individual-ID-indexed measurement frames,
+            required for endogenous / static-persistent models (the source/
+            destination calendar adapter sources the target block from them).
+        historical: Cumulative parameter registry; reserved for the
+            static-persistent importance block.
 
     Return:
         Tuple of (AFPeriodResult, ConditionalDistribution). The returned
@@ -122,9 +140,6 @@ def estimate_transition_period(
     """
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
-
-    measurements_pt = get_measurements_per_factor(model_spec.factors, period=period)
-    all_measures = _get_ordered_measures(measurements_pt)
 
     transition_info = processed_model.transition_info
 
@@ -149,21 +164,23 @@ def estimate_transition_period(
         [factors.index(f) for f in state_factors], dtype=jnp.int32
     )
 
-    params_index = get_transition_period_params_index(
-        period=period,
-        latent_factors=state_factors,
-        transition_info=transition_info,
-        measurements_at_period=measurements_pt,
-        controls=controls_names,
-        endogenous_factors=endogenous_factors,
-        observed_factors=observed_factors,
-        shock_factors=shock_factors,
-    )
     normalizations = get_normalizations_for_period(model_spec.factors, period=period)
-    params_template = create_af_params_template(
-        params_index,
-        normalizations,
-        period=period,
+
+    measurements, all_measures, loading_mask, params_template = (
+        _assemble_target_measurements(
+            period=period,
+            model_spec=model_spec,
+            factors=factors,
+            controls_names=controls_names,
+            state_factors=state_factors,
+            shock_factors=shock_factors,
+            transition_info=transition_info,
+            endogenous_factors=endogenous_factors,
+            observed_factors=observed_factors,
+            measurements=measurements,
+            frames_by_period=frames_by_period,
+            normalizations=normalizations,
+        )
     )
 
     params_template = _initialize_transition_params(
@@ -193,9 +210,6 @@ def estimate_transition_period(
     _seed_probability_start_values(
         params_template, transition_constraints, fixed_params
     )
-
-    # Build loading mask
-    loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
 
     # JOINT Halton design covering ALL randomness needed at this step,
     # mirroring MATLAB's `create_nodes_weights_01/12`. The chained sample
@@ -363,6 +377,140 @@ def estimate_transition_period(
     )
 
     return period_result, updated_dist
+
+
+def _assemble_target_measurements(
+    *,
+    period: int,
+    model_spec: ModelSpec,
+    factors: tuple[str, ...],
+    controls_names: tuple[str, ...],
+    state_factors: tuple[str, ...],
+    shock_factors: tuple[str, ...],
+    transition_info: TransitionInfo,
+    endogenous_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
+    measurements: Array,
+    frames_by_period: Mapping[int, pd.DataFrame] | None,
+    normalizations: dict[str, dict[tuple[str, str], float]],
+) -> tuple[Array, list[str], np.ndarray, pd.DataFrame]:
+    """Build the target measurements, names, loading mask, and params template.
+
+    With endogenous or static-persistent factors the target block mixes calendars
+    (destination skills at period d, source investment at period s), sourced from the
+    compiled layout; plain models keep the single-period path, byte-identical to before.
+    """
+    use_layout = bool(endogenous_factors) or any(
+        model_spec.factors[f].af_state_role == "static_persistent"
+        for f in state_factors
+    )
+    if not use_layout:
+        measurements_pt = get_measurements_per_factor(model_spec.factors, period=period)
+        all_measures = _get_ordered_measures(measurements_pt)
+        loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
+        params_index = get_transition_period_params_index(
+            period=period,
+            latent_factors=state_factors,
+            transition_info=transition_info,
+            measurements_at_period=measurements_pt,
+            controls=controls_names,
+            endogenous_factors=endogenous_factors,
+            observed_factors=observed_factors,
+            shock_factors=shock_factors,
+        )
+        params_template = create_af_params_template(
+            params_index, normalizations, period=period
+        )
+        return measurements, all_measures, loading_mask, params_template
+
+    if frames_by_period is None:
+        msg = (
+            "frames_by_period is required for AF models with endogenous or "
+            "static-persistent factors."
+        )
+        raise ValueError(msg)
+    n_calendar_periods = max(
+        len(spec.measurements) for spec in model_spec.factors.values()
+    )
+    layout = compile_af_step_layouts(
+        _factor_infos_from_spec(model_spec, endogenous_factors),
+        n_periods=n_calendar_periods,
+    )[period - 1]
+    target_terms = layout.target_terms()
+    _ids, target_values, _order = build_step_measurement_array(
+        target_terms, frames_by_period
+    )
+    measurements = jnp.asarray(target_values)
+    all_measures = [term.measurement for term in target_terms]
+    loading_mask = build_block_loading_mask(target_terms, factors)
+    params_index = get_transition_period_params_index(
+        period=period,
+        latent_factors=state_factors,
+        transition_info=transition_info,
+        measurements_at_period={},
+        controls=controls_names,
+        endogenous_factors=endogenous_factors,
+        observed_factors=observed_factors,
+        shock_factors=shock_factors,
+        measurement_index_tuples=compile_target_measurement_index(
+            layout, controls_names
+        ),
+    )
+    params_template = create_af_params_template(params_index, {}, period=period)
+    params_template = _apply_layout_normalizations(
+        params_template, model_spec, target_terms
+    )
+    return measurements, all_measures, loading_mask, params_template
+
+
+def _factor_infos_from_spec(
+    model_spec: ModelSpec,
+    endogenous_factors: tuple[str, ...],
+) -> list[AFFactorInfo]:
+    """Build per-factor AF role + measurement info for the layout compiler."""
+    infos: list[AFFactorInfo] = []
+    for name, spec in model_spec.factors.items():
+        if name in endogenous_factors:
+            role = AFFactorRole.ENDOGENOUS
+        elif spec.af_state_role == "static_persistent":
+            role = AFFactorRole.STATIC_PERSISTENT
+        else:
+            role = AFFactorRole.DYNAMIC
+        infos.append(
+            AFFactorInfo(name=name, role=role, measurements_by_period=spec.measurements)
+        )
+    return infos
+
+
+def _apply_layout_normalizations(
+    params_template: pd.DataFrame,
+    model_spec: ModelSpec,
+    target_terms: tuple,
+) -> pd.DataFrame:
+    """Pin loading/intercept normalizations at each target term's true param period.
+
+    The mixed-calendar target indexes destination skills at `d` and source investment
+    at `s`, so normalizations must be applied per row's `param_period` rather than at a
+    single period (which `create_af_params_template` assumes).
+    """
+    params = params_template
+    for term in target_terms:
+        period = term.param_period
+        for factor in term.factor_loadings:
+            norms = model_spec.factors[factor].normalizations
+            if norms is None:
+                continue
+            if norms.loadings is not None and period < len(norms.loadings):
+                val = norms.loadings[period].get(term.measurement)
+                loc = ("loadings", period, term.measurement, factor)
+                if val is not None and loc in params.index:
+                    params.loc[loc, ["value", "lower_bound", "upper_bound"]] = val
+            if norms.intercepts is not None and period < len(norms.intercepts):
+                val = norms.intercepts[period].get(term.measurement)
+                loc = ("controls", period, term.measurement, "constant")
+                if val is not None and loc in params.index:
+                    params.loc[loc, ["value", "lower_bound", "upper_bound"]] = val
+    return params
 
 
 def _run_transition_optimization(
