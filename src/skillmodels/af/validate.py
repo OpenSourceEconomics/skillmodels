@@ -6,7 +6,7 @@ import optimagic as om
 import pandas as pd
 
 from skillmodels.common.identification import (
-    check_identification,
+    check_initial_anchors,
     warn_if_overrestricted,
 )
 from skillmodels.common.model_spec import FactorSpec, ModelSpec
@@ -116,7 +116,7 @@ def validate_af_model(
     for factor_name, factor_spec in model_spec.factors.items():
         errors.extend(_validate_factor(factor_name, factor_spec))
 
-    errors.extend(check_identification(model_spec, fixed_params, constraints))
+    errors.extend(check_initial_anchors(model_spec, fixed_params, constraints))
 
     warn_if_overrestricted(model_spec, fixed_params, constraints)
     _warn_on_observed_factor_leakage(model_spec)

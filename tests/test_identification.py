@@ -1,6 +1,6 @@
 """Tests for the reusable transition-aware identification anchor check (audit F6).
 
-`check_identification` is the estimator-agnostic core of the AF period-0 anchor
+`check_initial_anchors` is the estimator-agnostic core of the AF period-0 anchor
 diagnostic: given a ModelSpec plus any fixed_params / constraints, it returns a
 list of human-readable problems with the initial-period affine anchoring. Every
 factor with an initial distribution needs both a loading (scale) and an intercept
@@ -18,8 +18,8 @@ import pytest
 
 from skillmodels.common.constraints import select_by_loc
 from skillmodels.common.identification import (
-    check_identification,
-    fail_if_not_identified,
+    check_initial_anchors,
+    fail_if_initial_state_unanchored,
     find_excess_initial_restrictions,
 )
 from skillmodels.common.model_spec import (
@@ -63,7 +63,7 @@ def test_check_identification_clean_translog_returns_no_problems() -> None:
         skills_loadings=({"y1": 1},) * 2,
         skills_intercepts=({"y1": 0},) * 2,
     )
-    assert check_identification(model) == []
+    assert check_initial_anchors(model) == []
 
 
 def test_check_identification_flags_missing_period0_loading() -> None:
@@ -71,7 +71,7 @@ def test_check_identification_flags_missing_period0_loading() -> None:
         skills_loadings=({}, {"y1": 1}),
         skills_intercepts=({"y1": 0},) * 2,
     )
-    problems = check_identification(model)
+    problems = check_initial_anchors(model)
     assert any("period 0" in p for p in problems)
 
 
@@ -85,7 +85,7 @@ def test_check_identification_log_ces_requires_initial_intercept_anchor() -> Non
         skills_intercepts=({}, {}),
         skills_transition="log_ces",
     )
-    problems = check_identification(model)
+    problems = check_initial_anchors(model)
     assert any("period 0" in p and "location" in p for p in problems)
 
 
@@ -108,7 +108,7 @@ def test_check_identification_equality_of_free_loadings_does_not_anchor() -> Non
     constraints: list[om.constraints.Constraint] = [
         om.EqualityConstraint(selector=functools.partial(select_by_loc, loc=group))
     ]
-    problems = check_identification(model, constraints=constraints)
+    problems = check_initial_anchors(model, constraints=constraints)
     assert any("period 0" in p and "scale" in p for p in problems)
 
 
@@ -126,7 +126,7 @@ def test_check_identification_zero_loading_pin_is_not_a_scale_anchor() -> None:
             names=["category", "period", "name1", "name2"],
         ),
     )
-    problems = check_identification(model, fixed_params=fixed)
+    problems = check_initial_anchors(model, fixed_params=fixed)
     assert any("period 0" in p and "scale" in p for p in problems)
 
 
@@ -142,7 +142,7 @@ def test_check_identification_nonfinite_loading_pin_is_not_an_anchor() -> None:
             names=["category", "period", "name1", "name2"],
         ),
     )
-    problems = check_identification(model, fixed_params=fixed)
+    problems = check_initial_anchors(model, fixed_params=fixed)
     assert any("period 0" in p and "scale" in p for p in problems)
 
 
@@ -166,7 +166,7 @@ def test_check_identification_equality_anchor_is_transitive() -> None:
         om.EqualityConstraint(selector=functools.partial(select_by_loc, loc=g1)),
         om.EqualityConstraint(selector=functools.partial(select_by_loc, loc=g2)),
     ]
-    assert check_identification(model, constraints=constraints) == []
+    assert check_initial_anchors(model, constraints=constraints) == []
 
 
 def test_check_identification_honours_fixed_params_anchor() -> None:
@@ -181,26 +181,26 @@ def test_check_identification_honours_fixed_params_anchor() -> None:
             names=["category", "period", "name1", "name2"],
         ),
     )
-    assert check_identification(model, fixed_params=fixed) == []
+    assert check_initial_anchors(model, fixed_params=fixed) == []
 
 
-def test_fail_if_not_identified_raises_when_location_unanchored() -> None:
+def test_require_initial_anchors_raises_when_location_unanchored() -> None:
     """A factor with a scale anchor but no period-0 location anchor is rejected."""
     model = _model(
         skills_loadings=({"y1": 1},) * 2,
         skills_intercepts=({}, {}),
     )
-    with pytest.raises(ValueError, match="not identified"):
-        fail_if_not_identified(model)
+    with pytest.raises(ValueError, match="not anchored"):
+        fail_if_initial_state_unanchored(model)
 
 
-def test_fail_if_not_identified_passes_a_fully_anchored_model() -> None:
+def test_require_initial_anchors_passes_a_fully_anchored_model() -> None:
     """A model with both period-0 scale and location anchors passes silently."""
     model = _model(
         skills_loadings=({"y1": 1},) * 2,
         skills_intercepts=({"y1": 0},) * 2,
     )
-    fail_if_not_identified(model)
+    fail_if_initial_state_unanchored(model)
 
 
 _INDEX_NAMES = ["category", "period", "name1", "name2"]
@@ -230,7 +230,7 @@ def test_check_identification_accepts_fixed_initial_mean_as_location_anchor() ->
         skills_intercepts=({}, {}),
     )
     fixed = _fixed([(("initial_states", 0, "mixture_0", "skills"), 0.0)])
-    assert check_identification(model, fixed_params=fixed) == []
+    assert check_initial_anchors(model, fixed_params=fixed) == []
 
 
 def test_check_identification_flags_factor_with_no_normalizations() -> None:
@@ -258,7 +258,7 @@ def test_check_identification_flags_factor_with_no_normalizations() -> None:
             ),
         },
     )
-    problems = check_identification(model)
+    problems = check_initial_anchors(model)
     assert any("skills" in problem for problem in problems)
 
 
@@ -280,7 +280,7 @@ def test_check_identification_rejects_zero_loading_tied_to_intercept() -> None:
             ("loadings", 0, "y1", "skills"),
         )
     ]
-    problems = check_identification(model, constraints=constraints)
+    problems = check_initial_anchors(model, constraints=constraints)
     assert any("scale anchor" in problem for problem in problems)
 
 

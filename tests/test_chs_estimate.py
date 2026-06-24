@@ -35,9 +35,9 @@ def test_estimate_chs_rejects_unidentified_model_by_default(model2_data):
     intercepts free and runs a single mixture component, so its initial latent
     mean is a free parameter with no location anchor — a common shift of the
     latent mean against the intercepts leaves the likelihood unchanged. With the
-    default `require_identification=True`, `estimate_chs` refuses to run it.
+    default `require_initial_anchors=True`, `estimate_chs` refuses to run it.
     """
-    with pytest.raises(ValueError, match="not identified"):
+    with pytest.raises(ValueError, match="not anchored"):
         estimate_chs(
             MODEL2,
             model2_data,
@@ -54,14 +54,14 @@ def test_estimate_chs_returns_conforming_result(model2_data, anchoring_start_par
     supplied. MODEL2 follows the CHS convention of a free initial latent mean
     (seeded to 0) rather than an intercept normalization, so it is
     intentionally location-under-identified and the identification gate is
-    disabled via `require_identification=False`.
+    disabled via `require_initial_anchors=False`.
     """
     result = estimate_chs(
         MODEL2,
         model2_data,
         CHSEstimationOptions(start_params_strategy="none"),
         start_params=anchoring_start_params,
-        require_identification=False,
+        require_initial_anchors=False,
     )
 
     assert isinstance(result, CHSEstimationResult)
@@ -88,7 +88,7 @@ def test_estimate_chs_provides_ml_inference(model2_data, anchoring_start_params)
         model2_data,
         CHSEstimationOptions(start_params_strategy="none"),
         start_params=anchoring_start_params,
-        require_identification=False,
+        require_initial_anchors=False,
     )
 
     assert result.likelihood_result is not None
@@ -121,7 +121,7 @@ def test_estimate_chs_enforces_user_fixed_constraint_value(
         CHSEstimationOptions(start_params_strategy="none"),
         start_params=anchoring_start_params,
         constraints=[FixedConstraintWithValue(loc=loc, value=target)],
-        require_identification=False,
+        require_initial_anchors=False,
     )
 
     assert result.params.loc[loc, "value"] == pytest.approx(target)

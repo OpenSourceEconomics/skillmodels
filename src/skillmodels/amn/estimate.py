@@ -34,7 +34,7 @@ from skillmodels.amn.types import (
     MixtureFitResult,
 )
 from skillmodels.common.identification import (
-    fail_if_not_identified,
+    fail_if_initial_state_unanchored,
     warn_if_overrestricted,
 )
 from skillmodels.common.model_spec import ModelSpec
@@ -175,7 +175,7 @@ def estimate_amn(
     fixed_params: pd.DataFrame | None = None,
     constraints: list[om.constraints.Constraint] | None = None,
     *,
-    require_identification: bool = True,
+    require_initial_anchors: bool = True,
     linearize_control_function: bool = False,
     for_start_values: bool = False,
 ) -> AMNEstimationResult:
@@ -199,10 +199,11 @@ def estimate_amn(
         constraints: Not honoured -- raises `NotImplementedError` when a
             non-empty list is passed. The AMN stages have no optimiser in
             which to impose equality/other constraints.
-        require_identification: When True (the default), run the
-            estimator-agnostic period-0 anchor check (`fail_if_not_identified`)
-            and raise `ValueError` if the initial latent distribution has no
-            scale or location anchor. Set False only for models that are
+        require_initial_anchors: When True (the default), run the
+            estimator-agnostic period-0 anchor check
+            (`fail_if_initial_state_unanchored`) and raise `ValueError` if the
+            initial latent distribution has no scale or location anchor. Set
+            False only for models that are
             intentionally location-under-identified (e.g. the original CHS
             replication convention with a free initial mean seeded to 0). The
             check is also skipped automatically when `for_start_values=True`,
@@ -227,8 +228,8 @@ def estimate_amn(
         params DataFrame.
 
     """
-    if require_identification and not for_start_values:
-        fail_if_not_identified(model_spec, fixed_params, constraints)
+    if require_initial_anchors and not for_start_values:
+        fail_if_initial_state_unanchored(model_spec, fixed_params, constraints)
         warn_if_overrestricted(model_spec, fixed_params, constraints)
     if start_params is not None or constraints:
         raise NotImplementedError(

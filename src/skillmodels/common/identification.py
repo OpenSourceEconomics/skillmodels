@@ -1,7 +1,7 @@
 """Transition-aware identification anchor diagnostics (audit F6/F7/F8).
 
 The initial-period latent distribution is not produced by any transition, so
-its affine orbit (scale + location) must be pinned directly. `check_identification`
+its affine orbit (scale + location) must be pinned directly. `check_initial_anchors`
 verifies that, dispatching on each factor's transition type:
 
 Every factor with an initial distribution needs BOTH a scale anchor and a location
@@ -27,12 +27,13 @@ is therefore an INITIAL-ANCHOR PRECHECK, not a complete identification proof: an
 empty result means `initial_anchor_ok`, with later identification unverified.
 
 This is the estimator-agnostic core: identification of the initial latent
-distribution is a property of the model, not of any estimator. `fail_if_not_identified`
-wraps it as a hard gate that `estimate_af` (via `validate_af_model`), `estimate_chs`
+distribution is a property of the model, not of any estimator.
+`fail_if_initial_state_unanchored` wraps it as a hard gate that `estimate_af`
+(via `validate_af_model`), `estimate_chs`
 and `estimate_amn` all run by default, so an unanchored initial distribution raises in
 every estimator. The gate lives at the estimator entry (not in `process_model`) because
 the alternative anchor sources (`fixed_params`, equality `constraints`) are only known
-there, not from the bare `ModelSpec`. Each estimator exposes a `require_identification`
+there, not from the bare `ModelSpec`. Each estimator exposes a `require_initial_anchors`
 switch to turn the gate off for models that are intentionally location-under-identified
 -- e.g. the original CHS replication convention, where the initial latent mean is a free
 parameter seeded to 0 rather than pinned by an intercept normalization.
@@ -44,7 +45,7 @@ ONE primitive scale anchor is needed across the connected skill-investment syste
 restriction, not a normalization. This is split deliberately between the two
 sides of the diagnostic:
 
-- The HARD GATE (`check_identification` / `fail_if_not_identified`) stays
+- The HARD GATE (`check_initial_anchors` / `fail_if_initial_state_unanchored`) stays
   per-factor and CONSERVATIVE: it requires each factor with an initial
   distribution to carry its own scale anchor. A precise per-system requirement
   needs the production graph plus nonzero-share information, which is not
@@ -54,7 +55,7 @@ sides of the diagnostic:
   `has_initial_distribution=False`, so it is skipped and exactly one scale anchor
   (on skills) is required -- correct. The only cost is over-requiring a redundant
   anchor in the exotic case where a CES input factor ALSO carries its own initial
-  distribution; pass `require_identification=False` (or add the redundant anchor)
+  distribution; pass `require_initial_anchors=False` (or add the redundant anchor)
   there.
 - The WARN side (`find_excess_initial_restrictions` /
   `warn_if_overrestricted`) IS restricted-CES aware: when a restricted-CES
@@ -198,7 +199,7 @@ def _propagate_equality_values(
     return propagated
 
 
-def fail_if_not_identified(
+def fail_if_initial_state_unanchored(
     model_spec: ModelSpec,
     fixed_params: pd.DataFrame | None = None,
     constraints: list[om.constraints.Constraint] | None = None,
@@ -206,26 +207,29 @@ def fail_if_not_identified(
     """Raise if any factor's initial-period affine orbit is unanchored.
 
     The estimator-agnostic gate every entry point runs by default:
-    `check_identification` collects the missing period-0 scale/location anchors
+    `check_initial_anchors` collects the missing period-0 scale/location anchors
     and this wrapper turns a non-empty result into a `ValueError`. Identification
     of the initial latent distribution is a property of the model, not of the
     estimator, so AF, CHS and AMN all enforce it. Anchors may come from
     `Normalizations`, `fixed_params`, or a connected equality constraint (all
-    passed through to `check_identification`).
+    passed through to `check_initial_anchors`).
 
     Raises:
         ValueError: If the initial-anchor precheck reports any problem.
 
     """
-    problems = check_identification(model_spec, fixed_params, constraints)
+    problems = check_initial_anchors(model_spec, fixed_params, constraints)
     if problems:
-        msg = "ModelSpec is not identified:\n" + "\n".join(
-            f"  - {problem}" for problem in problems
+        msg = (
+            "ModelSpec initial-period latent distribution is not anchored "
+            "(initial-anchor precheck failed; later-period identification is a "
+            "separate question this gate does not certify):\n"
+            + "\n".join(f"  - {problem}" for problem in problems)
         )
         raise ValueError(msg)
 
 
-def check_identification(
+def check_initial_anchors(
     model_spec: ModelSpec,
     fixed_params: pd.DataFrame | None = None,
     constraints: list[om.constraints.Constraint] | None = None,
@@ -358,7 +362,7 @@ def find_excess_initial_restrictions(
 ) -> list[str]:
     """Report period-0 anchoring restrictions that exceed the affine orbit (Pro F4).
 
-    `check_identification` is one-sided: it flags *too few* anchors. This is the
+    `check_initial_anchors` is one-sided: it flags *too few* anchors. This is the
     complementary side -- it flags *too many*. Each factor's initial affine orbit
     has exactly two free directions, one scale and one location, so exactly one
     independent scale pin and one independent location pin are normalizations. Any
@@ -379,8 +383,9 @@ def find_excess_initial_restrictions(
     normalization (see `recover_primitive_ces_scales`). A per-factor scale anchor on a
     second CES factor is therefore a testable restriction. The scale accounting for
     those factors is reported once at the SYSTEM level rather than per factor. This is
-    the WARN side only -- the hard gate (`fail_if_not_identified`) stays per-factor and
-    conservative, so it never passes a genuinely scale-under-identified model on the
+    the WARN side only -- the hard gate (`fail_if_initial_state_unanchored`) stays
+    per-factor and conservative, so it never passes a genuinely scale-under-identified
+    model on the
     strength of an assumed CES link.
     """
     pinned = _pinned_values(model_spec, fixed_params)
@@ -440,8 +445,8 @@ def warn_if_overrestricted(
 ) -> None:
     """Emit a `UserWarning` for each period-0 restriction beyond a normalization.
 
-    The mirror image of `fail_if_not_identified`: that gate fires when an initial
-    orbit direction is UNPINNED (under-identification); this one fires when a
+    The mirror image of `fail_if_initial_state_unanchored`: that gate fires when an
+    initial orbit direction is UNPINNED (under-identification); this one fires when a
     direction is pinned MORE THAN ONCE. A surplus pin constrains an identified
     feature, so it is a testable restriction rather than a free normalization and can
     move the estimate under misspecification. Warning (not raising) keeps such models
