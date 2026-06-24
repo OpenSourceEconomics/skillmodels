@@ -9,7 +9,7 @@ modified.
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from skillmodels._beartype_conf import MODEL_SPEC_CONF, beartype_init
 from skillmodels.common.measurement_models import (
@@ -144,6 +144,16 @@ class FactorSpec:
     shock, with investment-equation and shock parameters estimated as part
     of the initial step. The transition function must not depend on the
     factor's own lag.
+    """
+    af_state_role: Literal["dynamic", "static_persistent"] = "dynamic"
+    """AF calendar role of a non-endogenous state factor.
+
+    `"static_persistent"` marks a time-invariant factor (e.g. MC/MN) whose
+    period-0 measurement density is re-applied as an AF importance factor at
+    every transition step, because the same latent value re-enters the
+    investment/production equations at every period. Declared explicitly
+    rather than inferred from an identity transition (which may be pinned via
+    `fixed_params`). Ignored by CHS/AMN and for endogenous factors.
     """
 
     def with_transition_function(self, func: str | Callable) -> Self:
@@ -299,6 +309,7 @@ class ModelSpec:
                 transition_function=spec.get("transition_function"),
                 has_production_shock=spec.get("has_production_shock", True),
                 has_initial_distribution=spec.get("has_initial_distribution", True),
+                af_state_role=spec.get("af_state_role", "dynamic"),
                 correction=correction,
             )
 
