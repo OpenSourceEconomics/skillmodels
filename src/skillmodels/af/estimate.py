@@ -212,8 +212,17 @@ def estimate_af(
             break
 
         prev_period_params = period_results[-1].params
-        historical = HistoricalParams.from_param_frames(
-            [r.params for r in period_results]
+        # The cumulative registry is only consumed by the static-persistent
+        # importance block; build it only then (and only then is its
+        # unique-index invariant guaranteed to hold).
+        needs_historical = any(
+            spec.af_state_role == "static_persistent"
+            for spec in model_spec.factors.values()
+        )
+        historical = (
+            HistoricalParams.from_param_frames([r.params for r in period_results])
+            if needs_historical
+            else None
         )
 
         period_t_result, cond_dist = estimate_transition_period(

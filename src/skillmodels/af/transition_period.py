@@ -400,7 +400,16 @@ def _assemble_target_measurements(
     (destination skills at period d, source investment at period s), sourced from the
     compiled layout; plain models keep the single-period path, byte-identical to before.
     """
-    use_layout = bool(endogenous_factors) or any(
+    # The calendar adapter applies to RECONSTRUCTED investment (endogenous with
+    # has_initial_distribution=False): its period-0 indicators are excluded from the
+    # initial step and scored once, at the 0->1 step, against I_0. Legacy endogenous
+    # factors that keep an initial distribution stay on the single-period path.
+    reconstructed_endog = tuple(
+        f
+        for f in endogenous_factors
+        if not model_spec.factors[f].has_initial_distribution
+    )
+    use_layout = bool(reconstructed_endog) or any(
         model_spec.factors[f].af_state_role == "static_persistent"
         for f in state_factors
     )
