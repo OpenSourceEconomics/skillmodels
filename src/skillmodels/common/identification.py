@@ -4,17 +4,23 @@ The initial-period latent distribution is not produced by any transition, so
 its affine orbit (scale + location) must be pinned directly. `check_identification`
 verifies that, dispatching on each factor's transition type:
 
-Every factor with an initial distribution needs BOTH a loading (scale) anchor and
-an intercept (location) anchor at the initial period, regardless of transition.
-The CES simplex `sum_i gamma_i = 1` does NOT supply the initial location anchor
-(Pro F1: plain CES obeys f(x+c,i+c)=f(x,i)+c, so a common shift of all latent
-inputs leaves observables unchanged while preserving the simplex); it only
-replaces the *cross-period* skills-location alternative, which this period-0
-precheck does not police.
+Every factor with an initial distribution needs BOTH a scale anchor and a location
+anchor at the initial period, regardless of transition. The scale anchor is a
+finite, nonzero loading; the location anchor is a finite measurement intercept OR,
+equivalently, a finite fixed initial-component latent mean (the CHS convention pins
+the latter and leaves the measurement constants free). The CES simplex
+`sum_i gamma_i = 1` does NOT supply the initial location anchor (Pro F1: plain CES
+obeys f(x+c,i+c)=f(x,i)+c, so a common shift of all latent inputs leaves observables
+unchanged while preserving the simplex); it only replaces the *cross-period*
+skills-location alternative, which this period-0 precheck does not police.
 
 An anchor may come from a `Normalizations` map, a `fixed_params` pin, or a
-`select_by_loc` equality constraint that is connected to a numerically fixed
-member. Periods t>0 are intentionally not checked here: an unrestricted
+`select_by_loc` equality constraint connected to a numerically pinned member. The
+pinned VALUE (not just the key) is propagated through equality components and then
+tested against the category rule, so a loading tied to a zero intercept does not
+masquerade as a scale anchor. A factor whose `normalizations is None` is checked the
+same way against its fixed/equality anchors, not skipped. Periods t>0 are
+intentionally not checked here: an unrestricted
 transition transforms along with a later latent's affine orbit, so verifying
 those needs a full transition-aware diagnostic (a larger, separate piece). This
 is therefore an INITIAL-ANCHOR PRECHECK, not a complete identification proof: an
@@ -70,79 +76,80 @@ def _is_location_anchor_value(value: float) -> bool:
     return math.isfinite(value)
 
 
-def _normalized_keys(model_spec: ModelSpec) -> set[tuple[object, ...]]:
-    """Return the param keys pinned by `Normalizations` across all factor-periods.
+def _pinned_values(
+    model_spec: ModelSpec,
+    fixed_params: pd.DataFrame | None,
+) -> dict[tuple[object, ...], float]:
+    """Map every numerically pinned parameter key to its value.
 
-    Loadings map to `("loadings", period, meas, factor)` and intercepts to
-    `("controls", period, meas, "constant")` -- the conventions used by the
-    params MultiIndex.
+    Combines `Normalizations` (loadings to `("loadings", period, meas, factor)`,
+    intercepts to `("controls", period, meas, "constant")`) with `fixed_params`
+    rows. Keeping the value -- not just the key -- lets the caller apply the
+    category-specific anchor rule: a loading pins scale only when finite and
+    nonzero, a location anchor needs only finiteness.
     """
-    keys: set[tuple[object, ...]] = set()
+    pinned: dict[tuple[object, ...], float] = {}
     for factor, spec in model_spec.factors.items():
         norms = spec.normalizations
         if norms is None:
             continue
         for period, loadings in enumerate(norms.loadings or ()):
             for meas, value in loadings.items():
-                if _is_scale_anchor_value(value):
-                    keys.add(("loadings", period, meas, factor))
+                pinned[("loadings", period, meas, factor)] = float(value)
         for period, intercepts in enumerate(norms.intercepts or ()):
             for meas, value in intercepts.items():
-                if _is_location_anchor_value(value):
-                    keys.add(("controls", period, meas, "constant"))
-    return keys
+                pinned[("controls", period, meas, "constant")] = float(value)
+    if fixed_params is not None:
+        values = fixed_params["value"].to_numpy()
+        for idx, value in zip(fixed_params.index, values, strict=True):
+            pinned[tuple(idx)] = float(value)
+    return pinned
 
 
-def _valid_fixed_keys(fixed_params: pd.DataFrame | None) -> set[tuple[object, ...]]:
-    """Return the `fixed_params` keys that are VALID anchors by value (Pro F1).
-
-    Loading pins count only when finite and nonzero; intercept (controls) pins
-    count when finite; other categories pass through unchecked (they are not
-    consulted as period-0 anchors).
-    """
-    keys: set[tuple[object, ...]] = set()
-    if fixed_params is None:
-        return keys
-    values = fixed_params["value"].to_numpy()
-    for idx, value in zip(fixed_params.index, values, strict=True):
-        category = idx[0]
-        if category == "loadings":
-            if _is_scale_anchor_value(float(value)):
-                keys.add(tuple(idx))
-        elif category == "controls":
-            if _is_location_anchor_value(float(value)):
-                keys.add(tuple(idx))
-        else:
-            keys.add(tuple(idx))
-    return keys
-
-
-def _equality_closure(
+def _equality_components(
     constraints: list[om.constraints.Constraint] | None,
-    anchor_sources: set[tuple[object, ...]],
-) -> set[tuple[object, ...]]:
-    """Propagate anchors transitively through equality groups (Pro F2).
+) -> list[frozenset[tuple[object, ...]]]:
+    """Return connected components of keys tied equal by `select_by_loc` groups.
 
-    A `select_by_loc` equality group ties its members equal. A group fixes its
-    members to a number only when it is connected -- possibly through a chain of
-    groups -- to a numerically fixed or normalized member. Iterate to a fixed
-    point so that A fixed, A=B, B=C all anchor C regardless of how the single
-    logical component is split across constraints.
+    Two keys share a component when one equality group lists them together or a
+    chain of overlapping groups connects them; standalone keys are omitted.
     """
-    groups = [
-        {tuple(idx) for idx in loc}
-        for constraint in constraints or []
-        if (loc := _equality_constraint_loc(constraint)) is not None
-    ]
-    anchored = set(anchor_sources)
-    changed = True
-    while changed:
-        changed = False
-        for group in groups:
-            if group & anchored and not group <= anchored:
-                anchored |= group
-                changed = True
-    return anchored
+    components: list[set[tuple[object, ...]]] = []
+    for constraint in constraints or []:
+        loc = _equality_constraint_loc(constraint)
+        if loc is None:
+            continue
+        merged = {tuple(idx) for idx in loc}
+        disjoint: list[set[tuple[object, ...]]] = []
+        for component in components:
+            if component & merged:
+                merged |= component
+            else:
+                disjoint.append(component)
+        disjoint.append(merged)
+        components = disjoint
+    return [frozenset(component) for component in components]
+
+
+def _propagate_equality_values(
+    pinned: dict[tuple[object, ...], float],
+    components: list[frozenset[tuple[object, ...]]],
+) -> dict[tuple[object, ...], float]:
+    """Spread each equality component's agreed value to all its members (Pro F3).
+
+    A member inherits a value only when its component's pinned members agree on a
+    single value; a component with conflicting pins fabricates no anchor. Carrying
+    the VALUE -- not merely the membership -- stops a loading tied to a zero
+    intercept from masquerading as a scale anchor.
+    """
+    propagated = dict(pinned)
+    for component in components:
+        component_values = {pinned[key] for key in component if key in pinned}
+        if len(component_values) == 1:
+            (value,) = component_values
+            for key in component:
+                propagated[key] = value
+    return propagated
 
 
 def fail_if_not_identified(
@@ -179,36 +186,46 @@ def check_identification(
 ) -> list[str]:
     """Return problems with the initial-period affine anchoring of each factor.
 
-    Empty list means every factor with an initial distribution has the anchors
-    its transition requires (see the module docstring for the per-transition
-    rules). Factors whose `normalizations is None` are skipped -- that is a
-    separate, estimator-specific error.
+    Empty list means every factor with an initial distribution has both a period-0
+    scale anchor (a finite, nonzero loading) and a period-0 location anchor (a
+    finite measurement intercept or a finite fixed initial-component latent mean).
+    Anchors come from `Normalizations`, `fixed_params`, or equality constraints
+    connected to a numerically pinned member; the pinned VALUE -- not just the key
+    -- decides whether the category-specific anchor rule is met. A factor whose
+    `normalizations is None` is checked the same way, against whatever fixed/equality
+    anchors it has, rather than skipped.
     """
-    # Anchor sources are the VALID (by-value) fixed pins and normalizations;
-    # equality groups then transfer those anchors transitively.
-    anchor_sources = _valid_fixed_keys(fixed_params) | _normalized_keys(model_spec)
-    anchored = _equality_closure(constraints, anchor_sources)
+    pinned = _pinned_values(model_spec, fixed_params)
+    pinned = _propagate_equality_values(pinned, _equality_components(constraints))
     problems: list[str] = []
     for factor_name, spec in model_spec.factors.items():
-        norms = spec.normalizations
-        if norms is None:
-            continue
         if not spec.has_initial_distribution:
             continue
         if len(spec.measurements) == 0 or len(spec.measurements[0]) == 0:
             continue
         measures = spec.measurements[0]
 
-        # Every factor with an initial distribution needs an absolute initial
-        # location anchor mu_theta,0,1=0 (the CES simplex does NOT supply it --
-        # f(x+c,i+c)=f(x,i)+c leaves a common-shift orbit) and a scale anchor.
-        # Both must be VALID by value (Pro F1) -- normalizations and fixed pins
-        # are filtered above, so a plain set-membership test suffices here.
+        # The initial distribution is not produced by a transition, so its scale
+        # and location orbits must be pinned directly. A loading pins scale only
+        # when finite and nonzero (the CES simplex does NOT supply the location
+        # anchor: f(x+c,i+c)=f(x,i)+c leaves a common-shift orbit). The location
+        # anchor is a finite measurement intercept OR a finite fixed
+        # initial-component latent mean (the CHS convention leaves the measurement
+        # constants free).
         has_loading = any(
-            ("loadings", 0, meas, factor_name) in anchored for meas in measures
+            _is_scale_anchor_value(pinned[key])
+            for meas in measures
+            if (key := ("loadings", 0, meas, factor_name)) in pinned
         )
         has_intercept = any(
-            ("controls", 0, meas, "constant") in anchored for meas in measures
+            _is_location_anchor_value(pinned[key])
+            for meas in measures
+            if (key := ("controls", 0, meas, "constant")) in pinned
+        ) or any(
+            _is_location_anchor_value(pinned[key])
+            for component in range(model_spec.n_mixtures)
+            if (key := ("initial_states", 0, f"mixture_{component}", factor_name))
+            in pinned
         )
 
         if not has_loading:
@@ -221,10 +238,11 @@ def check_identification(
             )
         if not has_intercept:
             problems.append(
-                f"Factor '{factor_name}' period 0: no intercept normalization "
-                f"(location anchor). The initial distribution is not produced by "
-                f"a transition, so its location must be pinned directly. Add an "
-                f"intercept=0 normalization for one period-0 measurement, a "
-                f"`fixed_params` intercept pin, or an equality constraint."
+                f"Factor '{factor_name}' period 0: no location anchor. The initial "
+                f"distribution is not produced by a transition, so its location "
+                f"must be pinned directly. Add an intercept=0 normalization for one "
+                f"period-0 measurement, a `fixed_params` intercept pin, a "
+                f"`fixed_params` pin on one initial-component mean "
+                f"(`initial_states`, the CHS convention), or an equality constraint."
             )
     return problems

@@ -200,3 +200,84 @@ def test_fail_if_not_identified_passes_a_fully_anchored_model() -> None:
         skills_intercepts=({"y1": 0},) * 2,
     )
     fail_if_not_identified(model)
+
+
+_INDEX_NAMES = ["category", "period", "name1", "name2"]
+
+
+def _fixed(rows: list[tuple[tuple[object, ...], float]]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {"value": [value for _, value in rows]},
+        index=pd.MultiIndex.from_tuples([key for key, _ in rows], names=_INDEX_NAMES),
+    )
+
+
+def _equality(*keys: tuple[object, ...]) -> om.constraints.Constraint:
+    loc = pd.MultiIndex.from_tuples(list(keys), names=_INDEX_NAMES)
+    return om.EqualityConstraint(selector=functools.partial(select_by_loc, loc=loc))
+
+
+def test_check_identification_accepts_fixed_initial_mean_as_location_anchor() -> None:
+    """A fixed period-0 component mean removes the location orbit (CHS convention).
+
+    `skills` normalizes its period-0 loading but leaves the measurement intercept
+    free; pinning one initial-component latent mean supplies the location anchor, so
+    the model is fully anchored.
+    """
+    model = _model(
+        skills_loadings=({"y1": 1.0},) * 2,
+        skills_intercepts=({}, {}),
+    )
+    fixed = _fixed([(("initial_states", 0, "mixture_0", "skills"), 0.0)])
+    assert check_identification(model, fixed_params=fixed) == []
+
+
+def test_check_identification_flags_factor_with_no_normalizations() -> None:
+    """A factor whose `normalizations is None` with no other anchor is rejected.
+
+    An absent `Normalizations` object is not "out of scope": the initial affine
+    orbit is still unpinned, so the gate must report the missing scale/location
+    anchors rather than silently skip the factor.
+    """
+    model = ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2", "y3"),) * 2,
+                normalizations=None,
+                transition_function="translog",
+            ),
+            "investment": FactorSpec(
+                measurements=(("z1", "z2", "z3"),) * 2,
+                normalizations=Normalizations(
+                    loadings=({"z1": 1.0},) * 2,
+                    intercepts=({"z1": 0.0},) * 2,
+                ),
+                transition_function="linear",
+                is_endogenous=True,
+            ),
+        },
+    )
+    problems = check_identification(model)
+    assert any("skills" in problem for problem in problems)
+
+
+def test_check_identification_rejects_zero_loading_tied_to_intercept() -> None:
+    """A loading equated to a zero intercept does not pin scale.
+
+    `skills` has a period-0 intercept normalization (location) but no period-0
+    loading normalization (scale). Tying that loading equal to the zero intercept
+    leaves it fixed at zero, which is invariant under rescaling, so the factor is
+    still scale-under-identified.
+    """
+    model = _model(
+        skills_loadings=({}, {"y1": 1.0}),
+        skills_intercepts=({"y1": 0.0}, {"y1": 0.0}),
+    )
+    constraints = [
+        _equality(
+            ("controls", 0, "y1", "constant"),
+            ("loadings", 0, "y1", "skills"),
+        )
+    ]
+    problems = check_identification(model, constraints=constraints)
+    assert any("scale anchor" in problem for problem in problems)
