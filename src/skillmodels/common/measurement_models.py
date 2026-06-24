@@ -20,13 +20,16 @@ The three families:
 
 import enum
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
 from jax.scipy.special import log_ndtr
 from jax.scipy.stats import norm
+from numpy.typing import NDArray
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,26 @@ def resolve_measurement_family(
         upper = math.inf if model.upper is None else float(model.upper)
         return MeasurementFamily.TOBIT, lower, upper
     return MeasurementFamily.GAUSSIAN, -math.inf, math.inf
+
+
+def measurement_family_arrays(
+    measurement_models: Mapping[str, MeasurementModel],
+    measure_names: Sequence[str],
+) -> tuple[NDArray[np.integer], NDArray[np.floating], NDArray[np.floating]]:
+    """Return `(family_codes, lowers, uppers)` aligned to `measure_names`.
+
+    A name absent from `measurement_models` resolves to Gaussian. The arrays line
+    up row-for-row with a measurement system's loadings / SD arrays so the shared
+    kernel can be vmapped over them. Each code is a `MeasurementFamily` integer.
+    """
+    resolved = [
+        resolve_measurement_family(measurement_models.get(name, GaussianMeasurement()))
+        for name in measure_names
+    ]
+    codes = np.array([int(family) for family, _lo, _hi in resolved], dtype=np.int64)
+    lowers = np.array([lo for _f, lo, _hi in resolved], dtype=np.float64)
+    uppers = np.array([hi for _f, _lo, hi in resolved], dtype=np.float64)
+    return codes, lowers, uppers
 
 
 def measurement_loglik(

@@ -10,6 +10,7 @@ shared likelihood kernel consumes.
 
 import math
 
+import numpy as np
 import pytest
 
 from skillmodels.common.measurement_models import (
@@ -17,6 +18,7 @@ from skillmodels.common.measurement_models import (
     MeasurementFamily,
     ProbitMeasurement,
     TobitMeasurement,
+    measurement_family_arrays,
     resolve_measurement_family,
 )
 from skillmodels.common.model_spec import (
@@ -148,3 +150,22 @@ def test_from_dict_without_measurement_models_is_all_gaussian() -> None:
         }
     )
     assert model.measurement_model("test_score") == GaussianMeasurement()
+
+
+def test_measurement_family_arrays_aligns_and_defaults_gaussian() -> None:
+    models = {
+        "passed_grade": ProbitMeasurement(),
+        "amount": TobitMeasurement(lower=0.0, upper=5.0),
+    }
+    names = ["test_score", "passed_grade", "amount"]
+    codes, lowers, uppers = measurement_family_arrays(models, names)
+    np.testing.assert_array_equal(
+        codes,
+        [
+            int(MeasurementFamily.GAUSSIAN),
+            int(MeasurementFamily.PROBIT),
+            int(MeasurementFamily.TOBIT),
+        ],
+    )
+    assert lowers.tolist() == [-math.inf, -math.inf, 0.0]
+    assert uppers.tolist() == [math.inf, math.inf, 5.0]
