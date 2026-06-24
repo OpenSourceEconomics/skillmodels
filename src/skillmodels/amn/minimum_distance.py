@@ -152,7 +152,10 @@ class _Structure:
     baseline_mean_zero_slots: tuple[int, ...]
     """Indices into ``factor_period_slots`` for which the K-th mixture's
     mean is determined by the tau-weighted sum-to-zero constraint
-    (AMN eq. 13). Typically the period-0 latent-factor slots."""
+    (AMN eq. 13). The period-0 latent-factor slots, EXCEPT factors whose
+    initial location is already pinned by a measurement-intercept
+    normalization (those keep a free mean to avoid double-normalizing the
+    initial location -- audit F7)."""
 
 
 def _build_structure(  # noqa: C901, PLR0912, PLR0915
@@ -203,6 +206,15 @@ def _build_structure(  # noqa: C901, PLR0912, PLR0915
     intercept_free_mask = np.zeros(n_aug, dtype=bool)
     sigma2_free_mask = np.zeros(n_aug, dtype=bool)
 
+    # Factors whose period-0 location is already pinned by a measurement
+    # intercept normalization. For these the AMN weighted mean-zero restriction
+    # must NOT also be imposed: a pinned intercept and mean-zero both anchor the
+    # same initial-location orbit direction, so applying both over-identifies it
+    # (audit F7) -- the factor mean is forced to satisfy a constraint the pinned
+    # intercept already discharges, leaving an irreducible moment residual when
+    # the true initial mean is nonzero.
+    factors_with_pinned_initial_intercept: set[str] = set()
+
     # Latent-factor measurement slots.
     for aug_idx, (period, factor, meas_name) in zip(
         layout.measurement_slots, layout.measurement_meta, strict=True
@@ -235,6 +247,8 @@ def _build_structure(  # noqa: C901, PLR0912, PLR0915
             lambda_free_mask[aug_idx, col] = True
         if intercept_normalized:
             intercept_value[aug_idx] = intercept_norm_value
+            if int(period) == 0:
+                factors_with_pinned_initial_intercept.add(factor)
         else:
             intercept_free_mask[aug_idx] = True
 
@@ -265,12 +279,19 @@ def _build_structure(  # noqa: C901, PLR0912, PLR0915
     del observed_factor_names
 
     # Mean-zero baseline: period-0 latent-factor slots get pinned by the
-    # tau-weighted sum-to-zero constraint. Observed factors / controls
-    # have free means (no normalization needed; they're directly
-    # observed).
+    # tau-weighted sum-to-zero constraint -- UNLESS the factor's initial
+    # location is already pinned by a measurement-intercept normalization, in
+    # which case mean-zero would be a second normalization on the same orbit
+    # direction (audit F7) and the factor mean stays free instead. Observed
+    # factors / controls have free means (no normalization needed; they're
+    # directly observed).
     latent_factor_names = set(processed_model.labels.latent_factors)
     baseline_slot_ids = tuple(
-        slot_index[(p, f)] for (p, f) in slots if p == 0 and f in latent_factor_names
+        slot_index[(p, f)]
+        for (p, f) in slots
+        if p == 0
+        and f in latent_factor_names
+        and f not in factors_with_pinned_initial_intercept
     )
 
     return _Structure(

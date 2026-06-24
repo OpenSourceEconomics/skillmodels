@@ -119,7 +119,30 @@ def _build_oracle_mixture(
     }
 
 
-def test_build_structure_identifies_anchor_and_baseline():
+def _mean_zero_model() -> ModelSpec:
+    """Canonical AMN: free period-0 intercept, location set by weighted mean-zero."""
+    return ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2", "y3"), ("y1", "y2", "y3")),
+                normalizations=Normalizations(
+                    loadings=({"y1": 1}, {"y1": 1}),
+                    intercepts=({}, {}),
+                ),
+                transition_function="linear",
+            ),
+        },
+    )
+
+
+def test_build_structure_drops_mean_zero_when_initial_intercept_pinned():
+    """A pinned period-0 intercept removes that factor's mean-zero baseline slot.
+
+    `_tiny_model` pins the period-0 anchor intercept to 0, which supplies the
+    initial location. Imposing the weighted mean-zero on top would be a second
+    normalization of the same orbit direction (audit F7), so the period-0 factor
+    mean stays free and is NOT a baseline slot.
+    """
     model = _tiny_model()
     processed = process_model(model)
     layout = build_augmented_measure_layout(processed)
@@ -137,7 +160,26 @@ def test_build_structure_identifies_anchor_and_baseline():
     assert struct.intercept_free_mask.sum() == 5
     # All 6 measurement slots have free sigma2 (no obs factors, no controls).
     assert struct.sigma2_free_mask.sum() == 6
-    # Baseline mean-zero slot is (0, "skills").
+    # The pinned period-0 intercept already anchors location, so there is no
+    # mean-zero baseline slot.
+    assert struct.baseline_mean_zero_slots == ()
+
+
+def test_build_structure_keeps_mean_zero_when_initial_intercept_free():
+    """With a free period-0 intercept, the weighted mean-zero anchors location.
+
+    The canonical AMN convention leaves the measurement intercepts free and sets
+    the initial location through the period-0 weighted mean-zero, so the period-0
+    factor slot IS a baseline slot.
+    """
+    model = _mean_zero_model()
+    processed = process_model(model)
+    layout = build_augmented_measure_layout(processed)
+
+    struct = _build_structure(layout, processed)
+
+    # No pinned intercept anywhere, so all 6 intercepts are free.
+    assert struct.intercept_free_mask.sum() == 6
     baseline_slot = struct.factor_period_slots.index((0, "skills"))
     assert baseline_slot in struct.baseline_mean_zero_slots
 
@@ -150,9 +192,11 @@ def test_pack_layout_returns_consistent_total():
 
     n_total, slices = _pack_layout(struct, n_components=2)
 
-    # sigma2: 6 free; chol_0+chol_1: 2*3=6; mu: 2*2 - 1 baseline = 3;
-    # lambda: 4 free; intercept: 5 free => 6+6+3+4+5 = 24.
-    assert n_total == 24
+    # `_tiny_model` pins the period-0 intercept, so there is no mean-zero
+    # baseline slot and every mu entry is free (audit F7).
+    # sigma2: 6 free; chol_0+chol_1: 2*3=6; mu: 2*2 - 0 baseline = 4;
+    # lambda: 4 free; intercept: 5 free => 6+6+4+4+5 = 25.
+    assert n_total == 25
     assert slices["sigma2"] == slice(0, 6)
 
 
@@ -256,6 +300,73 @@ def test_solve_minimum_distance_recovers_oracle():
     assert loadings.loc[(0, "y1"), "loading"] == pytest.approx(1.0, abs=1e-6)
     assert loadings.loc[(0, "y2"), "loading"] == pytest.approx(0.8, abs=5e-2)
     assert loadings.loc[(0, "y3"), "loading"] == pytest.approx(1.2, abs=5e-2)
+
+
+def _nonzero_initial_mean_oracle(
+    layout: AugmentedMeasureLayout,
+) -> MixtureFitResult:
+    """Oracle moments whose period-0 factor mean is NONZERO in every component.
+
+    The period-0 intercept of the anchor measurement is pinned to 0 (see
+    `_tiny_model`), so that pin already supplies the initial location: the
+    factor mean must stay free to absorb the true nonzero level. Imposing the
+    AMN weighted mean-zero restriction on top would force the weighted mean to
+    0 and contradict these moments, so a faithful Stage-2 fit must reach SSE 0
+    only when it does NOT double-normalize the location.
+    """
+    n_components, n_aug = 2, 6
+    truth_lambda = np.zeros((6, 2))
+    truth_lambda[0, 0] = 1.0
+    truth_lambda[1, 0] = 0.8
+    truth_lambda[2, 0] = 1.2
+    truth_lambda[3, 1] = 1.0
+    truth_lambda[4, 1] = 0.8
+    truth_lambda[5, 1] = 1.2
+    truth_intercept = np.array([0.0, 0.1, -0.2, 0.5, 0.3, 0.4])
+    truth_sigma2 = np.array([0.3, 0.25, 0.4, 0.35, 0.2, 0.5]) ** 2
+    # Period-0 latent mean is 0.4 in BOTH mixtures => weighted mean 0.4 != 0.
+    truth_mu = np.array([[0.4, 0.4], [0.4, -0.3]])
+    truth_omega = np.array(
+        [
+            [[1.0, 0.4], [0.4, 1.2]],
+            [[0.9, 0.2], [0.2, 1.1]],
+        ]
+    )
+
+    means = np.empty((n_components, n_aug))
+    covs = np.empty((n_components, n_aug, n_aug))
+    for m in range(n_components):
+        means[m] = truth_intercept + truth_lambda @ truth_mu[m]
+        covs[m] = truth_lambda @ truth_omega[m] @ truth_lambda.T + np.diag(truth_sigma2)
+
+    return MixtureFitResult(
+        weights=np.array([0.5, 0.5]),
+        means=means,
+        covariances=covs,
+        loglikelihood=-100.0,
+        n_iter=10,
+        converged=True,
+        layout=layout,
+    )
+
+
+def test_pinned_initial_intercept_frees_factor_mean_from_mean_zero():
+    """A pinned period-0 intercept disables the weighted mean-zero on that factor.
+
+    Pinning the anchor intercept and imposing the AMN weighted mean-zero
+    constraint are two location normalizations on the same orbit direction.
+    With a nonzero true initial mean only ONE can hold, so a faithful fit drops
+    mean-zero (the intercept pin supplies location) and recovers the moments at
+    SSE 0; double-normalizing would leave a large irreducible residual.
+    """
+    model = _tiny_model()
+    processed = process_model(model)
+    layout = build_augmented_measure_layout(processed)
+    mixture = _nonzero_initial_mean_oracle(layout)
+
+    result = solve_minimum_distance(mixture, processed)
+
+    assert result.objective_value < 1e-3
 
 
 def test_solve_minimum_distance_rejects_unknown_weighting():
