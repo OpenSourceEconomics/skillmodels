@@ -204,21 +204,12 @@ def _validate_factor(factor_name: str, factor_spec: FactorSpec) -> list[str]:
             f"supported for endogenous factors (set is_endogenous=True)."
         )
 
-    # Factors without an initial distribution must also not be measured at
-    # period 0: their value at period 0 is not drawn from any mixture, so a
-    # measurement density there would have no latent value to hit.
-    if (
-        not factor_spec.has_initial_distribution
-        and len(factor_spec.measurements) > 0
-        and len(factor_spec.measurements[0]) > 0
-    ):
-        errors.append(
-            f"Factor '{factor_name}': has_initial_distribution=False requires "
-            f"empty measurements at period 0 (got "
-            f"{factor_spec.measurements[0]!r}). Drop them from the FactorSpec; "
-            f"their contribution would typically be absorbed into the "
-            f"transition step 0->1 in a MATLAB-style reproduction."
-        )
+    # A reconstructed factor (has_initial_distribution=False) MAY declare period-0
+    # measurements under the contemporaneous convention: they measure the period-0
+    # reconstruction I_0 = g(theta_0). They are excluded from the initial step (which
+    # has no latent value for them) and sourced by the source/destination calendar
+    # adapter as the free target of the 0->1 step, scored against I_0. So period-0
+    # reconstructed-factor measurements are allowed and not an error here.
 
     return errors
 
