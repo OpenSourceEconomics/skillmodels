@@ -37,20 +37,30 @@ switch to turn the gate off for models that are intentionally location-under-ide
 -- e.g. the original CHS replication convention, where the initial latent mean is a free
 parameter seeded to 0 rather than pinned by an intercept normalization.
 
-KNOWN LIMITATION -- restricted-CES scale is per-COMPONENT, not per-factor (Pro
-F2). For a restricted-CES skill factor, the production restrictions identify the
-relative skill/investment scales, so only ONE primitive scale anchor is needed
-across the connected skill-investment system (on lambda_theta,0,1 OR
-lambda_I,0,1); a second loading pin is then a testable restriction, not a
-normalization. This precheck does not build the production-graph connected
-components: it checks each factor's OWN initial loading anchor. In the standard
-setup -- investment is endogenous with `has_initial_distribution=False`, so it is
-skipped here -- this happens to require exactly one scale anchor (on skills),
-which is correct. But it does NOT flag an additional lambda_I,0,1 pin as an
-over-normalizing testable restriction, and for a CES model where the input factor
-DOES carry an initial distribution it would over-require (one anchor per factor).
-The connected-component scale accounting belongs to the full identification
-diagnostic.
+RESTRICTED-CES SCALE SHARING (Pro F5). For a restricted-CES skill factor, the
+production restrictions identify the relative skill/investment scales, so only
+ONE primitive scale anchor is needed across the connected skill-investment system
+(on lambda_theta,0,1 OR lambda_I,0,1); a second loading pin is then a testable
+restriction, not a normalization. This is split deliberately between the two
+sides of the diagnostic:
+
+- The HARD GATE (`check_identification` / `fail_if_not_identified`) stays
+  per-factor and CONSERVATIVE: it requires each factor with an initial
+  distribution to carry its own scale anchor. A precise per-system requirement
+  needs the production graph plus nonzero-share information, which is not
+  available from the bare `ModelSpec`; a crude graph could make the gate PASS a
+  genuinely scale-under-identified model, which is worse than over-requiring. In
+  the standard setup investment is endogenous with
+  `has_initial_distribution=False`, so it is skipped and exactly one scale anchor
+  (on skills) is required -- correct. The only cost is over-requiring a redundant
+  anchor in the exotic case where a CES input factor ALSO carries its own initial
+  distribution; pass `require_identification=False` (or add the redundant anchor)
+  there.
+- The WARN side (`find_excess_initial_restrictions` /
+  `warn_if_overrestricted`) IS restricted-CES aware: when a restricted-CES
+  production is present it accounts scale anchors once across the CES system and
+  flags a second independent scale pin as a testable restriction. Being
+  imprecise here only over- or under-emits a warning, never weakens the gate.
 """
 
 import math
@@ -61,7 +71,41 @@ import optimagic as om
 import pandas as pd
 
 from skillmodels.common.constraints import _equality_constraint_loc
-from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.model_spec import FactorSpec, ModelSpec
+
+# Restricted CES (psi=1) production is affine in its latent inputs, so the
+# production shares identify the relative scales of the combined factors; one
+# primitive scale anchor propagates to the whole system. The general
+# `log_ces_general` form is excluded (it does not impose the restriction).
+_RESTRICTED_CES_TRANSITIONS = frozenset(
+    {"log_ces", "log_ces_af", "log_ces_with_constant"}
+)
+
+
+def _restricted_ces_scale_system(model_spec: ModelSpec) -> frozenset[str]:
+    """Return latent factors that share one scale through restricted-CES production.
+
+    When any factor uses a restricted-CES transition, the production combines the
+    latent factors into a system whose relative scales the CES restrictions identify
+    from a single primitive anchor (see `recover_primitive_ces_scales`). skillmodels
+    CES production is over the full latent state, so the system is the set of latent
+    factors that carry an initial distribution. Returns an empty set when no
+    restricted-CES transition is present (the translog default: each factor anchors
+    its own scale) or when fewer than two such factors exist (no sharing to report).
+    """
+    has_restricted_ces = any(
+        isinstance(spec.transition_function, str)
+        and spec.transition_function in _RESTRICTED_CES_TRANSITIONS
+        for spec in model_spec.factors.values()
+    )
+    if not has_restricted_ces:
+        return frozenset()
+    members = frozenset(
+        name
+        for name, spec in model_spec.factors.items()
+        if spec.has_initial_distribution
+    )
+    return members if len(members) >= 2 else frozenset()
 
 
 def _is_scale_anchor_value(value: float) -> bool:
@@ -250,6 +294,63 @@ def check_identification(
     return problems
 
 
+def _initial_anchor_keys(
+    factor_name: str,
+    spec: FactorSpec,
+    pinned: dict[tuple[object, ...], float],
+    n_mixtures: int,
+) -> tuple[list[tuple[str, int, str, str]], list[tuple[str, int, str, str]]]:
+    """Return the pinned period-0 scale and location anchor keys for a factor.
+
+    Scale keys are finite-nonzero period-0 loadings; location keys are finite
+    period-0 measurement intercepts plus finite fixed initial-component means.
+    """
+    measures = spec.measurements[0]
+    scale_keys = [
+        key
+        for meas in measures
+        if (key := ("loadings", 0, meas, factor_name)) in pinned
+        and _is_scale_anchor_value(pinned[key])
+    ]
+    location_keys = [
+        key
+        for meas in measures
+        if (key := ("controls", 0, meas, "constant")) in pinned
+        and _is_location_anchor_value(pinned[key])
+    ] + [
+        key
+        for component in range(n_mixtures)
+        if (key := ("initial_states", 0, f"mixture_{component}", factor_name)) in pinned
+        and _is_location_anchor_value(pinned[key])
+    ]
+    return scale_keys, location_keys
+
+
+def _scale_excess_message(factor_name: str, n_scale: int) -> list[str]:
+    """Return the per-factor scale over-restriction message, if any."""
+    if n_scale <= 1:
+        return []
+    return [
+        f"Factor '{factor_name}' period 0: {n_scale} independent scale pins "
+        f"(loadings), but the initial scale orbit has one direction. "
+        f"{n_scale - 1} of them are testable restrictions, not normalizations -- "
+        f"they constrain identified features and can move the estimate under "
+        f"misspecification."
+    ]
+
+
+def _location_excess_message(factor_name: str, n_location: int) -> list[str]:
+    """Return the per-factor location over-restriction message, if any."""
+    if n_location <= 1:
+        return []
+    return [
+        f"Factor '{factor_name}' period 0: {n_location} independent location pins "
+        f"(measurement intercept and/or initial-component mean), but the initial "
+        f"location orbit has one direction. {n_location - 1} of them are testable "
+        f"restrictions, not normalizations."
+    ]
+
+
 def find_excess_initial_restrictions(
     model_spec: ModelSpec,
     fixed_params: pd.DataFrame | None = None,
@@ -270,6 +371,17 @@ def find_excess_initial_restrictions(
     empty list means each orbit direction is pinned at most once. Pins tied together
     by an equality constraint count as a single restriction, so consistent equality
     chains never trip the check.
+
+    Restricted-CES scale sharing (Pro F5): when the model uses a restricted-CES
+    production (`log_ces` / `log_ces_af` / `log_ces_with_constant`), the production
+    shares identify the RELATIVE scales of the factors the CES combines, so a single
+    primitive scale anchor across the whole CES system is the only scale
+    normalization (see `recover_primitive_ces_scales`). A per-factor scale anchor on a
+    second CES factor is therefore a testable restriction. The scale accounting for
+    those factors is reported once at the SYSTEM level rather than per factor. This is
+    the WARN side only -- the hard gate (`fail_if_not_identified`) stays per-factor and
+    conservative, so it never passes a genuinely scale-under-identified model on the
+    strength of an assumed CES link.
     """
     pinned = _pinned_values(model_spec, fixed_params)
     components = _equality_components(constraints)
@@ -281,50 +393,41 @@ def find_excess_initial_restrictions(
     def _independent_count(keys: Iterable[tuple[object, ...]]) -> int:
         return len({component_of.get(key, key) for key in keys})
 
+    ces_system = _restricted_ces_scale_system(model_spec)
+
     messages: list[str] = []
+    system_scale_keys: list[tuple[object, ...]] = []
     for factor_name, spec in model_spec.factors.items():
         if not spec.has_initial_distribution:
             continue
         if len(spec.measurements) == 0 or len(spec.measurements[0]) == 0:
             continue
-        measures = spec.measurements[0]
+        scale_keys, location_keys = _initial_anchor_keys(
+            factor_name, spec, pinned, model_spec.n_mixtures
+        )
 
-        scale_keys = [
-            key
-            for meas in measures
-            if (key := ("loadings", 0, meas, factor_name)) in pinned
-            and _is_scale_anchor_value(pinned[key])
-        ]
-        location_keys = [
-            key
-            for meas in measures
-            if (key := ("controls", 0, meas, "constant")) in pinned
-            and _is_location_anchor_value(pinned[key])
-        ] + [
-            key
-            for component in range(model_spec.n_mixtures)
-            if (key := ("initial_states", 0, f"mixture_{component}", factor_name))
-            in pinned
-            and _is_location_anchor_value(pinned[key])
-        ]
+        if factor_name in ces_system:
+            # Scale accounting is deferred to the system-level check below, since
+            # the CES restrictions pin one scale across all member factors.
+            system_scale_keys.extend(scale_keys)
+        else:
+            messages.extend(
+                _scale_excess_message(factor_name, _independent_count(scale_keys))
+            )
+        messages.extend(
+            _location_excess_message(factor_name, _independent_count(location_keys))
+        )
 
-        n_scale = _independent_count(scale_keys)
-        if n_scale > 1:
-            messages.append(
-                f"Factor '{factor_name}' period 0: {n_scale} independent scale pins "
-                f"(loadings), but the initial scale orbit has one direction. "
-                f"{n_scale - 1} of them are testable restrictions, not "
-                f"normalizations -- they constrain identified features and can move "
-                f"the estimate under misspecification."
-            )
-        n_location = _independent_count(location_keys)
-        if n_location > 1:
-            messages.append(
-                f"Factor '{factor_name}' period 0: {n_location} independent location "
-                f"pins (measurement intercept and/or initial-component mean), but the "
-                f"initial location orbit has one direction. {n_location - 1} of them "
-                f"are testable restrictions, not normalizations."
-            )
+    n_system_scale = _independent_count(system_scale_keys)
+    if n_system_scale > 1:
+        members = ", ".join(f"'{name}'" for name in sorted(ces_system))
+        messages.append(
+            f"Restricted-CES scale system ({members}) period 0: {n_system_scale} "
+            f"independent scale pins (loadings) across the system, but the CES "
+            f"restrictions identify the relative scales from a SINGLE primitive "
+            f"anchor. {n_system_scale - 1} of them are testable restrictions, not "
+            f"normalizations."
+        )
     return messages
 
 

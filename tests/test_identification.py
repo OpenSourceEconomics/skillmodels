@@ -324,3 +324,67 @@ def test_find_excess_initial_restrictions_ignores_equality_tied_pins() -> None:
     ]
     excess = find_excess_initial_restrictions(model, constraints=constraints)
     assert not any("scale" in item for item in excess)
+
+
+def _ces_two_factor_model(
+    *,
+    investment_loadings: tuple[Mapping[str, float], ...],
+    investment_intercepts: tuple[Mapping[str, float], ...],
+) -> ModelSpec:
+    """A restricted-CES `skills` output plus a latent `investment` input.
+
+    Both factors carry an initial distribution, so investment is a CES input
+    that has its own period-0 measurement system.
+    """
+    return ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "y2", "y3"),) * 2,
+                normalizations=Normalizations(
+                    loadings=({"y1": 1.0},) * 2,
+                    intercepts=({"y1": 0.0},) * 2,
+                ),
+                transition_function="log_ces",
+            ),
+            "investment": FactorSpec(
+                measurements=(("z1", "z2", "z3"),) * 2,
+                normalizations=Normalizations(
+                    loadings=investment_loadings,
+                    intercepts=investment_intercepts,
+                ),
+                transition_function="linear",
+            ),
+        },
+    )
+
+
+def test_find_excess_flags_second_scale_anchor_in_restricted_ces_system() -> None:
+    """A second scale anchor across a restricted-CES system is a testable restriction.
+
+    `skills` (restricted CES) anchors its own period-0 scale; `investment` is a
+    CES input that also carries an initial distribution and redundantly anchors a
+    second scale. The CES restrictions identify investment's scale from skills'
+    single anchor, so the extra anchor constrains an identified feature.
+    """
+    model = _ces_two_factor_model(
+        investment_loadings=({"z1": 1.0},) * 2,
+        investment_intercepts=({"z1": 0.0},) * 2,
+    )
+    excess = find_excess_initial_restrictions(model)
+    assert any(
+        "CES" in item and "scale" in item and "testable" in item for item in excess
+    )
+
+
+def test_find_excess_allows_single_scale_anchor_in_restricted_ces_system() -> None:
+    """One scale anchor for the whole restricted-CES system is not excess.
+
+    Only `skills` anchors the shared CES scale; investment's scale is identified
+    through the CES restrictions, so there is no excess scale restriction.
+    """
+    model = _ces_two_factor_model(
+        investment_loadings=({}, {}),
+        investment_intercepts=({"z1": 0.0}, {"z1": 0.0}),
+    )
+    excess = find_excess_initial_restrictions(model)
+    assert not any("scale" in item for item in excess)
