@@ -84,7 +84,7 @@ cuda = { features = [ "cuda" ], solve-group = "cuda" }
 docs = { features = [ "docs" ], solve-group = "default" }
 tests-cpu = { features = [ "tests" ], solve-group = "default" }
 tests-cuda = { features = [ "tests", "cuda" ], solve-group = "cuda" }
-type-checking = { features = [ "type-checking" ], solve-group = "default" }
+type-checking = { features = [ "type-checking", "tests" ], solve-group = "default" }
 tests-cuda12 = { features = [ "tests", "cuda" ], solve-group = "cuda" }
 tests-cuda13 = { features = [ "tests", "cuda13" ], solve-group = "cuda13" }
 [tool.pixi.feature.cuda]
@@ -132,7 +132,7 @@ mem-on-clean-repo = """\
 [tool.pixi.feature.type-checking.pypi-dependencies]
 matplotlib = "*"  # required because of pandas
 pandas-stubs = "*"
-ty = "*"
+ty = "==0.0.23"  # pinned: 0.0.52 regressed, mass-flagging dataclass-typed params
 types-pytz = "*"
 [tool.pixi.feature.type-checking.tasks]
 ty = "ty check src tests docs"
