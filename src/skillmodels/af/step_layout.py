@@ -22,9 +22,11 @@ measurements compose with the shared measurement kernel without a second calenda
 
 import enum
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, SupportsFloat, cast
+
+import pandas as pd
 
 from skillmodels.common.measurement_models import MeasurementFamily
 
@@ -120,6 +122,60 @@ class AFStepLayout:
     def importance_terms(self) -> tuple[AFMeasurementTerm, ...]:
         """Return the fixed, historical importance terms."""
         return tuple(t for t in self.terms if t.role == "importance")
+
+
+@dataclass(frozen=True)
+class HistoricalParams:
+    """Cumulative AF parameter registry keyed by the full param MultiIndex.
+
+    Importance terms re-apply fixed period-0 static-factor (MC/MN) densities, whose
+    params live in the initial-step result, not the immediately-previous step result.
+    A single concatenated registry makes every earlier estimate reachable.
+    """
+
+    table: pd.DataFrame
+    """Concatenated per-step params with a unique MultiIndex and a `value` column."""
+
+    @classmethod
+    def from_param_frames(cls, frames: Iterable[pd.DataFrame]) -> HistoricalParams:
+        """Concatenate per-step param frames, rejecting duplicate index entries."""
+        combined = pd.concat(list(frames))
+        if combined.index.has_duplicates:
+            dups = sorted(set(combined.index[combined.index.duplicated()].tolist()))
+            msg = f"Duplicate parameter index entries across AF steps: {dups}"
+            raise ValueError(msg)
+        return cls(table=combined)
+
+    def value(self, category: str, period: int, name1: str, name2: str) -> float:
+        """Return the estimated value at one full-index coordinate."""
+        # The index is unique (validated), so this `.loc` is a scalar; pandas-stubs
+        # still type it as a broad union, hence the cast to a float-coercible value.
+        cell = self.table.loc[(category, period, name1, name2), "value"]
+        return float(cast("SupportsFloat", cell))
+
+
+def compile_target_measurement_index(
+    layout: AFStepLayout,
+    controls: tuple[str, ...],
+) -> list[tuple[str, int, str, str]]:
+    """Build the free target measurement param index in the flat parser's global order.
+
+    Emits all control rows, then all loading rows, then all measurement-SD rows (the
+    order `_parse_transition_params` expects), each tagged with its term's true
+    `param_period` so a mixed-calendar target (destination skills at `d`, source
+    investment at `s`) parses correctly.
+    """
+    targets = layout.target_terms()
+    ind_tups: list[tuple[str, int, str, str]] = []
+    for term in targets:
+        for ctrl in controls:
+            ind_tups.append(("controls", term.param_period, term.measurement, ctrl))
+    for term in targets:
+        for factor in term.factor_loadings:
+            ind_tups.append(("loadings", term.param_period, term.measurement, factor))
+    for term in targets:
+        ind_tups.append(("meas_sds", term.param_period, term.measurement, "-"))
+    return ind_tups
 
 
 def compile_af_step_layouts(
