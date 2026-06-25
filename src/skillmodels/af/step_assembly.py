@@ -74,6 +74,13 @@ def assemble_step_arrays(
         An `AFStepArrays` with target/importance data, masks, and fixed params.
 
     """
+    # @pro: calendar split for step s->d. The FREE target block = {destination skills
+    # on theta_d, source investment I_s on period s}; the FIXED importance block =
+    # {source skills on theta_s, every static-persistent factor's period-0 rows}. The
+    # importance loadings/controls/SDs are read from `historical` by each row's true
+    # param_period (period-0 for static factors), so the carry-over density is fixed at
+    # its originally estimated value. Confirm target/importance membership and the
+    # history sourcing are the right ones for the MATLAB sequential likelihood.
     targets = layout.target_terms()
     importances = layout.importance_terms()
 

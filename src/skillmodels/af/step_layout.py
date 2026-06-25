@@ -231,9 +231,17 @@ def _terms_for_factor(
             ),
         ]
     if info.role == AFFactorRole.ENDOGENOUS:
-        # Source-period indicators measure I_s (the inv that drives this transition).
+        # @pro: THE calendar fix. The endogenous (investment) indicators are sourced
+        # from the SOURCE period s and scored on I_s -- the investment that drives the
+        # s->d transition -- not from destination d (the prior I_{d-1} mispairing).
+        # Confirm this matches MATLAB likelihood_01/12, where the period-s investment
+        # block enters transition_{s->d}.
         return _terms_at(info, source, AFEval.INV_SRC, "target", free=True, fam=fam_map)
     # STATIC_PERSISTENT: each declared period's indicators re-applied as importance.
+    # @pro: the dropped-MC/MN fix. A static factor's period-0 measurement block is
+    # re-emitted as a FIXED importance term at every step s->d (not only the first), so
+    # its density carries over in the importance weight. Is re-anchoring the static
+    # block at its declared period-0 the correct carry-over weight at every later step?
     terms: list[AFMeasurementTerm] = []
     for period in range(len(info.measurements_by_period)):
         terms.extend(

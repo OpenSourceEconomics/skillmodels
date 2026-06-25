@@ -169,6 +169,9 @@ def estimate_af(
         observed_factors=observed_factors,
     )
 
+    # @pro: entry point of the source/destination calendar adapter. Per-period frames
+    # are kept ID-indexed (not positionally concatenated) so the adapter can pair each
+    # individual's destination-skill and source-investment rows by ID across periods.
     # Per-period individual-ID-indexed frames for the source/destination calendar
     # adapter (used only for models with endogenous / static-persistent factors).
     # Level 1 is the period level (level 0 is the individual ID).

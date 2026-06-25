@@ -447,6 +447,11 @@ def _assemble_target_measurements(
         n_periods=n_calendar_periods,
     )[period - 1]
     target_terms = layout.target_terms()
+    # @pro: the free target block for this step is the mixed-calendar set {destination
+    # skills at d, source investment I_s at s}; the params index, template, and
+    # normalizations below are indexed at each row's own param_period so the mixed
+    # calendar parses correctly. The matching fixed importance block is built in
+    # `_run_transition_optimization`.
     step_arrays = assemble_step_arrays(
         layout, frames_by_period, factors, historical, controls_names
     )
@@ -572,10 +577,12 @@ def _run_transition_optimization(
         params_template, fixed_params
     )
 
-    # Importance/previous block. With the calendar adapter, the importance block is
-    # the layout's fixed source-skills (+ static-persistent period-0) rows from
-    # history -- it excludes the source investment (which is the free target). Without
-    # the adapter, fall back to extracting all previous-period measurement params.
+    # Importance/previous block. @pro: with the calendar adapter, the importance block
+    # is the layout's fixed source-skills (+ static-persistent period-0) rows from
+    # history -- it EXCLUDES the source investment (now the free target), avoiding the
+    # double-count, and RE-INCLUDES the static factors' period-0 density at every step
+    # (the dropped-MC/MN fix). Without the adapter, fall back to extracting all
+    # previous-period measurement params (the legacy single-calendar path).
     if importance is not None:
         prev_measurements = jnp.asarray(importance.importance_measurements)
         prev_meas_info = {
