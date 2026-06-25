@@ -59,6 +59,7 @@ from skillmodels.common.constraints import (
     filter_within_step_constraints,
     reconcile_start_to_equality,
 )
+from skillmodels.common.measurement_models import GaussianMeasurement
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.types import ProcessedModel, TransitionInfo, to_plain_dict
 
@@ -439,6 +440,8 @@ def _assemble_target_measurements(
             "endogenous or static-persistent factors."
         )
         raise ValueError(msg)
+    _fail_if_endogenous_precedes_state(factors, endogenous_factors)
+    _fail_if_unsupported_adapter_measurements(model_spec)
     n_calendar_periods = max(
         len(spec.measurements) for spec in model_spec.factors.values()
     )
@@ -482,10 +485,25 @@ def _factor_infos_from_spec(
     model_spec: ModelSpec,
     endogenous_factors: tuple[str, ...],
 ) -> list[AFFactorInfo]:
-    """Build per-factor AF role + measurement info for the layout compiler."""
+    """Build per-factor AF role + measurement info for the layout compiler.
+
+    The source-investment calendar is defined only for a *reconstructed* endogenous
+    factor -- one with `has_initial_distribution=False`. An endogenous factor that still
+    carries an initial distribution is not a reconstructed investment, so it cannot take
+    the `ENDOGENOUS` source-period role; the adapter does not support it and raises.
+    """
     infos: list[AFFactorInfo] = []
     for name, spec in model_spec.factors.items():
         if name in endogenous_factors:
+            if spec.has_initial_distribution:
+                msg = (
+                    f"AF calendar adapter: endogenous factor {name!r} has "
+                    "has_initial_distribution=True. The source-investment calendar is "
+                    "only defined for reconstructed endogenous factors "
+                    "(has_initial_distribution=False); a carried endogenous factor is "
+                    "not supported on the adapter path."
+                )
+                raise ValueError(msg)
             role = AFFactorRole.ENDOGENOUS
         elif spec.af_state_role == "static_persistent":
             role = AFFactorRole.STATIC_PERSISTENT
@@ -495,6 +513,65 @@ def _factor_infos_from_spec(
             AFFactorInfo(name=name, role=role, measurements_by_period=spec.measurements)
         )
     return infos
+
+
+def _fail_if_endogenous_precedes_state(
+    latent_factors: tuple[str, ...],
+    endogenous_factors: tuple[str, ...],
+) -> None:
+    """Reject a public factor order that interleaves endogenous before state factors.
+
+    The shared integrand assembles the latent vector as all dynamic-state factors
+    followed by all reconstructed-endogenous factors, while the loading mask columns
+    follow `latent_factors` (public insertion order). If an endogenous factor appears
+    before a state factor in public order, those two orderings disagree and a loading
+    row would score the wrong latent. Until the two representations are unified, require
+    every state factor to precede every endogenous factor and raise otherwise.
+    """
+    endo = set(endogenous_factors)
+    seen_endogenous = False
+    for name in latent_factors:
+        if name in endo:
+            seen_endogenous = True
+        elif seen_endogenous:
+            msg = (
+                "AF calendar adapter: all dynamic-state factors must precede every "
+                f"endogenous factor in the ModelSpec, but state factor {name!r} "
+                "follows an endogenous factor. Reorder so state factors come first."
+            )
+            raise ValueError(msg)
+
+
+def _fail_if_unsupported_adapter_measurements(model_spec: ModelSpec) -> None:
+    """Reject cross-loaded or non-Gaussian measurements on the calendar-adapter path.
+
+    The compiler emits one single-factor density term per measurement declaration and
+    does not plumb measurement-family metadata through the adapter, so a cross-loaded
+    measurement (declared under more than one factor) would be double-counted as two
+    rows, and a non-Gaussian (probit/Tobit) measurement would be silently scored as
+    Gaussian. Both are rejected until row-merging and family plumbing land.
+    """
+    owner: dict[str, str] = {}
+    for factor_name, spec in model_spec.factors.items():
+        for period_measures in spec.measurements:
+            for measure in period_measures:
+                if measure in owner and owner[measure] != factor_name:
+                    msg = (
+                        f"AF calendar adapter: measurement {measure!r} is "
+                        f"cross-loaded on factors {owner[measure]!r} and "
+                        f"{factor_name!r}; cross-loaded measurements are not supported."
+                    )
+                    raise ValueError(msg)
+                owner[measure] = factor_name
+    for measure in owner:
+        model = model_spec.measurement_models.get(measure)
+        if model is not None and not isinstance(model, GaussianMeasurement):
+            msg = (
+                f"AF calendar adapter: measurement {measure!r} has a non-Gaussian "
+                f"family ({type(model).__name__}); the adapter supports only Gaussian "
+                "measurements."
+            )
+            raise ValueError(msg)
 
 
 def _apply_layout_normalizations(

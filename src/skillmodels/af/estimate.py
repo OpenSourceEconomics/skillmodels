@@ -273,13 +273,16 @@ def estimate_af(
     else:
         conditional_dists_out = ()
 
+    period_means = tuple(float(r.loglikelihood) for r in period_results)
     return AFEstimationResult(
         period_results=tuple(period_results),
         params=all_params,
         model_spec=model_spec,
         conditional_distributions=conditional_dists_out,
         success=all(r.success for r in period_results),
-        loglikelihood=float(sum(r.loglikelihood for r in period_results)),
+        loglikelihood=float(sum(period_means)),
+        sequential_criterion=float(sum(period_means)),
+        period_mean_criteria=period_means,
     )
 
 

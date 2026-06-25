@@ -237,19 +237,13 @@ def _terms_for_factor(
         # Confirm this matches MATLAB likelihood_01/12, where the period-s investment
         # block enters transition_{s->d}.
         return _terms_at(info, source, AFEval.INV_SRC, "target", free=True, fam=fam_map)
-    # STATIC_PERSISTENT: each declared period's indicators re-applied as importance.
-    # @pro: the dropped-MC/MN fix. A static factor's period-0 measurement block is
-    # re-emitted as a FIXED importance term at every step s->d (not only the first), so
-    # its density carries over in the importance weight. Is re-anchoring the static
+    # STATIC_PERSISTENT: only the period-0 indicators are re-applied as importance.
+    # @pro: a static factor's period-0 measurement block is re-emitted as a FIXED
+    # importance term at every step s->d (period-0 rows only, re-applied each step), so
+    # its time-invariant density carries over in the importance weight without any later
+    # period's declaration leaking into an earlier step. Is re-anchoring the static
     # block at its declared period-0 the correct carry-over weight at every later step?
-    terms: list[AFMeasurementTerm] = []
-    for period in range(len(info.measurements_by_period)):
-        terms.extend(
-            _terms_at(
-                info, period, AFEval.STATIC, "importance", free=False, fam=fam_map
-            )
-        )
-    return terms
+    return _terms_at(info, 0, AFEval.STATIC, "importance", free=False, fam=fam_map)
 
 
 def _terms_at(

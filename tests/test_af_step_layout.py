@@ -115,6 +115,49 @@ def test_step_1_to_2_importance_reapplies_period0_static_factors() -> None:
     }
 
 
+def test_static_persistent_does_not_leak_future_periods() -> None:
+    """A static factor contributes only its period-0 rows to every importance block.
+
+    A static-persistent factor whose declarations span periods 0 and 2 re-applies its
+    period-0 measurement as a fixed importance term at every step, and never lets its
+    period-2 declaration leak forward into an earlier step's importance block.
+    """
+    factor_infos = (
+        AFFactorInfo(
+            name="skills",
+            role=AFFactorRole.DYNAMIC,
+            measurements_by_period=(("sk0",), ("sk1",), ("sk2",)),
+        ),
+        AFFactorInfo(
+            name="MC",
+            role=AFFactorRole.STATIC_PERSISTENT,
+            measurements_by_period=(("mc0",), (), ("mc2",)),
+        ),
+        AFFactorInfo(
+            name="MN",
+            role=AFFactorRole.STATIC_PERSISTENT,
+            measurements_by_period=(("mn0",), (), ()),
+        ),
+    )
+    layouts = compile_af_step_layouts(factor_infos, n_periods=3)
+    step_01_static = {
+        (t.measurement, t.data_period)
+        for t in layouts[0].terms
+        if t.role == "importance" and t.eval_node == AFEval.STATIC
+    }
+    assert ("mc0", 0) in step_01_static
+    assert ("mc2", 2) not in step_01_static
+    assert ("mn0", 0) in step_01_static
+
+    for layout in layouts:
+        step_static = {
+            (t.measurement, t.data_period)
+            for t in layout.terms
+            if t.role == "importance" and t.eval_node == AFEval.STATIC
+        }
+        assert ("mn0", 0) in step_static
+
+
 def test_each_investment_calendar_wave_is_a_target_exactly_once() -> None:
     layouts = compile_af_step_layouts(_cnlsy_factor_infos(), n_periods=3)
     inv_targets = [
