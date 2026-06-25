@@ -13,7 +13,10 @@ from jax import Array
 from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.af.initial_period import estimate_initial_period
 from skillmodels.af.params import get_measurements_per_factor
-from skillmodels.af.step_layout import HistoricalParams
+from skillmodels.af.step_layout import (
+    HistoricalParams,
+    fail_if_spearman_unsupported_on_adapter,
+)
 from skillmodels.af.transition_period import estimate_transition_period
 from skillmodels.af.types import (
     AFEstimationOptions,
@@ -104,8 +107,7 @@ def estimate_af(
         options = AFEstimationOptions()
     af_options = options
 
-    validate_af_model(model_spec, fixed_params, constraints)
-    fail_if_unsupported_kappa_params(start_params, fixed_params, constraints)
+    _validate_af_inputs(model_spec, fixed_params, constraints, start_params, af_options)
     processed_model = process_model(model_spec)
 
     # If AMN-based starts are requested, run the full AMN three-stage
@@ -327,6 +329,21 @@ def _align_adapter_panel(data: pd.DataFrame, n_periods: int) -> pd.DataFrame:
             )
             raise ValueError(msg)
     return data.sort_index()
+
+
+def _validate_af_inputs(
+    model_spec: ModelSpec,
+    fixed_params: pd.DataFrame | None,
+    constraints: list[om.constraints.Constraint] | None,
+    start_params: pd.DataFrame | None,
+    af_options: AFEstimationOptions,
+) -> None:
+    """Reject unsupported AF input combinations before any fitting begins."""
+    fail_if_spearman_unsupported_on_adapter(
+        model_spec, af_options.start_params_strategy
+    )
+    validate_af_model(model_spec, fixed_params, constraints)
+    fail_if_unsupported_kappa_params(start_params, fixed_params, constraints)
 
 
 def _maybe_align_adapter_panel(

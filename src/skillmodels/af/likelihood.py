@@ -729,6 +729,8 @@ def af_per_obs_loglike_transition(
     prev_measurement_families: Array | None = None,
     prev_measurement_lowers: Array | None = None,
     prev_measurement_uppers: Array | None = None,
+    target_control_tensor: Array | None = None,
+    prev_control_contrib: Array | None = None,
 ) -> Array:
     """Per-observation log-likelihood for a transition period (Step t).
 
@@ -763,7 +765,11 @@ def af_per_obs_loglike_transition(
     prev_full_loadings = prev_full_loadings.at[prev_loading_mask].set(
         prev_loadings_flat
     )
-    prev_control_contrib = prev_controls @ prev_control_params.T
+    # On the calendar-adapter path the importance control contribution is precompiled
+    # per row at its own control_period (static factors at 0, source skills at s); the
+    # plain path falls back to one shared source-period matmul.
+    if prev_control_contrib is None:
+        prev_control_contrib = prev_controls @ prev_control_params.T
     # NaN-safety for prev-period measurements (see `_initial_loglike_per_obs`).
     prev_meas_mask = jnp.isfinite(prev_measurements)
     safe_prev_measurements = jnp.where(prev_meas_mask, prev_measurements, 0.0)
@@ -779,6 +785,7 @@ def af_per_obs_loglike_transition(
         meas_sds=parsed["meas_sds"],
         measurements=measurements,
         controls=controls,
+        target_control_tensor=target_control_tensor,
         loading_mask=loading_mask,
         prev_residuals_base=prev_residuals_base,
         prev_measurements_safe=safe_prev_measurements,
@@ -845,6 +852,8 @@ def af_loglike_transition(
     prev_measurement_families: Array | None = None,
     prev_measurement_lowers: Array | None = None,
     prev_measurement_uppers: Array | None = None,
+    target_control_tensor: Array | None = None,
+    prev_control_contrib: Array | None = None,
 ) -> Array:
     """Negative log-likelihood for a transition period (Step t).
 
@@ -937,6 +946,12 @@ def af_loglike_transition(
             codes for the previous-period measurement block. ``None`` is Gaussian.
         prev_measurement_lowers: Optional previous-period Tobit lower bounds.
         prev_measurement_uppers: Optional previous-period Tobit upper bounds.
+        target_control_tensor: Optional shape-``(n_obs, n_measures, n_controls)``
+            per-row target control data, each row at its own ``control_period``
+            (calendar-adapter path). ``None`` keeps the single shared-matrix matmul.
+        prev_control_contrib: Optional shape-``(n_obs, n_prev_measures)`` precompiled
+            importance control contribution, each row at its ``control_period``.
+            ``None`` computes it from the shared previous-period controls matrix.
 
     Return:
         Scalar negative log-likelihood.
@@ -978,6 +993,8 @@ def af_loglike_transition(
         prev_measurement_families=prev_measurement_families,
         prev_measurement_lowers=prev_measurement_lowers,
         prev_measurement_uppers=prev_measurement_uppers,
+        target_control_tensor=target_control_tensor,
+        prev_control_contrib=prev_control_contrib,
     )
     return -jnp.mean(log_likes)
 
@@ -1050,6 +1067,7 @@ def _transition_loglike_per_obs(
     measurements: Array,
     controls: Array,
     loading_mask: Array,
+    target_control_tensor: Array | None = None,
     prev_residuals_base: Array,
     prev_measurements_safe: Array,
     prev_meas_mask: Array,
@@ -1113,7 +1131,16 @@ def _transition_loglike_per_obs(
     meas_mask = jnp.isfinite(measurements)
     safe_measurements = jnp.where(meas_mask, measurements, 0.0)
 
-    control_contrib = controls @ control_params.T
+    # On the calendar-adapter path each target row carries its own control_period, so
+    # the control data is a per-row tensor `(n_obs, n_measures, n_controls)` and the
+    # contribution is an einsum with the free control params. The plain path keeps the
+    # single shared-matrix matmul (one destination-period controls matrix).
+    if target_control_tensor is None:
+        control_contrib = controls @ control_params.T
+    else:
+        control_contrib = jnp.einsum(
+            "omc,mc->om", target_control_tensor, control_params
+        )
     residuals_base = safe_measurements - control_contrib
 
     cond_weights = prev_distribution["cond_weights"]

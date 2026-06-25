@@ -93,3 +93,77 @@ def test_step_1_to_2_importance_includes_static_mc_from_period0() -> None:
     mc_row = [n for _, n in arrays.imp_order].index(("mc", 0))
     assert arrays.importance_loadings_flat[mc_row] == 1.5
     assert arrays.importance_meas_sds[mc_row] == 0.4
+
+
+def _frames_with_control():
+    # A non-constant measurement control `x` whose value differs by period, so a row
+    # sourced from the wrong period is detectable.
+    return {
+        0: pd.DataFrame(
+            {"sk": [1.0, 2.0], "mc": [7.0, 8.0], "inv": [0.1, 0.2], "x": [10.0, 20.0]},
+            index=[1, 2],
+        ),
+        1: pd.DataFrame(
+            {"sk": [3.0, 4.0], "inv": [0.3, 0.4], "x": [100.0, 200.0]}, index=[1, 2]
+        ),
+        2: pd.DataFrame({"sk": [5.0, 6.0], "x": [1000.0, 2000.0]}, index=[1, 2]),
+    }
+
+
+def _historical_with_control():
+    rows = [
+        ("loadings", 0, "mc", "MC", 1.5),
+        ("controls", 0, "mc", "x", 0.5),
+        ("meas_sds", 0, "mc", "-", 0.4),
+        ("loadings", 1, "sk", "skills", 1.0),
+        ("controls", 1, "sk", "x", 2.0),
+        ("meas_sds", 1, "sk", "-", 0.5),
+    ]
+    idx = pd.MultiIndex.from_tuples(
+        [(r[0], r[1], r[2], r[3]) for r in rows],
+        names=["category", "period", "name1", "name2"],
+    )
+    return HistoricalParams(pd.DataFrame({"value": [r[4] for r in rows]}, index=idx))
+
+
+def test_importance_control_contrib_sources_each_row_from_its_control_period() -> None:
+    # 1->2 importance block: MC@0 (control_period 0) + source skills@1 (period 1).
+    # Each row's control contribution must use that row's OWN period's control data and
+    # fixed params, not one shared source-period matrix.
+    arrays = assemble_step_arrays(
+        _layouts()[1],
+        _frames_with_control(),
+        ("skills", "MC", "investment"),
+        _historical_with_control(),
+        ("x",),
+    )
+    rows = [n for _, n in arrays.imp_order]
+    mc_row = rows.index(("mc", 0))
+    sk_row = rows.index(("sk", 1))
+    # MC_0: x@period0 ([10,20]) * 0.5; skills_1: x@period1 ([100,200]) * 2.0.
+    np.testing.assert_allclose(
+        arrays.importance_control_contrib[:, mc_row], [5.0, 10.0]
+    )
+    np.testing.assert_allclose(
+        arrays.importance_control_contrib[:, sk_row], [200.0, 400.0]
+    )
+
+
+def test_target_controls_source_each_row_from_its_control_period() -> None:
+    # 1->2 target block: skills@2 (control_period 2) + source investment@1 (period 1).
+    # The per-row control-data tensor must read each row's own period's control values.
+    arrays = assemble_step_arrays(
+        _layouts()[1],
+        _frames_with_control(),
+        ("skills", "MC", "investment"),
+        _historical_with_control(),
+        ("x",),
+    )
+    order = [n for _, n in arrays.target_order]
+    sk_col = order.index(("sk", 2))
+    inv_col = order.index(("inv", 1))
+    # target_controls has shape (n_ids, n_target, n_controls); single control `x`.
+    # skills@2 reads x from period 2 ([1000,2000]); investment@1 reads x from period 1
+    # ([100,200]) -- each row sourced from its own control_period.
+    np.testing.assert_allclose(arrays.target_controls[:, sk_col, 0], [1000.0, 2000.0])
+    np.testing.assert_allclose(arrays.target_controls[:, inv_col, 0], [100.0, 200.0])

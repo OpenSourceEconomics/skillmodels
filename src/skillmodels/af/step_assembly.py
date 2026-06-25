@@ -52,6 +52,13 @@ class AFStepArrays:
     """`(n_importance, n_controls)` fixed importance control params, from history."""
     importance_meas_sds: np.ndarray
     """`(n_importance,)` fixed importance measurement SDs, from history."""
+    target_controls: np.ndarray
+    """`(n_ids, n_target, n_controls)` per-row target control data, each row sourced
+    from its term's own `control_period` (the free target control coefficients are
+    estimated, so only the data -- not the contribution -- can be precompiled)."""
+    importance_control_contrib: np.ndarray
+    """`(n_ids, n_importance)` fixed importance control contribution, each row's control
+    data (at its `control_period`) dotted with its fixed control params from history."""
 
 
 def assemble_step_arrays(
@@ -108,7 +115,9 @@ def assemble_step_arrays(
     control_params = np.array(
         [
             [
-                historical.value("controls", term.param_period, term.measurement, ctrl)
+                historical.value(
+                    "controls", term.control_period, term.measurement, ctrl
+                )
                 for ctrl in controls
             ]
             for term in importances
@@ -123,6 +132,16 @@ def assemble_step_arrays(
         dtype=np.float64,
     )
 
+    target_controls = _source_control_tensor(targets, frames_by_period, ids, controls)
+    imp_controls = _source_control_tensor(importances, frames_by_period, ids, controls)
+    # Importance control params are fixed (from history), so the contribution can be
+    # precompiled per row at its own control_period: (n_ids, n_imp, n_ctrl) . (n_imp,
+    # n_ctrl) -> (n_ids, n_imp). Target control params are estimated, so only the data
+    # tensor is precompiled; the kernel forms its contribution each iteration.
+    importance_control_contrib = np.einsum(
+        "imc,mc->im", imp_controls, control_params, optimize=False
+    )
+
     return AFStepArrays(
         ids=ids,
         target_measurements=target_values,
@@ -134,6 +153,8 @@ def assemble_step_arrays(
         importance_loadings_flat=np.array(loadings_flat, dtype=np.float64),
         importance_control_params=control_params,
         importance_meas_sds=meas_sds,
+        target_controls=target_controls,
+        importance_control_contrib=importance_control_contrib,
     )
 
 
@@ -153,3 +174,28 @@ def _source_block(
         for term in terms
     ]
     return order, np.column_stack(columns)
+
+
+def _source_control_tensor(
+    terms: Sequence[AFMeasurementTerm],
+    frames_by_period: Mapping[int, pd.DataFrame],
+    ids: np.ndarray,
+    controls: tuple[str, ...],
+) -> np.ndarray:
+    """Source each term's control values on the shared IDs from its `control_period`.
+
+    Returns shape `(n_ids, n_terms, n_controls)`. A `"constant"` control is a column of
+    ones; a named control is read from that term's `control_period` frame; an absent
+    control is zero. Reading each row at its own `control_period` is what keeps a
+    mixed-calendar block (e.g. destination skills at `d` with source investment at `s`)
+    from evaluating every row against one shared period's controls.
+    """
+    tensor = np.zeros((len(ids), len(terms), len(controls)), dtype=np.float64)
+    for row, term in enumerate(terms):
+        frame = frames_by_period[term.control_period]
+        for col, ctrl in enumerate(controls):
+            if ctrl == "constant":
+                tensor[:, row, col] = 1.0
+            elif ctrl in frame.columns:
+                tensor[:, row, col] = frame.loc[ids, ctrl].to_numpy(dtype=np.float64)
+    return tensor

@@ -717,6 +717,16 @@ def _run_transition_optimization(
         "stability_floor": af_options.stability_floor,
         "n_obs_per_batch": n_obs_per_batch,
     }
+    if importance is not None:
+        # Layout path: feed the per-row target control data and the precompiled
+        # importance control contribution, each sourced at its own control_period, so
+        # the kernel stops applying one shared period's controls to a mixed block.
+        loglike_kwargs["target_control_tensor"] = jnp.asarray(
+            importance.target_controls
+        )
+        loglike_kwargs["prev_control_contrib"] = jnp.asarray(
+            importance.importance_control_contrib
+        )
 
     loglike_and_grad = create_loglike_and_gradient(
         af_loglike_transition,

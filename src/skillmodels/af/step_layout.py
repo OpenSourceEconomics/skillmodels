@@ -71,6 +71,28 @@ def fail_if_calendar_adapter_unsupported(model_spec: ModelSpec, feature: str) ->
         raise NotImplementedError(msg)
 
 
+def fail_if_spearman_unsupported_on_adapter(
+    model_spec: ModelSpec, strategy: str
+) -> None:
+    """Raise if a Spearman moment start is requested for a calendar-adapter model.
+
+    The Spearman/OLS start routine discovers measurements at the destination period and
+    writes loading/SD rows there, so it does not seed the mixed-calendar target
+    (destination skills at `d` plus source investment at `s`). Rather than silently fall
+    back to the constant start -- which contradicts the requested option -- reject it on
+    the adapter path until a layout-aware moment initializer exists.
+    """
+    if strategy == "spearman" and model_uses_calendar_adapter(model_spec):
+        msg = (
+            "start_params_strategy='spearman' is not supported for AF models that use "
+            "the source/destination calendar adapter: the moment start discovers "
+            "measurements at the destination period and would mis-seed the "
+            "source-investment block. Use start_params_strategy='constant' (or 'amn') "
+            "until a calendar-aware moment initializer is implemented."
+        )
+        raise NotImplementedError(msg)
+
+
 class AFFactorRole(enum.Enum):
     """How a latent factor participates in AF's sequential calendar."""
 

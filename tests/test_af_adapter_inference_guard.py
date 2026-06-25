@@ -15,6 +15,7 @@ from skillmodels.af.inference import compute_af_standard_errors
 from skillmodels.af.posterior_states import get_af_posterior_states
 from skillmodels.af.step_layout import (
     fail_if_calendar_adapter_unsupported,
+    fail_if_spearman_unsupported_on_adapter,
     model_uses_calendar_adapter,
 )
 from skillmodels.af.types import AFEstimationResult
@@ -91,3 +92,23 @@ def test_standard_errors_reject_adapter_model() -> None:
 def test_posterior_states_reject_adapter_model() -> None:
     with pytest.raises(NotImplementedError, match="calendar adapter"):
         get_af_posterior_states(_adapter_result(), _adapter_model(), pd.DataFrame())
+
+
+def test_posterior_states_guard_reads_result_not_argument() -> None:
+    # An adapter RESULT must be rejected even if a plain model_spec is supplied as the
+    # argument: the guard reads af_result.model_spec, so the old bypass is closed.
+    with pytest.raises(NotImplementedError, match="calendar adapter"):
+        get_af_posterior_states(_adapter_result(), _plain_model(), pd.DataFrame())
+
+
+def test_spearman_guard_rejects_adapter_model() -> None:
+    with pytest.raises(NotImplementedError, match="spearman"):
+        fail_if_spearman_unsupported_on_adapter(_adapter_model(), "spearman")
+
+
+def test_spearman_guard_noop_for_constant_strategy_on_adapter() -> None:
+    fail_if_spearman_unsupported_on_adapter(_adapter_model(), "constant")
+
+
+def test_spearman_guard_noop_for_spearman_on_plain_model() -> None:
+    fail_if_spearman_unsupported_on_adapter(_plain_model(), "spearman")

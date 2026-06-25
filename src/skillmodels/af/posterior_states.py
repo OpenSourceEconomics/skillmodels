@@ -57,7 +57,17 @@ def get_af_posterior_states(
         (columns: id, period, factor1, ...) and "state_ranges".
 
     """
-    fail_if_calendar_adapter_unsupported(model_spec, "AF posterior-state extraction")
+    # Guard on the result's own specification, not the caller-supplied argument: an
+    # adapter result must be rejected regardless of what model_spec is passed in.
+    fail_if_calendar_adapter_unsupported(
+        af_result.model_spec, "AF posterior-state extraction"
+    )
+    if model_spec != af_result.model_spec:
+        msg = (
+            "get_af_posterior_states received a model_spec that does not match "
+            "af_result.model_spec; pass the same specification used for estimation."
+        )
+        raise ValueError(msg)
     jax.config.update("jax_enable_x64", val=True)
 
     idx_names = data.index.names
