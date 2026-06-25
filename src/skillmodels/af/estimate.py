@@ -160,6 +160,13 @@ def estimate_af(
     )
     state_factors = tuple(f for f in factors if f not in endogenous_factors)
 
+    # Align the full per-observation payload to one ID order on the adapter path, so the
+    # mixed-calendar measurement rows pair with the right individual's controls and
+    # latent payload (and reject an unbalanced panel that AF cannot positionally align).
+    data = _maybe_align_adapter_panel(
+        data, n_periods, model_spec, endogenous_factors, state_factors
+    )
+
     period_data = _extract_period_data(
         data,
         n_periods,
@@ -169,18 +176,7 @@ def estimate_af(
         observed_factors=observed_factors,
     )
 
-    # @pro: entry point of the source/destination calendar adapter. Per-period frames
-    # are kept ID-indexed (not positionally concatenated) so the adapter can pair each
-    # individual's destination-skill and source-investment rows by ID across periods.
-    # Per-period individual-ID-indexed frames for the source/destination calendar
-    # adapter (used only for models with endogenous / static-persistent factors).
-    # Level 1 is the period level (level 0 is the individual ID).
-    available_periods = set(data.index.get_level_values(1))
-    frames_by_period: dict[int, pd.DataFrame] = {
-        p: cast("pd.DataFrame", data.xs(p, level=1))
-        for p in range(n_periods)
-        if p in available_periods
-    }
+    frames_by_period = _frames_by_period_from_data(data, n_periods)
 
     equality_groups = _extract_equality_groups(constraints)
     step_constraints = constraints
@@ -284,6 +280,76 @@ def estimate_af(
         sequential_criterion=float(sum(period_means)),
         period_mean_criteria=period_means,
     )
+
+
+def _frames_by_period_from_data(
+    data: pd.DataFrame, n_periods: int
+) -> dict[int, pd.DataFrame]:
+    """Build per-period individual-ID-indexed frames for the calendar adapter.
+
+    The adapter pairs each individual's destination-skill and source-investment rows by
+    ID across periods, so the frames are kept ID-indexed rather than positionally
+    concatenated. Level 1 is the period level (level 0 is the individual ID).
+    """
+    available_periods = set(data.index.get_level_values(1))
+    return {
+        p: cast("pd.DataFrame", data.xs(p, level=1))
+        for p in range(n_periods)
+        if p in available_periods
+    }
+
+
+def _align_adapter_panel(data: pd.DataFrame, n_periods: int) -> pd.DataFrame:
+    """Canonicalise a balanced panel to one ID-sorted order for the adapter path.
+
+    The calendar adapter sources mixed-calendar measurements on a sorted individual-ID
+    intersection, while controls, observed factors, the period-0 conditional
+    distribution, and the chain-link payloads are consumed positionally in input-row
+    order. Sorting by `(id, period)` puts every per-observation array in the same ID
+    order so the measurement row for an individual is paired with that same
+    individual's controls and latent payload.
+
+    AF aligns periods positionally, so the panel must be balanced: every individual
+    must appear in every period. Raise otherwise.
+    """
+    period_level = str(data.index.names[1])
+    period_values = data.index.get_level_values(period_level)
+    present = [p for p in range(n_periods) if bool((period_values == p).any())]
+    id_sets = {p: set(data.xs(p, level=period_level).index) for p in present}
+    reference = id_sets[present[0]]
+    for p in present[1:]:
+        if id_sets[p] != reference:
+            diff = sorted(reference.symmetric_difference(id_sets[p]))
+            msg = (
+                "AF calendar adapter requires a balanced panel: the individual set in "
+                f"period {p} differs from period {present[0]} (e.g. {diff[:5]}). "
+                "Provide every individual in every period."
+            )
+            raise ValueError(msg)
+    return data.sort_index()
+
+
+def _maybe_align_adapter_panel(
+    data: pd.DataFrame,
+    n_periods: int,
+    model_spec: ModelSpec,
+    endogenous_factors: tuple[str, ...],
+    state_factors: tuple[str, ...],
+) -> pd.DataFrame:
+    """Canonicalise the panel when the source/destination calendar adapter is active.
+
+    The adapter path is taken for a reconstructed endogenous factor
+    (`has_initial_distribution=False`) or any static-persistent state factor. Plain AF
+    models are returned unchanged.
+    """
+    reconstructed_endog = any(
+        not model_spec.factors[f].has_initial_distribution for f in endogenous_factors
+    )
+    uses_layout = reconstructed_endog or any(
+        model_spec.factors[f].af_state_role == "static_persistent"
+        for f in state_factors
+    )
+    return _align_adapter_panel(data, n_periods) if uses_layout else data
 
 
 def _extract_period_data(

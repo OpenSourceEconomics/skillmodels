@@ -29,10 +29,46 @@ from typing import Literal, SupportsFloat, cast
 import pandas as pd
 
 from skillmodels.common.measurement_models import MeasurementFamily
+from skillmodels.common.model_spec import ModelSpec
 
 # A term's role: a free, this-step target density vs a fixed, historical importance
 # reweighting density.
 AFTermRole = Literal["target", "importance"]
+
+
+def model_uses_calendar_adapter(model_spec: ModelSpec) -> bool:
+    """Return whether a model takes the AF source/destination calendar-adapter path.
+
+    The adapter activates for a reconstructed endogenous factor (`is_endogenous` with
+    `has_initial_distribution=False`) or any static-persistent factor. Plain AF models
+    keep the single-period path.
+    """
+    specs = model_spec.factors.values()
+    reconstructed_endog = any(
+        spec.is_endogenous and not spec.has_initial_distribution for spec in specs
+    )
+    static_persistent = any(spec.af_state_role == "static_persistent" for spec in specs)
+    return reconstructed_endog or static_persistent
+
+
+def fail_if_calendar_adapter_unsupported(model_spec: ModelSpec, feature: str) -> None:
+    """Raise if `feature` is requested for a calendar-adapter model.
+
+    AF standard-error inference and posterior-state extraction still reconstruct the
+    single-period measurement layout, which is wrong for the mixed-calendar adapter:
+    source-investment params live in the next step's result and the per-step parser
+    counts differ. Reject adapter models on those paths -- rather than return standard
+    errors that differentiate the wrong objective or posterior rows attached to the
+    wrong latent -- until they consume the compiled `AFStepLayout`.
+    """
+    if model_uses_calendar_adapter(model_spec):
+        msg = (
+            f"{feature} is not yet supported for AF models that use the "
+            "source/destination calendar adapter (a reconstructed-endogenous or "
+            "static-persistent factor). That path must be migrated to the compiled "
+            "AFStepLayout before it returns valid results."
+        )
+        raise NotImplementedError(msg)
 
 
 class AFFactorRole(enum.Enum):

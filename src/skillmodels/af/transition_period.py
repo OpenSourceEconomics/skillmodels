@@ -42,6 +42,7 @@ from skillmodels.af.step_layout import (
     HistoricalParams,
     compile_af_step_layouts,
     compile_target_measurement_index,
+    model_uses_calendar_adapter,
 )
 from skillmodels.af.types import (
     AFEstimationOptions,
@@ -1090,11 +1091,18 @@ def _initialize_transition_params(
     # MLE neighborhood; for sigma_inv_0 specifically, this is the difference
     # between converging at truth and drifting to the lower bound along
     # the sigma_inv / sigma_meas constant-Var ridge.
+    # The Spearman moment override discovers measurements at the destination period and
+    # writes loading/SD rows there, so it is not aware of the mixed-calendar target
+    # (destination skills at d + source investment at s). On the calendar-adapter path
+    # it would mis-seed the source-investment block, so skip it and keep the constant
+    # defaults (which converge for the adapter); calendar-aware moment seeding is future
+    # work. The point estimate is unaffected -- only start values differ.
     if (
         af_options is not None
         and af_options.start_params_strategy == "spearman"
         and model_spec is not None
         and period is not None
+        and not model_uses_calendar_adapter(model_spec)
     ):
         params = _apply_moment_based_overrides_transition(
             params,

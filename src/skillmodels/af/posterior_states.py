@@ -17,6 +17,7 @@ from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.af.initial_period import _build_loading_mask, _get_ordered_measures
 from skillmodels.af.likelihood import _log_normal_pdf
 from skillmodels.af.params import get_measurements_per_factor
+from skillmodels.af.step_layout import fail_if_calendar_adapter_unsupported
 from skillmodels.af.types import AFEstimationResult, ConditionalDistribution
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.state_ranges import create_state_ranges
@@ -56,6 +57,7 @@ def get_af_posterior_states(
         (columns: id, period, factor1, ...) and "state_ranges".
 
     """
+    fail_if_calendar_adapter_unsupported(model_spec, "AF posterior-state extraction")
     jax.config.update("jax_enable_x64", val=True)
 
     idx_names = data.index.names

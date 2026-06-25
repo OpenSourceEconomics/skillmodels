@@ -65,6 +65,7 @@ from skillmodels.af.params import (
     build_optimagic_inputs,
     get_measurements_per_factor,
 )
+from skillmodels.af.step_layout import fail_if_calendar_adapter_unsupported
 from skillmodels.af.transition_period import (
     _extract_prev_measurement_params,
     _get_raw_transition_functions,
@@ -180,6 +181,9 @@ def compute_af_standard_errors(
         replicate-by-parameter DataFrame.
 
     """
+    fail_if_calendar_adapter_unsupported(
+        result.model_spec, "AF standard-error inference"
+    )
     if af_options is None:
         af_options = AFEstimationOptions()
 
