@@ -32,6 +32,20 @@ def _step_0_to_1_targets():
     return layout.target_terms()
 
 
+def test_step_measurement_array_preserves_non_integer_ids() -> None:
+    # The assembler joins on individual ID, which must hold for string/UUID IDs, not
+    # only CNLSY-style numeric case IDs.
+    frame0 = pd.DataFrame({"sk_a": [10.0, 11.0], "inv_a": [1.0, 2.0]}, index=["b", "a"])
+    frame1 = pd.DataFrame({"sk_a": [100.0, 200.0]}, index=["a", "b"])
+    ids, values, term_order = build_step_measurement_array(
+        _step_0_to_1_targets(), {0: frame0, 1: frame1}
+    )
+    assert ids.tolist() == ["a", "b"]
+    inv_col = term_order.index(("inv_a", 0))
+    # investment from period 0, ID-aligned: a->2, b->1.
+    np.testing.assert_array_equal(values[:, inv_col], [2.0, 1.0])
+
+
 def test_step_measurement_array_sources_each_term_from_its_data_period() -> None:
     # Period frames deliberately have DIFFERENT individual orders.
     frame0 = pd.DataFrame(

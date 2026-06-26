@@ -38,7 +38,7 @@ def build_step_measurement_array(
 
     """
     if not terms:
-        ids_empty = np.array([], dtype=np.int64)
+        ids_empty = np.array([], dtype=object)
         return ids_empty, np.zeros((0, 0), dtype=np.float64), []
 
     needed_periods = {term.data_period for term in terms}
@@ -46,7 +46,9 @@ def build_step_measurement_array(
     for period in needed_periods:
         period_ids = set(frames_by_period[period].index)
         common_ids = period_ids if common_ids is None else (common_ids & period_ids)
-    ids = np.array(sorted(common_ids or set()), dtype=np.int64)
+    # Preserve ID values as-is (object dtype) rather than coercing to int64, so
+    # string/UUID identifiers align rather than raise (matches `assemble_step_arrays`).
+    ids = np.array(sorted(common_ids or set()), dtype=object)
 
     columns = []
     term_order: list[tuple[str, int]] = []
