@@ -149,6 +149,32 @@ def test_importance_control_contrib_sources_each_row_from_its_control_period() -
     )
 
 
+def _frames_with_string_ids():
+    # Same data as `_frames`, but individuals keyed by non-integer (string) IDs.
+    return {
+        0: pd.DataFrame(
+            {"sk": [1.0, 2.0], "mc": [7.0, 8.0], "inv": [0.1, 0.2]}, index=["a", "b"]
+        ),
+        1: pd.DataFrame({"sk": [3.0, 4.0], "inv": [0.3, 0.4]}, index=["a", "b"]),
+        2: pd.DataFrame({"sk": [5.0, 6.0]}, index=["a", "b"]),
+    }
+
+
+def test_assemble_preserves_non_integer_ids() -> None:
+    # The adapter's contract is ID-indexed alignment, not numeric IDs: string/UUID
+    # individual identifiers must align rather than be coerced or rejected.
+    arrays = assemble_step_arrays(
+        _layouts()[0],
+        _frames_with_string_ids(),
+        ("skills", "MC", "investment"),
+        _historical(),
+        ("constant",),
+    )
+    assert list(arrays.ids) == ["a", "b"]
+    cols = {name: arrays.target_measurements[:, j] for j, name in arrays.target_order}
+    np.testing.assert_array_equal(cols[("inv", 0)], [0.1, 0.2])
+
+
 def test_target_controls_source_each_row_from_its_control_period() -> None:
     # 1->2 target block: skills@2 (control_period 2) + source investment@1 (period 1).
     # The per-row control-data tensor must read each row's own period's control values.

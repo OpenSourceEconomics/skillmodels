@@ -96,7 +96,10 @@ def assemble_step_arrays(
     for period in needed:
         period_ids = set(frames_by_period[period].index)
         common = period_ids if common is None else (common & period_ids)
-    ids = np.array(sorted(common or set()), dtype=np.int64)
+    # Preserve the individual-ID values as-is (object dtype) rather than coercing to
+    # int64: the adapter's contract is stable ID alignment, which must hold for string,
+    # UUID, or other non-integer identifiers, not just CNLSY-style numeric case IDs.
+    ids = np.array(sorted(common or set()), dtype=object)
 
     target_order, target_values = _source_block(targets, frames_by_period, ids)
     imp_order, imp_values = _source_block(importances, frames_by_period, ids)
