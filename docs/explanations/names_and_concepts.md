@@ -96,17 +96,16 @@ tuning knob differs between estimators.
 `AFEstimationOptions` (from `skillmodels.af`) controls the sequential MLE:
 
 - **n_halton_points**, **n_halton_points_shock**: quadrature counts.
-- **n_mixture_components**: number of components in the latent-factor mixture.
 - **optimizer_algorithm**: the optimagic algorithm name passed to
   `optimagic.minimize(algorithm=...)` (default `"fides"`; use
   `"scipy_lbfgsb"` for MC sweeps).
-- **initialization_strategy**: `"amn"`, `"spearman"`, or `"constant"`. Same
-  meaning as in CHS.
+- **start_params_strategy**: `"amn"`, `"spearman"`, `"constant"`, or `"none"`.
+  Same meaning as in CHS. (The mixture-component count is not an estimator option;
+  it is the structural field `ModelSpec.n_mixtures`.)
 
 `AMNEstimationOptions` (from `skillmodels.amn`) controls the three-stage
 pipeline:
 
-- **n_mixture_components**: Stage-1 EM components.
 - **em_max_iter**, **em_tol**, **em_n_init**, **em_reg_covar**: Stage-1 EM
   numerical knobs.
 - **n_simulation_draws**: Stage-3 synthetic-panel size.
@@ -115,17 +114,11 @@ pipeline:
   full covariance matrices, and is currently the only implemented option.
   `"optimal"` is reserved for a future Avar-weighted criterion and raises
   `NotImplementedError`.
-- **investment_endogeneity**: apply the AMN (2020) eq. 7-8 / AF Sec. 3.5
-  investment control-function correction in Stage 3. Defaults to `False`. When
-  `True` and the model has an endogenous (investment) factor, a first-stage
-  investment equation is OLS-fit per period and its residual is added as an
-  additive `cf` covariate (coefficient `kappa_t`) to each state factor's
-  production regression; observed factors are then excluded from the production
-  function and act as instruments (at least one observed instrument is
-  required). The default stays `False` because `estimate_af` calls
-  `estimate_amn` for start values and the AF likelihood implements only
-  `kappa=0`; opt into the correction at the application call site. A no-op for
-  models without endogenous factors.
+- Investment-endogeneity correction is no longer an estimation-option flag.
+  Attach a `CorrectionSpec` to the endogenous investment `FactorSpec`
+  (`FactorSpec.correction`); its presence triggers the Stage-3 control-function
+  correction. See
+  [Endogeneity Corrections](../reference_guides/endogeneity_corrections.md).
 
 The shared structural field — number of mixture components in the latent
 distribution — lives directly on `ModelSpec.n_mixtures`, since it changes the

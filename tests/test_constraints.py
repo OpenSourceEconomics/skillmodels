@@ -215,6 +215,66 @@ def test_constant_factor_shock_constraints_only_target_existing_rows() -> None:
         assert c.loc in index, f"orphan shock constraint {c.loc} not in params index"
 
 
+def test_transition_simplex_constraints_only_target_existing_rows() -> None:
+    # A log_ces (CES) production factor combined with an endogenous factor must not
+    # emit a simplex (probability) constraint at the terminal augmented period where
+    # the factor does not transition. With endogenous factors the transition index
+    # stops at aug_periods[:-2], so a naive aug_periods[:-1] loop in
+    # _get_transition_constraints emits an orphan ProbabilityConstraint whose loc is
+    # absent from the params index, tripping the optimagic selector at maximize time.
+    from dataclasses import replace  # noqa: PLC0415
+
+    from skillmodels.common.model_spec import CorrectionSpec  # noqa: PLC0415
+    from skillmodels.common.params_index import get_params_index  # noqa: PLC0415
+    from skillmodels.test_data.model2 import MODEL2  # noqa: PLC0415
+
+    fac3 = MODEL2.factors["fac3"]
+    new_factors = dict(MODEL2.factors) | {
+        "fac3": replace(
+            fac3, is_endogenous=True, correction=CorrectionSpec(instruments=("inv_z",))
+        ),
+    }
+    model = (
+        MODEL2._replace(factors=new_factors)
+        ._replace(stagemap=None)
+        ._replace(observed_factors=("inv_z",))
+    )
+    processed = process_model(model)
+    index = get_params_index(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        transition_info=processed.transition_info,
+        endogenous_factors_info=processed.endogenous_factors_info,
+    )
+    constraints = get_constraints(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        anchoring_info=processed.anchoring,
+        normalizations=processed.normalizations,
+        endogenous_factors_info=processed.endogenous_factors_info,
+        bounds_distance=1e-8,
+    )
+    simplex_locs = []
+    for c in constraints:
+        if not isinstance(c, om.ProbabilityConstraint):
+            continue
+        selector = c.selector
+        if not isinstance(selector, functools.partial):
+            continue
+        simplex_locs += [
+            tup
+            for tup in selector.keywords["loc"]
+            if isinstance(tup, tuple) and tup[0] == "transition"
+        ]
+    assert simplex_locs, "the log_ces factor must have its gammas on a simplex"
+    for loc in simplex_locs:
+        assert loc in index, (
+            f"orphan transition simplex constraint {loc} not in params index"
+        )
+
+
 def test_get_constraints_pins_instrument_out_of_production() -> None:
     # Built-in production transitions enumerate a free coefficient for every
     # observed factor, including the excluded instrument; that coefficient must be
@@ -511,7 +571,13 @@ def test_trans_coeff_constraints() -> None:
             "type": "probability",
         },
     ]
-    calculated = _get_transition_constraints(labels)
+    no_endogenous = EndogenousFactorsInfo(
+        has_endogenous_factors=False,
+        aug_periods_to_aug_period_meas_types=MappingProxyType({}),
+        aug_periods_from_period=lambda period: [period],
+        factor_info=MappingProxyType({}),
+    )
+    calculated = _get_transition_constraints(labels, no_endogenous)
     as_dicts = [_to_dict(c) for c in calculated]
     assert_list_equal_except_for_order(as_dicts, expected)
 

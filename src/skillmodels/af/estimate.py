@@ -1,5 +1,7 @@
 """Main driver for the AF estimation procedure."""
 
+from typing import cast
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -11,6 +13,10 @@ from jax import Array
 from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.af.initial_period import estimate_initial_period
 from skillmodels.af.params import get_measurements_per_factor
+from skillmodels.af.step_layout import (
+    HistoricalParams,
+    fail_if_spearman_unsupported_on_adapter,
+)
 from skillmodels.af.transition_period import estimate_transition_period
 from skillmodels.af.types import (
     AFEstimationOptions,
@@ -101,8 +107,7 @@ def estimate_af(
         options = AFEstimationOptions()
     af_options = options
 
-    validate_af_model(model_spec, fixed_params, constraints)
-    fail_if_unsupported_kappa_params(start_params, fixed_params, constraints)
+    _validate_af_inputs(model_spec, fixed_params, constraints, start_params, af_options)
     processed_model = process_model(model_spec)
 
     # If AMN-based starts are requested, run the full AMN three-stage
@@ -140,6 +145,7 @@ def estimate_af(
             n_halton_points_posterior_summary=(
                 af_options.n_halton_points_posterior_summary
             ),
+            bounds_distance=af_options.bounds_distance,
         )
 
     # Extract data arrays per period
@@ -157,6 +163,13 @@ def estimate_af(
     )
     state_factors = tuple(f for f in factors if f not in endogenous_factors)
 
+    # Align the full per-observation payload to one ID order on the adapter path, so the
+    # mixed-calendar measurement rows pair with the right individual's controls and
+    # latent payload (and reject an unbalanced panel that AF cannot positionally align).
+    data = _maybe_align_adapter_panel(
+        data, n_periods, model_spec, endogenous_factors, state_factors
+    )
+
     period_data = _extract_period_data(
         data,
         n_periods,
@@ -165,6 +178,8 @@ def estimate_af(
         model_spec,
         observed_factors=observed_factors,
     )
+
+    frames_by_period = _frames_by_period_from_data(data, n_periods)
 
     equality_groups = _extract_equality_groups(constraints)
     step_constraints = constraints
@@ -199,6 +214,19 @@ def estimate_af(
             break
 
         prev_period_params = period_results[-1].params
+        # The cumulative registry feeds the calendar adapter's fixed importance
+        # block (source skills + static-persistent period-0 rows). Build it whenever
+        # the layout path is active (reconstructed investment or static factors).
+        needs_historical = any(
+            (spec.is_endogenous and not spec.has_initial_distribution)
+            or spec.af_state_role == "static_persistent"
+            for spec in model_spec.factors.values()
+        )
+        historical = (
+            HistoricalParams.from_param_frames([r.params for r in period_results])
+            if needs_historical
+            else None
+        )
 
         period_t_result, cond_dist = estimate_transition_period(
             period=t,
@@ -210,6 +238,8 @@ def estimate_af(
             prev_controls=period_data[t - 1]["controls"],
             prev_period_params=prev_period_params,
             prev_distribution=cond_dist,
+            frames_by_period=frames_by_period,
+            historical=historical,
             af_options=af_options,
             endogenous_factors=endogenous_factors,
             observed_factors=observed_factors,
@@ -242,14 +272,102 @@ def estimate_af(
     else:
         conditional_dists_out = ()
 
+    period_means = tuple(float(r.loglikelihood) for r in period_results)
     return AFEstimationResult(
         period_results=tuple(period_results),
         params=all_params,
         model_spec=model_spec,
         conditional_distributions=conditional_dists_out,
         success=all(r.success for r in period_results),
-        loglikelihood=float(sum(r.loglikelihood for r in period_results)),
+        loglikelihood=float(sum(period_means)),
+        sequential_criterion=float(sum(period_means)),
+        period_mean_criteria=period_means,
     )
+
+
+def _frames_by_period_from_data(
+    data: pd.DataFrame, n_periods: int
+) -> dict[int, pd.DataFrame]:
+    """Build per-period individual-ID-indexed frames for the calendar adapter.
+
+    The adapter pairs each individual's destination-skill and source-investment rows by
+    ID across periods, so the frames are kept ID-indexed rather than positionally
+    concatenated. Level 1 is the period level (level 0 is the individual ID).
+    """
+    available_periods = set(data.index.get_level_values(1))
+    return {
+        p: cast("pd.DataFrame", data.xs(p, level=1))
+        for p in range(n_periods)
+        if p in available_periods
+    }
+
+
+def _align_adapter_panel(data: pd.DataFrame, n_periods: int) -> pd.DataFrame:
+    """Canonicalise a balanced panel to one ID-sorted order for the adapter path.
+
+    The calendar adapter sources mixed-calendar measurements on a sorted individual-ID
+    intersection, while controls, observed factors, the period-0 conditional
+    distribution, and the chain-link payloads are consumed positionally in input-row
+    order. Sorting by `(id, period)` puts every per-observation array in the same ID
+    order so the measurement row for an individual is paired with that same
+    individual's controls and latent payload.
+
+    AF aligns periods positionally, so the panel must be balanced: every individual
+    must appear in every period. Raise otherwise.
+    """
+    period_level = str(data.index.names[1])
+    period_values = data.index.get_level_values(period_level)
+    present = [p for p in range(n_periods) if bool((period_values == p).any())]
+    id_sets = {p: set(data.xs(p, level=period_level).index) for p in present}
+    reference = id_sets[present[0]]
+    for p in present[1:]:
+        if id_sets[p] != reference:
+            diff = sorted(reference.symmetric_difference(id_sets[p]))
+            msg = (
+                "AF calendar adapter requires a balanced panel: the individual set in "
+                f"period {p} differs from period {present[0]} (e.g. {diff[:5]}). "
+                "Provide every individual in every period."
+            )
+            raise ValueError(msg)
+    return data.sort_index()
+
+
+def _validate_af_inputs(
+    model_spec: ModelSpec,
+    fixed_params: pd.DataFrame | None,
+    constraints: list[om.constraints.Constraint] | None,
+    start_params: pd.DataFrame | None,
+    af_options: AFEstimationOptions,
+) -> None:
+    """Reject unsupported AF input combinations before any fitting begins."""
+    fail_if_spearman_unsupported_on_adapter(
+        model_spec, af_options.start_params_strategy
+    )
+    validate_af_model(model_spec, fixed_params, constraints)
+    fail_if_unsupported_kappa_params(start_params, fixed_params, constraints)
+
+
+def _maybe_align_adapter_panel(
+    data: pd.DataFrame,
+    n_periods: int,
+    model_spec: ModelSpec,
+    endogenous_factors: tuple[str, ...],
+    state_factors: tuple[str, ...],
+) -> pd.DataFrame:
+    """Canonicalise the panel when the source/destination calendar adapter is active.
+
+    The adapter path is taken for a reconstructed endogenous factor
+    (`has_initial_distribution=False`) or any static-persistent state factor. Plain AF
+    models are returned unchanged.
+    """
+    reconstructed_endog = any(
+        not model_spec.factors[f].has_initial_distribution for f in endogenous_factors
+    )
+    uses_layout = reconstructed_endog or any(
+        model_spec.factors[f].af_state_role == "static_persistent"
+        for f in state_factors
+    )
+    return _align_adapter_panel(data, n_periods) if uses_layout else data
 
 
 def _extract_period_data(

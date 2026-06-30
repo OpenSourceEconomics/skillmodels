@@ -37,6 +37,7 @@ from skillmodels.common.identification import (
     fail_if_initial_state_unanchored,
     warn_if_overrestricted,
 )
+from skillmodels.common.measurement_models import GaussianMeasurement
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 from skillmodels.common.types import ProcessedModel
@@ -166,6 +167,32 @@ def _fit_stage1_mixture(
     )
 
 
+def _fail_if_non_gaussian_measurements(model_spec: ModelSpec) -> None:
+    """Reject probit/Tobit measures: AMN's moment map assumes continuous Gaussians.
+
+    AMN recovers loadings and measurement SDs from the cross-covariance of a
+    factor's multiple indicators (mixture EM + minimum distance), which treats every
+    measure as a continuous Gaussian signal. A probit/Tobit measure routed through
+    that map would be silently mis-estimated, so it is refused here. The AMN->CHS
+    seeding path supplies a working-linear (Gaussian) spec, so it is unaffected.
+    """
+    non_gaussian = sorted(
+        name
+        for name, model in model_spec.measurement_models.items()
+        if not isinstance(model, GaussianMeasurement)
+    )
+    if non_gaussian:
+        msg = (
+            f"estimate_amn supports only Gaussian measurements, but "
+            f"{non_gaussian} are non-Gaussian (probit/Tobit). AMN's mixture-EM and "
+            "minimum-distance stages recover loadings and SDs from multi-indicator "
+            "cross-covariances, which assume continuous Gaussian measures. Estimate "
+            "such models with estimate_af, or translate the measures to a working "
+            "linear system before seeding."
+        )
+        raise NotImplementedError(msg)
+
+
 @beartype(conf=ESTIMATION_CONF)
 def estimate_amn(
     model_spec: ModelSpec,
@@ -228,6 +255,7 @@ def estimate_amn(
         params DataFrame.
 
     """
+    _fail_if_non_gaussian_measurements(model_spec)
     if require_initial_anchors and not for_start_values:
         fail_if_initial_state_unanchored(model_spec, fixed_params, constraints)
         warn_if_overrestricted(model_spec, fixed_params, constraints)

@@ -47,6 +47,7 @@ project:
         - file: explanations/linear_predict.md
     - title: Reference Guides
       children:
+        - file: reference_guides/estimator_prerequisites.md
         - file: reference_guides/transition_functions.md
         - file: reference_guides/endogeneity_corrections.md
   error_rules:

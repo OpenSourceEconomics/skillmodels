@@ -56,6 +56,12 @@ def get_af_posterior_states(
         (columns: id, period, factor1, ...) and "state_ranges".
 
     """
+    if model_spec != af_result.model_spec:
+        msg = (
+            "get_af_posterior_states received a model_spec that does not match "
+            "af_result.model_spec; pass the same specification used for estimation."
+        )
+        raise ValueError(msg)
     jax.config.update("jax_enable_x64", val=True)
 
     idx_names = data.index.names
@@ -81,21 +87,42 @@ def get_af_posterior_states(
         if not measurements_pt:
             continue
 
-        meas_info = _extract_period_measurement_info(
-            period_result.params,
-            model_spec,
-            state_factors,
-            t,
-        )
-
         period_mask = data.index.get_level_values(period_col) == t
         period_df = data.loc[period_mask]
         ids = period_df.index.get_level_values(id_col)
 
-        all_measures = _get_ordered_measures(measurements_pt)
-        meas_cols = [c for c in all_measures if c in period_df.columns]
+        # Keep only the measurements that load on a STATE factor and are present in
+        # the data. A state factor's own indicators are parsed correctly at their own
+        # period, so the single-period extraction below is valid for them. Under the
+        # source/destination calendar adapter the reconstructed investment's indicators
+        # load on no state factor and are sourced from a different step (their params
+        # live at a different `param_period`), so the single-period parse would misread
+        # them; drop them. Investment is endogenous, not a state coordinate, so it is
+        # not reported either way. The resulting posterior conditions on the
+        # state-loading measurements plus the period-0 chained sample; it does not fold
+        # in the investment indicators' information about the state, so it is slightly
+        # less precise than (but unbiased relative to) the full-information posterior.
+        # For plain models every measurement loads on a state factor, so this is a
+        # no-op and the result is byte-identical to the pre-migration output.
+        state_meas_pt = {
+            f: tuple(m for m in measurements_pt[f] if m in period_df.columns)
+            for f in state_factors
+            if f in measurements_pt
+            and any(m in period_df.columns for m in measurements_pt[f])
+        }
+        kept = _get_ordered_measures(state_meas_pt)
+        if not kept:
+            continue
+
+        meas_info = _extract_period_measurement_info(
+            period_result.params,
+            state_factors,
+            t,
+            kept,
+            state_meas_pt,
+        )
         measurements = jnp.array(
-            period_df[meas_cols].to_numpy(dtype=np.float64, na_value=np.nan),
+            period_df[kept].to_numpy(dtype=np.float64, na_value=np.nan),
         )
 
         # Build per-observation control contribution
@@ -140,17 +167,23 @@ def get_af_posterior_states(
 
 def _extract_period_measurement_info(
     period_params: pd.DataFrame,
-    model_spec: ModelSpec,
     factors: tuple[str, ...],
     period: int,
+    measures: list[str],
+    measurements_pt: dict[str, tuple[str, ...]],
 ) -> dict[str, Any]:
-    """Extract measurement loadings, control contribution, and SDs."""
-    measurements_pt = get_measurements_per_factor(model_spec.factors, period=period)
-    all_measures = _get_ordered_measures(measurements_pt)
-    loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
+    """Extract measurement loadings, control contribution, and SDs.
+
+    `measures` is the ordered list of measurement columns to score against the
+    state `factors`, and `measurements_pt` maps each state factor to those of its
+    measures. Reconstructed investment indicators, which load on no state factor,
+    are excluded by the caller so the single-period parse never reaches for
+    source-period rows (and `_build_loading_mask` never indexes a non-state factor).
+    """
+    loading_mask = _build_loading_mask(measures, factors, measurements_pt)
 
     loadings_list = []
-    for mi, meas in enumerate(all_measures):
+    for mi, meas in enumerate(measures):
         for fi, factor in enumerate(factors):
             if loading_mask[mi, fi]:
                 loc = ("loadings", period, meas, factor)
@@ -159,7 +192,7 @@ def _extract_period_measurement_info(
                         float(period_params.loc[loc, "value"])  # ty: ignore[invalid-argument-type]
                     )
 
-    full_loadings = jnp.zeros((len(all_measures), len(factors)))
+    full_loadings = jnp.zeros((len(measures), len(factors)))
     full_loadings = full_loadings.at[jnp.array(loading_mask)].set(  # noqa: PD008
         jnp.array(loadings_list)
     )
@@ -174,22 +207,20 @@ def _extract_period_measurement_info(
         else ["constant"]
     )
     ctrl_params_list = []
-    for meas in all_measures:
+    for meas in measures:
         for ctrl in ctrl_names:
             loc = ("controls", period, meas, ctrl)
             if loc in period_params.index:
                 ctrl_params_list.append(float(period_params.loc[loc, "value"]))
             else:
                 ctrl_params_list.append(0.0)
-    control_params = jnp.array(ctrl_params_list).reshape(
-        len(all_measures), len(ctrl_names)
-    )
+    control_params = jnp.array(ctrl_params_list).reshape(len(measures), len(ctrl_names))
 
     sd_list = [
         float(period_params.loc[loc, "value"])  # ty: ignore[invalid-argument-type]
         if (loc := ("meas_sds", period, meas, "-")) in period_params.index
         else 0.5
-        for meas in all_measures
+        for meas in measures
     ]
 
     return {

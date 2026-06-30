@@ -39,6 +39,7 @@ from skillmodels.common.constraints import (
     filter_within_step_constraints,
     reconcile_start_to_equality,
 )
+from skillmodels.common.measurement_models import measurement_family_arrays
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.types import ProcessedModel, to_plain_dict
 
@@ -132,6 +133,7 @@ def estimate_initial_period(  # noqa: PLR0915
         params_index,
         normalizations,
         period=0,
+        bounds_distance=af_options.bounds_distance,
     )
 
     # Initialize parameters via simple heuristics
@@ -188,6 +190,10 @@ def estimate_initial_period(  # noqa: PLR0915
         all_measures, state_latent_factors, measurements_p0_filtered
     )
 
+    families, lowers, uppers = measurement_family_arrays(
+        model_spec.measurement_models, all_measures
+    )
+
     # Halton quadrature nodes: dimension equals the state-latent count
     # (observed factors are conditioned on, not integrated over, via the
     # Schur complement).
@@ -226,6 +232,9 @@ def estimate_initial_period(  # noqa: PLR0915
         "weights": weights,
         "stability_floor": af_options.stability_floor,
         "n_obs_per_batch": n_obs_per_batch,
+        "measurement_families": jnp.asarray(families),
+        "measurement_lowers": jnp.asarray(lowers),
+        "measurement_uppers": jnp.asarray(uppers),
     }
 
     loglike_and_grad = create_loglike_and_gradient(

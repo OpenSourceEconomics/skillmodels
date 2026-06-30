@@ -15,11 +15,13 @@ three stages:
    from the fitted mixture and estimate the production function by
    regression on the synthetic data.
 
-AMN shines when the data are non-Gaussian in the latent factor distribution.
-CHS assumes Gaussian latent factors (one mixture component); AF supports
-multiple mixture components but fits them jointly with the period-specific
-optimizer; AMN cleanly separates the mixture from the structural recovery and
-explicitly models the non-Gaussianity through the EM step.
+AMN shines when the latent factor distribution is non-Gaussian. CHS supports a
+finite mixture of Gaussian initial states via `ModelSpec.n_mixtures`, but filters
+each component with a Gaussian (square-root Kalman) recursion; setting
+`n_mixtures=1` is the deliberately restricted single-Gaussian benchmark. AF also
+supports multiple mixture components but fits them jointly with the
+period-specific optimizer. AMN cleanly separates the mixture (Stage-1 EM) from
+the structural recovery, so it models the non-Gaussianity explicitly.
 
 ## Minimal example
 
@@ -62,8 +64,9 @@ result.success                 # AND across stage convergence flags
 
 The smallest example that lets AMN's non-Gaussian fit show its advantage is a
 1-factor / 3-period model where the latent skill is drawn from a non-trivial
-mixture-of-normals. CHS, restricted to Gaussian latents, produces biased
-production-function estimates on this DGP; AMN's Stage 1 EM recovers the
+mixture-of-normals. CHS with a single Gaussian component (`n_mixtures=1`)
+produces biased production-function estimates on this DGP; AMN's Stage 1 EM
+recovers the
 mixture and the structural step undoes the bias.
 
 ```python
@@ -140,9 +143,9 @@ result.stages.mixture.weights      # tau, should be near (0.6, 0.4) up to label 
 result.stages.mixture.means        # Pi_k for the augmented measure vector
 ```
 
-Compare against a CHS fit of the same model (1 mixture component, since CHS
-assumes Gaussian latents) and verify that the slope estimate from CHS is
-biased downward — that's the signal AMN was designed to capture.
+Compare against a CHS fit of the same model with `n_mixtures=1` (the deliberately
+restricted single-Gaussian benchmark) and verify that the slope estimate from CHS
+is biased downward — that's the signal AMN was designed to capture.
 
 ## Tuning knobs
 
@@ -162,6 +165,22 @@ models; if the EM warns about degenerate covariances, bump `em_reg_covar` to
 `1e-4` first. The fit is initialised from a Spearman-moment guess for the
 loadings, then projected back to the augmented-measure space; that
 data-driven start beats random init by a wide margin.
+
+### Stage-1 missing data
+
+`mixture_em_method` selects how Stage 1 handles incomplete measurement rows:
+
+- `"complete_case"` (default) fits `sklearn.mixture.GaussianMixture` on
+  listwise-complete rows and raises `InsufficientCompleteCasesError` when fewer
+  than `n_mixtures` rows are complete.
+- `"missing_data"` fits an EM that marginalises over each row's missing entries,
+  valid under an ignorable (MAR) missingness assumption even when no row is
+  complete.
+
+A column that is never observed in any sampled row has unidentified moments; the
+missing-data EM raises unless `allow_never_observed_measurements=True` is set
+(intended only for seeding-style uses where such a column is tolerated).
+`mixture_em_max_rows` optionally subsamples the EM input for speed.
 
 ### Stage-2 weighting
 
@@ -250,10 +269,15 @@ factor's production regression. Under the correction:
 - **Anchoring** is not wired through the AMN stages. The model spec's
   `AnchoringSpec` is accepted (so the spec stays compatible with CHS), but
   the AMN result reports unanchored factor scales.
-- **Within-stage user constraints.** `estimate_amn(constraints=...)` is a
-  pass-through hook for forward compatibility; the AMN stages do not yet
-  honour `om.EqualityConstraint`. User `fixed_params` are applied
-  post-hoc to the combined params DataFrame.
+- **`start_params` and `constraints`.** `estimate_amn` does not honour either
+  and raises `NotImplementedError` if you pass them — the three-stage pipeline
+  has no single parameter vector to seed or constrain.
+- **`fixed_params`** are honoured only for the categories each stage estimates,
+  and pinned inside that stage rather than post-hoc: Stage 2 honours `loadings`,
+  measurement intercepts, and measurement SDs; Stage 3 honours `transition`.
+  Passing any other category raises `NotImplementedError`. (The generic Stage-3
+  NLS path supports pinning for most transitions, but `log_ces` /
+  `log_ces_with_constant` reject a non-empty fixed set.)
 
 See [How to compare estimators](how_to_compare_estimators.md) for an
 overlay of CHS, AF, and AMN on the same data with confidence intervals.
