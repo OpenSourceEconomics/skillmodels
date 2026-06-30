@@ -2,8 +2,13 @@
 
 import pytest
 
-from skillmodels.model_spec import AnchoringSpec, FactorSpec, ModelSpec, Normalizations
-from skillmodels.types import EstimationOptions
+from skillmodels.common.model_spec import (
+    AnchoringSpec,
+    CorrectionSpec,
+    FactorSpec,
+    ModelSpec,
+    Normalizations,
+)
 
 
 def _minimal_dict():
@@ -25,7 +30,6 @@ def test_from_dict_minimal() -> None:
     assert spec.factors["f1"].measurements == (("y1", "y2"), ("y1", "y2"))
     assert spec.factors["f1"].transition_function == "linear"
     assert spec.anchoring is None
-    assert spec.estimation_options is None
     assert spec.controls == ()
 
 
@@ -63,13 +67,11 @@ def test_from_dict_with_anchoring() -> None:
     assert spec.anchoring.free_controls is True
 
 
-def test_from_dict_with_estimation_options() -> None:
+def test_from_dict_with_n_mixtures() -> None:
     d = _minimal_dict()
-    d["estimation_options"] = {"n_mixtures": 2, "robust_bounds": False}
+    d["n_mixtures"] = 2
     spec = ModelSpec.from_dict(d)
-    assert spec.estimation_options is not None
-    assert spec.estimation_options.n_mixtures == 2
-    assert spec.estimation_options.robust_bounds is False
+    assert spec.n_mixtures == 2
 
 
 def test_from_dict_with_stagemap() -> None:
@@ -77,6 +79,107 @@ def test_from_dict_with_stagemap() -> None:
     d["stagemap"] = [0]
     spec = ModelSpec.from_dict(d)
     assert spec.stagemap == (0,)
+
+
+def test_correction_spec_defaults() -> None:
+    cf = CorrectionSpec(instruments=("z1",))
+    assert cf.instruments == ("z1",)
+    assert cf.state_predictors == ()
+    assert cf.targets == ()
+    assert cf.kappa_degree is None  # None resolves to degree 1 downstream
+    assert cf.kappa_terms is None
+
+
+def test_correction_spec_requires_nonempty_instruments() -> None:
+    with pytest.raises(ValueError, match="instrument"):
+        CorrectionSpec(instruments=())
+
+
+def test_correction_spec_rejects_both_kappa_degree_and_kappa_terms() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        CorrectionSpec(
+            instruments=("z1",),
+            kappa_degree=2,
+            kappa_terms={"health_mom": ("cf",)},
+        )
+
+
+def test_correction_spec_stores_fields_and_makes_kappa_terms_immutable() -> None:
+    cf = CorrectionSpec(
+        instruments=("sum_inv_paid_log", "sum_inv_private_log"),
+        state_predictors=("health_mom", "health_kid"),
+        targets=("health_mom", "health_kid"),
+        kappa_terms={"health_mom": ("cf",), "health_kid": ("cf", "cf ** 2")},
+    )
+    assert cf.state_predictors == ("health_mom", "health_kid")
+    assert cf.instruments == ("sum_inv_paid_log", "sum_inv_private_log")
+    assert cf.targets == ("health_mom", "health_kid")
+    assert cf.kappa_terms is not None
+    assert cf.kappa_terms["health_kid"] == ("cf", "cf ** 2")
+    # kappa_terms must be converted to an immutable mapping.
+    with pytest.raises(TypeError):
+        cf.kappa_terms["health_mom"] = ("cf", "cf ** 2")  # ty: ignore[invalid-assignment]
+
+
+def test_correction_spec_is_frozen() -> None:
+    cf = CorrectionSpec(instruments=("z1",))
+    with pytest.raises(AttributeError):
+        cf.targets = ("health_mom",)  # ty: ignore[invalid-assignment]
+
+
+def test_factor_spec_correction_defaults_to_none() -> None:
+    spec = FactorSpec(measurements=(("y1",),))
+    assert spec.correction is None
+
+
+def test_factor_spec_accepts_correction() -> None:
+    cf = CorrectionSpec(
+        instruments=("z1",),
+        targets=("health_mom",),
+    )
+    spec = FactorSpec(
+        measurements=(("ln_inv",),),
+        is_endogenous=True,
+        correction=cf,
+    )
+    assert spec.correction is cf
+
+
+def test_from_dict_with_correction_parses_and_auto_registers_instruments() -> None:
+    d = {
+        "factors": {
+            "skills": {"measurements": [["y1"]], "transition_function": "linear"},
+            "investment": {
+                "measurements": [["ln_inv"]],
+                "is_endogenous": True,
+                "transition_function": "linear",
+                "correction": {"instruments": ["iv1", "iv2"], "kappa_degree": 2},
+            },
+        },
+    }
+    model = ModelSpec.from_dict(d)
+    corr = model.factors["investment"].correction
+    assert corr is not None
+    assert corr.instruments == ("iv1", "iv2")
+    assert corr.kappa_degree == 2
+    # Instruments are auto-registered as observed factors.
+    assert model.observed_factors == ("iv1", "iv2")
+
+
+def test_with_correction_attaches_and_auto_registers_instruments() -> None:
+    plain = FactorSpec(measurements=(("y1",),))
+    inv = FactorSpec(measurements=(("ln_inv",),), is_endogenous=True)
+    model = ModelSpec(
+        factors={"skills": plain, "investment": inv},
+        observed_factors=("income",),
+    )
+    cf = CorrectionSpec(instruments=("income", "iv2"))
+
+    result = model.with_correction("investment", cf)
+
+    assert result.factors["investment"].correction is cf
+    # Instruments are auto-registered as observed factors, deduped against existing.
+    assert result.observed_factors == ("income", "iv2")
 
 
 def test_with_added_factor(model2) -> None:
@@ -94,13 +197,6 @@ def test_with_added_observed_factors(model2) -> None:
     assert result.observed_factors == ("obs1", "obs2")
 
 
-def test_with_estimation_options(model2) -> None:
-    opts = EstimationOptions(n_mixtures=3)
-    result = model2.with_estimation_options(opts)
-    assert result.estimation_options is not None
-    assert result.estimation_options.n_mixtures == 3
-
-
 def test_with_anchoring(model2) -> None:
     anch = AnchoringSpec(outcomes={"fac2": "Q2"})
     result = model2.with_anchoring(anch)
@@ -116,6 +212,23 @@ def test_with_controls(model2) -> None:
 def test_with_stagemap(model2) -> None:
     result = model2.with_stagemap((0, 1, 2, 3, 4, 5, 6))
     assert result.stagemap == (0, 1, 2, 3, 4, 5, 6)
+
+
+def test_without_correction_strips_correction_from_all_factors() -> None:
+    corrected = FactorSpec(
+        measurements=(("ln_inv",),),
+        is_endogenous=True,
+        correction=CorrectionSpec(instruments=("z1",), targets=("skills",)),
+    )
+    plain = FactorSpec(measurements=(("y1",),))
+    model = ModelSpec(factors={"skills": plain, "investment": corrected})
+
+    stripped = model.without_correction()
+
+    assert all(f.correction is None for f in stripped.factors.values())
+    # The rest of the spec is preserved.
+    assert stripped.factors["investment"].is_endogenous is True
+    assert tuple(stripped.factors) == ("skills", "investment")
 
 
 def test_with_transition_functions_valid(model2) -> None:

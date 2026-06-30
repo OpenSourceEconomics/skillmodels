@@ -10,8 +10,8 @@ import pandas as pd
 import pytest
 from numpy.testing import assert_array_equal as aae
 
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.process_data import (
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.process_data import (
     _augment_data_for_endogenous_factors,
     _generate_controls_array,
     _generate_measurements_array,
@@ -19,9 +19,9 @@ from skillmodels.process_data import (
     _handle_controls_with_missings,
     pre_process_data,
 )
-from skillmodels.process_model import process_model
+from skillmodels.common.process_model import process_model
+from skillmodels.common.types import Labels
 from skillmodels.test_data.simplest_augmented_model import SIMPLEST_AUGMENTED_MODEL
-from skillmodels.types import Labels
 
 
 def test_pre_process_data() -> None:

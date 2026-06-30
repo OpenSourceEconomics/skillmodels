@@ -4,11 +4,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from skillmodels.process_debug_data import (
+from skillmodels.chs.process_debug_data import (
     _create_post_update_states,
     _process_residuals,
-    create_state_ranges,
 )
+from skillmodels.common.state_ranges import create_state_ranges
 
 
 def test_create_state_ranges_invalid_quantile_raises() -> None:
@@ -26,7 +26,7 @@ def test_process_residuals_ids_with_mixtures() -> None:
         index=pd.MultiIndex.from_tuples([(0, "m1"), (0, "m2")]),
     )
 
-    result = _process_residuals(residuals=residuals, update_info=update_info)  # ty: ignore[invalid-argument-type]
+    result = _process_residuals(residuals=residuals, update_info=update_info)
 
     # For each update, ids should be [0, 0, 1, 1, 2, 2] not [0, 1, 2, 3, 4, 5]
     for _, group in result.groupby(["aug_period", "measurement"]):
@@ -49,7 +49,7 @@ def test_create_post_update_states_ids_with_mixtures() -> None:
     )
 
     result = _create_post_update_states(
-        filtered_states=filtered_states,  # ty: ignore[invalid-argument-type]
+        filtered_states=filtered_states,
         factors=factors,
         update_info=update_info,
     )

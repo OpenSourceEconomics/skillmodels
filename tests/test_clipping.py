@@ -3,7 +3,7 @@
 import jax.numpy as jnp
 import numpy as np
 
-from skillmodels.clipping import soft_clipping
+from skillmodels.chs.clipping import soft_clipping
 
 
 def test_one_sided_soft_maximum() -> None:

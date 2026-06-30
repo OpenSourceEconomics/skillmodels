@@ -11,12 +11,12 @@ import pandas as pd
 import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.decorators import register_params
-from skillmodels.maximization_inputs import get_maximization_inputs
-from skillmodels.model_spec import ModelSpec, Normalizations
-from skillmodels.test_data.model2 import MODEL2
-from skillmodels.utilities import reduce_n_periods
+from skillmodels.chs.maximization_inputs import get_maximization_inputs
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.decorators import register_params
+from skillmodels.common.model_spec import ModelSpec, Normalizations
+from skillmodels.common.utilities import reduce_n_periods
+from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
 
 jax.config.update("jax_enable_x64", True)
 
@@ -86,7 +86,7 @@ def test_likelihood_values_have_not_changed(
         ["category", "period", "name1", "name2"],
     )
 
-    inputs = get_maximization_inputs(model, model2_data)
+    inputs = get_maximization_inputs(model, model2_data, chs_options=MODEL2_CHS_OPTIONS)
 
     params = params.loc[inputs["params_template"].index]
 
@@ -99,8 +99,12 @@ def test_likelihood_values_have_not_changed(
 
 
 def test_splitting_does_not_change_gradient(model2, model2_data) -> None:
-    inputs = get_maximization_inputs(model2, model2_data)
-    inputs_split = get_maximization_inputs(model2, model2_data, 13)
+    inputs = get_maximization_inputs(
+        model2, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
+    inputs_split = get_maximization_inputs(
+        model2, model2_data, 13, chs_options=MODEL2_CHS_OPTIONS
+    )
 
     params = inputs["params_template"]
     params["value"] = 0.1
@@ -123,7 +127,7 @@ def test_likelihood_contributions_have_not_changed(
         ["category", "period", "name1", "name2"],
     )
 
-    inputs = get_maximization_inputs(model, model2_data)
+    inputs = get_maximization_inputs(model, model2_data, chs_options=MODEL2_CHS_OPTIONS)
 
     params = params.loc[inputs["params_template"].index]
 
@@ -190,7 +194,9 @@ def test_likelihood_contributions_large_nobs(
 
     stacked_data = pd.concat(to_concat)
 
-    inputs = get_maximization_inputs(model, stacked_data)
+    inputs = get_maximization_inputs(
+        model, stacked_data, chs_options=MODEL2_CHS_OPTIONS
+    )
 
     params = params.loc[inputs["params_template"].index]
 
@@ -223,7 +229,9 @@ def test_likelihood_runs_with_empty_periods(model2, model2_data) -> None:
         anchoring=None,
     )
 
-    func_dict = get_maximization_inputs(model, model2_data)
+    func_dict = get_maximization_inputs(
+        model, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
 
     params = func_dict["params_template"]
     params["value"] = 0.1
@@ -235,7 +243,9 @@ def test_likelihood_runs_with_empty_periods(model2, model2_data) -> None:
 def test_likelihood_runs_with_too_long_data(model2, model2_data) -> None:
     reduced = reduce_n_periods(model2, 2)
     assert isinstance(reduced, ModelSpec)
-    func_dict = get_maximization_inputs(reduced, model2_data)
+    func_dict = get_maximization_inputs(
+        reduced, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
 
     params = func_dict["params_template"]
     params["value"] = 0.1
@@ -248,7 +258,9 @@ def test_likelihood_runs_with_observed_factors(model2, model2_data) -> None:
     model = model2.with_added_observed_factors("ob1", "ob2")
     model2_data["ob1"] = np.arange(len(model2_data))
     model2_data["ob2"] = np.ones(len(model2_data))
-    func_dict = get_maximization_inputs(model, model2_data)
+    func_dict = get_maximization_inputs(
+        model, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
 
     params = func_dict["params_template"]
     params["value"] = 0.1

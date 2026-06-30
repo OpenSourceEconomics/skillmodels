@@ -1,0 +1,66 @@
+# Pip-only requirements for the skillmodels `af-estimator` branch.
+#
+# Installs every package needed to run the skillmodels test suite and
+# the two downstream research applications (`skane-struct-bw`,
+# `health-cognition`) -- minus the two applications themselves, which
+# their teams provide separately.
+#
+# Defaults to CPU JAX. For CUDA-12, replace `jax>=0.9` with
+# `jax[cuda12]>=0.9` (and provide a CUDA-12 toolkit on the host). See
+# https://jax.readthedocs.io/en/latest/installation.html for details.
+#
+# Usage (Python 3.14 venv):
+#   pip install -r requirements.txt
+#
+# Notes on dependencies that come from the downstream apps and are NOT
+# direct skillmodels dependencies are marked with `# downstream:` below.
+
+# Core scientific stack
+numpy>=2.4
+pandas>=3
+scipy>=1.16.0
+h5py>=3.16.0,<4
+jax>=0.9
+networkx
+filterpy
+pybaum>=0.1.3
+scikit-learn>=1.5  # AMN Stage 1 (mixture EM)
+statsmodels>=0.14.5  # downstream: regression diagnostics in skane / health-cognition
+seaborn  # downstream: figure styling in health-cognition
+
+# Estimation engine — pinned to the optimagic branch the AF estimator
+# relies on (`probability-allow-fixed-entries`); the PyPI release does
+# not yet carry the required `FixedConstraintWithValue` semantics.
+optimagic @ git+https://github.com/optimagic-dev/optimagic.git@probability-allow-fixed-entries
+fides>=0.7.8  # downstream: optimagic algorithm used by skane / health-cognition
+
+# Workflow / pipelines
+dags>=0.5.1
+pytask>=0.5.8
+pytask-parallel>=0.5.2
+
+# Viz + reporting
+plotly>=6.6
+kaleido>=1.2
+jupyter-book>=2
+tabulate>=0.9.0  # downstream: table formatting in skane / health-cognition reports
+nbformat>=5.10.4
+ipykernel>=6.29.5
+jupyterlab
+
+# Data / IO utilities
+statadict>=1.1.0  # downstream: Stata variable labels in skane / health-cognition
+deepdiff>=8.5.0  # downstream: snapshot diffing in skane / health-cognition
+xlrd>=2  # required by `tests/matlab_ces_repro` (CNLSY xls reader)
+
+# Dev / test / profiling tooling
+pytest>=8.4.1
+pytest-cov>=6.2.1
+pytest-xdist>=3.8.0
+pytest-memray; platform_system != 'Windows'
+memray>=1.17.2  # downstream: heap profiling driver
+snakeviz
+pdbp
+
+# Skillmodels itself, pulled from the `af-estimator` branch.
+skillmodels @ git+https://github.com/OpenSourceEconomics/skillmodels.git@af-estimator

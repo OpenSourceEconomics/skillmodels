@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.variance_decomposition import (
+from skillmodels.common.variance_decomposition import (
     _compute_variance_decomposition,
     summarize_measurement_reliability,
 )
@@ -110,3 +110,37 @@ def test_summarize_measurement_reliability(expected_variance_decomposition):
     assert summary.loc["y3", "mean_signal"] == pytest.approx(0.8)
     assert summary.loc["y2", "mean_signal"] == pytest.approx(0.0)
     assert summary.loc["y1", "mean_signal"] == pytest.approx(0.5)
+
+
+@pytest.fixture
+def af_format_variance_decomposition(setup_variance_decomposition):
+    """Rebuild `setup_variance_decomposition` with `period` as the level name.
+
+    AF and AMN produce params keyed by `period`; the CHS path uses
+    `aug_period`. `_compute_variance_decomposition`'s rename block
+    normalises both spellings before merging. This fixture exercises
+    the rename path that the CHS fixture leaves untouched.
+    """
+    params = setup_variance_decomposition["params"]
+    new_index = params.index.set_names(["category", "period", "name1", "name2"])
+    af_params = params.copy()
+    af_params.index = new_index
+    return {
+        **setup_variance_decomposition,
+        "params": af_params,
+    }
+
+
+def test_compute_variance_decomposition_with_period_level_params(
+    af_format_variance_decomposition, expected_variance_decomposition
+):
+    """Variance decomposition must handle params keyed by `period`.
+
+    Regression for the hard-coded `aug_period` rename target that
+    previously only worked for CHS params. AF and AMN expose their
+    params with `period` as the second level name, and a
+    `decompose_measurement_variance` call on them used to raise
+    `KeyError: 'aug_period'` during the loadings merge.
+    """
+    result = _compute_variance_decomposition(**af_format_variance_decomposition)
+    aaae(result.values, expected_variance_decomposition.values)

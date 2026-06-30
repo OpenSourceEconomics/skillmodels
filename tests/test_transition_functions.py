@@ -6,7 +6,7 @@ import optimagic as om
 import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.transition_functions import (
+from skillmodels.common.transition_functions import (
     constant,
     constraints_log_ces,
     identity_constraints_linear,
@@ -18,16 +18,20 @@ from skillmodels.transition_functions import (
     linear,
     linear_and_squares,
     log_ces,
+    log_ces_af,
     log_ces_general,
     params_constant,
     params_linear,
     params_linear_and_squares,
     params_log_ces,
+    params_log_ces_af,
     params_log_ces_general,
     params_robust_translog,
     params_translog,
+    params_translog_af,
     robust_translog,
     translog,
+    translog_af,
 )
 
 jax.config.update("jax_enable_x64", True)
@@ -81,6 +85,31 @@ def test_translog() -> None:
         aaae(calculated, expected)
 
 
+def test_translog_af_has_no_square_terms() -> None:
+    # States are skill and investment.
+    states = jnp.array([2.0, 3.0])
+
+    # params layout for translog_af: [b_skill, b_inv, d_interaction, constant]
+    b_s, b_i, d, c = 0.2, 0.1, 0.05, 0.04
+    params = jnp.array([b_s, b_i, d, c])
+
+    # Parameter names: exactly linear + single interaction + constant, NO '** 2'.
+    names = params_translog_af(("skills", "investment"))
+    assert names == ["skills", "investment", "skills * investment", "constant"]
+
+    expected = b_s * 2.0 + b_i * 3.0 + d * 2.0 * 3.0 + c
+    aaae(translog_af(states, params), expected)
+
+
+def test_log_ces_af_matches_log_ces() -> None:
+    states = jnp.array([3.0, 7.5])
+    params = jnp.array([0.4, 0.6, 2.0])
+    aaae(log_ces_af(states, params), log_ces(states, params))
+    assert params_log_ces_af(("skills", "investment")) == params_log_ces(
+        ("skills", "investment")
+    )
+
+
 def test_log_ces() -> None:
     states = jnp.array([3, 7.5])
     params = jnp.array([0.4, 0.6, 2])
@@ -99,7 +128,9 @@ def test_where_all_but_one_gammas_are_zero() -> None:
 
 
 def test_constant() -> None:
-    assert constant("bla", "blubb") == "bla"  # ty: ignore[invalid-argument-type]
+    state = jnp.array([1.0, 2.0, 3.0])
+    params = jnp.array([])
+    aaae(constant(state, params), state)
 
 
 def test_robust_translog() -> None:
@@ -260,14 +291,15 @@ def test_identity_constraints_linear_and_squares() -> None:
         assert c.value == pytest.approx(0.0)
 
 
-def test_identity_constraints_log_ces_raises() -> None:
-    with pytest.raises(NotImplementedError, match=r"^$"):
-        identity_constraints_log_ces(("a", "b"), 0, ("a", "b"))
+def test_identity_constraints_log_ces_is_noop() -> None:
+    # log_ces carry-forward identity is a no-op (see docstring); the
+    # gammas are already pinned by the ProbabilityConstraint from
+    # `constraints_log_ces`.
+    assert identity_constraints_log_ces("a", 0, ("a", "b")) == []
 
 
-def test_identity_constraints_log_ces_general_raises() -> None:
-    with pytest.raises(NotImplementedError, match=r"^$"):
-        identity_constraints_log_ces_general(("a", "b"), 0, ("a", "b"))
+def test_identity_constraints_log_ces_general_is_noop() -> None:
+    assert identity_constraints_log_ces_general("a", 0, ("a", "b")) == []
 
 
 def test_constraints_log_ces() -> None:

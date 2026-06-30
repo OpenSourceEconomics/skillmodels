@@ -7,7 +7,7 @@ import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 from numpy.typing import NDArray
 
-from skillmodels.qr import qr_gpu
+from skillmodels.chs.qr import qr_gpu
 
 SEED = 20
 

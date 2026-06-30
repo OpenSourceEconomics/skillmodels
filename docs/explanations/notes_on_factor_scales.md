@@ -8,9 +8,15 @@ Wiswall and Agostinelli define a class of transition functions with Known Locati
 Scale (KLS) that require fewer normalizations. Their critique potentially invalidates
 certain empirical estimates from CHS, but not the general estimation approach.
 
-To get estimates that avoid renormalization issues, you can either:
+To reduce the risk of renormalization issues, you can either:
 1. Use fewer normalizations with KLS transition functions, or
 2. Use non-KLS transition functions with one normalization per period and factor
+
+skillmodels supports both schemes, but supporting a scheme is not the same as
+guaranteeing identification: the model checker performs syntactic checks on the
+normalizations, not a transition-specific rank or scale-invariance analysis.
+Whether a given scheme identifies the model still depends on the transition
+functions and data; see the cautions below.
 
 As there is no natural scale for skills, neither approach is inherently better.
 However, we prefer using flexible non-KLS transition functions with explicit

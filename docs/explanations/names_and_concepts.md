@@ -76,12 +76,57 @@ of factors are arbitrary).
 
 ## Estimation Options
 
-The `EstimationOptions` dataclass controls numerical aspects:
+Each estimator has its own options dataclass, passed at call time rather than
+embedded in `ModelSpec`. The three classes share no fields — what counts as a
+tuning knob differs between estimators.
+
+`CHSEstimationOptions` (from `skillmodels.chs`) controls the Kalman MLE:
 
 - **robust_bounds**: Tightens parameter bounds to avoid numerical issues
 - **bounds_distance**: How much stricter to make bounds (zeroed if robust_bounds is
   false)
-- **n_mixtures**: Number of mixture components in the distribution
 - **sigma_points_scale**: Controls spread of sigma points in unscented Kalman filter
 - **clipping_\***: Parameters for soft-clipping the log-likelihood to prevent
   infinities
+- **start_params_strategy**: How to seed the `params_template`. `"amn"` (default)
+  runs the full AMN three-stage estimator and uses its parameters as the start;
+  `"spearman"` uses moment-based start values; `"none"` leaves entries as NaN
+  for the caller to fill in.
+
+`AFEstimationOptions` (from `skillmodels.af`) controls the sequential MLE:
+
+- **n_halton_points**, **n_halton_points_shock**: quadrature counts.
+- **n_mixture_components**: number of components in the latent-factor mixture.
+- **optimizer_algorithm**: the optimagic algorithm name passed to
+  `optimagic.minimize(algorithm=...)` (default `"fides"`; use
+  `"scipy_lbfgsb"` for MC sweeps).
+- **initialization_strategy**: `"amn"`, `"spearman"`, or `"constant"`. Same
+  meaning as in CHS.
+
+`AMNEstimationOptions` (from `skillmodels.amn`) controls the three-stage
+pipeline:
+
+- **n_mixture_components**: Stage-1 EM components.
+- **em_max_iter**, **em_tol**, **em_n_init**, **em_reg_covar**: Stage-1 EM
+  numerical knobs.
+- **n_simulation_draws**: Stage-3 synthetic-panel size.
+- **minimum_distance_weighting**: Stage-2 weighting. `"identity"` (default) is
+  the paper's unweighted identity-metric criterion over per-component means and
+  full covariance matrices, and is currently the only implemented option.
+  `"optimal"` is reserved for a future Avar-weighted criterion and raises
+  `NotImplementedError`.
+- **investment_endogeneity**: apply the AMN (2020) eq. 7-8 / AF Sec. 3.5
+  investment control-function correction in Stage 3. Defaults to `False`. When
+  `True` and the model has an endogenous (investment) factor, a first-stage
+  investment equation is OLS-fit per period and its residual is added as an
+  additive `cf` covariate (coefficient `kappa_t`) to each state factor's
+  production regression; observed factors are then excluded from the production
+  function and act as instruments (at least one observed instrument is
+  required). The default stays `False` because `estimate_af` calls
+  `estimate_amn` for start values and the AF likelihood implements only
+  `kappa=0`; opt into the correction at the application call site. A no-op for
+  models without endogenous factors.
+
+The shared structural field — number of mixture components in the latent
+distribution — lives directly on `ModelSpec.n_mixtures`, since it changes the
+model itself rather than the optimizer.

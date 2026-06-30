@@ -1,5 +1,6 @@
 """Tests for constraints."""
 
+import functools
 from types import MappingProxyType
 from typing import Any
 
@@ -9,7 +10,7 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-from skillmodels.constraints import (
+from skillmodels.common.constraints import (
     FixedConstraintWithValue,
     _get_anchoring_constraints,
     _get_constant_factors_constraints,
@@ -21,10 +22,270 @@ from skillmodels.constraints import (
     _get_transition_constraints,
     add_bounds,
     get_constraints,
+    reconcile_start_to_equality,
 )
-from skillmodels.process_model import process_model
+from skillmodels.common.process_model import process_model
+from skillmodels.common.selector import select_by_loc
+from skillmodels.common.types import (
+    Anchoring,
+    EndogenousFactorsInfo,
+    Labels,
+    MeasurementType,
+    Normalizations,
+)
 from skillmodels.test_data.simplest_augmented_model import SIMPLEST_AUGMENTED_MODEL
-from skillmodels.types import Anchoring, Labels, Normalizations
+
+
+def test_reconcile_start_to_equality_pools_pairwise_groups():
+    """Pairwise-equality groups (e.g. time-invariant controls) are pooled too.
+
+    hc ties a measurement's control / loading / sd across periods via
+    `om.PairwiseEqualityConstraint`. A per-period seed (AMN/Spearman) fills each
+    member independently and breaks it, so the reconciler must average each
+    element-wise group, not only plain `om.EqualityConstraint`s. Regression for
+    the `InvalidParamsError` that AMN-seeded time-invariant controls triggered.
+    """
+    names = ["category", "period", "name1", "name2"]
+    index = pd.MultiIndex.from_tuples(
+        [("controls", p, "m1", "constant") for p in (0, 1, 2)], names=names
+    )
+    params = pd.DataFrame({"value": [1.0, 2.0, 3.0]}, index=index)
+    locs = [
+        pd.MultiIndex.from_tuples([("controls", p, "m1", "constant")], names=names)
+        for p in (0, 1, 2)
+    ]
+    constraint = om.PairwiseEqualityConstraint(
+        selectors=[functools.partial(select_by_loc, loc=loc) for loc in locs]
+    )
+
+    out = reconcile_start_to_equality(params, [constraint])
+
+    np.testing.assert_allclose(out["value"].to_numpy(), [2.0, 2.0, 2.0])
+
+
+def test_reconcile_start_to_equality_propagates_fixed_member_value():
+    """A fixed member's value propagates to its equality group, not the mean.
+
+    When a pairwise-equality group contains a `FixedConstraintWithValue` member,
+    the shared start value must be that fixed value, so that enforcing the fix and
+    then reconciling do not fight each other; averaging would move the fixed
+    coordinate off its target. Regression for audit finding F10.
+    """
+    names = ["category", "period", "name1", "name2"]
+    index = pd.MultiIndex.from_tuples(
+        [("loadings", p, "m1", "fac1") for p in (0, 1, 2)], names=names
+    )
+    params = pd.DataFrame({"value": [1.0, 2.0, 9.0]}, index=index)
+    locs = [
+        pd.MultiIndex.from_tuples([("loadings", p, "m1", "fac1")], names=names)
+        for p in (0, 1, 2)
+    ]
+    pairwise = om.PairwiseEqualityConstraint(
+        selectors=[functools.partial(select_by_loc, loc=loc) for loc in locs]
+    )
+    fixed = FixedConstraintWithValue(loc=("loadings", 2, "m1", "fac1"), value=9.0)
+
+    out = reconcile_start_to_equality(params, [pairwise, fixed])
+
+    np.testing.assert_allclose(out["value"].to_numpy(), [9.0, 9.0, 9.0])
+
+
+def test_reconcile_start_to_equality_raises_on_conflicting_fixed_members():
+    """Two fixed members in one equality group with different values is infeasible."""
+    names = ["category", "period", "name1", "name2"]
+    index = pd.MultiIndex.from_tuples(
+        [("loadings", p, "m1", "fac1") for p in (0, 1)], names=names
+    )
+    params = pd.DataFrame({"value": [1.0, 2.0]}, index=index)
+    locs = [
+        pd.MultiIndex.from_tuples([("loadings", p, "m1", "fac1")], names=names)
+        for p in (0, 1)
+    ]
+    pairwise = om.PairwiseEqualityConstraint(
+        selectors=[functools.partial(select_by_loc, loc=loc) for loc in locs]
+    )
+    fixed = [
+        FixedConstraintWithValue(loc=("loadings", 0, "m1", "fac1"), value=3.0),
+        FixedConstraintWithValue(loc=("loadings", 1, "m1", "fac1"), value=4.0),
+    ]
+
+    with pytest.raises(ValueError, match="Conflicting"):
+        reconcile_start_to_equality(params, [pairwise, *fixed])
+
+
+def _corr_model_processed():
+    """Process a correction model: an endogenous investment + an instrument."""
+    from dataclasses import replace  # noqa: PLC0415
+
+    from skillmodels.common.model_spec import CorrectionSpec  # noqa: PLC0415
+    from skillmodels.test_data.model2 import MODEL2  # noqa: PLC0415
+
+    fac3 = MODEL2.factors["fac3"]
+    corr = CorrectionSpec(instruments=("inv_z",))
+    new_factors = dict(MODEL2.factors) | {
+        "fac3": replace(fac3, is_endogenous=True, correction=corr)
+    }
+    model = MODEL2._replace(factors=new_factors)._replace(stagemap=None)
+    model = model._replace(observed_factors=("inv_z",))
+    return process_model(model)
+
+
+def test_get_constraints_pins_kappa_to_zero_on_carry_forward_periods() -> None:
+    processed = _corr_model_processed()
+    constraints = get_constraints(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        anchoring_info=processed.anchoring,
+        normalizations=processed.normalizations,
+        endogenous_factors_info=processed.endogenous_factors_info,
+        bounds_distance=1e-8,
+    )
+    kappa_fixed = [
+        c
+        for c in constraints
+        if isinstance(c, FixedConstraintWithValue)
+        and isinstance(c.loc, tuple)
+        and c.loc[0] == "kappa"
+    ]
+    assert kappa_fixed, "kappa must be pinned to 0 on carry-forward periods"
+    # All such constraints pin kappa to exactly 0.
+    assert all(c.value == 0.0 for c in kappa_fixed)
+    # They fall only on the state factors' carry-forward (STATES) aug periods,
+    # never on the production (ENDOGENOUS) aug periods where kappa is free.
+    meas_types = processed.endogenous_factors_info.aug_periods_to_aug_period_meas_types
+    for c in kappa_fixed:
+        assert isinstance(c.loc, tuple)
+        _category, aug_period, target, _term = c.loc
+        assert target in ("fac1", "fac2")
+        assert meas_types[aug_period] == MeasurementType.STATES
+
+
+def test_constant_factor_shock_constraints_only_target_existing_rows() -> None:
+    # A constant-transition state factor combined with an endogenous factor must
+    # not emit shock-fix constraints at aug periods where the factor does not
+    # transition. With endogenous factors the transition index stops at
+    # aug_periods[:-2], so a naive aug_periods[:-1] loop emits one orphan
+    # ("shock_sds", last_aug, factor, "-") loc that trips the optimagic selector.
+    from dataclasses import replace  # noqa: PLC0415
+
+    from skillmodels.common.model_spec import CorrectionSpec  # noqa: PLC0415
+    from skillmodels.common.params_index import get_params_index  # noqa: PLC0415
+    from skillmodels.test_data.model2 import MODEL2  # noqa: PLC0415
+
+    fac1 = MODEL2.factors["fac1"]
+    fac3 = MODEL2.factors["fac3"]
+    new_factors = dict(MODEL2.factors) | {
+        "fac1": replace(fac1, transition_function="constant"),
+        "fac3": replace(
+            fac3, is_endogenous=True, correction=CorrectionSpec(instruments=("inv_z",))
+        ),
+    }
+    model = (
+        MODEL2._replace(factors=new_factors)
+        ._replace(stagemap=None)
+        ._replace(observed_factors=("inv_z",))
+    )
+    processed = process_model(model)
+    index = get_params_index(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        transition_info=processed.transition_info,
+        endogenous_factors_info=processed.endogenous_factors_info,
+    )
+    constraints = get_constraints(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        anchoring_info=processed.anchoring,
+        normalizations=processed.normalizations,
+        endogenous_factors_info=processed.endogenous_factors_info,
+        bounds_distance=1e-8,
+    )
+    shock_fixes = [
+        c
+        for c in constraints
+        if isinstance(c, FixedConstraintWithValue)
+        and isinstance(c.loc, tuple)
+        and c.loc[0] == "shock_sds"
+    ]
+    assert shock_fixes, "the constant factor must have its shocks pinned to 0"
+    for c in shock_fixes:
+        assert c.loc in index, f"orphan shock constraint {c.loc} not in params index"
+
+
+def test_get_constraints_pins_instrument_out_of_production() -> None:
+    # Built-in production transitions enumerate a free coefficient for every
+    # observed factor, including the excluded instrument; that coefficient must be
+    # pinned to 0 on the production (ENDOGENOUS) aug periods so the instrument
+    # cannot leak into production.
+    processed = _corr_model_processed()
+    constraints = get_constraints(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        anchoring_info=processed.anchoring,
+        normalizations=processed.normalizations,
+        endogenous_factors_info=processed.endogenous_factors_info,
+        bounds_distance=1e-8,
+    )
+    meas_types = processed.endogenous_factors_info.aug_periods_to_aug_period_meas_types
+    inst_pins = [
+        c
+        for c in constraints
+        if isinstance(c, FixedConstraintWithValue)
+        and isinstance(c.loc, tuple)
+        and c.loc[0] == "transition"
+        and "inv_z" in c.loc[3]
+        and meas_types[c.loc[1]] == MeasurementType.ENDOGENOUS_FACTORS
+    ]
+    assert inst_pins, "instrument coeffs must be pinned to 0 on production periods"
+    assert all(c.value == 0.0 for c in inst_pins)
+    for c in inst_pins:
+        assert isinstance(c.loc, tuple)
+        _category, _aug_period, target, _name2 = c.loc
+        assert target in ("fac1", "fac2")
+
+
+def test_get_constraints_skips_custom_target_transition() -> None:
+    # A custom (registered) production transition on a correction target has no
+    # built-in `params_<name>` enumerator; the instrument-exclusion guard must
+    # skip it (custom-production leakage is validated separately by
+    # `check_model`) rather than raise AttributeError.
+    from dataclasses import replace  # noqa: PLC0415
+
+    from skillmodels.common.decorators import register_params  # noqa: PLC0415
+    from skillmodels.common.model_spec import CorrectionSpec  # noqa: PLC0415
+    from skillmodels.test_data.model2 import MODEL2  # noqa: PLC0415
+
+    @register_params(params=["constant", "fac1", "fac2"])
+    def custom_prod(fac1, fac2, params):
+        return params["constant"] + params["fac1"] * fac1 + params["fac2"] * fac2
+
+    corr = CorrectionSpec(instruments=("inv_z",))
+    new_factors = dict(MODEL2.factors) | {
+        "fac1": replace(MODEL2.factors["fac1"], transition_function=custom_prod),
+        "fac3": replace(MODEL2.factors["fac3"], is_endogenous=True, correction=corr),
+    }
+    model = (
+        MODEL2._replace(factors=new_factors)
+        ._replace(stagemap=None)
+        ._replace(observed_factors=("inv_z",))
+    )
+    processed = process_model(model)
+
+    # Must not raise `AttributeError: ... has no attribute 'params_custom_prod'`.
+    constraints = get_constraints(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        anchoring_info=processed.anchoring,
+        normalizations=processed.normalizations,
+        endogenous_factors_info=processed.endogenous_factors_info,
+        bounds_distance=1e-8,
+    )
+    assert constraints
 
 
 def _to_dict(c: om.constraints.Constraint) -> dict[str, Any]:
@@ -189,7 +450,13 @@ def test_constant_factor_constraints() -> None:
         {"loc": ("shock_sds", 1, "fac2", "-"), "type": "fixed", "value": 0.0},
     ]
 
-    calculated = _get_constant_factors_constraints(labels)
+    no_endog = EndogenousFactorsInfo(
+        has_endogenous_factors=False,
+        aug_periods_to_aug_period_meas_types=MappingProxyType({}),
+        aug_periods_from_period=lambda p: [p],
+        factor_info=MappingProxyType({}),
+    )
+    calculated = _get_constant_factors_constraints(labels, no_endog)
     as_dicts = [_to_dict(c) for c in calculated]
     assert_list_equal_except_for_order(as_dicts, expected)
 
@@ -402,6 +669,7 @@ def test_get_constraints_with_endogenous_factors(
         anchoring_info=simplest_augmented_model.anchoring,
         normalizations=simplest_augmented_model.normalizations,
         endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
+        bounds_distance=1e-8,
     )
     # Should contain augmented-period constraints
     assert any(
@@ -418,6 +686,7 @@ def test_get_constraints_returns_om_objects(simplest_augmented_model) -> None:
         anchoring_info=simplest_augmented_model.anchoring,
         normalizations=simplest_augmented_model.normalizations,
         endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
+        bounds_distance=1e-8,
     )
     assert len(constraints) > 0
     for c in constraints:
@@ -428,26 +697,27 @@ def test_get_constraints_for_augmented_periods(simplest_augmented_model) -> None
     calculated = _get_constraints_for_augmented_periods(
         labels=simplest_augmented_model.labels,
         endogenous_factors_info=simplest_augmented_model.endogenous_factors_info,
+        bounds_distance=1e-8,
     )
     as_dicts = [_to_dict(c) for c in calculated]
+    # Only the non-final aug-period of each meas-type should produce
+    # identity constraints: `get_transition_index_tuples` truncates
+    # transitions at `aug_periods[:-2]` when endogenous factors are
+    # present, so emitting fixed constraints at the last STATES- or
+    # ENDO-typed aug-period would target locs that don't exist in the
+    # params index. Aug 2 (last STATES-typed) and aug 3 (last
+    # ENDO-typed) are therefore intentionally absent from the expected
+    # list.
     expected = [
         {"loc": ("transition", 0, "fac1", "fac1"), "type": "fixed", "value": 1.0},
         {"loc": ("transition", 0, "fac1", "fac2"), "type": "fixed", "value": 0.0},
         {"loc": ("transition", 0, "fac1", "of"), "type": "fixed", "value": 0.0},
         {"loc": ("transition", 0, "fac1", "constant"), "type": "fixed", "value": 0.0},
         {"loc": ("shock_sds", 0, "fac1", "-"), "type": "fixed", "value": 0.00000001},
-        {"loc": ("transition", 2, "fac1", "fac1"), "type": "fixed", "value": 1.0},
-        {"loc": ("transition", 2, "fac1", "fac2"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 2, "fac1", "of"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 2, "fac1", "constant"), "type": "fixed", "value": 0.0},
         {"loc": ("transition", 1, "fac2", "fac1"), "type": "fixed", "value": 0.0},
         {"loc": ("transition", 1, "fac2", "fac2"), "type": "fixed", "value": 1.0},
         {"loc": ("transition", 1, "fac2", "of"), "type": "fixed", "value": 0.0},
         {"loc": ("transition", 1, "fac2", "constant"), "type": "fixed", "value": 0.0},
         {"loc": ("shock_sds", 1, "fac2", "-"), "type": "fixed", "value": 0.00000001},
-        {"loc": ("transition", 3, "fac2", "fac1"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 3, "fac2", "fac2"), "type": "fixed", "value": 1.0},
-        {"loc": ("transition", 3, "fac2", "of"), "type": "fixed", "value": 0.0},
-        {"loc": ("transition", 3, "fac2", "constant"), "type": "fixed", "value": 0.0},
     ]
     assert_list_equal_except_for_order(as_dicts, expected)

@@ -3,9 +3,7 @@
 import pickle
 from types import MappingProxyType
 
-import pytest
-
-from skillmodels.types import FactorInfo, _make_immutable
+from skillmodels.common.types import FactorInfo, _make_immutable
 
 
 def test_make_immutable_list_to_tuple() -> None:
@@ -23,15 +21,11 @@ def test_mapping_proxy_pickle_roundtrip() -> None:
 
 
 def test_factor_info_from_flags_all_false() -> None:
-    info = FactorInfo.from_flags(is_endogenous=False, is_correction=False)
+    info = FactorInfo.from_flags(is_endogenous=False)
     assert info.is_state
 
 
-def test_factor_info_from_flags_correction() -> None:
-    info = FactorInfo.from_flags(is_endogenous=True, is_correction=True)
-    assert info.is_correction
-
-
-def test_factor_info_from_flags_both_true_raises() -> None:
-    with pytest.raises(ValueError, match=r"correction.*endogenous"):
-        FactorInfo.from_flags(is_endogenous=False, is_correction=True)
+def test_factor_info_from_flags_endogenous() -> None:
+    info = FactorInfo.from_flags(is_endogenous=True)
+    assert info.is_endogenous
+    assert not info.is_state

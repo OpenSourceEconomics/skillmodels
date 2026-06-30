@@ -5,8 +5,8 @@ Factor fac2 is endogenous. Both factors use linear transition functions with two
 periods. Used for testing endogenous factor augmentation.
 """
 
-from skillmodels.model_spec import (
-    EstimationOptions,
+from skillmodels.chs.options import CHSEstimationOptions
+from skillmodels.common.model_spec import (
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -33,7 +33,13 @@ SIMPLEST_AUGMENTED_MODEL = ModelSpec(
         ),
     },
     observed_factors=("of",),
-    estimation_options=EstimationOptions(
-        bounds_distance=1e-8,
-    ),
+)
+
+# CHS options used alongside SIMPLEST_AUGMENTED_MODEL in tests. Tests using
+# this fixture exercise CHS plumbing rather than full estimation; opt into
+# the cheap Spearman start-value path so collection stays fast. End-user
+# defaults remain "amn".
+SIMPLEST_AUGMENTED_MODEL_CHS_OPTIONS = CHSEstimationOptions(
+    bounds_distance=1e-8,
+    start_params_strategy="spearman",
 )

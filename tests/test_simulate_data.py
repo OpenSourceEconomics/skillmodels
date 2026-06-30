@@ -7,15 +7,14 @@ import pandas as pd
 import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
-from skillmodels.model_spec import (
-    EstimationOptions,
+from skillmodels.common.model_spec import (
     FactorSpec,
     ModelSpec,
     Normalizations,
 )
-from skillmodels.params_index import get_params_index
-from skillmodels.process_model import process_model
-from skillmodels.simulate_data import (
+from skillmodels.common.params_index import get_params_index
+from skillmodels.common.process_model import process_model
+from skillmodels.common.simulate_data import (
     _collapse_aug_periods_to_periods,
     _get_shock,
     measurements_from_states,
@@ -237,11 +236,6 @@ def test_simulate_dataset_no_data_with_nobs() -> None:
                 transition_function="linear",
             ),
         },
-        estimation_options=EstimationOptions(
-            robust_bounds=True,
-            bounds_distance=0.001,
-            n_mixtures=1,
-        ),
     )
 
     processed = process_model(model_no_controls)

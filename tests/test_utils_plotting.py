@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from skillmodels.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
+from skillmodels.common.utils_plotting import get_layout_kwargs, get_make_subplot_kwargs
 
 
 def test_get_layout_kwargs_defaults() -> None:

@@ -6,10 +6,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.filtered_states import get_filtered_states
-from skillmodels.maximization_inputs import get_maximization_inputs
-from skillmodels.test_data.model2 import MODEL2
+from skillmodels.chs.maximization_inputs import get_maximization_inputs
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.individual_states import get_individual_states_from_params
+from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
@@ -25,14 +25,18 @@ def model2_data():
     return data.set_index(["caseid", "period"])
 
 
-def test_get_filtered_states(model2, model2_data) -> None:
+def test_get_individual_states_from_params(model2, model2_data) -> None:
     params = pd.read_csv(REGRESSION_VAULT / "one_stage_anchoring.csv")
     params = params.set_index(["category", "period", "name1", "name2"])
 
-    max_inputs = get_maximization_inputs(model2, model2_data)
+    max_inputs = get_maximization_inputs(
+        model2, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
     params = params.loc[max_inputs["params_template"].index]
 
-    calculated = get_filtered_states(model_spec=model2, data=model2_data, params=params)
+    calculated = get_individual_states_from_params(
+        model_spec=model2, data=model2_data, params=params
+    )
 
     factors = ["fac1", "fac2", "fac3"]
     expected_ratios = [1.187757, 1, 1]

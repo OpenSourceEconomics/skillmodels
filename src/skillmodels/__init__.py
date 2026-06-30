@@ -1,43 +1,67 @@
 """Skillmodels: A Python package for estimating latent factor models."""
 
+# Enable 64-bit JAX before any skillmodels submodule. Every CHS / AF / AMN
+# entry point already sets this inside its function body; centralising it
+# here makes the package behave consistently for direct callers.
 import contextlib
+import os
+
+os.environ.setdefault("JAX_ENABLE_X64", "1")
+
+import jax
+
+jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
 with contextlib.suppress(ImportError):
     import pdbp  # noqa: F401
 
-from skillmodels.diagnostic_plots import (
-    plot_likelihood_contributions,
-    plot_residual_boxplots,
+from skillmodels.af.estimate import estimate_af  # noqa: E402
+from skillmodels.af.types import AFEstimationOptions, AFEstimationResult  # noqa: E402
+from skillmodels.amn.estimate import estimate_amn  # noqa: E402
+from skillmodels.amn.types import (  # noqa: E402
+    AMNEstimationOptions,
+    AMNEstimationResult,
 )
-from skillmodels.filtered_states import get_filtered_states
-from skillmodels.maximization_inputs import get_maximization_inputs
-from skillmodels.model_spec import (
+from skillmodels.chs.estimate import estimate_chs  # noqa: E402
+from skillmodels.chs.maximization_inputs import get_maximization_inputs  # noqa: E402
+from skillmodels.chs.options import CHSEstimationOptions  # noqa: E402
+from skillmodels.chs.types import CHSEstimationResult  # noqa: E402
+from skillmodels.common.control_function import generate_kappa_terms  # noqa: E402
+from skillmodels.common.estimation import (  # noqa: E402
+    CommonEstimationOptions,
+    CommonEstimationResult,
+)
+from skillmodels.common.individual_states import (  # noqa: E402
+    get_individual_states,
+    get_individual_states_from_params,
+)
+from skillmodels.common.model_spec import (  # noqa: E402
     AnchoringSpec,
-    EstimationOptions,
+    CorrectionSpec,
     FactorSpec,
     ModelSpec,
     Normalizations,
 )
-from skillmodels.process_debug_data import create_state_ranges
-from skillmodels.simulate_data import simulate_dataset, simulate_policy_effect
-from skillmodels.variance_decomposition import (
-    decompose_measurement_variance,
-    summarize_measurement_reliability,
-)
 
 __all__ = [
+    "AFEstimationOptions",
+    "AFEstimationResult",
+    "AMNEstimationOptions",
+    "AMNEstimationResult",
     "AnchoringSpec",
-    "EstimationOptions",
+    "CHSEstimationOptions",
+    "CHSEstimationResult",
+    "CommonEstimationOptions",
+    "CommonEstimationResult",
+    "CorrectionSpec",
     "FactorSpec",
     "ModelSpec",
     "Normalizations",
-    "create_state_ranges",
-    "decompose_measurement_variance",
-    "get_filtered_states",
+    "estimate_af",
+    "estimate_amn",
+    "estimate_chs",
+    "generate_kappa_terms",
+    "get_individual_states",
+    "get_individual_states_from_params",
     "get_maximization_inputs",
-    "plot_likelihood_contributions",
-    "plot_residual_boxplots",
-    "simulate_dataset",
-    "simulate_policy_effect",
-    "summarize_measurement_reliability",
 ]

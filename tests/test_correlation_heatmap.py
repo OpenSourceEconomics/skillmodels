@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import pytest
 from pandas.testing import assert_frame_equal as afe
 
-from skillmodels.correlation_heatmap import (
+from skillmodels.common.correlation_heatmap import (
     _get_mask,
     _get_measurement_data_for_multiple_periods,
     _get_measurement_data_for_single_period,
@@ -21,7 +21,7 @@ from skillmodels.correlation_heatmap import (
     get_scores_corr,
     plot_correlation_heatmap,
 )
-from skillmodels.types import Labels
+from skillmodels.common.types import Labels
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
 
@@ -275,12 +275,12 @@ def test_process_factors() -> None:
     observed_factor = "g"
     factors = ["b", "d", "g"]
     all_factors = None
-    assert tuple("abcd") == _process_factors(model, all_factors)[0]  # ty: ignore[invalid-argument-type]
-    assert tuple("efg") == _process_factors(model, all_factors)[1]  # ty: ignore[invalid-argument-type]
-    assert (latent_factor,) == _process_factors(model, latent_factor)[0]  # ty: ignore[invalid-argument-type]
-    assert (observed_factor,) == _process_factors(model, observed_factor)[1]  # ty: ignore[invalid-argument-type]
-    assert tuple(factors[:-1]) == _process_factors(model, factors)[0]  # ty: ignore[invalid-argument-type]
-    assert (factors[-1],) == _process_factors(model, factors)[1]  # ty: ignore[invalid-argument-type]
+    assert tuple("abcd") == _process_factors(model, all_factors)[0]
+    assert tuple("efg") == _process_factors(model, all_factors)[1]
+    assert (latent_factor,) == _process_factors(model, latent_factor)[0]
+    assert (observed_factor,) == _process_factors(model, observed_factor)[1]
+    assert tuple(factors[:-1]) == _process_factors(model, factors)[0]
+    assert (factors[-1],) == _process_factors(model, factors)[1]
 
 
 def test_get_mask_lower_triangle_only() -> None:

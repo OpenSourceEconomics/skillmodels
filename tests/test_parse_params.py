@@ -6,6 +6,7 @@ implementation details.
 """
 
 from collections.abc import Mapping
+from dataclasses import replace
 from types import MappingProxyType
 
 import jax.numpy as jnp
@@ -14,11 +15,60 @@ import pandas as pd
 import pytest
 from numpy.testing import assert_array_equal as aae
 
-from skillmodels.config import TEST_DATA_DIR
-from skillmodels.parse_params import create_parsing_info, parse_params
-from skillmodels.process_model import process_model
+from skillmodels.common.config import TEST_DATA_DIR
+from skillmodels.common.model_spec import CorrectionSpec
+from skillmodels.common.params_index import get_params_index
+from skillmodels.common.parse_params import create_parsing_info, parse_params
+from skillmodels.common.process_model import process_model
+from skillmodels.common.types import Anchoring
 from skillmodels.test_data.model2 import MODEL2
-from skillmodels.types import Anchoring
+
+
+def test_parse_params_populates_first_stage_reserved_key() -> None:
+    """The first-stage betas parse into a reserved trans_coeffs key.
+
+    The contemporaneous first-stage equation's coefficients live under the
+    `investment_eq` params category but are threaded into the transition-coeffs
+    dict under a reserved `__first_stage_<inv>__` key, so the prediction DAG
+    node reads them with no change to the predict signature.
+    """
+    fac3 = MODEL2.factors["fac3"]
+    corr = CorrectionSpec(instruments=("inv_z",))
+    new_fac3 = replace(fac3, is_endogenous=True, correction=corr)
+    new_factors = dict(MODEL2.factors) | {"fac3": new_fac3}
+    model = MODEL2._replace(factors=new_factors)._replace(stagemap=None)
+    model = model._replace(observed_factors=("inv_z",))
+    processed = process_model(model)
+
+    p_index = get_params_index(
+        update_info=processed.update_info,
+        labels=processed.labels,
+        dimensions=processed.dimensions,
+        transition_info=processed.transition_info,
+        endogenous_factors_info=processed.endogenous_factors_info,
+    )
+    parsing_info = create_parsing_info(
+        params_index=p_index,
+        update_info=processed.update_info,
+        labels=processed.labels,
+        anchoring=processed.anchoring,
+        has_endogenous_factors=True,
+    )
+    assert parsing_info.investment_factor == "fac3"
+
+    params_vec = jnp.arange(len(p_index)).astype(float)
+    _, _, _, parsed = parse_params(
+        params_vec, parsing_info, processed.dimensions, processed.labels, n_obs=5
+    )
+    reserved = "__first_stage_fac3__"
+    assert reserved in parsed.transition
+    n_aug = len(processed.labels.aug_periods)
+    # (aug_periods[:-2], state_predictors + instruments + constant) = (14, 4).
+    assert parsed.transition[reserved].shape == (n_aug - 2, 4)
+    # kappa reserved keys, one per target, with one cf column each.
+    assert "__kappa_fac1__" in parsed.transition
+    assert "__kappa_fac2__" in parsed.transition
+    assert parsed.transition["__kappa_fac1__"].shape == (n_aug - 2, 1)
 
 
 @pytest.fixture

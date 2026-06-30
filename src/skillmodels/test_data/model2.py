@@ -5,9 +5,9 @@ with CES, linear, and constant transition functions respectively. It includes
 anchoring of fac1 to outcome Q1 and a single control variable x1.
 """
 
-from skillmodels.model_spec import (
+from skillmodels.chs.options import CHSEstimationOptions
+from skillmodels.common.model_spec import (
     AnchoringSpec,
-    EstimationOptions,
     FactorSpec,
     ModelSpec,
     Normalizations,
@@ -49,9 +49,14 @@ MODEL2 = ModelSpec(
     ),
     controls=("x1",),
     stagemap=(0, 0, 0, 0, 0, 0, 0),
-    estimation_options=EstimationOptions(
-        robust_bounds=True,
-        bounds_distance=0.001,
-        n_mixtures=1,
-    ),
+)
+
+# CHS options used alongside MODEL2 in tests. Tests using this fixture run
+# `get_maximization_inputs` for shape and value checks rather than full
+# estimation; opt into the cheap Spearman start-value path so the fixture
+# stays fast. End-user defaults (CHSEstimationOptions()) keep `"amn"`.
+MODEL2_CHS_OPTIONS = CHSEstimationOptions(
+    robust_bounds=True,
+    bounds_distance=0.001,
+    start_params_strategy="spearman",
 )
