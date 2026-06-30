@@ -32,7 +32,6 @@ dependencies = [
   "beartype>=0.22",
   "dags>=0.5.1",
   "jax>=0.9",
-  "jaxopt>=0.8.5",
   "jupyter-book>=2",
   "kaleido>=1.2",
   "numpy>=2.4",
@@ -88,11 +87,10 @@ type-checking = { features = [ "type-checking", "tests" ], solve-group = "defaul
 tests-cuda12 = { features = [ "tests", "cuda" ], solve-group = "cuda" }
 tests-cuda13 = { features = [ "tests", "cuda13" ], solve-group = "cuda13" }
 [tool.pixi.feature.cuda]
-platforms = [ "linux-64" ]
-system-requirements = { cuda = "12" }
-[tool.pixi.feature.cuda.dependencies]
+platforms = [ "linux-64-cuda12" ]
+[tool.pixi.feature.cuda.target.linux-64.dependencies]
 cuda-nvcc = ">=12"
-[tool.pixi.feature.cuda.pypi-dependencies]
+[tool.pixi.feature.cuda.target.linux-64.pypi-dependencies]
 jax = { version = ">=0.7", extras = [ "cuda12" ] }
 [tool.pixi.feature.cuda.tasks]
 mem-cuda = """\
@@ -100,11 +98,10 @@ mem-cuda = """\
   tests/test_likelihood_regression.py::test_likelihood_contributions_large_nobs\
   """
 [tool.pixi.feature.cuda13]
-platforms = [ "linux-64" ]
-system-requirements = { cuda = "13" }
-[tool.pixi.feature.cuda13.dependencies]
+platforms = [ "linux-64-cuda13" ]
+[tool.pixi.feature.cuda13.target.linux-64.dependencies]
 cuda-nvcc = ">=13"
-[tool.pixi.feature.cuda13.pypi-dependencies]
+[tool.pixi.feature.cuda13.target.linux-64.pypi-dependencies]
 jax = { version = ">=0.9", extras = [ "cuda13" ] }
 [tool.pixi.feature.docs.tasks]
 build-docs = { cmd = "jupyter book build --html", cwd = "docs" }
@@ -134,13 +131,18 @@ matplotlib = "*"  # required because of pandas
 pandas-stubs = "*"
 types-pytz = "*"
 [tool.pixi.pypi-dependencies]
-jaxopt = ">=0.8.5"
 optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "probability-allow-fixed-entries" }
 pdbp = "*"
 skillmodels = { path = ".", editable = true }
 [tool.pixi.workspace]
 channels = [ "conda-forge" ]
-platforms = [ "linux-64", "osx-arm64", "win-64" ]
+platforms = [
+  "linux-64",
+  "osx-arm64",
+  "win-64",
+  { name = "linux-64-cuda12", platform = "linux-64", cuda = "12" },
+  { name = "linux-64-cuda13", platform = "linux-64", cuda = "13" },
+]
 
 [tool.ruff]
 fix = true
@@ -195,9 +197,8 @@ expand_tables = [
   "tool.pixi.environments.type-checking",
   "tool.pixi.feature",
   "tool.pixi.feature.cuda",
-  "tool.pixi.feature.cuda.dependencies",
-  "tool.pixi.feature.cuda.pypi-dependencies",
-  "tool.pixi.feature.cuda.system-requirements",
+  "tool.pixi.feature.cuda.target.linux-64.dependencies",
+  "tool.pixi.feature.cuda.target.linux-64.pypi-dependencies",
   "tool.pixi.feature.cuda.tasks",
   "tool.pixi.feature.docs",
   "tool.pixi.feature.docs.dependencies",
