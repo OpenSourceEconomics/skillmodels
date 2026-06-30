@@ -35,6 +35,15 @@ from skillmodels.af.params import (
     get_normalizations_for_period,
     get_transition_period_params_index,
 )
+from skillmodels.af.step_assembly import AFStepArrays, assemble_step_arrays
+from skillmodels.af.step_layout import (
+    AFFactorInfo,
+    AFFactorRole,
+    HistoricalParams,
+    compile_af_step_layouts,
+    compile_target_measurement_index,
+    model_uses_calendar_adapter,
+)
 from skillmodels.af.types import (
     AFEstimationOptions,
     AFPeriodResult,
@@ -51,6 +60,7 @@ from skillmodels.common.constraints import (
     filter_within_step_constraints,
     reconcile_start_to_equality,
 )
+from skillmodels.common.measurement_models import GaussianMeasurement
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.types import ProcessedModel, TransitionInfo, to_plain_dict
 
@@ -72,6 +82,8 @@ def estimate_transition_period(
     start_params: pd.DataFrame | None = None,
     fixed_params: pd.DataFrame | None = None,
     user_constraints: list[om.constraints.Constraint] | None = None,
+    frames_by_period: Mapping[int, pd.DataFrame] | None = None,
+    historical: HistoricalParams | None = None,
 ) -> tuple[AFPeriodResult, ConditionalDistribution]:
     """Estimate a transition period (Step t, t >= 1) of the AF procedure.
 
@@ -102,6 +114,12 @@ def estimate_transition_period(
             from `estimate_af(constraints=...)`. Entries whose members
             all sit in this step's params index are appended to the
             step's `om.minimize` call (within-step equalities).
+        frames_by_period: Per-period individual-ID-indexed measurement frames,
+            required for endogenous / static-persistent models (the source/
+            destination calendar adapter sources the target block from them).
+        historical: Cumulative parameter registry; supplies the fixed importance
+            block (source skills + static-persistent period-0 rows) when the
+            calendar adapter is active.
 
     Return:
         Tuple of (AFPeriodResult, ConditionalDistribution). The returned
@@ -122,9 +140,6 @@ def estimate_transition_period(
     """
     factors = processed_model.labels.latent_factors
     controls_names = processed_model.labels.controls
-
-    measurements_pt = get_measurements_per_factor(model_spec.factors, period=period)
-    all_measures = _get_ordered_measures(measurements_pt)
 
     transition_info = processed_model.transition_info
 
@@ -149,21 +164,25 @@ def estimate_transition_period(
         [factors.index(f) for f in state_factors], dtype=jnp.int32
     )
 
-    params_index = get_transition_period_params_index(
-        period=period,
-        latent_factors=state_factors,
-        transition_info=transition_info,
-        measurements_at_period=measurements_pt,
-        controls=controls_names,
-        endogenous_factors=endogenous_factors,
-        observed_factors=observed_factors,
-        shock_factors=shock_factors,
-    )
     normalizations = get_normalizations_for_period(model_spec.factors, period=period)
-    params_template = create_af_params_template(
-        params_index,
-        normalizations,
-        period=period,
+
+    measurements, all_measures, loading_mask, params_template, step_arrays = (
+        _assemble_target_measurements(
+            period=period,
+            model_spec=model_spec,
+            factors=factors,
+            controls_names=controls_names,
+            state_factors=state_factors,
+            shock_factors=shock_factors,
+            transition_info=transition_info,
+            endogenous_factors=endogenous_factors,
+            observed_factors=observed_factors,
+            measurements=measurements,
+            frames_by_period=frames_by_period,
+            historical=historical,
+            normalizations=normalizations,
+            bounds_distance=af_options.bounds_distance,
+        )
     )
 
     params_template = _initialize_transition_params(
@@ -193,9 +212,6 @@ def estimate_transition_period(
     _seed_probability_start_values(
         params_template, transition_constraints, fixed_params
     )
-
-    # Build loading mask
-    loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
 
     # JOINT Halton design covering ALL randomness needed at this step,
     # mirroring MATLAB's `create_nodes_weights_01/12`. The chained sample
@@ -319,6 +335,7 @@ def estimate_transition_period(
         transition_constraints=transition_constraints,
         fixed_params=fixed_params,
         user_constraints=user_constraints,
+        importance=step_arrays,
     )
 
     # Build the next ChainLink from the just-fitted period parameters and
@@ -365,6 +382,234 @@ def estimate_transition_period(
     return period_result, updated_dist
 
 
+def _assemble_target_measurements(
+    *,
+    period: int,
+    model_spec: ModelSpec,
+    factors: tuple[str, ...],
+    controls_names: tuple[str, ...],
+    state_factors: tuple[str, ...],
+    shock_factors: tuple[str, ...],
+    transition_info: TransitionInfo,
+    endogenous_factors: tuple[str, ...],
+    observed_factors: tuple[str, ...],
+    measurements: Array,
+    frames_by_period: Mapping[int, pd.DataFrame] | None,
+    historical: HistoricalParams | None,
+    normalizations: dict[str, dict[tuple[str, str], float]],
+    bounds_distance: float = 0.001,
+) -> tuple[Array, list[str], np.ndarray, pd.DataFrame, AFStepArrays | None]:
+    """Build the target measurements, names, loading mask, params template, arrays.
+
+    With endogenous or static-persistent factors the target block mixes calendars
+    (destination skills at period d, source investment at period s), sourced from the
+    compiled layout; plain models keep the single-period path, byte-identical to before.
+    """
+    # The calendar adapter applies to RECONSTRUCTED investment (endogenous with
+    # has_initial_distribution=False): its period-0 indicators are excluded from the
+    # initial step and scored once, at the 0->1 step, against I_0. Legacy endogenous
+    # factors that keep an initial distribution stay on the single-period path.
+    reconstructed_endog = tuple(
+        f
+        for f in endogenous_factors
+        if not model_spec.factors[f].has_initial_distribution
+    )
+    use_layout = bool(reconstructed_endog) or any(
+        model_spec.factors[f].af_state_role == "static_persistent"
+        for f in state_factors
+    )
+    if not use_layout:
+        measurements_pt = get_measurements_per_factor(model_spec.factors, period=period)
+        all_measures = _get_ordered_measures(measurements_pt)
+        loading_mask = _build_loading_mask(all_measures, factors, measurements_pt)
+        params_index = get_transition_period_params_index(
+            period=period,
+            latent_factors=state_factors,
+            transition_info=transition_info,
+            measurements_at_period=measurements_pt,
+            controls=controls_names,
+            endogenous_factors=endogenous_factors,
+            observed_factors=observed_factors,
+            shock_factors=shock_factors,
+        )
+        params_template = create_af_params_template(
+            params_index, normalizations, period=period, bounds_distance=bounds_distance
+        )
+        return measurements, all_measures, loading_mask, params_template, None
+
+    if frames_by_period is None or historical is None:
+        msg = (
+            "frames_by_period and historical are required for AF models with "
+            "endogenous or static-persistent factors."
+        )
+        raise ValueError(msg)
+    _fail_if_endogenous_precedes_state(factors, endogenous_factors)
+    _fail_if_unsupported_adapter_measurements(model_spec)
+    n_calendar_periods = max(
+        len(spec.measurements) for spec in model_spec.factors.values()
+    )
+    layout = compile_af_step_layouts(
+        _factor_infos_from_spec(model_spec, endogenous_factors),
+        n_periods=n_calendar_periods,
+    )[period - 1]
+    target_terms = layout.target_terms()
+    # @pro: the free target block for this step is the mixed-calendar set {destination
+    # skills at d, source investment I_s at s}; the params index, template, and
+    # normalizations below are indexed at each row's own param_period so the mixed
+    # calendar parses correctly. The matching fixed importance block is built in
+    # `_run_transition_optimization`.
+    step_arrays = assemble_step_arrays(
+        layout, frames_by_period, factors, historical, controls_names
+    )
+    measurements = jnp.asarray(step_arrays.target_measurements)
+    all_measures = [term.measurement for term in target_terms]
+    loading_mask = step_arrays.target_loading_mask
+    params_index = get_transition_period_params_index(
+        period=period,
+        latent_factors=state_factors,
+        transition_info=transition_info,
+        measurements_at_period={},
+        controls=controls_names,
+        endogenous_factors=endogenous_factors,
+        observed_factors=observed_factors,
+        shock_factors=shock_factors,
+        measurement_index_tuples=compile_target_measurement_index(
+            layout, controls_names
+        ),
+    )
+    params_template = create_af_params_template(
+        params_index, {}, period=period, bounds_distance=bounds_distance
+    )
+    params_template = _apply_layout_normalizations(
+        params_template, model_spec, target_terms
+    )
+    return measurements, all_measures, loading_mask, params_template, step_arrays
+
+
+def _factor_infos_from_spec(
+    model_spec: ModelSpec,
+    endogenous_factors: tuple[str, ...],
+) -> list[AFFactorInfo]:
+    """Build per-factor AF role + measurement info for the layout compiler.
+
+    The source-investment calendar is defined only for a *reconstructed* endogenous
+    factor -- one with `has_initial_distribution=False`. An endogenous factor that still
+    carries an initial distribution is not a reconstructed investment, so it cannot take
+    the `ENDOGENOUS` source-period role; the adapter does not support it and raises.
+    """
+    infos: list[AFFactorInfo] = []
+    for name, spec in model_spec.factors.items():
+        if name in endogenous_factors:
+            if spec.has_initial_distribution:
+                msg = (
+                    f"AF calendar adapter: endogenous factor {name!r} has "
+                    "has_initial_distribution=True. The source-investment calendar is "
+                    "only defined for reconstructed endogenous factors "
+                    "(has_initial_distribution=False); a carried endogenous factor is "
+                    "not supported on the adapter path."
+                )
+                raise ValueError(msg)
+            role = AFFactorRole.ENDOGENOUS
+        elif spec.af_state_role == "static_persistent":
+            role = AFFactorRole.STATIC_PERSISTENT
+        else:
+            role = AFFactorRole.DYNAMIC
+        infos.append(
+            AFFactorInfo(name=name, role=role, measurements_by_period=spec.measurements)
+        )
+    return infos
+
+
+def _fail_if_endogenous_precedes_state(
+    latent_factors: tuple[str, ...],
+    endogenous_factors: tuple[str, ...],
+) -> None:
+    """Reject a public factor order that interleaves endogenous before state factors.
+
+    The shared integrand assembles the latent vector as all dynamic-state factors
+    followed by all reconstructed-endogenous factors, while the loading mask columns
+    follow `latent_factors` (public insertion order). If an endogenous factor appears
+    before a state factor in public order, those two orderings disagree and a loading
+    row would score the wrong latent. Until the two representations are unified, require
+    every state factor to precede every endogenous factor and raise otherwise.
+    """
+    endo = set(endogenous_factors)
+    seen_endogenous = False
+    for name in latent_factors:
+        if name in endo:
+            seen_endogenous = True
+        elif seen_endogenous:
+            msg = (
+                "AF calendar adapter: all dynamic-state factors must precede every "
+                f"endogenous factor in the ModelSpec, but state factor {name!r} "
+                "follows an endogenous factor. Reorder so state factors come first."
+            )
+            raise ValueError(msg)
+
+
+def _fail_if_unsupported_adapter_measurements(model_spec: ModelSpec) -> None:
+    """Reject cross-loaded or non-Gaussian measurements on the calendar-adapter path.
+
+    The compiler emits one single-factor density term per measurement declaration and
+    does not plumb measurement-family metadata through the adapter, so a cross-loaded
+    measurement (declared under more than one factor) would be double-counted as two
+    rows, and a non-Gaussian (probit/Tobit) measurement would be silently scored as
+    Gaussian. Both are rejected until row-merging and family plumbing land.
+    """
+    owner: dict[str, str] = {}
+    for factor_name, spec in model_spec.factors.items():
+        for period_measures in spec.measurements:
+            for measure in period_measures:
+                if measure in owner and owner[measure] != factor_name:
+                    msg = (
+                        f"AF calendar adapter: measurement {measure!r} is "
+                        f"cross-loaded on factors {owner[measure]!r} and "
+                        f"{factor_name!r}; cross-loaded measurements are not supported."
+                    )
+                    raise ValueError(msg)
+                owner[measure] = factor_name
+    for measure in owner:
+        model = model_spec.measurement_models.get(measure)
+        if model is not None and not isinstance(model, GaussianMeasurement):
+            msg = (
+                f"AF calendar adapter: measurement {measure!r} has a non-Gaussian "
+                f"family ({type(model).__name__}); the adapter supports only Gaussian "
+                "measurements."
+            )
+            raise ValueError(msg)
+
+
+def _apply_layout_normalizations(
+    params_template: pd.DataFrame,
+    model_spec: ModelSpec,
+    target_terms: tuple,
+) -> pd.DataFrame:
+    """Pin loading/intercept normalizations at each target term's true param period.
+
+    The mixed-calendar target indexes destination skills at `d` and source investment
+    at `s`, so normalizations must be applied per row's `param_period` rather than at a
+    single period (which `create_af_params_template` assumes).
+    """
+    params = params_template
+    for term in target_terms:
+        period = term.param_period
+        for factor in term.factor_loadings:
+            norms = model_spec.factors[factor].normalizations
+            if norms is None:
+                continue
+            if norms.loadings is not None and period < len(norms.loadings):
+                val = norms.loadings[period].get(term.measurement)
+                loc = ("loadings", period, term.measurement, factor)
+                if val is not None and loc in params.index:
+                    params.loc[loc, ["value", "lower_bound", "upper_bound"]] = val
+            if norms.intercepts is not None and period < len(norms.intercepts):
+                val = norms.intercepts[period].get(term.measurement)
+                loc = ("controls", period, term.measurement, "constant")
+                if val is not None and loc in params.index:
+                    params.loc[loc, ["value", "lower_bound", "upper_bound"]] = val
+    return params
+
+
 def _run_transition_optimization(
     *,
     params_template: pd.DataFrame,
@@ -398,6 +643,7 @@ def _run_transition_optimization(
     transition_constraints: list[om.constraints.Constraint],
     fixed_params: pd.DataFrame | None,
     user_constraints: list[om.constraints.Constraint] | None = None,
+    importance: AFStepArrays | None = None,
 ) -> tuple[pd.DataFrame, om.OptimizeResult]:
     """Build likelihood, run the optimizer, and return updated params.
 
@@ -413,12 +659,30 @@ def _run_transition_optimization(
         params_template, fixed_params
     )
 
-    prev_meas_info = _extract_prev_measurement_params(
-        prev_period_params,
-        model_spec,
-        factors,
-        period - 1,
-    )
+    # Importance/previous block. @pro: with the calendar adapter, the importance block
+    # is the layout's fixed source-skills (+ static-persistent period-0) rows from
+    # history -- it EXCLUDES the source investment (now the free target), avoiding the
+    # double-count, and RE-INCLUDES the static factors' period-0 density at every step
+    # (the dropped-MC/MN fix). Without the adapter, fall back to extracting all
+    # previous-period measurement params (the legacy single-calendar path).
+    if importance is not None:
+        prev_measurements = jnp.asarray(importance.importance_measurements)
+        # `assemble_step_arrays` returns host (numpy) arrays; move them on-device so
+        # they satisfy the `jax.Array` kwargs contract under the beartype claw (mirrors
+        # the target `loading_mask` wrap below). Numerically a no-op.
+        prev_meas_info = {
+            "loading_mask": jnp.asarray(importance.importance_loading_mask),
+            "control_params": jnp.asarray(importance.importance_control_params),
+            "loadings_flat": jnp.asarray(importance.importance_loadings_flat),
+            "meas_sds": jnp.asarray(importance.importance_meas_sds),
+        }
+    else:
+        prev_meas_info = _extract_prev_measurement_params(
+            prev_period_params,
+            model_spec,
+            factors,
+            period - 1,
+        )
 
     n_obs_per_batch = af_options.n_obs_per_batch
     if n_obs_per_batch is None:
@@ -460,6 +724,16 @@ def _run_transition_optimization(
         "stability_floor": af_options.stability_floor,
         "n_obs_per_batch": n_obs_per_batch,
     }
+    if importance is not None:
+        # Layout path: feed the per-row target control data and the precompiled
+        # importance control contribution, each sourced at its own control_period, so
+        # the kernel stops applying one shared period's controls to a mixed block.
+        loglike_kwargs["target_control_tensor"] = jnp.asarray(
+            importance.target_controls
+        )
+        loglike_kwargs["prev_control_contrib"] = jnp.asarray(
+            importance.importance_control_contrib
+        )
 
     loglike_and_grad = create_loglike_and_gradient(
         af_loglike_transition,
@@ -834,11 +1108,18 @@ def _initialize_transition_params(
     # MLE neighborhood; for sigma_inv_0 specifically, this is the difference
     # between converging at truth and drifting to the lower bound along
     # the sigma_inv / sigma_meas constant-Var ridge.
+    # The Spearman moment override discovers measurements at the destination period and
+    # writes loading/SD rows there, so it is not aware of the mixed-calendar target
+    # (destination skills at d + source investment at s). On the calendar-adapter path
+    # it would mis-seed the source-investment block, so skip it and keep the constant
+    # defaults (which converge for the adapter); calendar-aware moment seeding is future
+    # work. The point estimate is unaffected -- only start values differ.
     if (
         af_options is not None
         and af_options.start_params_strategy == "spearman"
         and model_spec is not None
         and period is not None
+        and not model_uses_calendar_adapter(model_spec)
     ):
         params = _apply_moment_based_overrides_transition(
             params,

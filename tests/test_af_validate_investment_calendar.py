@@ -1,21 +1,16 @@
-"""Regression tests for the AF endogenous-investment measurement-calendar guard.
+"""Regression tests for the AF endogenous-investment measurement calendar.
 
-AF reconstructs an endogenous factor (investment) from the PREVIOUS period's
-latent skills: at the (t-1)->t step the generated investment I is a function of
-theta_{t-1}, and it is that same I which the period-t measurement block scores.
-So measurements declared at period t for an endogenous factor measure the
-investment generated from period t-1 (I_{t-1}), not the contemporaneous I_t.
-CHS / AMN read the identical period-t measurements as the contemporaneous I_t (a
-standard latent factor with its own initial distribution). The two are different
-calendars for one ModelSpec, so `validate_af_model` warns when an endogenous
-factor carries measurements (audit F8). Modelling investment as a standard
-non-endogenous factor instead measures the contemporaneous value and emits no
-calendar warning.
+On the calendar-adapter path a reconstructed endogenous factor (investment,
+`is_endogenous=True` and `has_initial_distribution=False`) is contemporaneous: a
+period-c investment indicator measures `I_c`, the same calendar CHS / AMN read.
+The adapter makes the public ModelSpec contemporaneous and the AF step assembler
+re-times the source investment internally, so `validate_af_model` must NOT warn
+that the indicators denote `I_{t-1}` or that estimators disagree on the calendar.
+A user who shifted their data to satisfy such a warning would reintroduce the
+original off-by-one bug.
 """
 
 import warnings
-
-import pytest
 
 from skillmodels.af.validate import validate_af_model
 from skillmodels.common.model_spec import (
@@ -36,12 +31,22 @@ def _skills_factor() -> FactorSpec:
     )
 
 
-def test_validate_af_model_warns_on_endogenous_factor_with_measurements() -> None:
-    """An endogenous factor with measurements triggers the calendar warning.
+def _lagged_calendar_warned(records: list[warnings.WarningMessage]) -> bool:
+    """Return whether any recorded warning teaches the stale lagged calendar."""
+    return any(
+        "I_{t-1}" in str(r.message)
+        or "different investment calendars" in str(r.message)
+        or "generated from period" in str(r.message)
+        for r in records
+    )
 
-    Its period-1 indicators score the investment generated from period-0 skills
-    (I_0), not the contemporaneous I_1, so the user is warned that AF and CHS/AMN
-    read this ModelSpec on different investment calendars.
+
+def test_no_lagged_calendar_warning_for_reconstructed_endogenous() -> None:
+    """A reconstructed endogenous factor with measurements emits no calendar warning.
+
+    Under the calendar adapter its period-c indicators score the contemporaneous
+    `I_c` (shared with CHS / AMN), so `validate_af_model` must not claim they
+    denote `I_{t-1}` or that estimators read different investment calendars.
     """
     model = ModelSpec(
         factors={
@@ -58,8 +63,10 @@ def test_validate_af_model_warns_on_endogenous_factor_with_measurements() -> Non
             ),
         },
     )
-    with pytest.warns(UserWarning, match="generated from period"):
+    with warnings.catch_warnings(record=True) as records:
+        warnings.simplefilter("always")
         validate_af_model(model)
+    assert not _lagged_calendar_warned(records)
 
 
 def test_validate_af_model_no_calendar_warning_for_standard_investment() -> None:
@@ -82,9 +89,10 @@ def test_validate_af_model_no_calendar_warning_for_standard_investment() -> None
             ),
         },
     )
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", UserWarning)
-        assert validate_af_model(model) is None
+    with warnings.catch_warnings(record=True) as records:
+        warnings.simplefilter("always")
+        validate_af_model(model)
+    assert not _lagged_calendar_warned(records)
 
 
 def test_validate_af_model_no_calendar_warning_for_measurementless_endogenous() -> None:
@@ -101,6 +109,7 @@ def test_validate_af_model_no_calendar_warning_for_measurementless_endogenous() 
             ),
         },
     )
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", UserWarning)
-        assert validate_af_model(model) is None
+    with warnings.catch_warnings(record=True) as records:
+        warnings.simplefilter("always")
+        validate_af_model(model)
+    assert not _lagged_calendar_warned(records)

@@ -121,6 +121,7 @@ def get_transition_period_params_index(
     endogenous_factors: tuple[str, ...] = (),
     observed_factors: tuple[str, ...] = (),
     shock_factors: tuple[str, ...] | None = None,
+    measurement_index_tuples: list[tuple[str, int, str, str]] | None = None,
 ) -> pd.MultiIndex:
     """Build parameter index for a transition period (Step t, t >= 1).
 
@@ -141,6 +142,9 @@ def get_transition_period_params_index(
             SD is estimated. Factors omitted here get no shock SD parameter
             and are integrated deterministically (dropping their shock
             dimension from the Halton draw). Defaults to `latent_factors`.
+        measurement_index_tuples: Pre-compiled mixed-calendar measurement index
+            rows (source/destination calendar adapter). When given, used verbatim
+            for the measurement block instead of single-period emission.
 
     Return:
         MultiIndex with levels (category, period, name1, name2).
@@ -173,17 +177,23 @@ def get_transition_period_params_index(
         # Investment shock SD
         ind_tups.append(("investment_sds", period - 1, endog_factor, "-"))
 
-    # Measurement params for period t (loadings for ALL factors, not just state)
-    all_factor_measurements = dict(measurements_at_period)
-    all_latent = (*latent_factors, *endogenous_factors)
-    ind_tups.extend(
-        _measurement_index_tuples(
-            period=period,
-            latent_factors=all_latent,
-            measurements=all_factor_measurements,
-            controls=controls,
+    # Measurement params. By default emit period-t rows for all factors; when the
+    # source/destination calendar adapter supplies a pre-compiled mixed-calendar
+    # measurement index (destination skills at d, source investment at s, in global
+    # category order), use it verbatim instead.
+    if measurement_index_tuples is not None:
+        ind_tups.extend(measurement_index_tuples)
+    else:
+        all_factor_measurements = dict(measurements_at_period)
+        all_latent = (*latent_factors, *endogenous_factors)
+        ind_tups.extend(
+            _measurement_index_tuples(
+                period=period,
+                latent_factors=all_latent,
+                measurements=all_factor_measurements,
+                controls=controls,
+            )
         )
-    )
 
     return pd.MultiIndex.from_tuples(
         ind_tups,

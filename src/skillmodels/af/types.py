@@ -100,6 +100,15 @@ class AFEstimationOptions:
     posterior-state summary precision matters for downstream analysis.
     """
 
+    bounds_distance: float
+    """Minimum distance from zero for SD parameters (their lower bound).
+
+    Also sets the corresponding distance from 1 for the upper bound of CES
+    share parameters. Defaults to 0.001. The Antweiler-Freyberger Monte Carlo
+    uses 0.01; raising it stops a weakly-identified SD (e.g. the investment
+    shock SD) from collapsing onto the floor as far.
+    """
+
     def __init__(  # noqa: D107
         self,
         n_halton_points: int = 50,
@@ -114,6 +123,7 @@ class AFEstimationOptions:
         start_params_strategy: Literal["none", "constant", "spearman", "amn"] = "amn",
         keep_conditional_distributions: bool = True,
         n_halton_points_posterior_summary: int = 256,
+        bounds_distance: float = 0.001,
     ) -> None:
         if n_halton_points_posterior_summary < 1:
             msg = (
@@ -142,6 +152,7 @@ class AFEstimationOptions:
             "n_halton_points_posterior_summary",
             n_halton_points_posterior_summary,
         )
+        object.__setattr__(self, "bounds_distance", bounds_distance)
 
 
 @dataclass(frozen=True)
@@ -306,7 +317,11 @@ class AFPeriodResult:
     """Estimated parameters with 4-level MultiIndex (category, period, name1, name2)."""
 
     loglikelihood: float
-    """Log-likelihood value at the optimum."""
+    """Per-observation **mean** log-likelihood criterion at the optimum.
+
+    This is the negated optimiser objective `-mean(neg_log_like)`, i.e. an average over
+    observations, not a summed log-likelihood. Multiply by the step's sample size to
+    recover a total."""
 
     success: bool
     """Whether optimization converged."""
@@ -336,8 +351,24 @@ class AFEstimationResult:
     `skillmodels.common.estimation.CommonEstimationResult`."""
 
     loglikelihood: float
-    """Sum of the per-period log-likelihoods at the optimum (AF maximises a
-    sequence of per-period likelihoods)."""
+    """Alias of `sequential_criterion`, retained for `CommonEstimationResult`
+    conformance and back-compat.
+
+    It is the sum of the per-period **mean** log-likelihood criteria, which is a
+    sequential/composite criterion, **not** a joint sample log-likelihood: each term is
+    a per-observation average and the static-factor (e.g. MC/MN) densities are
+    deliberately re-applied across independently optimised steps. It is therefore not
+    valid for AIC/BIC or likelihood-ratio comparisons; use it only as the optimiser
+    objective scale. See `period_mean_criteria` for the per-step breakdown."""
+
+    sequential_criterion: float = float("nan")
+    """The summed per-period mean log-likelihood criteria (same value as
+    `loglikelihood`, under its honest name). A sequential criterion, not a joint
+    log-likelihood — see `loglikelihood`."""
+
+    period_mean_criteria: tuple[float, ...] = ()
+    """Per-period mean log-likelihood criteria, ordered by period (each is the
+    corresponding `AFPeriodResult.loglikelihood`)."""
 
     md_criterion: float | None = None
     """Always `None` for AF; present to satisfy the common result Protocol."""

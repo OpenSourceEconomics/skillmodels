@@ -14,6 +14,8 @@ import optimagic as om
 import pandas as pd
 import pytest
 
+import skillmodels.af.estimate as est
+import skillmodels.af.initial_period as ip
 from skillmodels.af import AFEstimationOptions, estimate_af
 from skillmodels.af.likelihood import (
     _rebuild_chain_at_period,
@@ -36,6 +38,81 @@ from skillmodels.test_data.model2 import MODEL2_CHS_OPTIONS
 jax.config.update("jax_enable_x64", True)
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
+
+
+def test_af_options_bounds_distance_field() -> None:
+    """`bounds_distance` is configurable and defaults to the 0.001 SD floor."""
+    assert AFEstimationOptions().bounds_distance == 0.001
+    assert AFEstimationOptions(bounds_distance=0.01).bounds_distance == 0.01
+
+
+class _StopForTest(Exception):  # noqa: N818
+    """Sentinel raised by the spy to abort estimation before optimization."""
+
+
+def test_af_options_bounds_distance_threads_to_template(
+    monkeypatch, model2_af, model2_data
+) -> None:
+    """`AFEstimationOptions.bounds_distance` reaches `create_af_params_template`.
+
+    Spy on the template builder, capture the `bounds_distance` it is called with,
+    and raise before any optimization runs (the template is built first), so the
+    test stays cheap.
+    """
+    captured: dict[str, float] = {}
+
+    def _spy(*args, **kwargs):
+        captured["bounds_distance"] = kwargs["bounds_distance"]
+        raise _StopForTest
+
+    monkeypatch.setattr(ip, "create_af_params_template", _spy)
+    with pytest.raises(_StopForTest):
+        estimate_af(
+            model_spec=model2_af,
+            data=model2_data,
+            options=AFEstimationOptions(
+                n_halton_points=10,
+                n_halton_points_shock=10,
+                start_params_strategy="constant",
+                bounds_distance=0.01,
+            ),
+        )
+    assert captured["bounds_distance"] == 0.01
+
+
+def test_af_options_bounds_distance_survives_amn_start(
+    monkeypatch, model2_af, model2_data
+) -> None:
+    """`bounds_distance` survives the af_options rebuild on the AMN start path.
+
+    With `start_params_strategy="amn"`, `estimate_af` reconstructs the options
+    after running AMN; `bounds_distance` must carry through to the per-period
+    template builder, not silently revert to the default.
+    """
+
+    class _FakeAMN:
+        params = pd.DataFrame({"value": []})
+
+    monkeypatch.setattr(est, "estimate_amn", lambda **_kwargs: _FakeAMN())
+    captured: dict[str, float] = {}
+
+    def _spy(*args, **kwargs):
+        captured["bounds_distance"] = kwargs["bounds_distance"]
+        raise _StopForTest
+
+    monkeypatch.setattr(ip, "create_af_params_template", _spy)
+    with pytest.raises(_StopForTest):
+        estimate_af(
+            model_spec=model2_af,
+            data=model2_data,
+            options=AFEstimationOptions(
+                n_halton_points=10,
+                n_halton_points_shock=10,
+                start_params_strategy="amn",
+                bounds_distance=0.01,
+            ),
+        )
+    assert captured["bounds_distance"] == 0.01
 
 
 @pytest.fixture
