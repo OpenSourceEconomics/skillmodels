@@ -10,7 +10,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # hatch-vcs derives the version from git tags, so the full history
           # (including tags) must be fetched.
