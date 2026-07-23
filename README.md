@@ -67,7 +67,7 @@ $ make html
 
 It took countless hours to write skillmodels. I make it available under a very
 permissive license in the hope that it helps other people to do great research that
-advances our knowledge about the formation of cognitive and noncognitive siklls. If you
+advances our knowledge about the formation of cognitive and noncognitive skills. If you
 find skillmodels helpful, please don't forget to cite it. Below you can find the bibtex
 entry for a suggested citation. The suggested citation will be updated once the code
 becomes part of a published paper.
