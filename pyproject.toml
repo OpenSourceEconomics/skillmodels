@@ -103,6 +103,11 @@ platforms = [ "linux-64-cuda13" ]
 cuda-nvcc = ">=13"
 [tool.pixi.feature.cuda13.target.linux-64.pypi-dependencies]
 jax = { version = ">=0.9", extras = [ "cuda13" ] }
+[tool.pixi.feature.docs.dependencies]
+# Provides the `myst` Node CLI (and pulls in nodejs) that the jupyter-book PyPI
+# wrapper shells out to; without it the build tries to install Node interactively
+# and fails in CI (e.g. Read the Docs).
+mystmd = "*"
 [tool.pixi.feature.docs.tasks]
 build-docs = { cmd = "jupyter book build --html", cwd = "docs" }
 view-docs = { cmd = "jupyter book start", cwd = "docs" }
