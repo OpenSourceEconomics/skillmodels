@@ -247,6 +247,11 @@ ini_options.markers = [
   "long_running: slow tests skipped in CI (run with -m long_running)",
 ]
 ini_options.filterwarnings = [
+  # beartype 0.22.9 (latest) cannot decorate any parameterized numpy.typing.NDArray[...]
+  # hint under numpy>=2.5's PEP 695 NDArray[ScalarT] definition -- beartype.claw just
+  # warns and leaves the function unchecked (confirmed via minimal repro; no matching
+  # upstream issue found as of 2026-07-29). Remove once fixed upstream.
+  "ignore:(?s).*NumPy data type.*invalid.*:beartype.roar.BeartypeClawDecorWarning",
   "ignore::pandas.errors.PerformanceWarning",
 ]
 
