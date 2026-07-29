@@ -35,7 +35,7 @@ dependencies = [
   "jupyter-book>=2",
   "kaleido>=1.2",
   "numpy>=2.4",
-  "optimagic>=0.5.3",
+  "optimagic>=0.5.4",
   "pandas>=3",
   "plotly>=6.6",
   "pytask>=0.5.8",
@@ -48,6 +48,7 @@ email = "janos.gabler@gmail.com"
 [[project.maintainers]]
 name = "Janoś Gabler"
 email = "janos.gabler@gmail.com"
+
 [[project.maintainers]]
 name = "Hans-Martin von Gaudecker"
 email = "hmgaudecker@uni-bonn.de"
@@ -136,7 +137,6 @@ matplotlib = "*"  # required because of pandas
 pandas-stubs = "*"
 types-pytz = "*"
 [tool.pixi.pypi-dependencies]
-optimagic = { git = "https://github.com/optimagic-dev/optimagic.git", branch = "probability-allow-fixed-entries" }
 pdbp = "*"
 skillmodels = { path = ".", editable = true }
 [tool.pixi.workspace]
@@ -156,6 +156,7 @@ unsafe-fixes = false
 select = [ "ALL" ]
 extend-ignore = [
   "COM812",  # Conflicts with ruff-format
+  "CPY001",  # Missing copyright notice -- covered by the repo-level LICENSE file
   "EM101",   # Exception must not use a string literal
   "EM102",   # Exception must not use an f-string literal
   "FBT002",  # Boolean default positional argument in function definition
@@ -163,6 +164,7 @@ extend-ignore = [
   "ISC001",  # Conflicts with ruff-format
   "PERF401", # Use a list comprehension to create a transformed list
   "PLR0913", # Too many arguments in function definition
+  "PLR0917", # Too many positional arguments in function definition
   "PLR2004", # Magic value used in comparison
   "TC001",   # Move application import into a type-checking block
   "TC002",   # Move third-party import into a type-checking block
@@ -191,7 +193,6 @@ pydocstyle.convention = "google"
 column_width = 88
 max_supported_python = "3.14"
 table_format = "long"
-collapse_tables = [ "tool.hatch", "tool.pytest", "tool.pytask", "tool.ty" ]
 expand_tables = [
   "tool.pixi.dependencies",
   "tool.pixi.environments",
@@ -215,10 +216,9 @@ expand_tables = [
   "tool.pixi.feature.type-checking",
   "tool.pixi.feature.type-checking.pypi-dependencies",
   "tool.pixi.pypi-dependencies",
-  "tool.pixi.pypi-dependencies.optimagic",
-  "tool.pixi.pypi-dependencies.skillmodels",
   "tool.pixi.workspace",
 ]
+collapse_tables = [ "tool.hatch", "tool.pytask", "tool.pytest", "tool.ty" ]
 
 [tool.ty]
 # ty resolves third-party imports from this pixi env (the official ty-pre-commit hook

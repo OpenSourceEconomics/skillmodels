@@ -107,7 +107,9 @@ def test_get_factor_scores_data_with_single_period() -> None:
     )
     data_std = data.iloc[:2][[f"y{i}" for i in range(4)]].copy(deep=True)
     for m in data_std.columns:
-        data_std[m] = (data_std[m] - np.mean(data_std[m])) / np.std(data_std[m], ddof=1)
+        data_std[m] = (data_std[m] - float(np.mean(data_std[m]))) / float(
+            np.std(data_std[m], ddof=1)
+        )
     expected = pd.concat(
         [
             data_std["y0"] / 2 + data_std["y2"] / 2,
@@ -220,7 +222,9 @@ def test_get_factor_scores_data_with_multiple_period() -> None:
 
     data_std = data.iloc[:2][[f"y{i}" for i in range(4)]].copy(deep=True)
     for m in data_std.columns:
-        data_std[m] = (data_std[m] - np.mean(data_std[m])) / np.std(data_std[m], ddof=1)
+        data_std[m] = (data_std[m] - float(np.mean(data_std[m]))) / float(
+            np.std(data_std[m], ddof=1)
+        )
     temp = (
         pd.concat(
             [data_std["y0"] + data_std["y2"], data_std["y1"] + data_std["y3"]],
@@ -233,7 +237,9 @@ def test_get_factor_scores_data_with_multiple_period() -> None:
 
     data_std = data.iloc[2:][[f"y{i}" for i in range(4)]].copy(deep=True)
     for m in data_std.columns:
-        data_std[m] = (data_std[m] - np.mean(data_std[m])) / np.std(data_std[m], ddof=1)
+        data_std[m] = (data_std[m] - float(np.mean(data_std[m]))) / float(
+            np.std(data_std[m], ddof=1)
+        )
     temp = (
         pd.concat(
             [data_std["y0"] + data_std["y2"], data_std["y1"] + data_std["y3"]],

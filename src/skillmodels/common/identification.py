@@ -335,11 +335,13 @@ def _scale_excess_message(factor_name: str, n_scale: int) -> list[str]:
     if n_scale <= 1:
         return []
     return [
-        f"Factor '{factor_name}' period 0: {n_scale} independent scale pins "
-        f"(loadings), but the initial scale orbit has one direction. "
-        f"{n_scale - 1} of them are testable restrictions, not normalizations -- "
-        f"they constrain identified features and can move the estimate under "
-        f"misspecification."
+        (
+            f"Factor '{factor_name}' period 0: {n_scale} independent scale pins "
+            f"(loadings), but the initial scale orbit has one direction. "
+            f"{n_scale - 1} of them are testable restrictions, not normalizations -- "
+            f"they constrain identified features and can move the estimate under "
+            f"misspecification."
+        )
     ]
 
 
@@ -348,10 +350,12 @@ def _location_excess_message(factor_name: str, n_location: int) -> list[str]:
     if n_location <= 1:
         return []
     return [
-        f"Factor '{factor_name}' period 0: {n_location} independent location pins "
-        f"(measurement intercept and/or initial-component mean), but the initial "
-        f"location orbit has one direction. {n_location - 1} of them are testable "
-        f"restrictions, not normalizations."
+        (
+            f"Factor '{factor_name}' period 0: {n_location} independent location pins "
+            f"(measurement intercept and/or initial-component mean), but the initial "
+            f"location orbit has one direction. {n_location - 1} of them are testable "
+            f"restrictions, not normalizations."
+        )
     ]
 
 

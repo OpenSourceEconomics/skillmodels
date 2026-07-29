@@ -149,7 +149,7 @@ def log_likelihood(
 
 def _scan_body(
     carry: dict[str, Array],
-    loop_args: dict[str, Array],
+    loop_args: dict[str, Array | np.ndarray],
     controls: Array,
     parsed_params: ParsedParams,
     sigma_scaling_factor: float | Array,

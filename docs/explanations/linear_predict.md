@@ -9,23 +9,23 @@ back to the unscented predict.
 
 The check happens in `get_maximization_inputs`, where the predict function is selected
 via `functools.partial`. When the linear path is chosen, extra keyword arguments
-(`latent_factors`, `constant_factor_indices`, `n_all_factors`) are bound at setup time so
-the predict function has the same call signature as the unscented variant.
+(`latent_factors`, `constant_factor_indices`, `n_all_factors`) are bound at setup time
+so the predict function has the same call signature as the unscented variant.
 
 ## Why it is faster and uses less memory
 
 The unscented predict generates $2n + 1$ sigma points (where $n$ is the number of latent
 factors), transforms each one through the transition function, then recovers predicted
-means and covariances from weighted statistics. Its QR decomposition operates on a matrix
-of shape $(3n + 1) \times n$: the $2n + 1$ weighted deviation rows plus $n$ rows for the
-shock standard deviations.
+means and covariances from weighted statistics. Its QR decomposition operates on a
+matrix of shape $(3n + 1) \times n$: the $2n + 1$ weighted deviation rows plus $n$ rows
+for the shock standard deviations.
 
 The linear predict skips sigma-point generation entirely. Because the transition is
-linear, the predicted mean is just a matrix--vector product, and the predicted covariance
-follows from the standard linear Gaussian formula. Its QR decomposition operates on a
-$(2n) \times n$ matrix: $n$ rows from the propagated Cholesky factor and $n$ rows for the
-shocks. The reduction from $3n + 1$ to $2n$ rows speeds up the QR step and removes all
-sigma-point overhead.
+linear, the predicted mean is just a matrix--vector product, and the predicted
+covariance follows from the standard linear Gaussian formula. Its QR decomposition
+operates on a $(2n) \times n$ matrix: $n$ rows from the propagated Cholesky factor and
+$n$ rows for the shocks. The reduction from $3n + 1$ to $2n$ rows speeds up the QR step
+and removes all sigma-point overhead.
 
 The memory savings can be more important than the speed gains. The unscented path
 materialises $2n + 1$ sigma points for every observation and mixture component, and
@@ -39,8 +39,8 @@ model and running out of memory.
 
 The linear predict assembles a transition matrix $F$ of shape
 $(n_\text{latent}, n_\text{all})$ and a constant vector $c$ of length $n_\text{latent}$
-from the `trans_coeffs` dictionary. Here $n_\text{all}$ includes both latent and observed
-factors.
+from the `trans_coeffs` dictionary. Here $n_\text{all}$ includes both latent and
+observed factors.
 
 For each latent factor $i$:
 
@@ -71,10 +71,10 @@ factors and constants, and $s^{\text{out}}$ and $c^{\text{out}}$ the output-peri
 counterparts. The steps are:
 
 1. **Anchor** the input states: $x^a = x \odot s^{\text{in}} + c^{\text{in}}$.
-2. **Concatenate** observed factors to form the full state vector
+1. **Concatenate** observed factors to form the full state vector
    $\tilde{x} = [x^a, x^{\text{obs}}]$.
-3. **Apply the linear transition**: $y^a = \tilde{x}\, F^\top + c$.
-4. **Un-anchor** to get the predicted states:
+1. **Apply the linear transition**: $y^a = \tilde{x}\, F^\top + c$.
+1. **Un-anchor** to get the predicted states:
    $\hat{x} = (y^a - c^{\text{out}}) \oslash s^{\text{out}}$.
 
 ## Covariance prediction (square-root form)
@@ -123,10 +123,10 @@ $F$ rather than the full matrix.
 ## Practical impact
 
 Benchmarks on a 4-factor linear model (`health-cognition`,
-`no_feedback_to_investments_linear`, 8 GiB GPU) show a modest ~6 % speed-up on GPU
-(8.4 vs 8.9 s per optimizer iteration) and negligible difference on CPU. The speed gain
-is small because with only 4 latent factors the unscented transform generates just 9
-sigma points — a trivially cheap operation on modern hardware.
+`no_feedback_to_investments_linear`, 8 GiB GPU) show a modest ~6 % speed-up on GPU (8.4
+vs 8.9 s per optimizer iteration) and negligible difference on CPU. The speed gain is
+small because with only 4 latent factors the unscented transform generates just 9 sigma
+points — a trivially cheap operation on modern hardware.
 
 The memory reduction is the more significant benefit. Under the same conditions the
 unscented path ran out of GPU memory when only ~5 GiB was free, while the linear path

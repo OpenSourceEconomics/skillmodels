@@ -1,7 +1,7 @@
 # Package Architecture
 
-Skillmodels hosts three estimators under one model specification. The package
-layout reflects that:
+Skillmodels hosts three estimators under one model specification. The package layout
+reflects that:
 
 ```
 src/skillmodels/
@@ -61,45 +61,42 @@ src/skillmodels/
 
 ## How the layers interact
 
-Every estimator reads the same `ModelSpec` and produces the same canonical
-params DataFrame (4-level MultiIndex
-`(category, period, name1, name2)`). The differences live entirely below the
-spec:
+Every estimator reads the same `ModelSpec` and produces the same canonical params
+DataFrame (4-level MultiIndex `(category, period, name1, name2)`). The differences live
+entirely below the spec:
 
-- **CHS** consumes `process_model(spec) -> ProcessedModel`, then plugs that
-  into the Kalman recursion. `CHSEstimationOptions` is passed at call time
-  to `get_maximization_inputs(spec, data, chs_options=...)`.
-- **AF** also calls `process_model`, but uses `ProcessedModel` only for the
-  parameter index, labels, and transition info. The Kalman filter is not
-  invoked; period-specific Halton designs replace the predict step.
-- **AMN** likewise calls `process_model` for the index/labels, then runs its
-  three-stage pipeline. The result re-uses the same params DataFrame format
-  so the AMN output can seed CHS or AF estimation when desired.
+- **CHS** consumes `process_model(spec) -> ProcessedModel`, then plugs that into the
+  Kalman recursion. `CHSEstimationOptions` is passed at call time to
+  `get_maximization_inputs(spec, data, chs_options=...)`.
+- **AF** also calls `process_model`, but uses `ProcessedModel` only for the parameter
+  index, labels, and transition info. The Kalman filter is not invoked; period-specific
+  Halton designs replace the predict step.
+- **AMN** likewise calls `process_model` for the index/labels, then runs its three-stage
+  pipeline. The result re-uses the same params DataFrame format so the AMN output can
+  seed CHS or AF estimation when desired.
 
-`process_model` itself is structural: it takes only the spec and produces
-shapes, labels, transition info, and an `EndogenousFactorsInfo`. It does not
-carry any estimator-specific tuning. Each estimator's options class
-(`CHSEstimationOptions`, `AFEstimationOptions`, `AMNEstimationOptions`) is
-passed in at call time.
+`process_model` itself is structural: it takes only the spec and produces shapes,
+labels, transition info, and an `EndogenousFactorsInfo`. It does not carry any
+estimator-specific tuning. Each estimator's options class (`CHSEstimationOptions`,
+`AFEstimationOptions`, `AMNEstimationOptions`) is passed in at call time.
 
 ## Why this split
 
-The package grew organically: CHS was the original codebase; AF and AMN were
-later additions. Earlier iterations stored CHS-only options on `ModelSpec`,
-which made the spec leak CHS assumptions into a notionally agnostic container.
-The split into `common/`, `chs/`, `af/`, `amn/` makes the scope of each piece
-explicit at the import site:
+The package grew organically: CHS was the original codebase; AF and AMN were later
+additions. Earlier iterations stored CHS-only options on `ModelSpec`, which made the
+spec leak CHS assumptions into a notionally agnostic container. The split into
+`common/`, `chs/`, `af/`, `amn/` makes the scope of each piece explicit at the import
+site:
 
 - `from skillmodels import ModelSpec` — pure structural description.
-- `from skillmodels.chs import CHSEstimationOptions, get_maximization_inputs`
-  — CHS-specific.
+- `from skillmodels.chs import CHSEstimationOptions, get_maximization_inputs` —
+  CHS-specific.
 - `from skillmodels.af import estimate_af, AFEstimationOptions` — AF-specific.
 - `from skillmodels.common.variance_decomposition import decompose_measurement_variance`
   — works for any estimator, given pre-computed filtered states.
 
-The architectural principle: a function lives in `common/` iff it does not
-import from `chs/`, `af/`, or `amn/`. Anything that does belongs in the
-relevant subpackage. There is one practical exception:
-`CHSEstimationOptions` is defined in `chs/options.py` but the
-`process_model` orchestration in `common/` doesn't read it (it reads the
-structural `ModelSpec.n_mixtures` field instead), so the layering is clean.
+The architectural principle: a function lives in `common/` iff it does not import from
+`chs/`, `af/`, or `amn/`. Anything that does belongs in the relevant subpackage. There
+is one practical exception: `CHSEstimationOptions` is defined in `chs/options.py` but
+the `process_model` orchestration in `common/` doesn't read it (it reads the structural
+`ModelSpec.n_mixtures` field instead), so the layering is clean.
