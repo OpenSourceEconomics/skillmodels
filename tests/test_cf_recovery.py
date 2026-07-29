@@ -220,15 +220,19 @@ def test_control_function_recovers_period_specific_kappa() -> None:
     noise = np.random.default_rng(SEED + 2).normal(scale=0.05, size=int(free.sum()))
     start.loc[free, "value"] = true_params.loc[free, "value"].to_numpy() + noise
 
+    import pandas as pd  # noqa: PLC0415
+
+    def _neg_loglike_and_gradient(q: pd.DataFrame) -> tuple[float, np.ndarray]:
+        value, gradient = mi["loglike_and_gradient"](q)
+        return -value, -np.asarray(gradient)
+
     res = om.minimize(
         fun=lambda q: -mi["loglike"](q),
         params=start[["value"]],
         algorithm="scipy_lbfgsb",
         bounds=om.Bounds(lower=start["lower_bound"], upper=start["upper_bound"]),
         constraints=mi["constraints"],
-        fun_and_jac=lambda q: tuple(
-            -np.asarray(v) for v in mi["loglike_and_gradient"](q)
-        ),
+        fun_and_jac=_neg_loglike_and_gradient,
     )
     assert res.success
     est = res.params["value"]

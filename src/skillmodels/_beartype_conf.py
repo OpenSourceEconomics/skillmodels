@@ -64,7 +64,7 @@ def beartype_init[T](conf: BeartypeConf) -> Callable[[type[T]], type[T]]:
     """
 
     def wrap(cls: type[T]) -> type[T]:
-        cls.__init__ = beartype(conf=conf)(cls.__init__)  # ty: ignore[invalid-assignment]
+        cls.__init__ = beartype(conf=conf)(cls.__init__)
         return cls
 
     return wrap

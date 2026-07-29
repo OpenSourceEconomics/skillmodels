@@ -156,6 +156,7 @@ unsafe-fixes = false
 select = [ "ALL" ]
 extend-ignore = [
   "COM812",  # Conflicts with ruff-format
+  "CPY001",  # Missing copyright notice -- covered by the repo-level LICENSE file
   "EM101",   # Exception must not use a string literal
   "EM102",   # Exception must not use an f-string literal
   "FBT002",  # Boolean default positional argument in function definition
@@ -163,6 +164,7 @@ extend-ignore = [
   "ISC001",  # Conflicts with ruff-format
   "PERF401", # Use a list comprehension to create a transformed list
   "PLR0913", # Too many arguments in function definition
+  "PLR0917", # Too many positional arguments in function definition
   "PLR2004", # Magic value used in comparison
   "TC001",   # Move application import into a type-checking block
   "TC002",   # Move third-party import into a type-checking block

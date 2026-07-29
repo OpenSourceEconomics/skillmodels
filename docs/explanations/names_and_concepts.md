@@ -34,16 +34,17 @@ A **development stage** is a group of consecutive periods where the skill format
 technology (transition function parameters) remains constant. Stages are just equality
 constraints on parameters.
 
-Example: With 5 periods, you can estimate at most 4 different transition functions.
-The stagemap `[0, 0, 1, 1]` means:
+Example: With 5 periods, you can estimate at most 4 different transition functions. The
+stagemap `[0, 0, 1, 1]` means:
+
 - Periods 0→1 and 1→2 share the same parameters (stage 0)
 - Periods 2→3 and 3→4 share the same parameters (stage 1)
 
 ## Augmented Periods
 
-When models include endogenous factors (factors that depend on other factors in the
-same period), skillmodels internally expands periods into "augmented periods" to handle
-the sequential updating. Each regular period may contain multiple augmented periods.
+When models include endogenous factors (factors that depend on other factors in the same
+period), skillmodels internally expands periods into "augmented periods" to handle the
+sequential updating. Each regular period may contain multiple augmented periods.
 
 ## Anchoring
 
@@ -76,9 +77,9 @@ of factors are arbitrary).
 
 ## Estimation Options
 
-Each estimator has its own options dataclass, passed at call time rather than
-embedded in `ModelSpec`. The three classes share no fields — what counts as a
-tuning knob differs between estimators.
+Each estimator has its own options dataclass, passed at call time rather than embedded
+in `ModelSpec`. The three classes share no fields — what counts as a tuning knob differs
+between estimators.
 
 `CHSEstimationOptions` (from `skillmodels.chs`) controls the Kalman MLE:
 
@@ -86,40 +87,37 @@ tuning knob differs between estimators.
 - **bounds_distance**: How much stricter to make bounds (zeroed if robust_bounds is
   false)
 - **sigma_points_scale**: Controls spread of sigma points in unscented Kalman filter
-- **clipping_\***: Parameters for soft-clipping the log-likelihood to prevent
+- **clipping\_\***: Parameters for soft-clipping the log-likelihood to prevent
   infinities
-- **start_params_strategy**: How to seed the `params_template`. `"amn"` (default)
-  runs the full AMN three-stage estimator and uses its parameters as the start;
-  `"spearman"` uses moment-based start values; `"none"` leaves entries as NaN
-  for the caller to fill in.
+- **start_params_strategy**: How to seed the `params_template`. `"amn"` (default) runs
+  the full AMN three-stage estimator and uses its parameters as the start; `"spearman"`
+  uses moment-based start values; `"none"` leaves entries as NaN for the caller to fill
+  in.
 
 `AFEstimationOptions` (from `skillmodels.af`) controls the sequential MLE:
 
 - **n_halton_points**, **n_halton_points_shock**: quadrature counts.
 - **optimizer_algorithm**: the optimagic algorithm name passed to
-  `optimagic.minimize(algorithm=...)` (default `"fides"`; use
-  `"scipy_lbfgsb"` for MC sweeps).
-- **start_params_strategy**: `"amn"`, `"spearman"`, `"constant"`, or `"none"`.
-  Same meaning as in CHS. (The mixture-component count is not an estimator option;
-  it is the structural field `ModelSpec.n_mixtures`.)
+  `optimagic.minimize(algorithm=...)` (default `"fides"`; use `"scipy_lbfgsb"` for MC
+  sweeps).
+- **start_params_strategy**: `"amn"`, `"spearman"`, `"constant"`, or `"none"`. Same
+  meaning as in CHS. (The mixture-component count is not an estimator option; it is the
+  structural field `ModelSpec.n_mixtures`.)
 
-`AMNEstimationOptions` (from `skillmodels.amn`) controls the three-stage
-pipeline:
+`AMNEstimationOptions` (from `skillmodels.amn`) controls the three-stage pipeline:
 
-- **em_max_iter**, **em_tol**, **em_n_init**, **em_reg_covar**: Stage-1 EM
-  numerical knobs.
+- **em_max_iter**, **em_tol**, **em_n_init**, **em_reg_covar**: Stage-1 EM numerical
+  knobs.
 - **n_simulation_draws**: Stage-3 synthetic-panel size.
-- **minimum_distance_weighting**: Stage-2 weighting. `"identity"` (default) is
-  the paper's unweighted identity-metric criterion over per-component means and
-  full covariance matrices, and is currently the only implemented option.
-  `"optimal"` is reserved for a future Avar-weighted criterion and raises
-  `NotImplementedError`.
-- Investment-endogeneity correction is no longer an estimation-option flag.
-  Attach a `CorrectionSpec` to the endogenous investment `FactorSpec`
-  (`FactorSpec.correction`); its presence triggers the Stage-3 control-function
-  correction. See
+- **minimum_distance_weighting**: Stage-2 weighting. `"identity"` (default) is the
+  paper's unweighted identity-metric criterion over per-component means and full
+  covariance matrices, and is currently the only implemented option. `"optimal"` is
+  reserved for a future Avar-weighted criterion and raises `NotImplementedError`.
+- Investment-endogeneity correction is no longer an estimation-option flag. Attach a
+  `CorrectionSpec` to the endogenous investment `FactorSpec` (`FactorSpec.correction`);
+  its presence triggers the Stage-3 control-function correction. See
   [Endogeneity Corrections](../reference_guides/endogeneity_corrections.md).
 
-The shared structural field — number of mixture components in the latent
-distribution — lives directly on `ModelSpec.n_mixtures`, since it changes the
-model itself rather than the optimizer.
+The shared structural field — number of mixture components in the latent distribution —
+lives directly on `ModelSpec.n_mixtures`, since it changes the model itself rather than
+the optimizer.
