@@ -325,7 +325,9 @@ def get_constraints(
         n_mixtures=dimensions.n_mixtures,
         factors=labels.latent_factors,
     )
-    constraints += _get_transition_constraints(labels=labels)
+    constraints += _get_transition_constraints(
+        labels=labels, endogenous_factors_info=endogenous_factors_info
+    )
     constraints += _get_anchoring_constraints(
         update_info=update_info,
         controls=labels.controls,
@@ -539,21 +541,28 @@ def _get_initial_states_constraints(
 
 def _get_transition_constraints(
     labels: Labels,
+    endogenous_factors_info: EndogenousFactorsInfo,
 ) -> list[om.constraints.Constraint]:
     """Collect possible constraints on transition parameters.
 
     Args:
         labels: Dict of lists with labels for the model quantities like
             factors, periods, controls, stagemap and stages. See :ref:`labels`
+        endogenous_factors_info: Information about endogenous factors in the model.
 
     Returns:
         List of constraint objects.
 
     """
+    # Transition params (and therefore their simplex/probability folds) live on
+    # `aug_periods[:-2]` when endogenous factors split the calendar into augmented
+    # periods, else `aug_periods[:-1]`. Mirror `get_transition_index_tuples` exactly
+    # so no constraint targets a transition row absent from the params index.
+    end = -2 if endogenous_factors_info.has_endogenous_factors else -1
     constraints: list[om.constraints.Constraint] = []
     for f, factor in enumerate(labels.latent_factors):
         tname = labels.transition_names[f]
-        for aug_period in labels.aug_periods[:-1]:
+        for aug_period in labels.aug_periods[:end]:
             funcname = f"constraints_{tname}"
             if func := getattr(t_f_module, funcname, False):
                 constraints.append(

@@ -17,6 +17,11 @@ nonlinear latent-factor model. Key features:
     period-by-period.
   - `amn` — three-stage mixture-of-normals (Attanasio, Meghir & Nix 2020):
     EM, minimum distance, simulated regression.
+
+  The three estimators do **not** support the same data features and model
+  constructs (measurement families, missing data, corrections, anchoring). See
+  [Estimator Prerequisites](reference_guides/estimator_prerequisites.md) for the
+  full comparison before choosing one.
 - **Strongly-typed, immutable model spec**: frozen dataclasses with
   `MappingProxyType` containers throughout.
 - **JAX everywhere**: jitted likelihoods, autodiff gradients, optional GPU.

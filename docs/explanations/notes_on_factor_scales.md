@@ -74,17 +74,30 @@ However, we don't have formal identification results for this. **We advise cauti
 when using CES or log_CES functions—think carefully about your normalizations rather
 than relying on automatic generation.
 
-## Normalizations and Development Stages
+## Normalizations and Identification
 
-When using development stages (periods with identical transition parameters), the
-normalization requirements change.
+The library distinguishes three separate things, and only the first two are
+mechanical:
 
-The key insight: you can identify scale from the first period of a stage, so no later
-normalizations are needed until the next stage begins.
+1. a **syntactic normalization** you supply through `Normalizations` or
+   `fixed_params`;
+2. an estimator **precheck** that catches some missing initial scale/location
+   anchors — it is a precheck, **not** a proof of identification;
+3. a **transition-family identification argument**, which the library does not
+   establish for arbitrary models.
 
-**Recommendations:**
-- Normalize only in the first period of each stage
-- For the initial stage, normalize the first two periods
-- Use automatic normalizations when working with stages to avoid confusion
+Because step 3 is on you, there is no single stage-level rule of thumb that is safe
+across transition functions. Use the template that matches your production function:
 
-This reveals another type of over-normalization in the original CHS paper.
+- **Direct trans-log** (`translog`, `translog_af`): anchor one nonzero loading and
+  one intercept/location for every independently scaled factor-period.
+- **Restricted CES** (`log_ces_af` with $\psi_t = 1$): relative skill/investment
+  scales are identified through the production restrictions, so pinning *every* first
+  loading can impose testable restrictions — follow the CES templates in the
+  estimator-specific guides rather than normalizing mechanically.
+- **Intentionally restricted (original-AMN) benchmark**: a deliberately
+  over-restricted spec used only as a comparison point; label it as such so the extra
+  restrictions are not mistaken for identification requirements.
+
+For custom transitions you must establish identification yourself (or add a
+model-specific diagnostic); the automatic checker will not do it for you.

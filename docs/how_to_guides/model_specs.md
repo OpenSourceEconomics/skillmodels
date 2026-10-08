@@ -78,11 +78,15 @@ Each factor requires:
   `estimate_af` emits a `UserWarning` if you use a general built-in transition on
   a production factor while observed factors are present.
 - **normalizations** (optional): Fixed values for loadings and intercepts to identify
-  the model.
+  the model. The model checker validates these syntactically but does not prove
+  transition-specific identification; see
+  [Notes on factor scales](../explanations/notes_on_factor_scales.md).
 - **is_endogenous** (optional): Whether this factor is endogenous (default: false).
   See [Endogeneity Corrections](../reference_guides/endogeneity_corrections.md).
-- **is_correction** (optional): Whether this is a correction factor (default: false).
-  Must also be endogenous.
+- **correction** (optional): A `CorrectionSpec | None` attached to an endogenous
+  investment factor, adding a control-function correction for investment
+  endogeneity. See
+  [Endogeneity Corrections](../reference_guides/endogeneity_corrections.md).
 
 ## Anchoring
 
@@ -124,11 +128,14 @@ model = ModelSpec(
 
 ## Estimation Options
 
-Fine-tune the estimation:
+`n_mixtures` is a structural field on `ModelSpec` itself — the number of components
+in the latent-factor mixture (default 1). The numerical knobs below are
+**CHS-specific** and live on `CHSEstimationOptions` (`skillmodels.chs`), not on
+`ModelSpec`; AF and AMN have their own option dataclasses (`AFEstimationOptions`,
+`AMNEstimationOptions`).
 
 - **robust_bounds**: Make bounds stricter to avoid numerical issues (default: true)
 - **bounds_distance**: How much stricter to make bounds (default: 0.001)
-- **n_mixtures**: Number of mixture components (default: 1)
 - **sigma_points_scale**: Scaling for Julier sigma points (default: 2)
 - **clipping_lower_bound**: Clip log-likelihood from below (default: -1e30)
 - **clipping_upper_bound**: Clip log-likelihood from above (default: null)

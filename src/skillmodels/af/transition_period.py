@@ -663,11 +663,14 @@ def _run_transition_optimization(
     # previous-period measurement params (the legacy single-calendar path).
     if importance is not None:
         prev_measurements = jnp.asarray(importance.importance_measurements)
+        # `assemble_step_arrays` returns host (numpy) arrays; move them on-device so
+        # they satisfy the `jax.Array` kwargs contract under the beartype claw (mirrors
+        # the target `loading_mask` wrap below). Numerically a no-op.
         prev_meas_info = {
-            "loading_mask": importance.importance_loading_mask,
-            "control_params": importance.importance_control_params,
-            "loadings_flat": importance.importance_loadings_flat,
-            "meas_sds": importance.importance_meas_sds,
+            "loading_mask": jnp.asarray(importance.importance_loading_mask),
+            "control_params": jnp.asarray(importance.importance_control_params),
+            "loadings_flat": jnp.asarray(importance.importance_loadings_flat),
+            "meas_sds": jnp.asarray(importance.importance_meas_sds),
         }
     else:
         prev_meas_info = _extract_prev_measurement_params(

@@ -91,10 +91,14 @@ af_options = AFEstimationOptions(
 )
 ```
 
-All optimagic constraint kinds are supported: `FixedConstraintWithValue`
-(from normalisations / `fixed_params`), `ProbabilityConstraint` (from
-`log_ces` `gamma` simplex), and `EqualityConstraint` (within-step and
-cross-period equalities passed through `estimate_af(constraints=...)`).
+AF internally creates the fixed and probability constraints implied by the
+processed model: `FixedConstraintWithValue` (from normalisations / `fixed_params`)
+and `ProbabilityConstraint` (from the `log_ces` `gamma` simplex). The public
+`constraints=` argument is narrower — it honours only `om.EqualityConstraint`
+groups whose selector is built with
+`skillmodels.common.constraints.select_by_loc` (used for within-step and
+cross-period equality restrictions). Other optimagic constraint kinds passed there
+are ignored; supply any further fixed values through `fixed_params` instead.
 
 ## Start-values strategy
 

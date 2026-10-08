@@ -18,10 +18,18 @@ The guide assumes the three estimation results from the tutorial are in scope:
 `chs_result`, `af_result`, and `amn_result`. The corresponding model and data
 fixtures (`model`, `data`) are the same across all three.
 
+The three estimators support different data features and model constructs; see
+[Estimator Prerequisites](../reference_guides/estimator_prerequisites.md) for the
+support matrix (measurement families, missing data, corrections, anchoring).
+
 ## Why each estimator gets a different inference
 
-Each estimator computes the same point estimate of the same model, but the
-sampling-distribution machinery differs:
+The three estimators can be applied to the same structural `ModelSpec`, but they
+use different estimating criteria — CHS a joint Gaussian-component likelihood, AF
+a sequential Halton-integrated likelihood, AMN a three-stage
+EM / minimum-distance / simulate-and-regress fit — so their point estimates may
+differ even before inference is considered. The sampling-distribution machinery
+also differs:
 
 | Estimator | Inference                                            | Why this and not bootstrap (CHS) / not OPG (AF, AMN) |
 | --------- | ---------------------------------------------------- | --------------------------------------------------------- |

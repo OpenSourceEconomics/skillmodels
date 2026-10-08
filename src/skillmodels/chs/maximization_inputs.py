@@ -193,7 +193,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             start += step
             stop += step
         grad = _to_numpy(_grad)
-        return crit, grad
+        return _sanitize_criterion_for_optimizer(crit, grad)
 
     def debug_loglike(params: pd.DataFrame) -> dict[str, Any]:
         params_vec = partialed_get_jnp_params_vec(params)
@@ -447,6 +447,30 @@ def _partial_some_log_likelihood(
         iteration_to_period=iteration_to_period,
         observed_factors=observed_factors,
     )
+
+
+def _sanitize_criterion_for_optimizer(
+    crit: float,
+    grad: NDArray[np.floating],
+) -> tuple[float, NDArray[np.floating]]:
+    """Replace a non-finite criterion/gradient with a finite, unattractive one.
+
+    A descent optimiser can probe numerically degenerate parameter regions -- e.g.
+    an explosive nonlinear (translog) transition whose latent-state sensitivities
+    overflow -- where the log-likelihood value stays finite but its gradient turns
+    NaN/inf. Handed that verbatim, `optimagic` aborts the entire estimation. Since
+    such a point is always worse than the incumbent, return it with non-finite
+    gradient entries zeroed (and a non-finite value floored to a very unattractive
+    finite number) so a line-search / trust-region step rejects it and the
+    optimiser backtracks instead of crashing. At well-behaved points every value is
+    finite and this is a no-op.
+    """
+    grad_is_finite = np.isfinite(grad)
+    if np.isfinite(crit) and bool(grad_is_finite.all()):
+        return crit, grad
+    safe_grad = np.where(grad_is_finite, grad, 0.0)
+    safe_crit = crit if np.isfinite(crit) else -1e300
+    return safe_crit, safe_grad
 
 
 def _to_numpy(obj: Any) -> Any:  # noqa: ANN401

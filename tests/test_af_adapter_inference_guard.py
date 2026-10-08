@@ -1,18 +1,19 @@
-"""AF inference and posterior states reject calendar-adapter models for now.
+"""AF standard errors still reject calendar-adapter models for now.
 
-`compute_af_standard_errors` and `get_af_posterior_states` still reconstruct the
-single-period measurement layout, which is wrong for the source/destination calendar
-adapter (source-investment params live in the next step's result and the per-step parser
-counts differ). Until they consume the compiled `AFStepLayout`, they must raise on an
-adapter model rather than return standard errors that differentiate the wrong objective
-or posterior rows attached to the wrong latent.
+`compute_af_standard_errors` still reconstructs the single-period measurement layout,
+which is wrong for the source/destination calendar adapter (source-investment params
+live in the next step's result and the per-step parser counts differ). Until it consumes
+the compiled `AFStepLayout`, it must raise on an adapter model rather than return
+standard errors that differentiate the wrong objective. (`get_af_posterior_states` now
+supports adapter models: it scores each state factor against its own correctly-parsed
+indicators and drops the mis-sourced reconstructed-investment indicators -- see
+`test_af_posterior_states.py`.)
 """
 
 import pandas as pd
 import pytest
 
 from skillmodels.af.inference import compute_af_standard_errors
-from skillmodels.af.posterior_states import get_af_posterior_states
 from skillmodels.af.step_layout import (
     fail_if_calendar_adapter_unsupported,
     fail_if_spearman_unsupported_on_adapter,
@@ -87,18 +88,6 @@ def _adapter_result() -> AFEstimationResult:
 def test_standard_errors_reject_adapter_model() -> None:
     with pytest.raises(NotImplementedError, match="calendar adapter"):
         compute_af_standard_errors(_adapter_result(), pd.DataFrame())
-
-
-def test_posterior_states_reject_adapter_model() -> None:
-    with pytest.raises(NotImplementedError, match="calendar adapter"):
-        get_af_posterior_states(_adapter_result(), _adapter_model(), pd.DataFrame())
-
-
-def test_posterior_states_guard_reads_result_not_argument() -> None:
-    # An adapter RESULT must be rejected even if a plain model_spec is supplied as the
-    # argument: the guard reads af_result.model_spec, so the old bypass is closed.
-    with pytest.raises(NotImplementedError, match="calendar adapter"):
-        get_af_posterior_states(_adapter_result(), _plain_model(), pd.DataFrame())
 
 
 def test_spearman_guard_rejects_adapter_model() -> None:

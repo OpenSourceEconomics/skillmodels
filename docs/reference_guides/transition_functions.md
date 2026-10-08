@@ -5,8 +5,11 @@ several pre-built functions and supports custom functions.
 
 The same transition functions work for all three estimators (CHS, AF, AMN) — they live
 in `skillmodels.common.transition_functions` and are dispatched by name through each
-estimator's pipeline. AMN's Stage 3 currently supports the pre-built set listed below;
-custom `@register_params` transitions work with CHS and AF but not yet with AMN.
+estimator's pipeline. CHS and AF support both the pre-built set and custom
+`@register_params` transitions. AMN also supports custom callables through its Stage-3
+generic nonlinear-least-squares path, but with narrower correction- and
+fixed-parameter support than CHS (for example, `log_ces` / `log_ces_with_constant`
+reject fixed parameters in that path).
 
 ## Pre-built Transition Functions
 
