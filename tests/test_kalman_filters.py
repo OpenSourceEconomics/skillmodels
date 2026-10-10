@@ -570,3 +570,49 @@ def test_sigma_points_multiple_mixtures() -> None:
                 (n_sigma, n_observed),
             )
             aaae(observed_slice, expected)
+
+
+@pytest.mark.parametrize("update_func", UPDATE_FUNCS)
+def test_kalman_update_resets_negligible_mixture_component(update_func) -> None:
+    """A component with underflowing weight takes the dominant component's state.
+
+    Otherwise a nonlinear transition can blow its (irrelevant) state up to inf over
+    later periods, and the gradient through its zero weight becomes 0 * inf = NaN.
+    """
+    n_states = 2
+    states = jnp.array([[[1e100, -1e100], [0.3, -0.2]]])
+    chols = jnp.broadcast_to(jnp.eye(n_states), (1, 2, n_states, n_states))
+    log_weights = jnp.array([[-1e6, 0.0]])
+    kwargs = {
+        "loadings": jnp.array([1.0, 0.5]),
+        "control_params": jnp.ones(1),
+        "meas_sd": 1.0,
+        "controls": jnp.ones((1, 1)),
+    }
+
+    def two_updates(s: jax.Array) -> jax.Array:
+        s1, c1, w1, ll1 = update_func(
+            states=s,
+            upper_chols=chols,
+            measurements=jnp.array([0.4]),
+            log_mixture_weights=log_weights,
+            **kwargs,
+        )[:4]
+        _, _, _, ll2 = update_func(
+            states=s1**4,
+            upper_chols=c1,
+            measurements=jnp.array([0.1]),
+            log_mixture_weights=w1,
+            **kwargs,
+        )[:4]
+        return (ll1 + ll2).sum()
+
+    new_states = update_func(
+        states=states,
+        upper_chols=chols,
+        measurements=jnp.array([0.4]),
+        log_mixture_weights=log_weights,
+        **kwargs,
+    )[0]
+    aaae(new_states[0, 0], new_states[0, 1])
+    assert jnp.isfinite(jax.grad(two_updates)(states)).all()
