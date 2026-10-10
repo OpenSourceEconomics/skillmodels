@@ -131,11 +131,55 @@ def kalman_update(
         log_mixture_weights,
     )
 
+    if n_mixtures >= 2:
+        new_states, new_upper_chols = reset_negligible_mixture_components(
+            states=new_states,
+            upper_chols=new_upper_chols,
+            log_mixture_weights=new_log_mixture_weights,
+        )
+
     return (
         new_states,
         new_upper_chols,
         new_log_mixture_weights,
         new_loglikes,
+    )
+
+
+def reset_negligible_mixture_components(
+    states: Array,
+    upper_chols: Array,
+    log_mixture_weights: Array,
+) -> tuple[Array, Array]:
+    """Give components whose weight underflows the dominant component's state.
+
+    A component whose weight is below the smallest normal float contributes exactly
+    nothing to the likelihood, but its state is still propagated. Under a nonlinear
+    (e.g. translog) transition it can then explode to inf over later periods, and
+    the gradient through its zero weight becomes 0 * inf = NaN for every parameter.
+    Overwriting its state and covariance with the dominant component's keeps all
+    values finite; the likelihood is unchanged and the gradient is exact up to the
+    underflowed weight. The weights themselves are left untouched.
+
+    Args:
+        states: Array of shape (n_obs, n_mixtures, n_states).
+        upper_chols: Array of shape (n_obs, n_mixtures, n_states, n_states).
+        log_mixture_weights: Array of shape (n_obs, n_mixtures).
+
+    Returns:
+        states and upper_chols with negligible components replaced.
+
+    """
+    log_weights = jax.lax.stop_gradient(log_mixture_weights)
+    negligible = log_weights < jnp.log(jnp.finfo(log_weights.dtype).tiny)
+    dominant = jnp.argmax(log_weights, axis=1)
+    dominant_states = jnp.take_along_axis(states, dominant[:, None, None], axis=1)
+    dominant_chols = jnp.take_along_axis(
+        upper_chols, dominant[:, None, None, None], axis=1
+    )
+    return (
+        jnp.where(negligible[..., None], dominant_states, states),
+        jnp.where(negligible[..., None, None], dominant_chols, upper_chols),
     )
 
 
