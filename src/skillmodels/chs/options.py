@@ -59,6 +59,14 @@ class CHSEstimationOptions:
     Forwarded by `estimate_chs` to `estimate_ml` (e.g. convergence
     tolerances, trust-region settings for `fides`)."""
 
+    error_handling: Literal["raise", "continue"] = "raise"
+    """What `optimagic` does when the criterion raises (`optimize_options`).
+
+    The criterion raises whenever the log-likelihood or its gradient is
+    non-finite. `"raise"` aborts the estimation. `"continue"` replaces that
+    point by a penalty worse than the start value, so a trust-region step into
+    a numerically explosive region is rejected and the radius shrinks."""
+
     estimate_ml_options: Mapping[str, Any] = field(
         default_factory=lambda: MappingProxyType({})
     )
