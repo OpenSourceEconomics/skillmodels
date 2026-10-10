@@ -125,3 +125,27 @@ def test_estimate_chs_enforces_user_fixed_constraint_value(
     )
 
     assert result.params.loc[loc, "value"] == pytest.approx(target)
+
+
+def test_estimate_chs_forwards_error_handling(
+    model2_data, anchoring_start_params, monkeypatch
+):
+    """`error_handling` reaches optimagic so failed evaluations can be penalised."""
+    captured = {}
+
+    def fake_estimate_ml(**kwargs):
+        captured.update(kwargs["optimize_options"])
+        raise StopIteration
+
+    monkeypatch.setattr("skillmodels.chs.estimate.estimate_ml", fake_estimate_ml)
+    with pytest.raises(StopIteration):
+        estimate_chs(
+            MODEL2,
+            model2_data,
+            CHSEstimationOptions(
+                start_params_strategy="none", error_handling="continue"
+            ),
+            start_params=anchoring_start_params,
+            require_initial_anchors=False,
+        )
+    assert captured["error_handling"] == "continue"

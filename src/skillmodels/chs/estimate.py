@@ -123,6 +123,7 @@ def estimate_chs(
         "algorithm": options.optimizer_algorithm,
         "algo_options": to_plain_dict(options.optimizer_options) or None,
         "fun_and_jac": max_inputs["loglike_and_gradient"],
+        "error_handling": options.error_handling,
     }
 
     # Default to OPG/jacobian-based inference (`hessian=False`): the numerical

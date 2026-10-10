@@ -193,6 +193,14 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             start += step
             stop += step
         grad = _to_numpy(_grad)
+        if not (np.isfinite(crit) and np.isfinite(grad).all()):
+            # Raise rather than return, so `error_handling="continue"` can replace
+            # the point by a penalty that rejects the step.
+            msg = (
+                f"The log-likelihood ({crit}) or its gradient "
+                f"({int((~np.isfinite(grad)).sum())} entries) is non-finite."
+            )
+            raise FloatingPointError(msg)
         return crit, grad
 
     def debug_loglike(params: pd.DataFrame) -> dict[str, Any]:

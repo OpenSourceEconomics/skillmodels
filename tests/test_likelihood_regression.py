@@ -115,6 +115,18 @@ def test_splitting_does_not_change_gradient(model2, model2_data) -> None:
     aaae(gradient, gradient_split)
 
 
+def test_loglike_and_gradient_raises_on_non_finite_value(model2, model2_data) -> None:
+    """A non-finite value must raise, so optimagic can penalise and reject the step."""
+    inputs = get_maximization_inputs(
+        model2, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
+    params = inputs["params_template"]
+    params["value"] = 0.1
+    params.loc[params.index[0], "value"] = np.nan
+    with pytest.raises(FloatingPointError, match="non-finite"):
+        inputs["loglike_and_gradient"](params)
+
+
 @pytest.mark.parametrize(
     ("model_name", "fun_key"), product(MODEL_NAMES, ["loglikeobs"])
 )
