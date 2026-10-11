@@ -11,6 +11,7 @@ inputs. `get_maximization_inputs` stays public as the power-user escape
 hatch for callers who want to drive the optimiser themselves.
 """
 
+import numpy as np
 import optimagic as om
 import pandas as pd
 from beartype import beartype
@@ -40,6 +41,7 @@ def estimate_chs(
     start_params: pd.DataFrame | None = None,
     fixed_params: pd.DataFrame | None = None,
     constraints: list[om.constraints.Constraint] | None = None,
+    lower_bounds: pd.Series | None = None,
     *,
     require_initial_anchors: bool = True,
 ) -> CHSEstimationResult:
@@ -64,6 +66,10 @@ def estimate_chs(
             fixed.
         constraints: Optional extra `optimagic` constraints, appended to the
             model-implied constraints from `get_maximization_inputs`.
+        lower_bounds: Optional lower bounds, indexed like the `params_template`,
+            that tighten the template's bounds (e.g. a floor on a measurement
+            SD that would otherwise collapse). Start values below them are
+            raised onto them.
         require_initial_anchors: When True (the default), run the
             estimator-agnostic period-0 anchor check
             (`fail_if_initial_state_unanchored`) and raise `ValueError` if the
@@ -100,6 +106,16 @@ def estimate_chs(
     if start_params is not None:
         overlay = start_params["value"].reindex(start.index)
         start.loc[overlay.notna(), "value"] = overlay[overlay.notna()]
+
+    if lower_bounds is not None:
+        tighter = lower_bounds.reindex(start.index)
+        locs = tighter.dropna().index
+        start.loc[locs, "lower_bound"] = np.maximum(
+            start.loc[locs, "lower_bound"], tighter[locs]
+        )
+        start.loc[locs, "value"] = np.maximum(
+            start.loc[locs, "value"], start.loc[locs, "lower_bound"]
+        )
 
     all_constraints = [*max_inputs["constraints"], *(constraints or [])]
 

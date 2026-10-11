@@ -149,3 +149,34 @@ def test_estimate_chs_forwards_error_handling(
             require_initial_anchors=False,
         )
     assert captured["error_handling"] == "continue"
+
+
+def test_estimate_chs_applies_lower_bounds_and_clips_start(
+    model2_data, anchoring_start_params, monkeypatch
+):
+    """`lower_bounds` tightens the template bounds; the start moves onto them."""
+    captured = {}
+
+    def fake_estimate_ml(**kwargs):
+        captured.update(kwargs)
+        raise StopIteration
+
+    loc = anchoring_start_params.query("category == 'meas_sds'").index[:1]
+    start = anchoring_start_params.copy()
+    start.loc[loc, "value"] = 0.05
+    lower_bounds = pd.Series(0.1, index=loc)
+
+    monkeypatch.setattr("skillmodels.chs.estimate.estimate_ml", fake_estimate_ml)
+    with pytest.raises(StopIteration):
+        estimate_chs(
+            MODEL2,
+            model2_data,
+            CHSEstimationOptions(start_params_strategy="none"),
+            start_params=start,
+            lower_bounds=lower_bounds,
+            require_initial_anchors=False,
+        )
+    assert captured["bounds"].lower.loc[loc].tolist() == [0.1]
+    assert captured["params"].loc[loc, "value"].tolist() == [0.1]
+    other = captured["bounds"].lower.drop(loc)
+    assert other[np.isfinite(other)].max() < 0.1
