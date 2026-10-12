@@ -137,6 +137,7 @@ def kalman_update(
             states=new_states,
             upper_chols=new_upper_chols,
             log_mixture_weights=new_log_mixture_weights,
+            preserve_finite_weights=jnp.ndim(meas_sd) == 1,
         )
 
     return (
@@ -151,28 +152,35 @@ def reset_negligible_mixture_components(
     states: Array,
     upper_chols: Array,
     log_mixture_weights: Array,
+    *,
+    preserve_finite_weights: bool = False,
 ) -> tuple[Array, Array]:
-    """Give components whose weight underflows the dominant component's state.
+    """Give inactive components the dominant component's state.
 
-    A component whose weight is below the smallest normal float contributes exactly
-    nothing to the likelihood, but its state is still propagated. Under a nonlinear
-    (e.g. translog) transition it can then explode to inf over later periods, and
-    the gradient through its zero weight becomes 0 * inf = NaN for every parameter.
-    Overwriting its state and covariance with the dominant component's keeps all
-    values finite; the likelihood is unchanged and the gradient is exact up to the
-    underflowed weight. The weights themselves are left untouched.
+    The scalar-SD path retains its legacy underflow threshold to protect against
+    exploding nonlinear transitions in negligible components. The vector-SD path
+    sets `preserve_finite_weights=True`: a finite log weight must retain its own
+    state and covariance, because later measurements can revive that component.
+    Only components with log weight `-inf` are reset in that path. The weights
+    themselves are left untouched.
 
     Args:
         states: Array of shape (n_obs, n_mixtures, n_states).
         upper_chols: Array of shape (n_obs, n_mixtures, n_states, n_states).
         log_mixture_weights: Array of shape (n_obs, n_mixtures).
+        preserve_finite_weights: If True, reset only components with log weight
+            `-inf`. This is a static option, not a data-dependent branch.
 
     Returns:
         states and upper_chols with negligible components replaced.
 
     """
     log_weights = jax.lax.stop_gradient(log_mixture_weights)
-    negligible = log_weights < jnp.log(jnp.finfo(log_weights.dtype).tiny)
+    negligible = (
+        jnp.isneginf(log_weights)
+        if preserve_finite_weights
+        else log_weights < jnp.log(jnp.finfo(log_weights.dtype).tiny)
+    )
     dominant = jnp.argmax(log_weights, axis=1)
     dominant_states = jnp.take_along_axis(states, dominant[:, None, None], axis=1)
     dominant_chols = jnp.take_along_axis(

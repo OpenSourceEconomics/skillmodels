@@ -126,6 +126,7 @@ def kalman_update(
             states=new_states,
             upper_chols=new_upper_chols,
             log_mixture_weights=new_log_mixture_weights,
+            preserve_finite_weights=jnp.ndim(meas_sd) == 1,
         )
 
     debug_info = {}

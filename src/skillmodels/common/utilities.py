@@ -124,6 +124,9 @@ def remove_factors(
     out = model_spec._replace(
         factors=new_factors,
         anchoring=new_anchoring,
+        mixture_specific_meas_sds=_remaining_mixture_specific_meas_sds(
+            model_spec, new_factors
+        ),
     )
 
     # Remove periods if necessary, but only if no endogenous factors are present.
@@ -205,7 +208,12 @@ def remove_measurements(
             fspec, measurements=new_meas, normalizations=new_normalizations
         )
 
-    out = model_spec._replace(factors=new_factors)
+    out = model_spec._replace(
+        factors=new_factors,
+        mixture_specific_meas_sds=_remaining_mixture_specific_meas_sds(
+            model_spec, new_factors
+        ),
+    )
 
     if params is not None:
         # This likely won't work if we have endogenous factors.
@@ -353,6 +361,9 @@ def reduce_n_periods(
     out = model_spec._replace(
         factors=new_factors,
         stagemap=new_stagemap,
+        mixture_specific_meas_sds=_remaining_mixture_specific_meas_sds(
+            model_spec, new_factors
+        ),
     )
 
     if params is not None:
@@ -360,6 +371,24 @@ def reduce_n_periods(
         return (out, out_params)
 
     return out
+
+
+def _remaining_mixture_specific_meas_sds(
+    model_spec: ModelSpec,
+    factors: dict[str, FactorSpec],
+) -> tuple[str, ...]:
+    """Keep selected SD names still measured by the explicitly reduced factors."""
+    if not model_spec.mixture_specific_meas_sds:
+        return ()
+    measurements = {
+        meas
+        for factor in factors.values()
+        for period in factor.measurements
+        for meas in period
+    }
+    return tuple(
+        meas for meas in model_spec.mixture_specific_meas_sds if meas in measurements
+    )
 
 
 def _reduce_params(
