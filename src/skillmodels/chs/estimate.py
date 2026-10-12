@@ -43,6 +43,7 @@ def estimate_chs(
     fixed_params: pd.DataFrame | None = None,
     constraints: list[om.constraints.Constraint] | None = None,
     lower_bounds: pd.Series | None = None,
+    upper_bounds: pd.Series | None = None,
     *,
     require_initial_anchors: bool = True,
 ) -> CHSEstimationResult:
@@ -73,6 +74,9 @@ def estimate_chs(
             bound (optimagic counts each bound on a parameter in a
             `LinearConstraint` as one more linear constraint). Start values
             below them are raised onto them.
+        upper_bounds: Optional upper bounds, the counterpart of `lower_bounds`
+            (e.g. `0` to restrict a loading's sign). Start values above them
+            are lowered onto them.
         require_initial_anchors: When True (the default), run the
             estimator-agnostic period-0 anchor check
             (`fail_if_initial_state_unanchored`) and raise `ValueError` if the
@@ -116,6 +120,14 @@ def estimate_chs(
         start.loc[locs, "lower_bound"] = replacement[locs]
         start.loc[locs, "value"] = np.maximum(
             start.loc[locs, "value"], start.loc[locs, "lower_bound"]
+        )
+
+    if upper_bounds is not None:
+        replacement = upper_bounds.reindex(start.index)
+        locs = replacement.dropna().index
+        start.loc[locs, "upper_bound"] = replacement[locs]
+        start.loc[locs, "value"] = np.minimum(
+            start.loc[locs, "value"], start.loc[locs, "upper_bound"]
         )
 
     all_constraints = [*max_inputs["constraints"], *(constraints or [])]
