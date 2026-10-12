@@ -1,8 +1,10 @@
 """End-to-end smoke test for `skillmodels.chs.estimate.estimate_chs`."""
 
+import functools
 from pathlib import Path
 
 import numpy as np
+import optimagic as om
 import pandas as pd
 import pytest
 
@@ -11,6 +13,7 @@ from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.chs.types import CHSEstimationResult
 from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.fixed_constraint import FixedConstraintWithValue
+from skillmodels.common.selector import select_by_loc
 from skillmodels.test_data.model2 import MODEL2
 
 REGRESSION_VAULT = Path(__file__).parent / "regression_vault"
@@ -180,3 +183,63 @@ def test_estimate_chs_applies_lower_bounds_and_clips_start(
     assert captured["params"].loc[loc, "value"].tolist() == [0.1]
     other = captured["bounds"].lower.drop(loc)
     assert other[np.isfinite(other)].max() < 0.1
+
+
+def test_estimate_chs_lower_bounds_can_remove_a_bound(
+    model2_data, anchoring_start_params, monkeypatch
+):
+    """A `-inf` entry in `lower_bounds` replaces the template's bound."""
+    captured = {}
+
+    def fake_estimate_ml(**kwargs):
+        captured.update(kwargs)
+        raise StopIteration
+
+    loc = anchoring_start_params.query("category == 'meas_sds'").index[:1]
+    monkeypatch.setattr("skillmodels.chs.estimate.estimate_ml", fake_estimate_ml)
+    with pytest.raises(StopIteration):
+        estimate_chs(
+            MODEL2,
+            model2_data,
+            CHSEstimationOptions(start_params_strategy="none"),
+            start_params=anchoring_start_params,
+            lower_bounds=pd.Series(-np.inf, index=loc),
+            require_initial_anchors=False,
+        )
+    assert captured["bounds"].lower.loc[loc].tolist() == [-np.inf]
+
+
+def test_estimate_chs_moves_start_onto_linear_equalities(
+    model2_data, anchoring_start_params, monkeypatch
+):
+    """Start values satisfy user `LinearConstraint` equalities (a linear trend)."""
+    captured = {}
+
+    def fake_estimate_ml(**kwargs):
+        captured.update(kwargs)
+        raise StopIteration
+
+    sds = anchoring_start_params.query("category == 'meas_sds' & name1 == 'y1'").index
+    start = anchoring_start_params.copy()
+    start.loc[sds, "value"] = np.linspace(0.5, 1.5, len(sds)) ** 2
+    constraints: list[om.constraints.Constraint] = [
+        om.LinearConstraint(
+            selector=functools.partial(select_by_loc, loc=list(sds[t : t + 3])),
+            weights=np.array([1.0, -2.0, 1.0]),
+            value=0.0,
+        )
+        for t in range(len(sds) - 2)
+    ]
+    monkeypatch.setattr("skillmodels.chs.estimate.estimate_ml", fake_estimate_ml)
+    with pytest.raises(StopIteration):
+        estimate_chs(
+            MODEL2,
+            model2_data,
+            CHSEstimationOptions(start_params_strategy="none"),
+            start_params=start,
+            constraints=constraints,
+            lower_bounds=pd.Series(-np.inf, index=sds),
+            require_initial_anchors=False,
+        )
+    values = captured["params"].loc[sds, "value"].to_numpy()
+    np.testing.assert_allclose(np.diff(values, n=2), 0.0, atol=1e-12)
