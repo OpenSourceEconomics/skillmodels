@@ -209,6 +209,35 @@ def test_estimate_chs_lower_bounds_can_remove_a_bound(
     assert captured["bounds"].lower.loc[loc].tolist() == [-np.inf]
 
 
+def test_estimate_chs_applies_upper_bounds_and_clips_start(
+    model2_data, anchoring_start_params, monkeypatch
+):
+    """`upper_bounds` replaces the template bounds; the start moves onto them."""
+    captured = {}
+
+    def fake_estimate_ml(**kwargs):
+        captured.update(kwargs)
+        raise StopIteration
+
+    loc = pd.MultiIndex.from_tuples(
+        [("controls", 0, "y1", "x1")], names=anchoring_start_params.index.names
+    )
+    start = anchoring_start_params.copy()
+    start.loc[loc, "value"] = 0.5
+    monkeypatch.setattr("skillmodels.chs.estimate.estimate_ml", fake_estimate_ml)
+    with pytest.raises(StopIteration):
+        estimate_chs(
+            MODEL2,
+            model2_data,
+            CHSEstimationOptions(start_params_strategy="none"),
+            start_params=start,
+            upper_bounds=pd.Series(0.0, index=loc),
+            require_initial_anchors=False,
+        )
+    assert captured["bounds"].upper.loc[loc].tolist() == [0.0]
+    assert captured["params"].loc[loc, "value"].tolist() == [0.0]
+
+
 def test_estimate_chs_moves_start_onto_linear_equalities(
     model2_data, anchoring_start_params, monkeypatch
 ):
