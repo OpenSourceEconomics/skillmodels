@@ -43,7 +43,11 @@ def get_params_index(
     ind_tups += get_loadings_index_tuples(
         factors=labels.latent_factors, update_info=update_info
     )
-    ind_tups += get_meas_sds_index_tuples(update_info=update_info)
+    ind_tups += get_meas_sds_index_tuples(
+        update_info=update_info,
+        mixture_specific=labels.mixture_specific_meas_sds,
+        n_mixtures=dimensions.n_mixtures,
+    )
     ind_tups += get_shock_sds_index_tuples(
         aug_periods=labels.aug_periods,
         factors=labels.latent_factors,
@@ -121,17 +125,26 @@ def get_loadings_index_tuples(
 
 def get_meas_sds_index_tuples(
     update_info: pd.DataFrame,
+    mixture_specific: tuple[str, ...] = (),
+    n_mixtures: int = 1,
 ) -> list[tuple[str, int, str, str]]:
     """Index tuples for meas_sd.
 
     Args:
         update_info: DataFrame with one row per Kalman update needed
             in the likelihood function. See :ref:`update_info`.
+        mixture_specific: Measurements with one SD per mixture component; they get
+            `"mixture_k"` rows instead of the single `"-"` row.
+        n_mixtures: Number of mixture components.
 
     """
     ind_tups = []
     for aug_period, meas in update_info.index:
-        ind_tups.append(("meas_sds", aug_period, meas, "-"))
+        if meas in mixture_specific:
+            for emf in range(n_mixtures):
+                ind_tups.append(("meas_sds", aug_period, meas, f"mixture_{emf}"))
+        else:
+            ind_tups.append(("meas_sds", aug_period, meas, "-"))
     return ind_tups
 
 

@@ -267,8 +267,9 @@ def _simulate_dataset(
         index=update_info.index,
         columns=labels.controls,
     )
+    # One column, or one per mixture component with mixture-specific SDs.
     meas_sds = pd.DataFrame(
-        data=parsed_params.meas_sds.reshape(-1, 1),
+        data=np.asarray(parsed_params.meas_sds).reshape(len(update_info), -1),
         index=update_info.index,
     )
 
@@ -284,7 +285,7 @@ def _simulate_dataset(
         dist_args.append(args)
 
     latent_states = np.zeros((n_aug_periods, n_obs, n_states))  # ty: ignore[invalid-assignment]
-    latent_states[0] = generate_start_states(
+    latent_states[0], components = _draw_start_states(
         rng=rng,
         n_obs=n_obs,
         dimensions=dimensions,
@@ -352,7 +353,7 @@ def _simulate_dataset(
                 controls=control_data[t],
                 loadings=loadings_df.loc[t].to_numpy(),
                 control_params=control_params_df.loc[t].to_numpy(),
-                sds=meas_sds.loc[t].to_numpy().flatten(),
+                sds=_period_sds(meas_sds.loc[t].to_numpy(), components),
                 families=families,
                 lowers=lowers,
                 uppers=uppers,
@@ -497,16 +498,47 @@ def generate_start_states(
         controls: shape (n_obs, n_controls),
 
     """
+    return _draw_start_states(
+        rng=rng,
+        n_obs=n_obs,
+        dimensions=dimensions,
+        dist_args=dist_args,
+        weights=weights,
+    )[0]
+
+
+def _draw_start_states(
+    rng: np.random.Generator,
+    n_obs: int,
+    dimensions: Dimensions,
+    dist_args: list[dict],
+    weights: NDArray[np.floating] | Array,
+) -> tuple[NDArray[np.floating], NDArray[np.integer]]:
+    """Draw initial states; also return each observation's mixture component."""
     n_states = dimensions.n_latent_factors
     if np.size(weights) == 1:
         out = rng.multivariate_normal(size=n_obs, **dist_args[0])
+        helper_array = np.zeros(n_obs, dtype=int)
     else:
         helper_array = rng.choice(np.arange(len(weights)), p=weights, size=n_obs)
         out = np.zeros((n_obs, n_states))
         for i in range(n_obs):
             out[i] = rng.multivariate_normal(**dist_args[helper_array[i]])
 
-    return out
+    return out, helper_array
+
+
+def _period_sds(
+    sds: NDArray[np.floating], components: NDArray[np.integer]
+) -> NDArray[np.floating]:
+    """Return `(n_meas,)` pooled SDs, or `(n_meas, n_obs)` component-specific SDs.
+
+    An observation keeps its initial mixture component throughout, matching the
+    CHS filter, where each component is propagated separately.
+    """
+    if sds.shape[1] == 1:
+        return sds.flatten()
+    return sds[:, components]
 
 
 def measurements_from_states(
@@ -533,7 +565,8 @@ def measurements_from_states(
         loadings: numpy array of size (n_meas, n_states)
         control_params: numpy array of size (n_meas, n_controls)
         sds: numpy array of size (n_meas) with the standard deviations
-            of the measurements. Measurement error is assumed to be independent
+            of the measurements, or (n_meas, n_obs) with one SD per observation
+            (mixture-specific SDs). Measurement error is assumed to be independent
             across measurements.
         families: optional `(n_meas,)` `MeasurementFamily` codes. `None` (the
             default) draws every measurement as Gaussian, byte-identical to the
@@ -550,6 +583,8 @@ def measurements_from_states(
     n_meas = loadings.shape[0]
     n_obs = len(states)
     eta = np.dot(states, loadings.T) + np.dot(controls, control_params.T)
+    if families is None and np.ndim(sds) == 2:
+        families = np.full(n_meas, int(MeasurementFamily.GAUSSIAN))
     if families is None:
         epsilon = rng.multivariate_normal([0] * n_meas, np.diag(sds**2), n_obs)
         return eta + epsilon

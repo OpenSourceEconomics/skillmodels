@@ -256,6 +256,13 @@ def estimate_amn(
 
     """
     _fail_if_non_gaussian_measurements(model_spec)
+    if model_spec.mixture_specific_meas_sds:
+        msg = (
+            "estimate_amn does not support mixture_specific_meas_sds "
+            f"{list(model_spec.mixture_specific_meas_sds)}; it is a CHS-only "
+            "option. Use estimate_chs."
+        )
+        raise NotImplementedError(msg)
     if require_initial_anchors and not for_start_values:
         fail_if_initial_state_unanchored(model_spec, fixed_params, constraints)
         warn_if_overrestricted(model_spec, fixed_params, constraints)

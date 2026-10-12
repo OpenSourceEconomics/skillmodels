@@ -237,6 +237,7 @@ def _get_labels(
         aug_stagemap=tuple(aug_stagemap),
         aug_stages=tuple(sorted(int(v) for v in np.unique(aug_stagemap))),
         aug_stages_to_stages=MappingProxyType(aug_stages_to_stages),
+        mixture_specific_meas_sds=model_spec.mixture_specific_meas_sds,
     )
 
 

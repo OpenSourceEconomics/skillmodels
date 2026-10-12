@@ -211,6 +211,10 @@ class ModelSpec:
     )
     """Per-variable observation model (probit / Tobit / Gaussian). A measurement
     omitted from this mapping is Gaussian, so existing specs are unchanged."""
+    mixture_specific_meas_sds: tuple[str, ...] = ()
+    """Measurements whose error SD differs by mixture component (CHS only, needs
+    `n_mixtures >= 2`). Each gets one `("meas_sds", aug_period, meas, "mixture_k")`
+    params row per component instead of the single `"-"` row."""
 
     def __init__(
         self,
@@ -221,6 +225,7 @@ class ModelSpec:
         anchoring: AnchoringSpec | None = None,
         n_mixtures: int = 1,
         measurement_models: Mapping[str, MeasurementModel] | None = None,
+        mixture_specific_meas_sds: tuple[str, ...] = (),
     ) -> None:
         """Create ModelSpec, wrapping factors dict in MappingProxyType."""
         object.__setattr__(self, "_factors", ensure_containers_are_immutable(factors))
@@ -230,6 +235,7 @@ class ModelSpec:
         object.__setattr__(self, "anchoring", anchoring)
         object.__setattr__(self, "n_mixtures", n_mixtures)
         self._set_measurement_models(measurement_models)
+        self._set_mixture_specific_meas_sds(mixture_specific_meas_sds)
 
     def _set_measurement_models(
         self, measurement_models: Mapping[str, MeasurementModel] | None
@@ -247,6 +253,23 @@ class ModelSpec:
         object.__setattr__(
             self, "measurement_models", ensure_containers_are_immutable(models)
         )
+
+    def _set_mixture_specific_meas_sds(self, names: tuple[str, ...]) -> None:
+        """Validate the mixture-specific measurement-SD names and store."""
+        unknown = sorted(set(names) - self._measurement_names())
+        if unknown:
+            msg = (
+                f"mixture_specific_meas_sds references {unknown}, which is not a "
+                "measurement variable in the model."
+            )
+            raise ValueError(msg)
+        if names and self.n_mixtures < 2:
+            msg = (
+                "mixture_specific_meas_sds requires n_mixtures >= 2, but "
+                f"n_mixtures={self.n_mixtures}."
+            )
+            raise ValueError(msg)
+        object.__setattr__(self, "mixture_specific_meas_sds", tuple(names))
 
     def _measurement_names(self) -> set[str]:
         """Return every measurement-variable name across all factors and periods."""
@@ -333,6 +356,7 @@ class ModelSpec:
             anchoring=anchoring,
             n_mixtures=d.get("n_mixtures", 1),
             measurement_models=measurement_models,
+            mixture_specific_meas_sds=tuple(d.get("mixture_specific_meas_sds", ())),
         )
 
     @property
@@ -351,6 +375,9 @@ class ModelSpec:
             n_mixtures=changes.get("n_mixtures", self.n_mixtures),
             measurement_models=changes.get(
                 "measurement_models", self.measurement_models
+            ),
+            mixture_specific_meas_sds=changes.get(
+                "mixture_specific_meas_sds", self.mixture_specific_meas_sds
             ),
         )
 

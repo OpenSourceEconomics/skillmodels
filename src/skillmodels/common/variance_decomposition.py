@@ -140,6 +140,12 @@ def _compute_variance_decomposition(
 
     # Extract measurement standard deviations
     meas_sds_df = params.loc["meas_sds"].reset_index()
+    if (meas_sds_df["name2"] != "-").any():
+        msg = (
+            "Variance decomposition does not support mixture-specific measurement "
+            "SDs (ModelSpec.mixture_specific_meas_sds)."
+        )
+        raise NotImplementedError(msg)
     meas_sds_df = meas_sds_df.rename(
         columns={"name1": "measurement", "value": "meas_sd", "period": "aug_period"}
     )

@@ -44,7 +44,8 @@ def kalman_update(
             of the pre-update covariance matrix of the state estimates.
         loadings: 1d array of length n_states with factor loadings.
         control_params: 1d array of length n_controls.
-        meas_sd: Standard deviation of the measurement error.
+        meas_sd: Standard deviation of the measurement error; a length
+            n_mixtures array if it differs by mixture component.
         measurements: 1d array of length n_obs with measurements.
             May contain NaNs if no measurement was observed.
         controls: Array of shape (n_obs, n_controls) with data on the

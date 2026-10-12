@@ -104,7 +104,8 @@ def validate_af_model(
     Raise:
         ValueError: If validation fails, with a detailed error message.
         NotImplementedError: If the model declares a control-function correction
-            (`FactorSpec.correction`), which AF does not implement.
+            (`FactorSpec.correction`) or `mixture_specific_meas_sds`, which AF
+            does not implement.
 
     """
     corrected = [
@@ -117,6 +118,13 @@ def validate_af_model(
             "covers only the kappa=0 (exogenous-investment) special case. Use "
             "estimate_chs for the correction, or strip it with "
             "ModelSpec.without_correction()."
+        )
+        raise NotImplementedError(msg)
+    if model_spec.mixture_specific_meas_sds:
+        msg = (
+            "AF estimation does not support mixture_specific_meas_sds "
+            f"{list(model_spec.mixture_specific_meas_sds)}; it is a CHS-only "
+            "option. Use estimate_chs."
         )
         raise NotImplementedError(msg)
 

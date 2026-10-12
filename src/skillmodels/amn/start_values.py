@@ -206,7 +206,9 @@ def _amn_values_on_chs_index(
         category, aug_period, name1, name2 = loc
         calendar = int(aug_periods_to_periods[int(aug_period)])
         src_category = "transition" if category == "kappa" else category
-        src_key = (src_category, calendar, name1, name2)
+        # AMN has pooled SDs only; seed every component of a mixture-specific SD.
+        src_name2 = "-" if category == "meas_sds" else name2
+        src_key = (src_category, calendar, name1, src_name2)
         if src_key in amn_value.index:
             out.loc[loc] = float(amn_value.loc[src_key])
     return out
@@ -547,9 +549,14 @@ def _override_loadings_meas_sds(
         loc_load = ("loadings", aug_period, meas, factor)
         if loc_load in params.index and free.loc[loc_load]:
             params.loc[loc_load, "value"] = float(result.loadings[local_idx])
-        loc_sd = ("meas_sds", aug_period, meas, "-")
-        if loc_sd in params.index and free.loc[loc_sd]:
-            params.loc[loc_sd, "value"] = float(result.meas_sds[local_idx])
+        # The pooled `"-"` row, or every `"mixture_k"` row of a mixture-specific SD.
+        loc_sds = params.index[
+            (params.index.get_level_values("category") == "meas_sds")
+            & (params.index.get_level_values("aug_period") == aug_period)
+            & (params.index.get_level_values("name1") == meas)
+        ]
+        loc_sds = loc_sds[free.loc[loc_sds].to_numpy()]
+        params.loc[loc_sds, "value"] = float(result.meas_sds[local_idx])
 
 
 def _override_initial_cholcovs(

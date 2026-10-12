@@ -314,6 +314,9 @@ def _estimate_amn_for_chs_seeding(
     # each step is cheap, but a seed does not need full convergence, and the
     # cap bounds the cost on a large factor-period block.
     seed_md_options = MappingProxyType({"stopping_maxiter": 500})
+    # AMN has pooled measurement SDs only; `get_amn_start_params` copies each
+    # pooled seed onto every component of a mixture-specific SD.
+    model_spec = model_spec._replace(mixture_specific_meas_sds=())
     try:
         return estimate_amn(
             model_spec=model_spec,

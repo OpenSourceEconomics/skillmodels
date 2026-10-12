@@ -57,6 +57,10 @@ def create_parsing_info(
     )
     controls = _get_positional_selector_from_loc(range_sr=range_sr, loc="controls")
     meas_sds = _get_positional_selector_from_loc(range_sr=range_sr, loc="meas_sds")
+    if labels.mixture_specific_meas_sds:
+        meas_sds = _mixture_specific_meas_sds_selector(
+            range_sr=range_sr, update_info=update_info, labels=labels
+        )
     shock_sds = _get_positional_selector_from_loc(range_sr=range_sr, loc="shock_sds")
 
     # control-function first-stage equation (empty selector for non-CF models).
@@ -134,6 +138,26 @@ def create_parsing_info(
         investment_factor=investment_factor,
         kappa=MappingProxyType(kappa),
     )
+
+
+def _mixture_specific_meas_sds_selector(
+    range_sr: pd.Series, update_info: pd.DataFrame, labels: Labels
+) -> Array:
+    """Return an `(n_updates, n_mixtures)` array of meas_sds positions.
+
+    Pooled measurements repeat their single `"-"` position across components.
+    """
+    n_mixtures = int(
+        (range_sr.index.get_level_values("category") == "mixture_weights").sum()
+    )
+    rows = []
+    for aug_period, meas in update_info.index:
+        if meas in labels.mixture_specific_meas_sds:
+            name2s = [f"mixture_{emf}" for emf in range(n_mixtures)]
+        else:
+            name2s = ["-"] * n_mixtures
+        rows.append([range_sr[("meas_sds", aug_period, meas, n2)] for n2 in name2s])
+    return jnp.array(rows)
 
 
 def _get_positional_selector_from_loc(

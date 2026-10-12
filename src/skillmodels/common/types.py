@@ -153,6 +153,8 @@ class Labels:
     """Map each augmented stage to its original stage."""
     transition_names: tuple[str, ...] = ()
     """Names of the transition functions per factor."""
+    mixture_specific_meas_sds: tuple[str, ...] = ()
+    """Measurements with one measurement-error SD per mixture component."""
 
     @property
     def all_factors(self) -> tuple[str, ...]:
@@ -385,7 +387,8 @@ class ParsingInfo:
     controls: Array | slice
     """Slice for control variable coefficients."""
     meas_sds: Array | slice
-    """Slice for measurement standard deviations."""
+    """Selector for measurement standard deviations. 1d (one SD per update) unless
+    some SDs are mixture-specific; then an `(n_updates, n_mixtures)` index array."""
     shock_sds: Array | slice
     """Slice for shock standard deviations."""
     loadings: LoadingsParsingInfo
@@ -422,7 +425,8 @@ class ParsedParams:
     loadings: Array
     """Factor loading parameters."""
     meas_sds: Array
-    """Measurement standard deviations."""
+    """Measurement standard deviations, `(n_updates,)` or, with mixture-specific
+    SDs, `(n_updates, n_mixtures)`."""
     shock_sds: Array
     """Shock standard deviations."""
     transition: MappingProxyType[str, Array]
