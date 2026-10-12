@@ -40,6 +40,7 @@ from skillmodels.common.constraints import (
     get_constraints,
     project_to_probability_constraints,
 )
+from skillmodels.common.measurement_models import GaussianMeasurement
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.params_index import get_params_index
 from skillmodels.common.parse_params import create_parsing_info
@@ -101,6 +102,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             endogenous factors, we double up the number of periods in order to add
 
     """
+    _fail_if_non_gaussian_measurements(model_spec)
     chs_options = chs_options or CHSEstimationOptions()
     processed_model = process_model(model_spec)
     p_index = get_params_index(
@@ -268,6 +270,27 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         "constraints": constraints,
         "params_template": params_template,
     }
+
+
+def _fail_if_non_gaussian_measurements(model_spec: ModelSpec) -> None:
+    """Reject probit/Tobit measures: the CHS update is a Gaussian Kalman update.
+
+    Such a measure would otherwise be silently estimated as a continuous Gaussian one.
+    """
+    non_gaussian = sorted(
+        name
+        for name, model in model_spec.measurement_models.items()
+        if not isinstance(model, GaussianMeasurement)
+    )
+    if non_gaussian:
+        msg = (
+            f"CHS supports only Gaussian measurements, but {non_gaussian} are "
+            "non-Gaussian (probit/Tobit). The CHS likelihood runs a Gaussian Kalman "
+            "update for every measurement. Declare them Gaussian (a linear "
+            "probability / linear working model) or use estimate_af, which honours "
+            "probit/Tobit families in the initial period."
+        )
+        raise NotImplementedError(msg)
 
 
 def _estimate_amn_for_chs_seeding(
