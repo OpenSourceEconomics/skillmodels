@@ -153,6 +153,11 @@ class Labels:
     """Map each augmented stage to its original stage."""
     transition_names: tuple[str, ...] = ()
     """Names of the transition functions per factor."""
+    missing_observed_factor_moments: MappingProxyType[str, tuple[str, str]] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    """Map an observed factor that may be missing to its `(mean, variance)` data
+    columns, see `ModelSpec.missing_observed_factor_moments`."""
 
     @property
     def all_factors(self) -> tuple[str, ...]:
