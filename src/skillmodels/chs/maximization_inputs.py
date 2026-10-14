@@ -129,8 +129,10 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         purpose="estimation",
     )
 
+    # Possibly-missing observed factors augment the sigma-point input.
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
-        n_states=processed_model.dimensions.n_latent_factors,
+        n_states=processed_model.dimensions.n_latent_factors
+        + len(processed_data["missing_observed_factors"]),
         kappa=chs_options.sigma_points_scale,
     )
 
@@ -151,6 +153,8 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             measurements=processed_data["measurements"],
             controls=processed_data["controls"],
             observed_factors=processed_data["observed_factors"],
+            observed_factor_vars=processed_data["observed_factor_vars"],
+            missing_observed_factors=processed_data["missing_observed_factors"],
             model=processed_model,
             sigma_weights=sigma_weights,
             sigma_scaling_factor=sigma_scaling_factor,
@@ -191,6 +195,9 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
                 measurements=measurements_slice,
                 controls=controls_slice,
                 observed_factors=observed_factors_slice,
+                observed_factor_vars=processed_data["observed_factor_vars"][
+                    :, start:stop, :
+                ],
             )
             start += step
             stop += step
@@ -409,6 +416,8 @@ def _partial_some_log_likelihood(
     measurements: Array,
     controls: Array,
     observed_factors: Array,
+    observed_factor_vars: Array,
+    missing_observed_factors: tuple[str, ...],
     model: ProcessedModel,
     sigma_weights: Array,
     sigma_scaling_factor: Array,
@@ -446,6 +455,9 @@ def _partial_some_log_likelihood(
     # states (cf is a non-linear function of the latent states), so the linear
     # fast-path would silently bypass the cf DAG node. Force the unscented path.
     has_control_function = model.endogenous_factors_info.control_function is not None
+    missing_observed_indices = tuple(
+        model.labels.observed_factors.index(f) for f in missing_observed_factors
+    )
     if is_all_linear(model.transition_info.function_names) and not has_control_function:
         constant_factor_indices = frozenset(
             i
@@ -458,9 +470,14 @@ def _partial_some_log_likelihood(
             latent_factors=model.labels.latent_factors,
             constant_factor_indices=constant_factor_indices,
             n_all_factors=model.dimensions.n_all_factors,
+            missing_observed_indices=missing_observed_indices,
         )
     else:
-        predict_func = functools.partial(kalman_predict, model.transition_info.func)
+        predict_func = functools.partial(
+            kalman_predict,
+            model.transition_info.func,
+            missing_observed_indices=missing_observed_indices,
+        )
 
     return functools.partial(
         fun,
@@ -477,6 +494,7 @@ def _partial_some_log_likelihood(
         is_predict_iteration=is_predict_iteration,
         iteration_to_period=iteration_to_period,
         observed_factors=observed_factors,
+        observed_factor_vars=observed_factor_vars,
     )
 
 

@@ -42,7 +42,13 @@ def process_data(
             observed control variables for the measurement equations.
         observed_factors: Array of shape
             (n_periods, n_obs, n_observed_factors) with data on the observed factors.
-            Only returned if estimation==True
+            Where a factor listed in `labels.missing_observed_factor_moments` is
+            missing, it holds the fill mean.
+        missing_observed_factors: Names of the observed factors with fill moments
+            that are missing somewhere in the data (estimation only; else empty).
+        observed_factor_vars: Array of shape
+            (n_periods, n_obs, len(missing_observed_factors)) with the fill
+            variance where the factor is missing and 0 where it is observed.
 
     """
     df = pre_process_data(df=df, periods=labels.periods)
@@ -63,6 +69,20 @@ def process_data(
         df=df, controls=labels.controls, update_info=update_info
     )
     out["controls"] = _generate_controls_array(df=df, labels=labels, n_obs=n_obs)
+    missing = tuple(
+        f
+        for f in labels.observed_factors
+        if purpose == "estimation"
+        and f in labels.missing_observed_factor_moments
+        and df[f].isna().any()
+    )
+    out["missing_observed_factors"] = missing
+    out["observed_factor_vars"] = _generate_observed_factor_vars_array(
+        df=df, labels=labels, n_obs=n_obs, factors=missing
+    )
+    for factor in missing:
+        mean_col, _ = labels.missing_observed_factor_moments[factor]
+        df[factor] = df[factor].fillna(df[mean_col])
     out["observed_factors"] = _generate_observed_factor_array(
         df=df, labels=labels, n_obs=n_obs
     )
@@ -119,6 +139,9 @@ def _get_period_data_for_endogenous_factors(
     meas = _get_period_measurements(update_info=update_info, aug_period=aug_period)
     controls = labels.controls
     observed = labels.observed_factors
+    moment_cols = [
+        col for cols in labels.missing_observed_factor_moments.values() for col in cols
+    ]
 
     out = df.query(f"period == {period}")[
         [
@@ -126,6 +149,7 @@ def _get_period_data_for_endogenous_factors(
             *meas,
             *controls,
             *observed,
+            *moment_cols,
             "period",
             "__old_id__",
             "__old_period__",
@@ -209,17 +233,45 @@ def _check_data(  # noqa: C901
                     )
 
         for factor in labels.observed_factors:
-            if factor not in period_data.columns:
-                var_report.loc[(aug_period, factor), "problem"] = "Variable is missing"
-            elif period_data[factor].isna().any():
-                var_report.loc[(aug_period, factor), "problem"] = (
-                    "Variable has missings"
-                )
+            moments = (
+                labels.missing_observed_factor_moments.get(factor)
+                if purpose == "estimation"
+                else None
+            )
+            problems = _observed_factor_problems(period_data, factor, moments)
+            for var, problem in problems.items():
+                var_report.loc[(aug_period, var), "problem"] = problem
 
     var_report = var_report.to_string() if len(var_report) > 0 else ""
 
     if var_report:
         raise ValueError(var_report)
+
+
+def _observed_factor_problems(
+    period_data: pd.DataFrame, factor: str, moments: tuple[str, str] | None
+) -> dict[str, str]:
+    """Map variables to problems with an observed factor and its fill moments.
+
+    Without `moments`, any missing value is a problem. With `moments`, missing
+    values need a non-missing fill mean and a non-negative fill variance.
+    """
+    if factor not in period_data.columns:
+        return {factor: "Variable is missing"}
+    missing = period_data[factor].isna()
+    if moments is None:
+        return {factor: "Variable has missings"} if missing.any() else {}
+    absent = [col for col in moments if col not in period_data.columns]
+    if absent:
+        return dict.fromkeys(absent, "Variable is missing")
+    mean, var = (period_data.loc[missing, col] for col in moments)
+    if mean.isna().any() or var.isna().any():
+        return {factor: f"Variable has missings without fill moments {moments}"}
+    if (var < 0).any():
+        return {
+            factor: f"Variable has missings with negative fill variance in {moments[1]}"
+        }
+    return {}
 
 
 def _handle_controls_with_missings(
@@ -279,6 +331,23 @@ def _generate_controls_array(
         arr[aug_period] = df.query(f"aug_period == {aug_period}")[
             list(labels.controls)
         ].to_numpy()
+    return jnp.array(arr, dtype="float32")
+
+
+def _generate_observed_factor_vars_array(
+    df: pd.DataFrame,
+    labels: Labels,
+    n_obs: int,
+    factors: tuple[str, ...],
+) -> Array:
+    arr = np.zeros((len(labels.aug_periods), n_obs, len(factors)))
+    for aug_period in labels.aug_periods:
+        period_data = df.query(f"aug_period == {aug_period}")
+        for k, factor in enumerate(factors):
+            var_col = labels.missing_observed_factor_moments[factor][1]
+            arr[aug_period, :, k] = np.where(
+                period_data[factor].isna(), period_data[var_col], 0.0
+            )
     return jnp.array(arr, dtype="float32")
 
 

@@ -36,6 +36,7 @@ def log_likelihood(
     is_predict_iteration: Array | np.ndarray,
     iteration_to_period: Array | np.ndarray,
     observed_factors: Array | np.ndarray,
+    observed_factor_vars: Array | np.ndarray,
 ) -> dict[str, Any]:
     """Log likelihood of a skill formation model, returning debug data on top.
 
@@ -65,6 +66,9 @@ def log_likelihood(
         iteration_to_period: Array mapping iteration index to period.
         observed_factors: Array of shape (n_periods, n_obs, n_observed_factors) with
             data on the observed factors.
+        observed_factor_vars: Array of shape (n_periods, n_obs, n_missing) with
+            the variance of each possibly-missing observed factor (0 where it is
+            observed).
 
     Returns:
         All data relevant for debugging, e.g. the log likelihood contribution of
@@ -104,6 +108,7 @@ def log_likelihood(
         sigma_weights=sigma_weights,
         predict_func=predict_func,
         observed_factors=observed_factors,
+        observed_factor_vars=observed_factor_vars,
     )
 
     static_out = jax.lax.scan(_body, carry, loop_args)[1]
@@ -156,6 +161,7 @@ def _scan_body(
     sigma_weights: Array,
     predict_func: Callable[..., tuple[Array, Array]],
     observed_factors: Array | np.ndarray,
+    observed_factor_vars: Array | np.ndarray,
 ) -> tuple[dict[str, Array], dict[str, Any]]:
     # ==================================================================================
     # create arguments needed for update
@@ -201,6 +207,7 @@ def _scan_body(
         ],
         "anchoring_constants": parsed_params.anchoring_constants[jnp.array([t, t + 1])],
         "observed_factors": observed_factors[t],
+        "observed_factor_vars": observed_factor_vars[t],
     }
 
     fixed_kwargs = {"predict_func": predict_func}
