@@ -103,7 +103,9 @@ def test_splitting_does_not_change_gradient(model2, model2_data) -> None:
         model2, model2_data, chs_options=MODEL2_CHS_OPTIONS
     )
     inputs_split = get_maximization_inputs(
-        model2, model2_data, 13, chs_options=MODEL2_CHS_OPTIONS
+        model2,
+        model2_data,
+        chs_options=replace(MODEL2_CHS_OPTIONS, split_dataset=13),
     )
 
     params = inputs["params_template"]

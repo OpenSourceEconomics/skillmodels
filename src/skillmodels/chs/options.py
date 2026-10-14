@@ -20,6 +20,10 @@ class CHSEstimationOptions:
     """Distance for bounds. Zeroed out if `robust_bounds` is False."""
     sigma_points_scale: float = 2
     """Scaling factor for sigma points in unscented transform."""
+    split_dataset: int = 1
+    """Number of slices of the individuals over which the gradient is accumulated.
+
+    More slices lower the peak memory of the gradient; the result is the same."""
     clipping_lower_bound: float = -1e30
     """Lower bound for soft clipping."""
     clipping_upper_bound: float | None = None

@@ -55,7 +55,6 @@ jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 def get_maximization_inputs(  # noqa: C901, PLR0915
     model_spec: ModelSpec,
     data: pd.DataFrame,
-    split_dataset: int = 1,
     *,
     chs_options: CHSEstimationOptions,
     fixed_params: pd.DataFrame | None = None,
@@ -65,8 +64,6 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     Args:
         model_spec: The model specification. See: :ref:`model_specs`
         data: Dataset in long format.
-        split_dataset: Controls into how many slices to split the dataset
-            during the gradient computation.
         chs_options: CHS-specific tuning parameters. Its `start_params_strategy`
             decides how the `params_template` values are seeded; pass
             `CHSEstimationOptions(start_params_strategy="none")` when only the
@@ -183,6 +180,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         n_obs = processed_data["measurements"].shape[1]
         _grad = jnp.zeros_like(params_vec)
         start = 0
+        split_dataset = chs_options.split_dataset
         stop = int(n_obs / split_dataset)
         step = int(n_obs / split_dataset)
         for i in range(split_dataset):
