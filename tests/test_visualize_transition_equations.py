@@ -35,7 +35,7 @@ def test_visualize_transition_equations_runs() -> None:
     params["value"] = params["value"].fillna(0)
 
     states = get_individual_states_from_params(
-        model_spec=model, data=data, params=params
+        model_spec=model, data=data, params=params, chs_options=MODEL2_CHS_OPTIONS
     )["anchored_states"]["states"]
 
     subplots = get_transition_plots(
@@ -143,7 +143,10 @@ def test_get_transition_plots_runs_for_correction_model() -> None:
     assert not template["value"].isna().any()
 
     states = get_individual_states_from_params(
-        model_spec=model, data=panel, params=template
+        model_spec=model,
+        data=panel,
+        params=template,
+        chs_options=CHSEstimationOptions(),
     )["anchored_states"]["states"]
 
     plots = get_transition_plots(

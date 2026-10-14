@@ -10,6 +10,7 @@ term that did not fit AF/AMN). Two entry points:
   result machinery, so there is no raw-params path for them).
 """
 
+from dataclasses import replace
 from typing import Any
 
 import pandas as pd
@@ -23,6 +24,7 @@ from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.af.types import AFEstimationResult
 from skillmodels.amn.types import AMNEstimationResult
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
+from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.chs.types import CHSEstimationResult
 from skillmodels.common.anchoring import anchor_states_df
 from skillmodels.common.model_spec import ModelSpec
@@ -34,6 +36,8 @@ from skillmodels.common.state_ranges import create_state_ranges
 def get_individual_states(
     data: pd.DataFrame,
     result: CHSEstimationResult | AFEstimationResult | AMNEstimationResult,
+    *,
+    chs_options: CHSEstimationOptions | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Compute per-individual latent state estimates from a fitted result.
 
@@ -47,6 +51,9 @@ def get_individual_states(
         data: Dataset in long format with MultiIndex (id, period).
         result: A `CHSEstimationResult`, `AFEstimationResult`, or
             `AMNEstimationResult`.
+        chs_options: The options the CHS result was estimated with, so the
+            filter uses the same likelihood settings. Required for a
+            `CHSEstimationResult`; unused for AF and AMN.
 
     Return:
         Nested dict. The return shape is **asymmetric** across estimators:
@@ -78,10 +85,17 @@ def get_individual_states(
             data=data,
         )
 
+    if chs_options is None:
+        msg = (
+            "get_individual_states needs `chs_options` for a CHSEstimationResult: "
+            "pass the CHSEstimationOptions used for the estimation."
+        )
+        raise TypeError(msg)
     return get_individual_states_from_params(
         model_spec=result.model_spec,
         data=data,
         params=result.params,
+        chs_options=chs_options,
     )
 
 
@@ -90,6 +104,8 @@ def get_individual_states_from_params(
     model_spec: ModelSpec,
     data: pd.DataFrame,
     params: pd.DataFrame,
+    *,
+    chs_options: CHSEstimationOptions,
 ) -> dict[str, dict[str, Any]]:
     """Compute CHS filtered states directly from raw parameters.
 
@@ -102,13 +118,20 @@ def get_individual_states_from_params(
         model_spec: Model specification.
         data: Dataset in long format with MultiIndex (id, period).
         params: Estimated parameter DataFrame (standard 4-level MultiIndex).
+        chs_options: The options used for the estimation, so the filter uses the
+            same likelihood settings (e.g. the sigma-point scale). Its
+            `start_params_strategy` is ignored: no start values are seeded.
 
     Return:
         Dict with both `"anchored_states"` and `"unanchored_states"`, each
         `{"states": DataFrame, "state_ranges": ...}`.
 
     """
-    max_inputs = get_maximization_inputs(model_spec=model_spec, data=data)
+    max_inputs = get_maximization_inputs(
+        model_spec=model_spec,
+        data=data,
+        chs_options=replace(chs_options, start_params_strategy="none"),
+    )
     params = params.loc[max_inputs["params_template"].index]
     debug_loglike = max_inputs["debug_loglike"]
     debug_data = debug_loglike(params)
