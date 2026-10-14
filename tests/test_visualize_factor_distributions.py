@@ -31,7 +31,7 @@ def _load_model2_filtered() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     params = params.loc[max_inputs["params_template"].index]
 
     states = get_individual_states_from_params(
-        model_spec=MODEL2, data=data, params=params
+        model_spec=MODEL2, data=data, params=params, chs_options=MODEL2_CHS_OPTIONS
     )["anchored_states"]["states"]
     return data, params, states
 

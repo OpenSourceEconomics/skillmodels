@@ -57,7 +57,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     data: pd.DataFrame,
     split_dataset: int = 1,
     *,
-    chs_options: CHSEstimationOptions | None = None,
+    chs_options: CHSEstimationOptions,
     fixed_params: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Create inputs for optimagic's maximize function.
@@ -67,8 +67,11 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         data: Dataset in long format.
         split_dataset: Controls into how many slices to split the dataset
             during the gradient computation.
-        chs_options: CHS-specific tuning parameters. Defaults to
-            ``CHSEstimationOptions()`` when not provided.
+        chs_options: CHS-specific tuning parameters. Its `start_params_strategy`
+            decides how the `params_template` values are seeded; pass
+            `CHSEstimationOptions(start_params_strategy="none")` when only the
+            likelihood functions or the bare template are needed, since the
+            `"amn"` strategy runs a full AMN estimation.
         fixed_params: Optional DataFrame with a ``"value"`` column pinning
             specified parameters to fixed values. Uses the same 4-level
             MultiIndex as the returned ``params_template``. Each matching
@@ -103,7 +106,6 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
 
     """
     _fail_if_non_gaussian_measurements(model_spec)
-    chs_options = chs_options or CHSEstimationOptions()
     processed_model = process_model(model_spec)
     p_index = get_params_index(
         update_info=processed_model.update_info,
