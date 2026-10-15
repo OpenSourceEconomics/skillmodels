@@ -546,14 +546,19 @@ def _get_state_ranges(
     all_factors: tuple[str, ...],
     quantile_cutoff: float | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """Create state ranges if none is given."""
-    if state_ranges is None:
-        state_ranges = create_state_ranges(
+    """Complete the given state ranges with those of the other factors in the data."""
+    given = state_ranges or {}
+    missing = [factor for factor in all_factors if factor not in given]
+    if not missing:
+        return given
+    return {
+        **given,
+        **create_state_ranges(
             filtered_states=states_data,
-            factors=list(all_factors),
+            factors=missing,
             quantile_cutoff=quantile_cutoff,
-        )
-    return state_ranges
+        ),
+    }
 
 
 def _get_parsed_params(

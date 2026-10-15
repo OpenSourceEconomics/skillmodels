@@ -11,6 +11,7 @@ from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.individual_states import get_individual_states_from_params
 from skillmodels.common.visualize_transition_equations import (
+    _get_state_ranges,
     combine_transition_plots,
     get_transition_plots,
 )
@@ -159,3 +160,16 @@ def test_get_transition_plots_runs_for_correction_model() -> None:
     )
     # A target factor's plot exists -> its cf-corrected transition evaluated.
     assert ("inv", "fac1") in plots
+
+
+def test_get_state_ranges_adds_factors_missing_from_given_ranges() -> None:
+    # Callers pass ranges of the latent factors; observed factors are inputs too.
+    states = pd.DataFrame(
+        {"aug_period": [0, 0, 1, 1], "fac1": [0.0, 1.0, 2.0, 3.0], "obs": [5, 7, 6, 9]}
+    )
+    given = {"fac1": pd.DataFrame({"minimum": [-1.0], "maximum": [1.0]})}
+    ranges = _get_state_ranges(
+        state_ranges=given, states_data=states, all_factors=("fac1", "obs")
+    )
+    assert ranges["fac1"] is given["fac1"]
+    assert ranges["obs"]["maximum"].tolist() == [7, 9]
