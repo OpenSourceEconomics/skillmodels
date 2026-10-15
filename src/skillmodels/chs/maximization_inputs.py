@@ -128,6 +128,22 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         purpose="estimation",
     )
 
+    # A physical observed input is repeated in both endogenous half-steps.
+    # Marginalizing it separately in each half drops its posterior/cross-covariance.
+    # Until it is carried jointly, reject uncertain inputs in prediction periods.
+    # The final two augmented rows have no outgoing transition.
+    if processed_model.endogenous_factors_info.has_endogenous_factors and np.any(
+        np.asarray(processed_data["observed_factor_vars"][:-2]) > 0
+    ):
+        msg = (
+            "CHS endogenous half-steps require a "
+            "persistent joint missing-observed-factor state for "
+            "positive-variance missing inputs. "
+            "This combination is not yet supported; zero-variance fills and "
+            "complete observed factors remain supported."
+        )
+        raise NotImplementedError(msg)
+
     # Possibly-missing observed factors augment the sigma-point input.
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
         n_states=processed_model.dimensions.n_latent_factors

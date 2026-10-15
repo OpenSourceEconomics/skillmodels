@@ -220,6 +220,82 @@ def test_loglike_without_missings_matches_baseline(transition) -> None:
     assert_allclose(loglike, BASELINE_LOGLIKE[transition], rtol=1e-12)
 
 
+def _endogenous_model(moments: dict | None) -> ModelSpec:
+    """Endogenous investment `inv` and state `s` share the observed inputs."""
+    return ModelSpec(
+        factors={
+            "s": FactorSpec(
+                measurements=(("y",), ("y",)), transition_function="linear"
+            ),
+            "inv": FactorSpec(
+                measurements=(("i",), ()),
+                is_endogenous=True,
+                transition_function="linear",
+            ),
+        },
+        observed_factors=("x", "z"),
+        missing_observed_factor_moments=moments,
+    )
+
+
+def _endogenous_data(variance: float | None = None) -> pd.DataFrame:
+    idx = pd.MultiIndex.from_product([[0, 1], [0, 1]], names=["id", "period"])
+    data = pd.DataFrame(
+        {"y": [-1.0, 0.0, 1.0, 2.0], "i": np.nan, "x": 0.0, "z": 0.0}, index=idx
+    )
+    data[["m", "v"]] = 0.0
+    if variance is not None:
+        data.loc[(0, 0), ["x", "v"]] = [np.nan, variance]
+    return data
+
+
+def _endogenous_loglike(model: ModelSpec, data: pd.DataFrame) -> float:
+    inputs = get_maximization_inputs(model, data, chs_options=OPTIONS)
+    params = inputs["params_template"].copy()
+    params["value"] = np.where(
+        params.index.get_level_values("category").isin(
+            ["meas_sds", "shock_sds", "loadings"]
+        ),
+        0.5,
+        0.1,
+    )
+    for idx in params.query("category == 'initial_cholcovs'").index:
+        row, col = idx[3].split("-")
+        params.loc[idx, "value"] = float(row == col)
+    return float(inputs["loglike"](params))
+
+
+@pytest.mark.parametrize(
+    "moments",
+    [
+        {"x": ("m", "v"), "z": ("m", "v")},
+        {"x": ("z", "v"), "z": ("m", "v")},
+    ],
+    ids=["shared_pair", "moment_is_observed_factor"],
+)
+def test_moment_columns_shared_or_aliased_leave_loglike_unchanged(moments) -> None:
+    """Moment columns may be shared across factors or alias a selected column."""
+    data = _endogenous_data()
+    plain = _endogenous_loglike(_endogenous_model(None), data)
+    declared = _endogenous_loglike(_endogenous_model(moments), data)
+    assert_allclose(declared, plain, rtol=0, atol=1e-12)
+
+
+def test_endogenous_model_rejects_uncertain_missing_input() -> None:
+    """Both half-steps would need the input's joint posterior, which is not carried."""
+    model = _endogenous_model({"x": ("m", "v")})
+    with pytest.raises(NotImplementedError, match="joint missing-observed-factor"):
+        get_maximization_inputs(model, _endogenous_data(1.0), chs_options=OPTIONS)
+
+
+def test_endogenous_model_plugs_in_zero_variance_fill() -> None:
+    """A zero-variance fill acts like observing the fill mean."""
+    model = _endogenous_model({"x": ("m", "v")})
+    filled = _endogenous_loglike(model, _endogenous_data(0.0))
+    plugged_in = _endogenous_loglike(model, _endogenous_data())
+    assert_allclose(filled, plugged_in, rtol=0, atol=1e-12)
+
+
 def test_moments_where_factor_is_observed_are_ignored() -> None:
     """Fill moments only matter in cells where the observed factor is missing."""
     data = _data()
@@ -297,7 +373,8 @@ def _predict_inputs():
             chols[i, k] = np.linalg.cholesky(covs[i, k]).T
     # Means are already substituted where the factor is missing.
     observed = rng.normal(size=(n_obs, 2))
-    obs_vars = np.array([[0.7, 0.0], [0.4, 1.3], [0.0, 0.0]])
+    # float32-representable variances with irrational roots.
+    obs_vars = np.array([[0.75, 0.0], [0.375, 1.25], [0.0, 0.0]])
     f_obs = np.array([[0.9, -0.6], [0.5, 0.8]])
     f_lat = np.array([[0.7, 0.2], [-0.3, 0.6]])
     const = np.array([0.1, -0.2])
@@ -348,7 +425,10 @@ def _linear_trans_coeffs(inp):
     }
 
 
-def test_linear_predict_integrates_out_missing_observed_factors() -> None:
+@pytest.mark.parametrize("variance_dtype", [jnp.float64, jnp.float32])
+def test_linear_predict_integrates_out_missing_observed_factors(
+    variance_dtype,
+) -> None:
     inp = _predict_inputs()
     exp_means, exp_covs = _analytic_prediction(inp)
     means, chols = linear_kalman_predict(
@@ -362,7 +442,7 @@ def test_linear_predict_integrates_out_missing_observed_factors() -> None:
         jnp.array(inp["scaling"]),
         jnp.array(inp["constants"]),
         jnp.array(inp["observed"]),
-        observed_factor_vars=jnp.array(inp["obs_vars"]),
+        observed_factor_vars=jnp.array(inp["obs_vars"], dtype=variance_dtype),
         latent_factors=LATENT,
         constant_factor_indices=frozenset(),
         n_all_factors=4,
@@ -377,7 +457,10 @@ def _linear_transition(params, states):
     return jnp.column_stack([states @ params[f][:-1] + params[f][-1] for f in LATENT])
 
 
-def test_unscented_predict_integrates_out_missing_observed_factors() -> None:
+@pytest.mark.parametrize("variance_dtype", [jnp.float64, jnp.float32])
+def test_unscented_predict_integrates_out_missing_observed_factors(
+    variance_dtype,
+) -> None:
     inp = _predict_inputs()
     exp_means, exp_covs = _analytic_prediction(inp)
     scaling_factor, weights = calculate_sigma_scaling_factor_and_weights(4, 2)
@@ -394,7 +477,7 @@ def test_unscented_predict_integrates_out_missing_observed_factors() -> None:
         jnp.array(inp["scaling"]),
         jnp.array(inp["constants"]),
         jnp.array(inp["observed"]),
-        observed_factor_vars=jnp.array(inp["obs_vars"]),
+        observed_factor_vars=jnp.array(inp["obs_vars"], dtype=variance_dtype),
         missing_observed_indices=(0, 1),
     )
     covs = np.einsum("nkja,nkjb->nkab", chols, chols)
