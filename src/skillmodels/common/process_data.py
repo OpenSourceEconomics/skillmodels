@@ -143,18 +143,23 @@ def _get_period_data_for_endogenous_factors(
         col for cols in labels.missing_observed_factor_moments.values() for col in cols
     ]
 
-    out = df.query(f"period == {period}")[
-        [
-            "id",
-            *meas,
-            *controls,
-            *observed,
-            *moment_cols,
-            "period",
-            "__old_id__",
-            "__old_period__",
-        ]
-    ]
+    # Several factor mappings may share a physical moment column, or reuse a
+    # column already selected above. Preserve its first position, not duplicates.
+    columns = list(
+        dict.fromkeys(
+            [
+                "id",
+                *meas,
+                *controls,
+                *observed,
+                *moment_cols,
+                "period",
+                "__old_id__",
+                "__old_period__",
+            ]
+        )
+    )
+    out = df.query(f"period == {period}")[columns]
     out["aug_period"] = aug_period
     return out
 

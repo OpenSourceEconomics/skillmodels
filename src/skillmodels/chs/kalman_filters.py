@@ -406,7 +406,10 @@ def linear_kalman_predict(
         # Row j is sqrt(v_j) * B[:, j], so the rows add B diag(v) B' to the cov.
         b_missing = f_mat[:, n_latent + jnp.array(missing_observed_indices)]
         b_missing = b_missing / s_out[:, jnp.newaxis]  # (n_latent, n_missing)
-        rows = jnp.sqrt(observed_factor_vars)[..., jnp.newaxis] * b_missing.T
+        # Promote before the root: loader moments are float32, while the
+        # covariance factor can be float64. A later cast cannot undo root rounding.
+        missing_sds = jnp.sqrt(observed_factor_vars.astype(chol_g.dtype))
+        rows = missing_sds[..., jnp.newaxis] * b_missing.T
         blocks.append(
             jnp.broadcast_to(rows[:, jnp.newaxis], (n_obs, n_mix, *b_missing.T.shape))
         )
@@ -560,7 +563,8 @@ def _augment_by_missing_observed_factors(
         [states, jnp.broadcast_to(means[:, None], (n_obs, n_mixtures, n_missing))],
         axis=-1,
     )
-    sds = jnp.sqrt(observed_factor_vars)  # (n_obs, n_missing)
+    # Preserve the covariance-factor precision during the root, not just scatter.
+    sds = jnp.sqrt(observed_factor_vars.astype(upper_chols.dtype))
     aug_chols = jnp.zeros((n_obs, n_mixtures, n_aug, n_aug), dtype=upper_chols.dtype)
     aug_chols = aug_chols.at[..., :n_latent, :n_latent].set(upper_chols)
     diag = jnp.arange(n_latent, n_aug)

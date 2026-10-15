@@ -223,7 +223,12 @@ class ModelSpec:
     An observed factor not listed here must never be missing. Only the CHS
     likelihood (and the filtered states built on it) integrates missing values
     out; simulation and transition plots still require complete observed
-    factors."""
+    factors. In CHS models with endogenous factors, positive-variance missing
+    inputs in a physical period with an outgoing transition are not yet
+    supported: both half-steps would need to carry the same missing input's
+    joint posterior. Such inputs raise `NotImplementedError`; zero-variance
+    fills, complete inputs, and terminal-only missing inputs remain supported.
+    """
 
     def __init__(
         self,
