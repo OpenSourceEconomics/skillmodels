@@ -365,10 +365,11 @@ def bivariate_density_contours(
                     factors=pair,
                     n_points=n_points,
                 )
+                # `z[i, j]` is the density at `(x[i], y[j])`; plotly reads rows as y.
                 contour = go.Contour(
                     x=x[:, 0],
                     y=y[0, :],
-                    z=z,
+                    z=z.T,
                     line={"color": getattr(px.colors.qualitative, lines_colorscale)[i]},
                 )
                 fig.add_trace(contour)
