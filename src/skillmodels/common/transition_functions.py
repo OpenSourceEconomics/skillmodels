@@ -473,6 +473,65 @@ def identity_constraints_stable_translog(
     )
 
 
+def asymmetric_translog(states: Array, params: Array) -> Array:
+    """Translog with separate own-square curvature above and below a knot per factor.
+
+    f = c + Σ_j β_j x_j + Σ_j γ⁺_j max(x_j − κ_j, 0)² + Σ_j γ⁻_j min(x_j − κ_j, 0)²
+        + Σ_{a<b} δ_ab x_a x_b.
+
+    Both one-sided squares are C¹ in x and κ. With γ⁺ = γ⁻ = γ it is a translog whose
+    linear and constant terms are shifted by −2γκ and γκ²; with κ = 0 as well it is
+    exactly `translog`. The knots κ are parameters (estimated unless fixed). No
+    clipping: check the fixed points of estimated laws before iterating them.
+
+    Parameter layout: linear, squares above, squares below, knots, interactions,
+    constant (see `params_asymmetric_translog`).
+
+    """  # noqa: RUF002
+    nfac = len(states)
+    constant = params[-1]
+    lin_beta = params[:nfac]
+    above_beta = params[nfac : 2 * nfac]
+    below_beta = params[2 * nfac : 3 * nfac]
+    knots = params[3 * nfac : 4 * nfac]
+    inter_beta = params[4 * nfac : -1]
+
+    d = states - knots
+    res = jnp.dot(states, lin_beta)
+    res += jnp.dot(jnp.maximum(d, 0.0) ** 2, above_beta)
+    res += jnp.dot(jnp.minimum(d, 0.0) ** 2, below_beta)
+    for p, (a, b) in zip(inter_beta, combinations(range(nfac), 2), strict=False):
+        res += p * states[a] * states[b]
+    res += constant
+    return res
+
+
+def params_asymmetric_translog(factors: tuple[str, ...]) -> list[str]:
+    """Parameter names for asymmetric_translog."""
+    return (
+        list(factors)
+        + [f"{factor} ** 2 (above)" for factor in factors]
+        + [f"{factor} ** 2 (below)" for factor in factors]
+        + [f"{factor} knot" for factor in factors]
+        + [f"{a} * {b}" for a, b in combinations(factors, 2)]
+        + ["constant"]
+    )
+
+
+def identity_constraints_asymmetric_translog(
+    factor: str,
+    aug_period: int,
+    all_factors: tuple[str, ...],
+) -> list[FixedConstraintWithValue]:
+    """Identity constraints for asymmetric_translog: own linear 1, all else 0."""
+    constraints: list[FixedConstraintWithValue] = []
+    for regressor in params_asymmetric_translog(all_factors):
+        val = 1.0 if factor == regressor else 0.0
+        loc = ("transition", aug_period, factor, regressor)
+        constraints.append(FixedConstraintWithValue(loc=loc, value=val))
+    return constraints
+
+
 def linear_and_squares(states: Array, params: Array) -> Array:
     """linear_and_squares transition function."""
     nfac = len(states)
