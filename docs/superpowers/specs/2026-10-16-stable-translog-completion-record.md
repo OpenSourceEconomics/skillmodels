@@ -194,3 +194,77 @@ added. Source files: `src/skillmodels/common/transition_functions.py` (+92),
 ## Remaining blocker
 
 `none`
+
+## Round 1 closure addendum (2026-10-16, after the reviewer's round-1 reply)
+
+Reviewer verdict in round 1: `potentially_serious` / `implementation_required`; F1
+verified fixed; F2 numerical repair verified with the resource comparison B2 (U2)
+outstanding; F3 moderate, nonblocking, with the endogenous same-law gradient check and the
+sigma-weighted moment reconstruction missing and design §3 item 3 overclaiming.
+
+### R2 / F2: resource evidence B2 (U2)
+
+- Strategy: ran the reviewer's RT3 (`benchmark_stable_translog.py`, copied unchanged to
+  the scratchpad and invoked from the project root) in the supported environment.
+  Command: `zsh -ic "cap pixi run -e tests-cpu python <scratchpad>/rt3/benchmark_stable_translog.py --output docs/superpowers/specs/2026-10-16-stable-translog-native-resource-comparison.json"`.
+  Exit 0; JSON plus four worker logs next to this document. Environment: hmg-office,
+  Python 3.14.6, JAX 0.10.2, CPU, x64, git head c2db3e9; `translog` source unchanged.
+- Observed (first call incl. compile / warm per call / worker peak RSS):
+  three_factor_toy translog 0.099 s / 6.8 µs / 0.386 GiB, stable_translog 0.099 s /
+  11.3 µs / 0.394 GiB (warm ratio 1.66, RSS ratio 1.02); run_e_one_factor translog
+  0.026 s / 6.5 µs / 0.367 GiB, stable_translog 0.061 s / 6.8 µs / 0.381 GiB (warm ratio
+  1.05, RSS ratio 1.04).
+- Assessment against the declared triggers: the contract's `warm_seconds` metric is the
+  wall time of `tests/test_transition_functions.py` in a fresh process, and the 10 %
+  triggers compare base and head on that metric; that comparison (5.27 s vs 5.24 s,
+  0.497 vs 0.498 GiB) is inside the triggers and is unchanged. The kernel microbenchmark
+  is a supplemental measurement on a 9-row vmap where one call costs about 7 µs, so the
+  4.5 µs difference is the cost of the extra elementwise operations plus dispatch, not a
+  workload regression. To show the workload-level effect, the CHS likelihood-and-gradient
+  of the estimation fixture was timed for both laws in fresh processes
+  (`2026-10-16-stable-translog-native-loglike-timing.json`, script kept at
+  `stable-translog-audit/time_loglike.py`): translog 2.75 / 2.63 ms per warm call,
+  stable_translog 1.85 / 2.51 ms; the within-law spread exceeds the between-law
+  difference; peak RSS 0.59 vs 0.60 GiB. No regression at the 10 % trigger on the declared
+  metric or on the workload. The kernel ratio is reported, not waived; if the maintainer
+  regards the microbenchmark as a trigger metric, a scoped decision is required.
+
+### R3 / F3: promised acceptance scope completed
+
+- `tests/test_stable_translog_estimation.py` now contains, in addition to the
+  missing-observed fixture tests: `REFERENCE_ENDOGENOUS`, a registered original-formula
+  callable for the endogenous fixture's factors (s, inv, x, z);
+  `test_endogenous_contributions_and_gradient_match_same_law_reference` (per-observation
+  contributions at 1e-10 and gradient at rtol 1e-8 against the reference, margin > 1e-8
+  from translog; the carry-forward substep of `s` is written explicitly as identity/zero
+  for every law, since a custom callable has no `identity_constraints_*` hook); and
+  `test_unscented_predict_moments_equal_sigma_weighted_reference_law`, which pushes the
+  fixture's own sigma points (`_calculate_sigma_points`) and Julier weights through an
+  independent NumPy evaluation of the clipped law, forms the weighted mean and covariance
+  plus the shock variance by hand, and compares with `kalman_predict` for
+  `stable_translog` at rtol 1e-10 (3 persons × 2 mixtures, random coefficients, seed 1).
+- Design §3 item 3 updated to state exactly this coverage and to name the mutant logs.
+- Mutant transcripts (exact commands and output in the logs):
+  `2026-10-16-stable-translog-mutant-translog-alias.log` (g = states inside
+  `stable_translog`): 23 failed, 12 passed, exit 1; every CHS/predict test and every
+  dispatch test fails numerically. `2026-10-16-stable-translog-mutant-scale-2.5.log`
+  (default scale 2.5): 11 failed, 18 passed, exit 1; the at-2 budget test fails
+  (15.77 % > 10 %) along with the knee/tail and dispatch value tests. Source restored
+  after each mutant (`git diff src/` empty).
+
+### Execution record
+
+- Targeted suite after the changes:
+  `2026-10-16-stable-translog-native-closure-round1.log`: 61 passed, 32 warnings in
+  45.44 s, exit 0 (two new tests: 5.99 s and 2.44 s).
+- `prek run` on the changed files: clean (ruff auto-fixed one import order).
+- No change to `src/`; `translog` and `stable_translog` sources are those audited in
+  round 1.
+
+### Finding dispositions after this addendum
+
+F1 `verified_fixed` (unchanged). F2 `verified_fixed`: numerical repair verified by the
+reviewer; B2 supplied natively with the reviewer's own RT3 plus a workload-level timing.
+F3 `verified_fixed`: the promised endogenous gradient and sigma-moment checks exist and
+pass; the design text matches the tests. Remaining blocker: none, subject to the
+maintainer's view on the kernel microbenchmark ratio noted under R2.

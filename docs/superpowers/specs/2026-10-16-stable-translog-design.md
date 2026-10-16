@@ -214,7 +214,11 @@ In scope:
    return the clipped law, not translog. `tests/test_stable_translog_estimation.py`: CHS
    likelihood contributions and gradients equal those of an independent same-law
    registered callable on a fixture with missing observed factors and on the endogenous
-   carry-forward fixture, and differ from translog by a numerical margin.
+   carry-forward fixture, and differ from translog by a numerical margin; the
+   unscented predict step's moments for `stable_translog` equal the sigma-weighted mean
+   and covariance of an independent NumPy evaluation of the clipped law on the fixture's
+   own sigma points and weights. Mutant transcripts (translog alias; default scale 2.5)
+   are kept as `2026-10-16-stable-translog-mutant-*.log` next to this document.
 4. Documentation section in `docs/reference_guides/transition_functions.md` with the
    formula, the boundedness statement, the uniqueness caveat and the default values.
 
