@@ -1,0 +1,37 @@
+[
+  {
+    "ref": "94aa213",
+    "target": "tests/test_transition_functions.py",
+    "wall_seconds": 5.27,
+    "ru_maxrss_children_gib": 0.497,
+    "returncode": 0,
+    "summary": "25 passed, 2 warnings in 2.23s",
+    "measurement": "fresh process, zero warmups, single repetition"
+  },
+  {
+    "ref": "671f596",
+    "target": "tests/test_transition_functions.py",
+    "wall_seconds": 5.24,
+    "ru_maxrss_children_gib": 0.498,
+    "returncode": 0,
+    "summary": "26 passed, 2 warnings in 2.26s",
+    "measurement": "fresh process, zero warmups, single repetition"
+  },
+  {
+    "ref": "671f596",
+    "target": "tests -m 'not long_running' -n 2 (full suite, Task 5)",
+    "command": "zsh -ic \"cap /usr/bin/time -v pixi run -e tests-cpu pytest tests -m 'not long_running' -v -p no:cacheprovider -n 2 --durations=20\"",
+    "wall_seconds": 1185.36,
+    "pytest_session_seconds": 1182.07,
+    "max_rss_gib": 6.237,
+    "max_rss_source": "/usr/bin/time -v, largest single process",
+    "returncode": 0,
+    "summary": "871 passed, 282 warnings in 1182.07s",
+    "measurement": "fresh process, zero warmups, single repetition",
+    "host": "hmg-home",
+    "python": "3.14.6",
+    "jax": "0.10.2",
+    "dtype": "float64 (enabled by skillmodels at import)",
+    "budget_note": "exceeds full-CI budget of 900 s; dominated by pre-existing tests/test_chs_estimate.py (250.8 s, 233.3 s, 233.0 s); no base full-suite run for comparison"
+  }
+]
