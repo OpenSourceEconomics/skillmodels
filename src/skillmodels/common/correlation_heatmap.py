@@ -411,6 +411,8 @@ def _get_measurement_data_for_single_period(
         )["variable"].to_list()
     for fac in observed_factors:
         measurements.append(fac)
+    # A measurement that loads on several factors is one column.
+    measurements = list(dict.fromkeys(measurements))
     return data.query(f"{update_info_by_period.index.names[0]}=={period}")[measurements]
 
 
