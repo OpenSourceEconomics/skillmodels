@@ -12,6 +12,7 @@ from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.individual_states import get_individual_states_from_params
 from skillmodels.common.visualize_transition_equations import (
     _get_state_ranges,
+    _prepare_data_for_one_plot_average_2d,
     combine_transition_plots,
     get_transition_plots,
 )
@@ -173,3 +174,28 @@ def test_get_state_ranges_adds_factors_missing_from_given_ranges() -> None:
     )
     assert ranges["fac1"] is given["fac1"]
     assert ranges["obs"]["maximum"].tolist() == [7, 9]
+
+
+def test_average_over_draws_skips_persons_with_a_missing_factor() -> None:
+    # Observed factors can be missing; a draw with a NaN would make every mean NaN.
+    states = pd.DataFrame(
+        {
+            "aug_period": [0] * 4,
+            "fac1": [0.0, 1.0, 2.0, 3.0],
+            "obs": [1.0, np.nan, 1.0, 1.0],
+        }
+    )
+    ranges = {"fac1": pd.DataFrame({"minimum": [0.0], "maximum": [1.0]})}
+    out = _prepare_data_for_one_plot_average_2d(
+        states_data=states,
+        state_ranges=ranges,
+        aug_period=0,
+        input_factor="fac1",
+        output_factor="fac1",
+        n_points=3,
+        n_draws=10,
+        transition_function=lambda _params, x: x.sum(axis=1),
+        transition_params={},
+        all_factors=("fac1", "obs"),
+    )
+    assert out["output_fac1"].tolist() == [1.0, 1.5, 2.0]
