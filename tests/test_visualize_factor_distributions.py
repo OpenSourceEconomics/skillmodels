@@ -2,7 +2,9 @@
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from scipy.stats import gaussian_kde
 
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.config import TEST_DATA_DIR
@@ -115,3 +117,22 @@ def test_visualize_factor_distributions_with_period_indexed_states() -> None:
         contour_plots=contours,
         surface_plots=None,
     )
+
+
+def test_bivariate_density_contours_put_first_factor_on_x_axis() -> None:
+    """Contour value at (x[col], y[row]) is the KDE of (first, second) factor there."""
+    data, _params, states = _load_model2_filtered()
+    contours = bivariate_density_contours(
+        data=data,
+        model_spec=MODEL2,
+        period=1,
+        filtered_states=states,
+        n_points=7,
+    )
+    (fac_x, fac_y), fig = next(iter(contours.items()))
+    trace = fig.data[0]
+    period_states = states.query("period == 1")
+    kernel = gaussian_kde(np.vstack([period_states[fac_x], period_states[fac_y]]))
+    xx, yy = np.meshgrid(trace.x, trace.y)
+    expected = kernel(np.vstack([xx.ravel(), yy.ravel()])).reshape(xx.shape)
+    np.testing.assert_allclose(np.asarray(trace.z), expected, rtol=1e-10)

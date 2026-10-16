@@ -110,6 +110,48 @@ are stated in design section 2.4.
 
 **Parameters**: identical to `translog`.
 
+### asymmetric_translog
+
+Like `translog`, but each factor's own square is split at a knot $\kappa_j$ into a
+part above and a part below it, each with its own coefficient:
+
+$$
+f_{t+1} = \sum_j \beta_j s_j + \sum_j \gamma^+_j \max(s_j - \kappa_j, 0)^2
++ \sum_j \gamma^-_j \min(s_j - \kappa_j, 0)^2 + \sum_{a<b} \delta_{ab} s_a s_b + c
+$$
+
+Use it when the data revert strongly at one end of a factor's range (a floor or a
+ceiling) and are close to linear at the other. A single square coefficient has to buy
+the reversion at one end with a slope above one at the other end; here the curvature
+on each side of the knot is free. With $\gamma^+_j = 0$, for instance, the own slope
+above the knot is exactly $\beta_j$ (plus any interaction terms), and the convex or
+concave tail is confined to values below it.
+
+Both one-sided squares are continuously differentiable in $s_j$ and in $\kappa_j$, so
+the unscented filter, the gradient and the optimiser see a smooth function.
+
+**Nesting**: with $\gamma^+_j = \gamma^-_j = \gamma_j$ the function is a `translog`
+whose linear coefficients are shifted by $-2\gamma_j\kappa_j$ and whose constant is
+shifted by $\sum_j \gamma_j \kappa_j^2$; with all knots at zero as well it equals
+`translog` exactly.
+
+**Knots** are parameters, one per factor, estimated by default. To fix a knot (e.g.
+to profile the likelihood over a grid of knots), fix the parameter
+`("transition", period, factor, "<regressor> knot")` like any other parameter, e.g.
+via `fixed_params`. A knot is not identified when its two curvature coefficients are
+equal (zero included): the knot is then absorbed by the linear term and the constant.
+
+There is no clipping. A convex tail can still produce an unstable fixed point far
+from the data, so check the fixed points of the estimated equations before using
+them as a long-horizon law of motion.
+
+**Parameters** (in this order): linear terms (`fac`), squares above the knot
+(`fac ** 2 (above)`), squares below the knot (`fac ** 2 (below)`), knots
+(`fac knot`), interaction terms (`fac_a * fac_b`), and `constant`. As for `translog`,
+they are enumerated over all factors, latent and observed. In carry-forward
+(identity) periods the own linear coefficient is fixed to 1 and every other
+parameter, the knots included, to 0.
+
 ### linear_and_squares
 
 Like `translog` but without interaction terms:
@@ -179,7 +221,8 @@ $$
 ## When to use the AF variants
 
 The general `translog` and `log_ces` (and the other built-in production
-functions: `linear`, `robust_translog`, `stable_translog`, `linear_and_squares`,
+functions: `linear`, `robust_translog`, `stable_translog`, `asymmetric_translog`,
+`linear_and_squares`,
 `log_ces_with_constant`, `log_ces_general`) enumerate parameters over **all**
 factors, including observed factors. For the CHS estimator this is the intended
 behaviour: observed factors are allowed to enter the production function with
@@ -195,7 +238,8 @@ match AF equations (6) and (7) respectively.
 
 To make the leakage visible, `validate_af_model` emits a loud `UserWarning` when a
 built-in production transition (`linear`, `linear_and_squares`, `translog`,
-`robust_translog`, `stable_translog`, `log_ces`, `log_ces_with_constant`,
+`robust_translog`, `stable_translog`, `asymmetric_translog`, `log_ces`,
+`log_ces_with_constant`,
 `log_ces_general`) is used
 on a non-endogenous production factor while observed factors are present. The
 warning is not an error — intentionally-leaky models still run — but it flags the
