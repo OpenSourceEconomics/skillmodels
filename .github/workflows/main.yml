@@ -13,17 +13,53 @@ on:
       - '*'
 jobs:
   run-tests:
-    name: Run tests for ${{ matrix.os }} on ${{ matrix.python-version }}
+    name: Run tests for ${{ matrix.os }} (${{ matrix.shard }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # The three estimation tests in tests/test_chs_estimate.py take about four
+      # minutes each; the rest of the suite takes about the same in total. They
+      # run on their own Linux runners; the other legs deselect them.
+      # yamllint disable rule:line-length
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-        python-version:
-          - '3.14'
+        include:
+          - os: ubuntu-latest
+            shard: rest
+            pytest_args: >-
+              tests --cov-report=xml --cov=./
+              --deselect tests/test_chs_estimate.py::test_estimate_chs_returns_conforming_result
+              --deselect tests/test_chs_estimate.py::test_estimate_chs_provides_ml_inference
+              --deselect tests/test_chs_estimate.py::test_estimate_chs_enforces_user_fixed_constraint_value
+          - os: ubuntu-latest
+            shard: long-1
+            pytest_args: >-
+              tests/test_chs_estimate.py::test_estimate_chs_returns_conforming_result
+              --cov-report=xml --cov=./
+          - os: ubuntu-latest
+            shard: long-2
+            pytest_args: >-
+              tests/test_chs_estimate.py::test_estimate_chs_provides_ml_inference
+              --cov-report=xml --cov=./
+          - os: ubuntu-latest
+            shard: long-3
+            pytest_args: >-
+              tests/test_chs_estimate.py::test_estimate_chs_enforces_user_fixed_constraint_value
+              --cov-report=xml --cov=./
+          - os: macos-latest
+            shard: rest
+            pytest_args: >-
+              tests -m 'not long_running'
+              --deselect tests/test_chs_estimate.py::test_estimate_chs_returns_conforming_result
+              --deselect tests/test_chs_estimate.py::test_estimate_chs_provides_ml_inference
+              --deselect tests/test_chs_estimate.py::test_estimate_chs_enforces_user_fixed_constraint_value
+          - os: windows-latest
+            shard: rest
+            pytest_args: >-
+              tests -m 'not long_running'
+              --deselect tests/test_chs_estimate.py::test_estimate_chs_returns_conforming_result
+              --deselect tests/test_chs_estimate.py::test_estimate_chs_provides_ml_inference
+              --deselect tests/test_chs_estimate.py::test_estimate_chs_enforces_user_fixed_constraint_value
+      # yamllint enable rule:line-length
     steps:
       - uses: actions/checkout@v6
       - uses: prefix-dev/setup-pixi@v0.9.4
@@ -35,15 +71,10 @@ jobs:
           activate-environment: true
           frozen: true
       - name: Run pytest
-        if: runner.os != 'Linux' || matrix.python-version != '3.14'
         shell: bash -l {0}
-        run: pixi run -e tests-cpu tests
-      - name: Run pytest with coverage
-        if: runner.os == 'Linux' && matrix.python-version == '3.14'
-        shell: bash -l {0}
-        run: pixi run -e tests-cpu tests-with-cov
+        run: pixi run -e tests-cpu pytest ${{ matrix.pytest_args }}
       - name: Upload coverage report
-        if: runner.os == 'Linux' && matrix.python-version == '3.14'
+        if: runner.os == 'Linux'
         uses: codecov/codecov-action@v5
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
