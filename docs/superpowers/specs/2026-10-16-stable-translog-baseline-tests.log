@@ -1,0 +1,139 @@
+ WARN Encountered 2 warnings while parsing the manifest:
+  ⚠ the `[system-requirements]` table is deprecated in favor of virtual
+  │ packages on `platforms`
+    ╭─[/home/hmg/econ/skillmodels-applications/skillmodels/pyproject.toml:92:23]
+ 91 │ platforms = [ "linux-64" ]
+ 92 │ system-requirements = { cuda = "12" }
+    ·                       ───────┬───────
+    ·                              ╰── declare these on the `platforms` entries instead
+ 93 │ [tool.pixi.feature.cuda.dependencies]
+    ╰────
+  help: e.g. platforms = [{ name = "my-linux-64", platform = "linux-64", cuda
+        = "12" }]
+
+  ⚠ the `[system-requirements]` table is deprecated in favor of virtual
+  │ packages on `platforms`
+     ╭─[/home/hmg/econ/skillmodels-applications/skillmodels/pyproject.toml:104:23]
+ 103 │ platforms = [ "linux-64" ]
+ 104 │ system-requirements = { cuda = "13" }
+     ·                       ───────┬───────
+     ·                              ╰── declare these on the `platforms` entries instead
+ 105 │ [tool.pixi.feature.cuda13.dependencies]
+     ╰────
+  help: e.g. platforms = [{ name = "my-linux-64", platform = "linux-64", cuda
+        = "13" }]
+
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- /home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/bin/python3.14
+rootdir: /home/hmg/econ/skillmodels-applications/skillmodels
+configfile: pyproject.toml
+plugins: cov-7.1.0, memray-1.8.0, anyio-4.14.0, xdist-3.8.0
+collecting ... collected 25 items
+
+tests/test_transition_functions.py::test_linear PASSED                   [  4%]
+tests/test_transition_functions.py::test_translog PASSED                 [  8%]
+tests/test_transition_functions.py::test_translog_af_has_no_square_terms PASSED [ 12%]
+tests/test_transition_functions.py::test_log_ces_af_matches_log_ces PASSED [ 16%]
+tests/test_transition_functions.py::test_log_ces PASSED                  [ 20%]
+tests/test_transition_functions.py::test_where_all_but_one_gammas_are_zero PASSED [ 24%]
+tests/test_transition_functions.py::test_constant PASSED                 [ 28%]
+tests/test_transition_functions.py::test_robust_translog PASSED          [ 32%]
+tests/test_transition_functions.py::test_log_ces_general PASSED          [ 36%]
+tests/test_transition_functions.py::test_log_ces_general_where_all_but_one_gammas_are_zero PASSED [ 40%]
+tests/test_transition_functions.py::test_param_names_log_ces_general PASSED [ 44%]
+tests/test_transition_functions.py::test_params_linear PASSED            [ 48%]
+tests/test_transition_functions.py::test_params_translog PASSED          [ 52%]
+tests/test_transition_functions.py::test_params_robust_translog PASSED   [ 56%]
+tests/test_transition_functions.py::test_params_linear_and_squares PASSED [ 60%]
+tests/test_transition_functions.py::test_params_constant PASSED          [ 64%]
+tests/test_transition_functions.py::test_params_log_ces PASSED           [ 68%]
+tests/test_transition_functions.py::test_linear_and_squares PASSED       [ 72%]
+tests/test_transition_functions.py::test_identity_constraints_linear PASSED [ 76%]
+tests/test_transition_functions.py::test_identity_constraints_translog PASSED [ 80%]
+tests/test_transition_functions.py::test_identity_constraints_robust_translog PASSED [ 84%]
+tests/test_transition_functions.py::test_identity_constraints_linear_and_squares PASSED [ 88%]
+tests/test_transition_functions.py::test_identity_constraints_log_ces_is_noop PASSED [ 92%]
+tests/test_transition_functions.py::test_identity_constraints_log_ces_general_is_noop PASSED [ 96%]
+tests/test_transition_functions.py::test_constraints_log_ces PASSED      [100%]
+
+=============================== warnings summary ===============================
+.pixi/envs/tests-cpu/lib/python3.14/site-packages/estimagic/estimation_table.py:12
+  /home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/estimagic/estimation_table.py:12: DeprecationWarning: NumPy warning suppression and assertion utilities are deprecated. Use warnings.catch_warnings, warnings.filterwarnings, pytest.warns, or pytest.filterwarnings instead. (Deprecated NumPy 2.4)
+    suppress_performance_warnings = np.testing.suppress_warnings()
+
+src/skillmodels/chs/process_debug_data.py:131
+  /home/hmg/econ/skillmodels-applications/skillmodels/src/skillmodels/chs/process_debug_data.py:131: BeartypeClawDecorWarning: Function skillmodels.chs.process_debug_data._convert_state_array_to_df() in file "/home/hmg/econ/skillmodels-applications/skillmodels/src/skillmodels/chs/process_debug_data.py" line 131 not decoratable by @beartype, as:
+      Traceback (most recent call last):
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_util/api/external/utilnumpy.py", line 253, in make_numpy_dtype
+          dtype = numpy_dtype(dtype)  # type: ignore[call-overload]
+      TypeError: Cannot interpret 'ScalarT' as a data type
+      
+      The above exception was the direct cause of the following exception:
+      
+      Traceback (most recent call last):
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/decorcore.py", line 211, in _beartype_object_nonfatal
+          return _beartype_object_fatal(obj, conf=conf, **kwargs)
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/decorcore.py", line 133, in _beartype_object_fatal
+          beartype_nontype(obj, **kwargs)  # type: ignore[return-value]
+          ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/_nontype/decornontype.py", line 313, in beartype_nontype
+          return beartype_func(obj, **kwargs)  # type: ignore[return-value]
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/_nontype/decornontype.py", line 402, in beartype_func
+          func_wrapper_code = generate_code(decor_meta)
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/_nontype/_wrap/wrapmain.py", line 121, in generate_code
+          code_check_params = _code_check_args(decor_meta)
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/_nontype/_wrap/_wrapargs.py", line 423, in code_check_args
+          reraise_exception_placeholder(
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+              exception=exception,
+              ^^^^^^^^^^^^^^^^^^^^
+          ...<9 lines>...
+              ),
+              ^^
+          )
+          ^
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_util/error/utilerrraise.py", line 138, in reraise_exception_placeholder
+          raise exception.with_traceback(exception.__traceback__)
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/_nontype/_wrap/_wrapargs.py", line 263, in code_check_args
+          hint_sane = sanify_hint_root_func(
+              decor_meta=decor_meta,
+          ...<3 lines>...
+              exception_prefix=EXCEPTION_PLACEHOLDER,
+          )
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_check/convert/convmain.py", line 204, in sanify_hint_root_func
+          hint_sane = reduce_hint(
+              hint=hint,
+          ...<5 lines>...
+              exception_prefix=exception_prefix,
+          )
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_check/convert/_reduce/redmain.py", line 267, in reduce_hint
+          hint_or_sane_curr = hint_reducer(
+              hint=hint_curr,
+          ...<8 lines>...
+              exception_prefix=exception_prefix,
+          )
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_check/convert/_reduce/redmain.py", line 558, in _reduce_hint_cached
+          hint_or_sane = hint_reducer_cached(hint, exception_prefix)
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_util/cache/utilcachecall.py", line 251, in _callable_cached
+          raise exception
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_util/cache/utilcachecall.py", line 243, in _callable_cached
+          return_value = args_flat_to_return_value[args_flat] = func(
+                                                                ~~~~^
+              *args)
+              ^^^^^^
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_check/convert/_reduce/_nonpep/api/redapinumpy.py", line 224, in reduce_hint_numpy_ndarray
+          hint_dtype = make_numpy_dtype(
+              dtype=hint_dtype_like,
+              exception_prefix=exception_prefix,
+              exception_cls=BeartypeDecorHintNonpepNumpyException,
+          )
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_util/api/external/utilnumpy.py", line 261, in make_numpy_dtype
+          raise exception_cls(
+          ...<2 lines>...
+          ) from exception
+      beartype.roar.BeartypeDecorHintNonpepNumpyException: Function skillmodels.chs.process_debug_data._convert_state_array_to_df() parameter "arr" NumPy data type ScalarT invalid (i.e., neither data type nor coercible into data type).
+      
+    def _convert_state_array_to_df(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 25 passed, 2 warnings in 2.47s ========================

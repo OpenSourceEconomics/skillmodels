@@ -1,4 +1,6 @@
 ---
+# Specs, plans and audit artifacts under docs/superpowers are kept verbatim.
+exclude: ^docs/superpowers/
 repos:
   - repo: meta
     hooks:
@@ -37,6 +39,7 @@ repos:
       - id: name-tests-test
         args:
           - --pytest-test-first
+        exclude: ^tests/stable_translog_reference\.py$
       - id: no-commit-to-branch
         args:
           - --branch
