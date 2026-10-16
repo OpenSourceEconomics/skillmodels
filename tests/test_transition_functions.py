@@ -311,3 +311,13 @@ def test_constraints_log_ces() -> None:
         assert entry[0] == "transition"
         assert entry[1] == 0
         assert entry[2] == "fac1"
+
+
+def test_stable_translog_is_registered_in_allow_lists() -> None:
+    from skillmodels.af.validate import (  # noqa: PLC0415
+        _AF_COMPATIBLE_TRANSITIONS,
+        _LEAKY_BUILTIN_PRODUCTION,
+    )
+
+    assert "stable_translog" in _AF_COMPATIBLE_TRANSITIONS
+    assert "stable_translog" in _LEAKY_BUILTIN_PRODUCTION
