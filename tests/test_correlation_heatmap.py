@@ -458,3 +458,60 @@ def test_get_scores_corr_single_period(
         periods=0,
     )
     assert isinstance(result, pd.DataFrame)
+
+
+def test_get_measurement_data_with_single_period_lists_a_shared_measurement_once() -> (
+    None
+):
+    """A measurement that loads on two factors appears as one column."""
+    update_info = pd.DataFrame(
+        {
+            "f1": [True, True, False],
+            "f2": [False, True, True],
+            "purpose": "measurement",
+        },
+        index=pd.MultiIndex.from_product(
+            [[0], ["y0", "y1", "y2"]], names=["stage", "variable"]
+        ),
+    )
+    data = pd.DataFrame({"stage": [0, 0], "y0": [1, 2], "y1": [3, 4], "y2": [5, 6]})
+    result = _get_measurement_data_for_single_period(
+        data, update_info, 0, latent_factors=["f1", "f2"], observed_factors=[]
+    )
+    assert list(result.columns) == ["y0", "y1", "y2"]
+
+
+def test_get_measurement_data_with_multiple_periods_lists_shared_measurement_once() -> (
+    None
+):
+    """A measurement that loads on two factors appears once per period."""
+    update_info = pd.DataFrame(
+        {
+            "f1": [True, True, False] * 2,
+            "f2": [False, True, True] * 2,
+            "purpose": "measurement",
+        },
+        index=pd.MultiIndex.from_product(
+            [[0, 1], ["y0", "y1", "y2"]], names=["stage", "variable"]
+        ),
+    )
+    data = pd.DataFrame(
+        {
+            "stage": [0, 0, 1, 1],
+            "y0": [1, 2, 3, 4],
+            "y1": [3, 4, 5, 6],
+            "y2": [5, 6, 7, 8],
+        },
+        index=[0, 1, 0, 1],
+    )
+    result = _get_measurement_data_for_multiple_periods(
+        data, update_info, [0, 1], latent_factors=["f1", "f2"], observed_factors=[]
+    )
+    assert list(result.columns) == [
+        "y0, 0",
+        "y1, 0",
+        "y2, 0",
+        "y0, 1",
+        "y1, 1",
+        "y2, 1",
+    ]
