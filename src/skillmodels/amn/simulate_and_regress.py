@@ -7,8 +7,8 @@ parameters by least-squares regression.
 Specialised fitters: closed-form OLS for `linear`; softmax-constrained
 Levenberg-Marquardt for `log_ces` and `log_ces_with_constant` (keeps
 gammas on the simplex). Everything else (translog, robust_translog,
-stable_translog, linear_and_squares, log_ces_general, and any user
-`@register_params`-decorated transition) goes through a generic NLS
+stable_translog, asymmetric_translog, linear_and_squares, log_ces_general,
+and any user `@register_params`-decorated transition) goes through a generic NLS
 path that calls the transition function directly via `jax.vmap`. This
 mirrors the per-factor NLS in
 `Monte Carlo Simulations/master_approx_simulationces2periodrho_5.R`
@@ -256,6 +256,7 @@ def _resolve_transition_callable(
         "translog",
         "robust_translog",
         "stable_translog",
+        "asymmetric_translog",
         "linear_and_squares",
         "log_ces",
         "log_ces_with_constant",
@@ -357,8 +358,8 @@ def _fit_generic_nls(
     """Generic Levenberg-Marquardt NLS via `jax.vmap` over the panel.
 
     Works for any `(states, params) -> scalar` callable, including
-    translog, robust_translog, stable_translog, linear_and_squares,
-    log_ces_general, and user-registered transitions.
+    translog, robust_translog, stable_translog, asymmetric_translog,
+    linear_and_squares, log_ces_general, and user-registered transitions.
 
     Args:
         transition_func: callable taking a 1D state vector and a 1D
@@ -471,8 +472,8 @@ def _fit_transition(
 
     `linear` and `log_ces`-family functions get specialised fitters for
     speed / simplex constraints; everything else (translog,
-    robust_translog, stable_translog, linear_and_squares, log_ces_general,
-    user) falls through to a generic `jax.vmap`-based NLS.
+    robust_translog, stable_translog, asymmetric_translog, linear_and_squares,
+    log_ces_general, user) falls through to a generic `jax.vmap`-based NLS.
 
     When ``cf`` is given (the investment control-function residual), an
     extra additive linear term ``kappa * cf`` is fitted jointly with the
