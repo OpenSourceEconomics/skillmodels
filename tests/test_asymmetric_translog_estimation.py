@@ -2,7 +2,7 @@
 
 Fixture: the two-latent, two-observed, three-period panel of
 tests/test_missing_observed_factors.py and its endogenous two-period model with
-carry-forward substeps, as in tests/test_stable_translog_estimation.py.
+carry-forward substeps.
 """
 
 from dataclasses import replace
