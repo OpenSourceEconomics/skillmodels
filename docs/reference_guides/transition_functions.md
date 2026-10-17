@@ -71,6 +71,45 @@ below.
 Same as `translog` but clips state values at ±10^12 before computation. Use this when
 states might grow very large and cause numerical overflow.
 
+### stable_translog
+
+Like `translog`, but every square and interaction is evaluated on a smoothly clipped
+state, while the linear part is untouched:
+
+$$
+f_{t+1} = \sum_j \beta_j s_j + \sum_j \gamma_j g(s_j)^2 + \sum_{a<b} \delta_{ab} g(s_a) g(s_b) + c,
+\qquad g(x) = \frac{x}{\left(1 + |x/\text{scale}|^{\text{power}}\right)^{1/\text{power}}}
+$$
+
+with defaults `scale=3.0` and `power=4`. Near zero $g(x) \approx x$ and the function
+agrees with `translog` (within 1 % of the nonlinear terms at $|x| \le 1$). Every
+nonlinear basis term is bounded by $\text{scale}^2$. For a deterministic fixed-matrix
+law with a Schur-stable COMPLETE linear part and uniformly bounded remaining forcing,
+iterates are bounded. This is not a certificate for changing matrices, control-function
+corrections, Gaussian sample paths or the UKF. The scalar application examples have a
+repelling translog fixed point, but a negative square coefficient alone is not enough
+to establish that root structure.
+
+Use `stable_translog` when the estimated technology is iterated for many periods
+(simulations, laws of motion in life-cycle models), subject to those conditions.
+`robust_translog` clips the whole input and hence also bounds deterministic output for
+fixed coefficients, but can settle at enormous artificial levels and alters linear
+dynamics. Neither name certifies the complete estimator or prevents all arithmetic overflow.
+
+Two caveats. Observed factors in the state vector are clipped too; keep their scale
+comparable to the latent factors or fix their nonlinear coefficients. And a `scale`
+beyond the translog's own unstable fixed point can leave a second stable fixed point in
+the tail; check the fixed points of your estimated equations before simulating. Other
+values of `scale` and `power` work in direct calls. Estimator registration requires
+complete parameter/identity companions and allow-lists for a new module-level string,
+or a correctly registered factor-argument callable; a one-line vector wrapper alone
+is insufficient. The string lookup uses defaults. Scale is measured in the declared
+factor units, not automatically in standard deviations. Preserving a change of units
+requires transforming the clipping scale too. Sigma-point and identification caveats
+are stated in design section 2.4.
+
+**Parameters**: identical to `translog`.
+
 ### linear_and_squares
 
 Like `translog` but without interaction terms:
@@ -140,7 +179,7 @@ $$
 ## When to use the AF variants
 
 The general `translog` and `log_ces` (and the other built-in production
-functions: `linear`, `robust_translog`, `linear_and_squares`,
+functions: `linear`, `robust_translog`, `stable_translog`, `linear_and_squares`,
 `log_ces_with_constant`, `log_ces_general`) enumerate parameters over **all**
 factors, including observed factors. For the CHS estimator this is the intended
 behaviour: observed factors are allowed to enter the production function with
@@ -156,7 +195,8 @@ match AF equations (6) and (7) respectively.
 
 To make the leakage visible, `validate_af_model` emits a loud `UserWarning` when a
 built-in production transition (`linear`, `linear_and_squares`, `translog`,
-`robust_translog`, `log_ces`, `log_ces_with_constant`, `log_ces_general`) is used
+`robust_translog`, `stable_translog`, `log_ces`, `log_ces_with_constant`,
+`log_ces_general`) is used
 on a non-endogenous production factor while observed factors are present. The
 warning is not an error — intentionally-leaky models still run — but it flags the
 wrong-estimand risk. Switch to `translog_af` / `log_ces_af`, or pin every

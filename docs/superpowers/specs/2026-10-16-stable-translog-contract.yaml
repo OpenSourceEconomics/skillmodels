@@ -1,0 +1,83 @@
+# Profile contract for the stable_translog design audit (skillmodels).
+contract_version: "1"
+target: "stable_translog design: translog transition function with soft-clipped nonlinear terms; verify the boundedness argument, the fidelity/uniqueness trade-off of the clip and its defaults (scale 3, power 4), the interaction with the unscented Kalman filter and identification, and the implementation plan, before code is written"
+environment:
+  hardware: "hmg-office, Linux, CPU only"
+  backend: "jax >=0.9 as required by pyproject.toml; record exact installed version in native evidence; XLA:CPU"
+  dtype: "float64"
+  jax_flags: "jax_enable_x64=True (skillmodels sets it at import)"
+
+metric_definitions:
+  nonlinear_fidelity_rel_error: "|g(x)^2 - x^2| / x^2 at a given |x|, for the default scale and power; the same quantity for g(x_a) g(x_b) versus x_a x_b at |x_a| = |x_b| = |x|"
+  iteration_bound: "sup over t of |theta_t| when the one-factor own map theta' = c + rho*theta + gamma*g(theta)^2 is iterated 200 times from a given start, using the run E psychological coefficients c=-0.003, rho=0.769, gamma=-0.103"
+  fixed_point_count: "number of real solutions of f(theta) = theta of the one-factor own map on [-60, 60], with stability by |f'(theta)| < 1"
+  moment_or_objective_change: "not used in this round (no estimation is run); reserved for the health-cognition closure round: relative change in percent of each translog transition coefficient when the model is re-estimated with stable_translog"
+  zero_baseline_absolute: 1.0e-8
+  warm_seconds: "median wall time of tests/test_transition_functions.py after the first call"
+  compile_seconds: "not_applicable in this round"
+  peak_host_gib: "resource.getrusage(RUSAGE_SELF).ru_maxrss after the test module"
+
+measurement_protocol:
+  repetitions: 1
+  warmup_calls: 0
+  aggregation: median
+  seed_aggregation: max
+  workload_aggregation: per_workload
+  noise_floor_pct: 3
+  isolation: "one pytest at a time; cap.slice checked for neighbours"
+  timer: "pytest durations"
+  memory_probe: "resource.getrusage(RUSAGE_SELF).ru_maxrss"
+  device_probe: "not_applicable"
+  cache_reset: "fresh process per run"
+  seeds: [0]
+  comparison: "translog (baseline) versus stable_translog (proposed) on identical inputs"
+
+profiles:
+
+  default:
+    intended_use: "the only profile: CHS maximum likelihood estimation with the unscented Kalman filter, and iterated simulation of estimated technologies"
+    applicability: required
+    workloads:
+      - name: unit
+        command: "pixi run -e tests-cpu pytest tests/test_transition_functions.py -v"
+        grid: "3-factor toy parameter vector from the existing translog tests; 1-factor run E psychological coefficients"
+    numerical:
+      max_nonlinear_fidelity_rel_error_at_1: 0.01       # defaults scale=3, power=4
+      max_nonlinear_fidelity_rel_error_at_2: 0.10
+      max_iteration_bound_from_minus_3: 5.0             # bounded excursion, run E coefficients
+      required_fixed_point_count_run_e: 1               # unique attractor for the run E map at the defaults
+      oracle: structural                                 # independent real-equation evaluation and boundedness/root proof
+      max_policy_disagreement_mass: not_applicable
+      max_boundary_shift_grid_cells: not_applicable
+      max_moment_change_pct: not_applicable
+      max_parameter_change_pct: not_applicable
+      candidate_set_error:
+        assessed_by: structural_bound
+        source: "docs/superpowers/specs/2026-10-16-stable-translog-design.md"
+        source_digest: "sha256:see BUNDLE-MANIFEST.json entry for the spec"
+        structural_bound:
+          value: 0.0
+          assumptions: "the only approximation is the deviation of g(x) from x inside the data region, which is reported as nonlinear_fidelity_rel_error, not hidden"
+          applies_to: "default profile"
+        configuration: "n/a"
+        max_regret: not_applicable
+        on_unavailable: report_unknown
+    resource:
+      max_warm_seconds: 30.0
+      max_compile_seconds: not_applicable
+      max_peak_host_gib: 4.0
+      max_peak_device_gib: not_applicable
+      max_executable_cache_entries: not_applicable
+    on_budget_exhaustion: "fail the test"
+    on_unresolved_certification: "not_applicable"
+
+ci:
+  max_wall_seconds: 900
+  max_peak_host_gib: 8.0
+  note: "the new tests must add less than five seconds to tests/test_transition_functions.py"
+
+repair_review_triggers:
+  max_warm_runtime_regression_pct: 10
+  max_compile_regression_pct: not_applicable
+  max_peak_memory_regression_pct: 10
+  comparison: "main -> stable-translog branch"

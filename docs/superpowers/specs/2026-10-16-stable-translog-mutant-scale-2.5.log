@@ -1,0 +1,439 @@
+MUTANT: default scale 2.5 instead of 3.0; expected: default-budget test at |x|=2 fails (15.77% > 10%)
+COMMAND: pixi run -e tests-cpu pytest tests/test_stable_translog.py tests/test_stable_translog_dispatch.py -v -p no:cacheprovider
+ WARN Encountered 2 warnings while parsing the manifest:
+  ⚠ the `[system-requirements]` table is deprecated in favor of virtual
+  │ packages on `platforms`
+    ╭─[/home/hmg/econ/skillmodels-applications/skillmodels/pyproject.toml:92:23]
+ 91 │ platforms = [ "linux-64" ]
+ 92 │ system-requirements = { cuda = "12" }
+    ·                       ───────┬───────
+    ·                              ╰── declare these on the `platforms` entries instead
+ 93 │ [tool.pixi.feature.cuda.dependencies]
+    ╰────
+  help: e.g. platforms = [{ name = "my-linux-64", platform = "linux-64", cuda
+        = "12" }]
+  ⚠ the `[system-requirements]` table is deprecated in favor of virtual
+  │ packages on `platforms`
+     ╭─[/home/hmg/econ/skillmodels-applications/skillmodels/pyproject.toml:104:23]
+ 103 │ platforms = [ "linux-64" ]
+ 104 │ system-requirements = { cuda = "13" }
+     ·                       ───────┬───────
+     ·                              ╰── declare these on the `platforms` entries instead
+ 105 │ [tool.pixi.feature.cuda13.dependencies]
+     ╰────
+  help: e.g. platforms = [{ name = "my-linux-64", platform = "linux-64", cuda
+        = "13" }]
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- /home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/bin/python3.14
+rootdir: /home/hmg/econ/skillmodels-applications/skillmodels
+configfile: pyproject.toml
+plugins: cov-7.1.0, memray-1.8.0, anyio-4.14.0, xdist-3.8.0
+collecting ... collected 29 items
+tests/test_stable_translog.py::test_finite_tail_witness_and_limits FAILED [  3%]
+tests/test_stable_translog.py::test_shape_order_permutations_and_parameter_basis[1] FAILED [  6%]
+tests/test_stable_translog.py::test_shape_order_permutations_and_parameter_basis[2] FAILED [ 10%]
+tests/test_stable_translog.py::test_shape_order_permutations_and_parameter_basis[3] FAILED [ 13%]
+tests/test_stable_translog.py::test_shape_order_permutations_and_parameter_basis[4] FAILED [ 17%]
+tests/test_stable_translog.py::test_default_profile_fidelity_for_squares_and_interactions[1.0-0.01] FAILED [ 20%]
+tests/test_stable_translog.py::test_default_profile_fidelity_for_squares_and_interactions[2.0-0.1] FAILED [ 24%]
+tests/test_stable_translog.py::test_all_200_iterates_and_fixed_point PASSED [ 27%]
+tests/test_stable_translog.py::test_derivatives_at_zero_clip_knee_and_tails FAILED [ 31%]
+tests/test_stable_translog.py::test_static_configuration_and_scaling[0.5-2] PASSED [ 34%]
+tests/test_stable_translog.py::test_static_configuration_and_scaling[3.0-4] PASSED [ 37%]
+tests/test_stable_translog.py::test_static_configuration_and_scaling[9.0-8] PASSED [ 41%]
+tests/test_stable_translog.py::test_identity_and_name_companions PASSED  [ 44%]
+tests/test_stable_translog.py::test_invalid_scale_fails_loud[0.0] PASSED [ 48%]
+tests/test_stable_translog.py::test_invalid_scale_fails_loud[-3.0] PASSED [ 51%]
+tests/test_stable_translog.py::test_invalid_scale_fails_loud[inf] PASSED [ 55%]
+tests/test_stable_translog.py::test_invalid_scale_fails_loud[nan] PASSED [ 58%]
+tests/test_stable_translog.py::test_invalid_power_fails_loud[0] PASSED   [ 62%]
+tests/test_stable_translog.py::test_invalid_power_fails_loud[1] PASSED   [ 65%]
+tests/test_stable_translog.py::test_invalid_power_fails_loud[3] PASSED   [ 68%]
+tests/test_stable_translog.py::test_invalid_power_fails_loud[4.0] PASSED [ 72%]
+tests/test_stable_translog.py::test_invalid_power_fails_loud[True] PASSED [ 75%]
+tests/test_stable_translog.py::test_finite_power_overflow_neighborhood[0.5-4] PASSED [ 79%]
+tests/test_stable_translog.py::test_finite_power_overflow_neighborhood[3.0-4] PASSED [ 82%]
+tests/test_stable_translog.py::test_finite_power_overflow_neighborhood[9.0-8] PASSED [ 86%]
+tests/test_stable_translog.py::test_observed_input_beyond_scale_is_clipped_in_interaction FAILED [ 89%]
+tests/test_stable_translog_dispatch.py::test_public_model_uses_clipped_values FAILED [ 93%]
+tests/test_stable_translog_dispatch.py::test_amn_resolver_returns_the_right_law FAILED [ 96%]
+tests/test_stable_translog_dispatch.py::test_af_public_validation_accepts_name PASSED [100%]
+=================================== FAILURES ===================================
+_____________________ test_finite_tail_witness_and_limits ______________________
+api = (<function stable_translog at 0x75945caa7530>, <PjitFunction of <function stable_translog at 0x75945caa7530>>, <PjitFunction of <function vmap.<locals>.vmap_f at 0x759458007740>>)
+    def test_finite_tail_witness_and_limits(api):
+        f, compiled, batch = api
+        x = jnp.array([[-1e80], [-1e76], [-50.0], [0.0], [50.0], [1e76], [1e80]])
+        p = jnp.array([0.0, 1.0, 0.0])
+        expected = np.array([float(transition(row, p)) for row in np.asarray(x)])  # ty: ignore[invalid-argument-type]
+>       assert_allclose(batch(x, p), expected, rtol=3e-14, atol=2e-14)
+E       AssertionError: 
+E       Not equal to tolerance rtol=3e-14, atol=2e-14
+E       
+E       Mismatched elements: 6 / 7 (85.7%)
+E       First 5 mismatches are at indices:
+E        [0]: 6.25 (ACTUAL), 9.0 (DESIRED)
+E        [1]: 6.25 (ACTUAL), 9.0 (DESIRED)
+E        [2]: 6.249980468841554 (ACTUAL), 8.999941680566865 (DESIRED)
+E        [4]: 6.249980468841554 (ACTUAL), 8.999941680566865 (DESIRED)
+E        [5]: 6.25 (ACTUAL), 9.0 (DESIRED)
+E       Max absolute difference among violations: 2.75
+E       Max relative difference among violations: 0.30555556
+E        ACTUAL: array([6.25   , 6.25   , 6.24998, 0.     , 6.24998, 6.25   , 6.25   ])
+E        DESIRED: array([9.      , 9.      , 8.999942, 0.      , 8.999942, 9.      ,
+E              9.      ])
+tests/test_stable_translog.py:35: AssertionError
+_____________ test_shape_order_permutations_and_parameter_basis[1] _____________
+api = (<function stable_translog at 0x75945caa7530>, <PjitFunction of <function stable_translog at 0x75945caa7530>>, <PjitFunction of <function vmap.<locals>.vmap_f at 0x759458007740>>)
+n = 1
+    @pytest.mark.parametrize("n", [1, 2, 3, 4])
+    def test_shape_order_permutations_and_parameter_basis(api, n):
+        f, compiled, batch = api
+        rng = np.random.default_rng(0)
+        states = rng.uniform(-6, 6, size=(8, n))
+        k = 2 * n + n * (n - 1) // 2 + 1
+        params = rng.normal(size=k)
+        expected = np.array([float(transition(row, params)) for row in states])
+>       assert_allclose(
+            batch(jnp.asarray(states), jnp.asarray(params)),
+            expected,
+            rtol=4e-13,
+            atol=4e-13,
+        )
+E       AssertionError: 
+E       Not equal to tolerance rtol=4e-13, atol=4e-13
+E       
+E       Mismatched elements: 8 / 8 (100%)
+E       First 5 mismatches are at indices:
+E        [0]: -4.917569411265951 (ACTUAL), -5.053798892672461 (DESIRED)
+E        [1]: -4.7980019669850655 (ACTUAL), -6.044858529871753 (DESIRED)
+E        [2]: -4.493127753784644 (ACTUAL), -7.665459103512282 (DESIRED)
+E        [3]: -4.31640428981995 (ACTUAL), -7.542716409306062 (DESIRED)
+E        [4]: -10.501863493905725 (ACTUAL), -12.874926344960715 (DESIRED)
+E       Max absolute difference among violations: 3.22631212
+E       Max relative difference among violations: 0.42773875
+E        ACTUAL: array([ -4.917569,  -4.798002,  -4.493128,  -4.316404, -10.501863,
+E              -11.773006,  -3.528211,  -8.664814])
+E        DESIRED: array([ -5.053799,  -6.044859,  -7.665459,  -7.542716, -12.874926,
+E              -14.80094 ,  -3.562395,  -9.900285])
+tests/test_stable_translog.py:56: AssertionError
+_____________ test_shape_order_permutations_and_parameter_basis[2] _____________
+api = (<function stable_translog at 0x75945caa7530>, <PjitFunction of <function stable_translog at 0x75945caa7530>>, <PjitFunction of <function vmap.<locals>.vmap_f at 0x759458007740>>)
+n = 2
+    @pytest.mark.parametrize("n", [1, 2, 3, 4])
+    def test_shape_order_permutations_and_parameter_basis(api, n):
+        f, compiled, batch = api
+        rng = np.random.default_rng(0)
+        states = rng.uniform(-6, 6, size=(8, n))
+        k = 2 * n + n * (n - 1) // 2 + 1
+        params = rng.normal(size=k)
+        expected = np.array([float(transition(row, params)) for row in states])
+>       assert_allclose(
+            batch(jnp.asarray(states), jnp.asarray(params)),
+            expected,
+            rtol=4e-13,
+            atol=4e-13,
+        )
+E       AssertionError: 
+E       Not equal to tolerance rtol=4e-13, atol=4e-13
+E       
+E       Mismatched elements: 8 / 8 (100%)
+E       First 5 mismatches are at indices:
+E        [0]: 7.852459062880633 (ACTUAL), 8.977725234597402 (DESIRED)
+E        [1]: 14.337147216733168 (ACTUAL), 17.702102507310308 (DESIRED)
+E        [2]: 5.664423407826265 (ACTUAL), 8.65777145123314 (DESIRED)
+E        [3]: 5.124010880598812 (ACTUAL), 6.115359600700208 (DESIRED)
+E        [4]: 5.727777715928939 (ACTUAL), 8.255790610299176 (DESIRED)
+E       Max absolute difference among violations: 3.82058717
+E       Max relative difference among violations: 0.34574117
+E        ACTUAL: array([ 7.852459, 14.337147,  5.664423,  5.124011,  5.727778, 10.73115 ,
+E              10.402337,  9.786083])
+E        DESIRED: array([ 8.977725, 17.702103,  8.657771,  6.11536 ,  8.255791, 14.475556,
+E              14.222924, 12.414664])
+tests/test_stable_translog.py:56: AssertionError
+_____________ test_shape_order_permutations_and_parameter_basis[3] _____________
+api = (<function stable_translog at 0x75945caa7530>, <PjitFunction of <function stable_translog at 0x75945caa7530>>, <PjitFunction of <function vmap.<locals>.vmap_f at 0x759458007740>>)
+n = 3
+    @pytest.mark.parametrize("n", [1, 2, 3, 4])
+    def test_shape_order_permutations_and_parameter_basis(api, n):
+        f, compiled, batch = api
+        rng = np.random.default_rng(0)
+        states = rng.uniform(-6, 6, size=(8, n))
+        k = 2 * n + n * (n - 1) // 2 + 1
+        params = rng.normal(size=k)
+        expected = np.array([float(transition(row, params)) for row in states])
+>       assert_allclose(
+            batch(jnp.asarray(states), jnp.asarray(params)),
+            expected,
+            rtol=4e-13,
+            atol=4e-13,
+        )
+E       AssertionError: 
+E       Not equal to tolerance rtol=4e-13, atol=4e-13
+E       
+E       Mismatched elements: 8 / 8 (100%)
+E       First 5 mismatches are at indices:
+E        [0]: 6.155187575221884 (ACTUAL), 6.490264289495424 (DESIRED)
+E        [1]: -8.653831021163983 (ACTUAL), -8.938177321824725 (DESIRED)
+E        [2]: -5.152191805460342 (ACTUAL), -5.938292290669064 (DESIRED)
+E        [3]: -0.5710967435813042 (ACTUAL), -4.442182991746442 (DESIRED)
+E        [4]: 0.4717654115627852 (ACTUAL), -0.15402138268425988 (DESIRED)
+E       Max absolute difference among violations: 3.87108625
+E       Max relative difference among violations: 4.06298647
+E        ACTUAL: array([ 6.155188, -8.653831, -5.152192, -0.571097,  0.471765, -4.953996,
+E              -3.810565, -6.17638 ])
+E        DESIRED: array([ 6.490264, -8.938177, -5.938292, -4.442183, -0.154021, -5.663169,
+E              -4.326617, -7.185585])
+tests/test_stable_translog.py:56: AssertionError
+_____________ test_shape_order_permutations_and_parameter_basis[4] _____________
+api = (<function stable_translog at 0x75945caa7530>, <PjitFunction of <function stable_translog at 0x75945caa7530>>, <PjitFunction of <function vmap.<locals>.vmap_f at 0x759458007740>>)
+n = 4
+    @pytest.mark.parametrize("n", [1, 2, 3, 4])
+    def test_shape_order_permutations_and_parameter_basis(api, n):
+        f, compiled, batch = api
+        rng = np.random.default_rng(0)
+        states = rng.uniform(-6, 6, size=(8, n))
+        k = 2 * n + n * (n - 1) // 2 + 1
+        params = rng.normal(size=k)
+        expected = np.array([float(transition(row, params)) for row in states])
+>       assert_allclose(
+            batch(jnp.asarray(states), jnp.asarray(params)),
+            expected,
+            rtol=4e-13,
+            atol=4e-13,
+        )
+E       AssertionError: 
+E       Not equal to tolerance rtol=4e-13, atol=4e-13
+E       
+E       Mismatched elements: 8 / 8 (100%)
+E       First 5 mismatches are at indices:
+E        [0]: 5.161189028593867 (ACTUAL), 9.81033140404612 (DESIRED)
+E        [1]: 15.910147709861935 (ACTUAL), 16.572597489035367 (DESIRED)
+E        [2]: 18.994051017518704 (ACTUAL), 25.381156885173958 (DESIRED)
+E        [3]: 11.49034636621635 (ACTUAL), 15.641290174084519 (DESIRED)
+E        [4]: -12.79728470390402 (ACTUAL), -16.549246417963857 (DESIRED)
+E       Max absolute difference among violations: 8.49729638
+E       Max relative difference among violations: 0.47390268
+E        ACTUAL: array([  5.161189,  15.910148,  18.994051,  11.490346, -12.797285,
+E              -22.708369,  22.831991,   5.953681])
+E        DESIRED: array([  9.810331,  16.572597,  25.381157,  15.64129 , -16.549246,
+E              -31.205665,  29.098097,   6.447245])
+tests/test_stable_translog.py:56: AssertionError
+_____ test_default_profile_fidelity_for_squares_and_interactions[1.0-0.01] _____
+api = (<function stable_translog at 0x75945caa7530>, <PjitFunction of <function stable_translog at 0x75945caa7530>>, <PjitFunction of <function vmap.<locals>.vmap_f at 0x759458007740>>)
+x = 1.0, budget = 0.01
+    @pytest.mark.parametrize(("x", "budget"), [(1.0, 0.01), (2.0, 0.10)])
+    def test_default_profile_fidelity_for_squares_and_interactions(api, x, budget):
+        f = api[0]
+        square = float(f(jnp.array([x]), jnp.array([0.0, 1.0, 0.0])))
+        cross = float(f(jnp.array([x, -x]), jnp.array([0.0, 0.0, 0.0, 0.0, 1.0, 0.0])))
+>       assert abs(square - x * x) / (x * x) <= budget
+E       assert (0.01255936808329483 / (1.0 * 1.0)) <= 0.01
+E        +  where 0.01255936808329483 = abs((0.9874406319167052 - (1.0 * 1.0)))
+tests/test_stable_translog.py:97: AssertionError
+_____ test_default_profile_fidelity_for_squares_and_interactions[2.0-0.1] ______
+api = (<function stable_translog at 0x75945caa7530>, <PjitFunction of <function stable_translog at 0x75945caa7530>>, <PjitFunction of <function vmap.<locals>.vmap_f at 0x759458007740>>)
+x = 2.0, budget = 0.1
+    @pytest.mark.parametrize(("x", "budget"), [(1.0, 0.01), (2.0, 0.10)])
+    def test_default_profile_fidelity_for_squares_and_interactions(api, x, budget):
+        f = api[0]
+        square = float(f(jnp.array([x]), jnp.array([0.0, 1.0, 0.0])))
+        cross = float(f(jnp.array([x, -x]), jnp.array([0.0, 0.0, 0.0, 0.0, 1.0, 0.0])))
+>       assert abs(square - x * x) / (x * x) <= budget
+E       assert (0.6309143973539539 / (2.0 * 2.0)) <= 0.1
+E        +  where 0.6309143973539539 = abs((3.369085602646046 - (2.0 * 2.0)))
+tests/test_stable_translog.py:97: AssertionError
+_________________ test_derivatives_at_zero_clip_knee_and_tails _________________
+api = (<function stable_translog at 0x75945caa7530>, <PjitFunction of <function stable_translog at 0x75945caa7530>>, <PjitFunction of <function vmap.<locals>.vmap_f at 0x759458007740>>)
+    def test_derivatives_at_zero_clip_knee_and_tails(api):
+        f = api[0]
+        knee = 3.0
+        x = np.array(
+            [
+                -50.0,
+                -knee,
+                -2.0,
+                -1.0,
+                -0.0,
+                0.0,
+                1.0,
+                2.0,
+                np.nextafter(knee, -np.inf),
+                knee,
+                np.nextafter(knee, np.inf),
+                50.0,
+            ]
+        )
+        params = jnp.array([0.4, 0.2, 0.1])
+        def objective(z):
+            return f(jnp.array([z]), params)
+        result = jax.jit(jax.vmap(jax.grad(objective)))(jnp.asarray(x))
+        expected = np.array([0.4 + 0.4 * float(clip(v) * clip_derivative(v)) for v in x])
+        assert bool(jnp.all(jnp.isfinite(result)))
+>       assert_allclose(result, expected, rtol=2e-12, atol=2e-13)
+E       AssertionError: 
+E       Not equal to tolerance rtol=2e-12, atol=2e-13
+E       
+E       Mismatched elements: 10 / 12 (83.3%)
+E       First 5 mismatches are at indices:
+E        [0]: 0.3999996875029297 (ACTUAL), 0.3999990668981396 (DESIRED)
+E        [1]: 0.17730512383055275 (ACTUAL), -0.024264068711928488 (DESIRED)
+E        [2]: -0.07802009118133446 (ACTUAL), -0.2104637974287903 (DESIRED)
+E        [3]: 0.014882748862439454 (ACTUAL), 0.0072947194704237606 (DESIRED)
+E        [6]: 0.7851172511375606 (ACTUAL), 0.7927052805295762 (DESIRED)
+E       Max absolute difference among violations: 0.20156919
+E       Max relative difference among violations: 8.30731214
+E        ACTUAL: array([ 0.4     ,  0.177305, -0.07802 ,  0.014883,  0.4     ,  0.4     ,
+E               0.785117,  0.87802 ,  0.622695,  0.622695,  0.622695,  0.4     ])
+E        DESIRED: array([ 0.399999, -0.024264, -0.210464,  0.007295,  0.4     ,  0.4     ,
+E               0.792705,  1.010464,  0.824264,  0.824264,  0.824264,  0.400001])
+tests/test_stable_translog.py:150: AssertionError
+__________ test_observed_input_beyond_scale_is_clipped_in_interaction __________
+api = (<function stable_translog at 0x75945caa7530>, <PjitFunction of <function stable_translog at 0x75945caa7530>>, <PjitFunction of <function vmap.<locals>.vmap_f at 0x759458007740>>)
+    def test_observed_input_beyond_scale_is_clipped_in_interaction(api) -> None:
+        f = api[0]
+        # latent at 1.0, observed input at 50: only the interaction coefficient is on
+        params = jnp.array([0.0, 0.0, 0.0, 0.0, 1.0, 0.0])
+        value = float(f(jnp.array([1.0, 50.0]), params))
+>       assert_allclose(value, float(clip(1.0) * clip(50.0)), rtol=3e-14)
+E       AssertionError: 
+E       Not equal to tolerance rtol=3e-14, atol=0
+E       
+E       Mismatched elements: 1 / 1 (100%)
+E       Max absolute difference among violations: 0.50655454
+E       Max relative difference among violations: 0.16937081
+E        ACTUAL: array(2.484247)
+E        DESIRED: array(2.990802)
+tests/test_stable_translog.py:252: AssertionError
+____________________ test_public_model_uses_clipped_values _____________________
+model_and_processed = (ModelSpec(_factors=mappingproxy({'skill': FactorSpec(measurements=(('m0', 'm1', 'm2'), ('m0', 'm1', 'm2')), normaliza..., 1: 1})), factor_info=mappingproxy({'skill': FactorInfo(factor_type=<FactorType.STATE: 1>)}), control_function=None)))
+    def test_public_model_uses_clipped_values(model_and_processed):
+        _, processed = model_and_processed
+        info = processed.transition_info
+        assert info is not None
+        states = jnp.array([[2.0], [3.0]])
+        params = {"skill": jnp.array([0.0, 1.0, 0.0])}
+        expected = jnp.array([[36.0 / jnp.sqrt(97.0)], [9.0 / jnp.sqrt(2.0)]])
+        # process_model wraps the full transition with in_axes=(None,0).
+>       assert_allclose(info.func(params, states), expected, rtol=3e-13, atol=3e-13)
+E       AssertionError: 
+E       Not equal to tolerance rtol=3e-13, atol=3e-13
+E       
+E       Mismatched elements: 2 / 2 (100%)
+E       Mismatch at indices:
+E        [0, 0]: 3.369085602646046 (ACTUAL), 3.655246194481029 (DESIRED)
+E        [1, 0]: 5.133562285458099 (ACTUAL), 6.363961030678928 (DESIRED)
+E       Max absolute difference among violations: 1.23039875
+E       Max relative difference among violations: 0.19333851
+E        ACTUAL: array([[3.369086],
+E              [5.133562]])
+E        DESIRED: array([[3.655246],
+E              [6.363961]])
+tests/test_stable_translog_dispatch.py:48: AssertionError
+___________________ test_amn_resolver_returns_the_right_law ____________________
+model_and_processed = (ModelSpec(_factors=mappingproxy({'skill': FactorSpec(measurements=(('m0', 'm1', 'm2'), ('m0', 'm1', 'm2')), normaliza..., 1: 1})), factor_info=mappingproxy({'skill': FactorInfo(factor_type=<FactorType.STATE: 1>)}), control_function=None)))
+    def test_amn_resolver_returns_the_right_law(model_and_processed):
+        model, processed = model_and_processed
+        func, names = _resolve_transition_callable(
+            "stable_translog", "skill", processed, model
+        )
+        assert func is tf.stable_translog
+        assert names == ("skill", "skill ** 2", "constant")
+        value = func(jnp.array([3.0]), jnp.array([0.0, 1.0, 0.0]))
+>       assert_allclose(value, 9.0 / jnp.sqrt(2.0), rtol=3e-14)
+E       AssertionError: 
+E       Not equal to tolerance rtol=3e-14, atol=0
+E       
+E       Mismatched elements: 1 / 1 (100%)
+E       Max absolute difference among violations: 1.23039875
+E       Max relative difference among violations: 0.19333851
+E        ACTUAL: array(5.133562)
+E        DESIRED: array(6.363961)
+tests/test_stable_translog_dispatch.py:63: AssertionError
+=============================== warnings summary ===============================
+.pixi/envs/tests-cpu/lib/python3.14/site-packages/estimagic/estimation_table.py:12
+    suppress_performance_warnings = np.testing.suppress_warnings()
+src/skillmodels/chs/process_debug_data.py:131
+  /home/hmg/econ/skillmodels-applications/skillmodels/src/skillmodels/chs/process_debug_data.py:131: BeartypeClawDecorWarning: Function skillmodels.chs.process_debug_data._convert_state_array_to_df() in file "/home/hmg/econ/skillmodels-applications/skillmodels/src/skillmodels/chs/process_debug_data.py" line 131 not decoratable by @beartype, as:
+      Traceback (most recent call last):
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_util/api/external/utilnumpy.py", line 253, in make_numpy_dtype
+          dtype = numpy_dtype(dtype)  # type: ignore[call-overload]
+      The above exception was the direct cause of the following exception:
+      Traceback (most recent call last):
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/decorcore.py", line 211, in _beartype_object_nonfatal
+          return _beartype_object_fatal(obj, conf=conf, **kwargs)
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/decorcore.py", line 133, in _beartype_object_fatal
+          beartype_nontype(obj, **kwargs)  # type: ignore[return-value]
+          ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/_nontype/decornontype.py", line 313, in beartype_nontype
+          return beartype_func(obj, **kwargs)  # type: ignore[return-value]
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/_nontype/decornontype.py", line 402, in beartype_func
+          func_wrapper_code = generate_code(decor_meta)
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/_nontype/_wrap/wrapmain.py", line 121, in generate_code
+          code_check_params = _code_check_args(decor_meta)
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/_nontype/_wrap/_wrapargs.py", line 423, in code_check_args
+          reraise_exception_placeholder(
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+              exception=exception,
+              ^^^^^^^^^^^^^^^^^^^^
+          ...<9 lines>...
+              ),
+              ^^
+          )
+          ^
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_util/error/utilerrraise.py", line 138, in reraise_exception_placeholder
+          raise exception.with_traceback(exception.__traceback__)
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_decor/_nontype/_wrap/_wrapargs.py", line 263, in code_check_args
+          hint_sane = sanify_hint_root_func(
+              decor_meta=decor_meta,
+          ...<3 lines>...
+              exception_prefix=EXCEPTION_PLACEHOLDER,
+          )
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_check/convert/convmain.py", line 204, in sanify_hint_root_func
+          hint_sane = reduce_hint(
+              hint=hint,
+          ...<5 lines>...
+              exception_prefix=exception_prefix,
+          )
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_check/convert/_reduce/redmain.py", line 267, in reduce_hint
+          hint_or_sane_curr = hint_reducer(
+              hint=hint_curr,
+          ...<8 lines>...
+              exception_prefix=exception_prefix,
+          )
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_check/convert/_reduce/redmain.py", line 558, in _reduce_hint_cached
+          hint_or_sane = hint_reducer_cached(hint, exception_prefix)
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_util/cache/utilcachecall.py", line 251, in _callable_cached
+          raise exception
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_util/cache/utilcachecall.py", line 243, in _callable_cached
+          return_value = args_flat_to_return_value[args_flat] = func(
+                                                                ~~~~^
+              *args)
+              ^^^^^^
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_check/convert/_reduce/_nonpep/api/redapinumpy.py", line 224, in reduce_hint_numpy_ndarray
+          hint_dtype = make_numpy_dtype(
+              dtype=hint_dtype_like,
+              exception_prefix=exception_prefix,
+              exception_cls=BeartypeDecorHintNonpepNumpyException,
+          )
+        File "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/lib/python3.14/site-packages/beartype/_util/api/external/utilnumpy.py", line 261, in make_numpy_dtype
+          raise exception_cls(
+          ...<2 lines>...
+          ) from exception
+    def _convert_state_array_to_df(
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: /tmp/claude-1000/-home-hmg-Dropbox-health-cognition-draft/f368457b-f0d1-419e-80f9-d3c98cf19bb0/scratchpad/mut2.xml -
+=========================== short test summary info ============================
+FAILED tests/test_stable_translog.py::test_finite_tail_witness_and_limits - A...
+FAILED tests/test_stable_translog.py::test_shape_order_permutations_and_parameter_basis[1]
+FAILED tests/test_stable_translog.py::test_shape_order_permutations_and_parameter_basis[2]
+FAILED tests/test_stable_translog.py::test_shape_order_permutations_and_parameter_basis[3]
+FAILED tests/test_stable_translog.py::test_shape_order_permutations_and_parameter_basis[4]
+FAILED tests/test_stable_translog.py::test_default_profile_fidelity_for_squares_and_interactions[1.0-0.01]
+FAILED tests/test_stable_translog.py::test_default_profile_fidelity_for_squares_and_interactions[2.0-0.1]
+FAILED tests/test_stable_translog.py::test_derivatives_at_zero_clip_knee_and_tails
+FAILED tests/test_stable_translog.py::test_observed_input_beyond_scale_is_clipped_in_interaction
+FAILED tests/test_stable_translog_dispatch.py::test_public_model_uses_clipped_values
+FAILED tests/test_stable_translog_dispatch.py::test_amn_resolver_returns_the_right_law
+================== 11 failed, 18 passed, 2 warnings in 6.95s ===================
+EXIT: 1

@@ -28,6 +28,7 @@ should not be jitted yet.
 """
 
 import functools
+import math
 from itertools import combinations
 
 import jax
@@ -376,6 +377,97 @@ def identity_constraints_robust_translog(
     all_factors: tuple[str, ...],
 ) -> list[FixedConstraintWithValue]:
     """Identity constraints for robust_translog."""
+    return identity_constraints_translog(
+        factor=factor, aug_period=aug_period, all_factors=all_factors
+    )
+
+
+def _soft_clip(x: Array, scale: float, power: int) -> Array:
+    """Smooth odd map; in real arithmetic |g(x)| < scale for finite x.
+
+    Floating-point results may round to +/-scale.
+
+    g(x) = x / (1 + |x / scale| ** power) ** (1 / power). The helper maps +/-infinity
+    to +/-scale and preserves NaN.
+    The full transition does not repair nonfinite linear inputs.
+    """
+    # Validate configuration in stable_translog; every evaluated branch is safe.
+    safe_x = jnp.where(jnp.isfinite(x), x, 0.0)
+    magnitude = jnp.abs(safe_x)
+    inside = magnitude <= scale
+    # Match this tie branch to the numerator branch for the correct derivative at
+    # |x| = scale.
+    m = jnp.where(inside, scale, magnitude)
+    unit_x = safe_x / m
+    unit_s = scale / m
+    denominator = (unit_s**power + unit_x**power) ** (1.0 / power)
+    # Keeping x itself in the small branch avoids losing subnormals in x / scale.
+    numerator = jnp.where(inside, safe_x, scale * unit_x)
+    clipped = numerator / denominator
+    return jnp.where(jnp.isfinite(x), clipped, scale * jnp.sign(x))
+
+
+def stable_translog(
+    states: Array,
+    params: Array,
+    *,
+    scale: float = 3.0,
+    power: int = 4,
+) -> Array:
+    """Translog whose squares and interactions are evaluated on soft-clipped states.
+
+    f = c + Σ_j β_j s_j + Σ_j γ_j g(s_j)² + Σ_{a<b} δ_ab g(s_a) g(s_b), with
+    g(x) = x / (1 + |x/scale|**power)**(1/power).
+
+    The linear part is untouched and each nonlinear basis term is bounded by scale².
+    The deterministic fixed-coefficient law has bounded iterates when the complete
+    linear matrix is Schur-stable and all remaining forcing is uniformly bounded.
+    This does not certify switched dynamics, control-function corrections, Gaussian
+    sample paths or UKF stability; see design section 2.2. Each nonlinear basis term
+    has <1% relative error for coordinates within +/-1 at the defaults, not necessarily
+    a cancelling sum or a likelihood. Observed factors are clipped in nonlinear terms.
+
+    Unlike robust_translog, this leaves the linear dynamics exact. A saturation
+    `scale` beyond the translog's own unstable fixed point can leave a second, spurious
+    stable fixed point in the tail; check the fixed points of estimated equations
+    before using the function as a long-horizon law of motion. `power` must be an even
+    integer ≥ 2 for a smooth g.
+
+    Parameter layout is that of `translog`.
+
+    """  # noqa: RUF002
+    if type(power) is not int or power < 2 or power % 2:
+        msg = f"power must be an even integer >= 2, got {power}."
+        raise ValueError(msg)
+    if not math.isfinite(scale) or scale <= 0:
+        msg = f"scale must be positive and finite, got {scale}."
+        raise ValueError(msg)
+    nfac = len(states)
+    constant = params[-1]
+    lin_beta = params[:nfac]
+    square_beta = params[nfac : 2 * nfac]
+    inter_beta = params[2 * nfac : -1]
+
+    g = _soft_clip(states, scale=scale, power=power)
+    res = jnp.dot(states, lin_beta)
+    res += jnp.dot(g**2, square_beta)
+    for p, (a, b) in zip(inter_beta, combinations(range(nfac), 2), strict=False):
+        res += p * g[a] * g[b]
+    res += constant
+    return res
+
+
+def params_stable_translog(factors: tuple[str, ...]) -> list[str]:
+    """Parameter names for stable_translog (same as translog)."""
+    return params_translog(factors)
+
+
+def identity_constraints_stable_translog(
+    factor: str,
+    aug_period: int,
+    all_factors: tuple[str, ...],
+) -> list[FixedConstraintWithValue]:
+    """Identity constraints for stable_translog (same as translog)."""
     return identity_constraints_translog(
         factor=factor, aug_period=aug_period, all_factors=all_factors
     )

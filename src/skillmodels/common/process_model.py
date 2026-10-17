@@ -389,6 +389,23 @@ def _inject_control_function_nodes(
         )
 
 
+def _hide_keyword_only_config(func: Callable) -> Callable:
+    """Bind keyword-only configuration (e.g. `scale` of stable_translog) at defaults.
+
+    dags would otherwise expose such arguments as inputs of the transition DAG.
+
+    """
+    params = inspect.signature(func).parameters.values()
+    if not any(p.kind is p.KEYWORD_ONLY for p in params):
+        return func
+
+    def bound(states: Array, params: Array) -> Array:
+        return func(states, params)
+
+    bound.__name__ = func.__name__  # ty: ignore[unresolved-attribute]
+    return bound
+
+
 def _build_base_transition_funcs(
     model_spec: ModelSpec,
     latent_factors: tuple[str, ...],
@@ -400,7 +417,7 @@ def _build_base_transition_funcs(
     for factor in latent_factors:
         spec = model_spec.factors[factor].transition_function
         if isinstance(spec, str):
-            func = getattr(t_f_module, spec)
+            func = _hide_keyword_only_config(getattr(t_f_module, spec))
             if spec == "constant":
                 func = rename_arguments(func, mapper={"state": factor})
             func_list.append(extract_params(func, key=factor))

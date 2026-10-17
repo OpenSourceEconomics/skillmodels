@@ -1,0 +1,361 @@
+{
+  "audited_baseline_ref": "94aa213d64955044c4afd436dd27af5e0f8852b1",
+  "audited_head_ref": "27ca5b486f6cbebfe19019943944a4cf4a390161",
+  "comparison": "Unchanged baseline translog evaluated at the installed head versus stable_translog, identical inputs. Confirm git revision and source hashes against the audited bundle before acceptance.",
+  "scope": "Offline resource evidence only; no repository edit and no automatic profile certification.",
+  "rows": [
+    {
+      "law": "translog",
+      "workload": "three_factor_toy",
+      "fixture": {
+        "states": [
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            0,
+            4
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            0,
+            -3,
+            0
+          ],
+          [
+            -1,
+            -1,
+            -1
+          ],
+          [
+            1.5,
+            -2,
+            1.8
+          ],
+          [
+            12,
+            -34,
+            48
+          ]
+        ],
+        "params": [
+          0.2,
+          0.1,
+          0.12,
+          0.08,
+          0.04,
+          0.05,
+          0.05,
+          0.03,
+          0.06,
+          0.04
+        ],
+        "source": "tests/test_transition_functions.py:48-85"
+      },
+      "input_digest": "98fa72cf530179543e802e861828741a83602249a35a4715a9976e81cada6e85",
+      "law_source_sha256": "8e837d61be13b3aba6a7461faa35c4fbf73b3d31171553cfd1d59e73543a8720",
+      "git_head": "c2db3e9b9d7902e714a3e79a5411e50ac81bd1a2",
+      "python": "3.14.6",
+      "jax": "0.10.2",
+      "host": "hmg-home",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+      "backend": "cpu",
+      "dtype": "float64",
+      "x64": true,
+      "transformation": "jit(vmap(law, in_axes=(0,None))); one fixed shape per fresh process",
+      "first_call_seconds_including_compile": 0.09875379699951736,
+      "compile_seconds": null,
+      "compile_note": "First call includes execution and compilation; it is not isolated compiler time. Contract compile budget is not_applicable.",
+      "warm_calls": 1000,
+      "warm_seconds_total": 0.006773041997803375,
+      "warm_seconds_per_call": 6.773041997803375e-06,
+      "peak_host_gib_before_first_call": 0.35082244873046875,
+      "peak_host_gib_after_first_call": 0.38550567626953125,
+      "peak_host_gib_after_repeated_shape": 0.38550567626953125,
+      "peak_device_gib": null,
+      "executable_cache_entries": null,
+      "cache_note": "Same compiled callable and shapes reused. RSS checkpoints are observed; no private cache-counter API or cache-growth certification is used.",
+      "outputs": [
+        0.76,
+        0.7000000000000001,
+        1.32,
+        0.04,
+        0.7700000000000002,
+        0.09999999999999995,
+        -0.07000000000000006,
+        0.5730000000000001,
+        76.72
+      ],
+      "measurement_deviation": "Supplemental microbenchmark: one compilation-bearing first call, then one batch of synchronized warm calls; not zero-warmup pytest session time.",
+      "worker_wall_seconds": 2.371631663001608,
+      "worker_log": "docs/superpowers/specs/2026-10-16-stable-translog-native-resource-comparison.three_factor_toy.translog.log",
+      "command": [
+        "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/bin/python",
+        "/tmp/claude-1000/-home-hmg-Dropbox-health-cognition-draft/f368457b-f0d1-419e-80f9-d3c98cf19bb0/scratchpad/rt3/benchmark_stable_translog.py",
+        "--worker-law",
+        "translog",
+        "--workload",
+        "three_factor_toy",
+        "--calls",
+        "1000"
+      ]
+    },
+    {
+      "law": "stable_translog",
+      "workload": "three_factor_toy",
+      "fixture": {
+        "states": [
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            0,
+            4
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            0,
+            -3,
+            0
+          ],
+          [
+            -1,
+            -1,
+            -1
+          ],
+          [
+            1.5,
+            -2,
+            1.8
+          ],
+          [
+            12,
+            -34,
+            48
+          ]
+        ],
+        "params": [
+          0.2,
+          0.1,
+          0.12,
+          0.08,
+          0.04,
+          0.05,
+          0.05,
+          0.03,
+          0.06,
+          0.04
+        ],
+        "source": "tests/test_transition_functions.py:48-85"
+      },
+      "input_digest": "98fa72cf530179543e802e861828741a83602249a35a4715a9976e81cada6e85",
+      "law_source_sha256": "6d97425e25dbb3b53b073b7fea594927e9e8e0bf2abcc5877a096245bf138e82",
+      "git_head": "c2db3e9b9d7902e714a3e79a5411e50ac81bd1a2",
+      "python": "3.14.6",
+      "jax": "0.10.2",
+      "host": "hmg-home",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+      "backend": "cpu",
+      "dtype": "float64",
+      "x64": true,
+      "transformation": "jit(vmap(law, in_axes=(0,None))); one fixed shape per fresh process",
+      "first_call_seconds_including_compile": 0.09894447899932857,
+      "compile_seconds": null,
+      "compile_note": "First call includes execution and compilation; it is not isolated compiler time. Contract compile budget is not_applicable.",
+      "warm_calls": 1000,
+      "warm_seconds_total": 0.01125535699975444,
+      "warm_seconds_per_call": 1.125535699975444e-05,
+      "peak_host_gib_before_first_call": 0.351104736328125,
+      "peak_host_gib_after_first_call": 0.394439697265625,
+      "peak_host_gib_after_repeated_shape": 0.394439697265625,
+      "peak_device_gib": null,
+      "executable_cache_entries": null,
+      "cache_note": "Same compiled callable and shapes reused. RSS checkpoints are observed; no private cache-counter API or cache-growth certification is used.",
+      "outputs": [
+        0.7324196955584823,
+        0.5945584412271572,
+        0.9122089917060472,
+        0.04,
+        0.768103957748822,
+        -0.0054415587728429485,
+        -0.0718960422511781,
+        0.5651273806259308,
+        5.608774892295967
+      ],
+      "measurement_deviation": "Supplemental microbenchmark: one compilation-bearing first call, then one batch of synchronized warm calls; not zero-warmup pytest session time.",
+      "worker_wall_seconds": 2.3636887510001543,
+      "worker_log": "docs/superpowers/specs/2026-10-16-stable-translog-native-resource-comparison.three_factor_toy.stable_translog.log",
+      "command": [
+        "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/bin/python",
+        "/tmp/claude-1000/-home-hmg-Dropbox-health-cognition-draft/f368457b-f0d1-419e-80f9-d3c98cf19bb0/scratchpad/rt3/benchmark_stable_translog.py",
+        "--worker-law",
+        "stable_translog",
+        "--workload",
+        "three_factor_toy",
+        "--calls",
+        "1000"
+      ]
+    },
+    {
+      "law": "translog",
+      "workload": "run_e_one_factor",
+      "fixture": {
+        "states": [
+          [
+            -3.0
+          ]
+        ],
+        "params": [
+          0.769,
+          -0.103,
+          -0.003
+        ],
+        "source": "profile contract: one-factor run-E coefficients and starting state; pointwise evaluation, not a 200-step timing"
+      },
+      "input_digest": "cf6ced577650c9b312d4df90a25ef46a8ff240734b07f1a7e228bfbca6920875",
+      "law_source_sha256": "8e837d61be13b3aba6a7461faa35c4fbf73b3d31171553cfd1d59e73543a8720",
+      "git_head": "c2db3e9b9d7902e714a3e79a5411e50ac81bd1a2",
+      "python": "3.14.6",
+      "jax": "0.10.2",
+      "host": "hmg-home",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+      "backend": "cpu",
+      "dtype": "float64",
+      "x64": true,
+      "transformation": "jit(vmap(law, in_axes=(0,None))); one fixed shape per fresh process",
+      "first_call_seconds_including_compile": 0.026321515997551614,
+      "compile_seconds": null,
+      "compile_note": "First call includes execution and compilation; it is not isolated compiler time. Contract compile budget is not_applicable.",
+      "warm_calls": 1000,
+      "warm_seconds_total": 0.0065096619982796255,
+      "warm_seconds_per_call": 6.509661998279625e-06,
+      "peak_host_gib_before_first_call": 0.35112762451171875,
+      "peak_host_gib_after_first_call": 0.3673057556152344,
+      "peak_host_gib_after_repeated_shape": 0.3673057556152344,
+      "peak_device_gib": null,
+      "executable_cache_entries": null,
+      "cache_note": "Same compiled callable and shapes reused. RSS checkpoints are observed; no private cache-counter API or cache-growth certification is used.",
+      "outputs": [
+        -3.237
+      ],
+      "measurement_deviation": "Supplemental microbenchmark: one compilation-bearing first call, then one batch of synchronized warm calls; not zero-warmup pytest session time.",
+      "worker_wall_seconds": 2.3440196759984246,
+      "worker_log": "docs/superpowers/specs/2026-10-16-stable-translog-native-resource-comparison.run_e_one_factor.translog.log",
+      "command": [
+        "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/bin/python",
+        "/tmp/claude-1000/-home-hmg-Dropbox-health-cognition-draft/f368457b-f0d1-419e-80f9-d3c98cf19bb0/scratchpad/rt3/benchmark_stable_translog.py",
+        "--worker-law",
+        "translog",
+        "--workload",
+        "run_e_one_factor",
+        "--calls",
+        "1000"
+      ]
+    },
+    {
+      "law": "stable_translog",
+      "workload": "run_e_one_factor",
+      "fixture": {
+        "states": [
+          [
+            -3.0
+          ]
+        ],
+        "params": [
+          0.769,
+          -0.103,
+          -0.003
+        ],
+        "source": "profile contract: one-factor run-E coefficients and starting state; pointwise evaluation, not a 200-step timing"
+      },
+      "input_digest": "cf6ced577650c9b312d4df90a25ef46a8ff240734b07f1a7e228bfbca6920875",
+      "law_source_sha256": "6d97425e25dbb3b53b073b7fea594927e9e8e0bf2abcc5877a096245bf138e82",
+      "git_head": "c2db3e9b9d7902e714a3e79a5411e50ac81bd1a2",
+      "python": "3.14.6",
+      "jax": "0.10.2",
+      "host": "hmg-home",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+      "backend": "cpu",
+      "dtype": "float64",
+      "x64": true,
+      "transformation": "jit(vmap(law, in_axes=(0,None))); one fixed shape per fresh process",
+      "first_call_seconds_including_compile": 0.060867508000228554,
+      "compile_seconds": null,
+      "compile_note": "First call includes execution and compilation; it is not isolated compiler time. Contract compile budget is not_applicable.",
+      "warm_calls": 1000,
+      "warm_seconds_total": 0.006817727000452578,
+      "warm_seconds_per_call": 6.817727000452578e-06,
+      "peak_host_gib_before_first_call": 0.3510246276855469,
+      "peak_host_gib_after_first_call": 0.3809814453125,
+      "peak_host_gib_after_repeated_shape": 0.3809814453125,
+      "peak_device_gib": null,
+      "executable_cache_entries": null,
+      "cache_note": "Same compiled callable and shapes reused. RSS checkpoints are observed; no private cache-counter API or cache-growth certification is used.",
+      "outputs": [
+        -2.9654879861599297
+      ],
+      "measurement_deviation": "Supplemental microbenchmark: one compilation-bearing first call, then one batch of synchronized warm calls; not zero-warmup pytest session time.",
+      "worker_wall_seconds": 2.2712926040003367,
+      "worker_log": "docs/superpowers/specs/2026-10-16-stable-translog-native-resource-comparison.run_e_one_factor.stable_translog.log",
+      "command": [
+        "/home/hmg/econ/skillmodels-applications/skillmodels/.pixi/envs/tests-cpu/bin/python",
+        "/tmp/claude-1000/-home-hmg-Dropbox-health-cognition-draft/f368457b-f0d1-419e-80f9-d3c98cf19bb0/scratchpad/rt3/benchmark_stable_translog.py",
+        "--worker-law",
+        "stable_translog",
+        "--workload",
+        "run_e_one_factor",
+        "--calls",
+        "1000"
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "workload": "three_factor_toy",
+      "warm_runtime_ratio": 1.6617875695152582,
+      "peak_host_ratio": 1.0231748105048586,
+      "interpretation": "Review existing 10% repair triggers and 3% noise floor. One repetition is not a significance claim; do not invent a waiver."
+    },
+    {
+      "workload": "run_e_one_factor",
+      "warm_runtime_ratio": 1.0473242700242145,
+      "peak_host_ratio": 1.0372324405163729,
+      "interpretation": "Review existing 10% repair triggers and 3% noise floor. One repetition is not a significance claim; do not invent a waiver."
+    }
+  ],
+  "remaining_contract_checks": "Retain the fresh-process unit-module and CI reports; preserve their explicit timing waivers. Align this supplemental warmed comparison with the declared measurement protocol before issuing resource acceptance."
+}

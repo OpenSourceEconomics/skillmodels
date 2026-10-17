@@ -1,0 +1,12 @@
+{
+  "purpose": "Workload-level warm timing of the CHS likelihood-and-gradient on the estimation fixture (tests/test_missing_observed_factors.py _model(2, law, MOMENTS), nonlinear=0.05), translog versus stable_translog, identical data and parameters. Supplements the reviewer's kernel microbenchmark (native-resource-comparison.json), whose per-call cost is dominated by dispatch at the 10 microsecond scale.",
+  "command": "for law in translog stable_translog translog stable_translog; do zsh -ic \"cap pixi run -e tests-cpu python <scratchpad>/time_loglike.py $law 200\"; done  (one fresh process per run; first call includes compilation; warm = mean of 200 subsequent synchronized calls)",
+  "environment": {"host": "hmg-office", "python": "3.14.6", "jax": "0.10.2", "backend": "cpu", "x64": true, "git_head": "c2db3e9 + uncommitted test extensions (transition_functions.py unchanged)"},
+  "runs": [
+    {"law": "translog", "first_call_s": 2.1767721839969454, "warm_s_per_call": 0.002746073609996529, "calls": 200, "loglike": -205.37241222797343, "peak_gib": 0.594879150390625},
+    {"law": "stable_translog", "first_call_s": 2.4540460919997713, "warm_s_per_call": 0.0018515510199904384, "calls": 200, "loglike": -204.14533290953568, "peak_gib": 0.6018753051757812},
+    {"law": "translog", "first_call_s": 2.2977069899970957, "warm_s_per_call": 0.0026277104099972346, "calls": 200, "loglike": -205.37241222797343, "peak_gib": 0.5915603637695312},
+    {"law": "stable_translog", "first_call_s": 2.2939079190000484, "warm_s_per_call": 0.0025074287799907325, "calls": 200, "loglike": -204.14533290953568, "peak_gib": 0.5972061157226562}
+  ],
+  "assessment": "Warm likelihood-and-gradient time per call: translog 2.75 / 2.63 ms, stable_translog 1.85 / 2.51 ms; the run-to-run spread of the same law (0.1 to 0.9 ms) exceeds the difference between laws. Peak RSS differs by about 1 percent. No workload-level runtime or memory regression is detectable at the 10 percent trigger."
+}
