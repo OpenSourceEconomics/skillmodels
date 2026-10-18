@@ -1,20 +1,20 @@
 # `asymmetric_translog`: translog with sign-split squares around an estimated knot
 
-Date: 2026-10-16. Status: design, to be implemented on branch `asymmetric-translog`
-from `stable-translog` at 9cd73db.
+Date: 2026-10-16. Status: design, to be implemented on branch `asymmetric-translog` from
+`stable-translog` at 9cd73db.
 
 ## 1. Why
 
 In the health-cognition application the estimated translog own-square of physical
 capacity is positive (0.07 to 0.10 at ages 74+ with own linear coefficient 0.97). Binned
 next-period means of the underlying measures show why: mobility and large-muscle counts
-revert strongly at the unhealthy floor (slope 0.6) and are near-linear at the healthy end
-(slope 0.83). A single quadratic term has to buy the floor reversion with a slope above
-one at the healthy end (own slope ρ + 2γx exceeds 1 for x > 0.15, inside the data), and
-extrapolates to an unstable fixed point at +1.5. The mirror pattern (ceiling at zero
-depressive symptoms, negative own-square, slope above one at the unhealthy end) appears
-for psychological capacity. A symmetric clip (`stable_translog`) cannot separate the two
-ends. The remedy is one curvature coefficient per side of a knot.
+revert strongly at the unhealthy floor (slope 0.6) and are near-linear at the healthy
+end (slope 0.83). A single quadratic term has to buy the floor reversion with a slope
+above one at the healthy end (own slope ρ + 2γx exceeds 1 for x > 0.15, inside the
+data), and extrapolates to an unstable fixed point at +1.5. The mirror pattern (ceiling
+at zero depressive symptoms, negative own-square, slope above one at the unhealthy end)
+appears for psychological capacity. A symmetric clip (`stable_translog`) cannot separate
+the two ends. The remedy is one curvature coefficient per side of a knot.
 
 ## 2. Function
 
@@ -30,17 +30,17 @@ f(x) = c + Σ_j β_j x_j
 
 - `max(·,0)²` and `min(·,0)²` are C¹ in x and in κ, so the unscented filter, the
   gradient and the optimiser see a smooth function. Implement as
-  `jnp.maximum(d, 0.0) ** 2` and `jnp.minimum(d, 0.0) ** 2` with `d = x − κ`;
-  no `where`.
+  `jnp.maximum(d, 0.0) ** 2` and `jnp.minimum(d, 0.0) ** 2` with `d = x − κ`; no
+  `where`.
 - Nesting: γ⁺ = γ⁻ = γ gives `c + Σβx + Σγ(x−κ)² + Σδ x_a x_b`, a translog with the
   linear and constant terms shifted by `−2γκ` and `γκ²`. With κ = 0 it is exactly
   `translog`. Tests pin both.
-- The knot κ_j is a parameter per factor, estimated by default. Users fix it through
-  the ordinary constraints machinery (profiling over a grid of knots is the intended
-  first use).
-- No clipping. If a fixed-point check of an estimated law shows a spurious attractor
-  far in the convex tail, composing with `_soft_clip` is a later extension, not part
-  of this spec.
+- The knot κ_j is a parameter per factor, estimated by default. Users fix it through the
+  ordinary constraints machinery (profiling over a grid of knots is the intended first
+  use).
+- No clipping. If a fixed-point check of an estimated law shows a spurious attractor far
+  in the convex tail, composing with `_soft_clip` is a later extension, not part of this
+  spec.
 
 ## 3. Parameter layout and names
 
@@ -74,20 +74,21 @@ configuration, so `_hide_keyword_only_config` is a no-op for it.
 
 ## 5. Tests (`tests/test_asymmetric_translog.py`, `tests/test_asymmetric_translog_estimation.py`)
 
-Kernel, on the 3-factor toy states and parameters of `tests/test_transition_functions.py`:
+Kernel, on the 3-factor toy states and parameters of
+`tests/test_transition_functions.py`:
 
 1. γ⁺ = γ⁻, κ = 0 equals `translog` to 1e-12 on a grid of states including both signs.
-2. γ⁺ = γ⁻ = γ, κ ≠ 0 equals `translog` with linear coefficients β − 2γκ and constant
-   c + Σγκ² to 1e-12.
-3. One-sided curvature: with γ⁺ = 0 and γ⁻ > 0 the own derivative (jax.grad) above the
+1. γ⁺ = γ⁻ = γ, κ ≠ 0 equals `translog` with linear coefficients β − 2γκ and constant c
+   \+ Σγκ² to 1e-12.
+1. One-sided curvature: with γ⁺ = 0 and γ⁻ > 0 the own derivative (jax.grad) above the
    knot equals β exactly and below the knot equals β + 2γ⁻(x − κ).
-4. C¹ at the knot: jax.grad with respect to x and with respect to κ is continuous across
+1. C¹ at the knot: jax.grad with respect to x and with respect to κ is continuous across
    the knot (values at κ ± 1e-7 within 1e-6), and the function value is continuous.
-5. Parameter companions: `params_asymmetric_translog` names and length
+1. Parameter companions: `params_asymmetric_translog` names and length
    `4*nfac + nfac*(nfac-1)/2 + 1`; identity constraints as in section 3.
-6. JIT, vmap and a 50-step `lax.scan` give the same values as eager evaluation.
-7. Fixed-point witness for the application pattern: one-factor own map with β = 0.97,
-   γ⁻ = 0.1, γ⁺ = 0, κ = −0.5, c = −0.03 iterated 200 steps from x ∈ {−3, −1, 0, 0.7, 2}
+1. JIT, vmap and a 50-step `lax.scan` give the same values as eager evaluation.
+1. Fixed-point witness for the application pattern: one-factor own map with β = 0.97, γ⁻
+   = 0.1, γ⁺ = 0, κ = −0.5, c = −0.03 iterated 200 steps from x ∈ {−3, −1, 0, 0.7, 2}
    stays finite and converges to the same point from every start (slope ≤ β < 1 above
    the knot, and below it β + 2γ⁻(x − κ) stays in (0, 1) on this range).
 
@@ -97,9 +98,10 @@ Estimation, on the fixture of `tests/test_missing_observed_factors.py` as in
 and the gradient to rtol 1e-8; with γ⁺ = γ⁻ and knots 0 the contributions equal those of
 `"translog"`; with γ⁺ ≠ γ⁻ they differ by more than 1e-8; the endogenous carry-forward
 fixture accepts the function with its identity constraints written explicitly for the
-reference callable (copy the `_endogenous_inputs` helper). Dispatch: the public model and
-the AMN resolver return the asymmetric law (copy `tests/test_stable_translog_dispatch.py`
-with one value that distinguishes the two sides of the knot).
+reference callable (copy the `_endogenous_inputs` helper). Dispatch: the public model
+and the AMN resolver return the asymmetric law (copy
+`tests/test_stable_translog_dispatch.py` with one value that distinguishes the two sides
+of the knot).
 
 ## 6. Documentation
 
