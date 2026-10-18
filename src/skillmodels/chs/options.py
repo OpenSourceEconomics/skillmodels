@@ -20,6 +20,10 @@ class CHSEstimationOptions:
     """Distance for bounds. Zeroed out if `robust_bounds` is False."""
     sigma_points_scale: float = 2
     """Scaling factor for sigma points in unscented transform."""
+    split_dataset: int = 1
+    """Number of slices of the individuals over which the gradient is accumulated.
+
+    More slices lower the peak memory of the gradient; the result is the same."""
     clipping_lower_bound: float = -1e30
     """Lower bound for soft clipping."""
     clipping_upper_bound: float | None = None
@@ -58,6 +62,14 @@ class CHSEstimationOptions:
 
     Forwarded by `estimate_chs` to `estimate_ml` (e.g. convergence
     tolerances, trust-region settings for `fides`)."""
+
+    error_handling: Literal["raise", "continue"] = "raise"
+    """What `optimagic` does when the criterion raises (`optimize_options`).
+
+    The criterion raises whenever the log-likelihood or its gradient is
+    non-finite. `"raise"` aborts the estimation. `"continue"` replaces that
+    point by a penalty worse than the start value, so a trust-region step into
+    a numerically explosive region is rejected and the radius shrinks."""
 
     estimate_ml_options: Mapping[str, Any] = field(
         default_factory=lambda: MappingProxyType({})

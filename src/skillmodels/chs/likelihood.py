@@ -36,6 +36,7 @@ def log_likelihood(
     is_predict_iteration: Array | np.ndarray,
     iteration_to_period: Array | np.ndarray,
     observed_factors: Array | np.ndarray,
+    observed_factor_vars: Array | np.ndarray,
 ) -> Array:
     """Aggregated log likelihood of a skill formation model.
 
@@ -66,6 +67,9 @@ def log_likelihood(
         iteration_to_period: Array mapping iteration index to period.
         observed_factors: Array of shape (n_periods, n_obs, n_observed_factors) with
             data on the observed factors.
+        observed_factor_vars: Array of shape (n_periods, n_obs, n_missing) with
+            the variance of each possibly-missing observed factor (0 where it is
+            observed).
 
     Returns:
         Scalar aggregated log likelihood.
@@ -86,6 +90,7 @@ def log_likelihood(
         is_predict_iteration=is_predict_iteration,
         iteration_to_period=iteration_to_period,
         observed_factors=observed_factors,
+        observed_factor_vars=observed_factor_vars,
     ).sum()
 
 
@@ -104,6 +109,7 @@ def log_likelihood_obs(
     is_predict_iteration: Array | np.ndarray,
     iteration_to_period: Array | np.ndarray,
     observed_factors: Array | np.ndarray,
+    observed_factor_vars: Array | np.ndarray,
 ) -> Array:
     """Log likelihood of a skill formation model.
 
@@ -143,6 +149,9 @@ def log_likelihood_obs(
         iteration_to_period: Array mapping iteration index to period.
         observed_factors: Array of shape (n_periods, n_obs,
             n_observed_factors) with data on the observed factors.
+        observed_factor_vars: Array of shape (n_periods, n_obs, n_missing) with
+            the variance of each possibly-missing observed factor (0 where it is
+            observed).
 
     Returns:
         jnp.array: 1d array of length N, the aggregated log likelihood.
@@ -181,6 +190,7 @@ def log_likelihood_obs(
         sigma_weights=sigma_weights,
         predict_func=predict_func,
         observed_factors=observed_factors,
+        observed_factor_vars=observed_factor_vars,
     )
     _body = jax.checkpoint(_body, prevent_cse=False)
     static_out = jax.lax.scan(_body, carry, loop_args, unroll=False)[1]
@@ -205,6 +215,7 @@ def _scan_body(
     sigma_weights: Array,
     predict_func: Callable,
     observed_factors: Array | np.ndarray,
+    observed_factor_vars: Array | np.ndarray,
 ) -> tuple[dict[str, Array], dict[str, Array]]:
     # ==================================================================================
     # create arguments needed for update
@@ -250,6 +261,7 @@ def _scan_body(
         ],
         "anchoring_constants": parsed_params.anchoring_constants[jnp.array([t, t + 1])],
         "observed_factors": observed_factors[t],
+        "observed_factor_vars": observed_factor_vars[t],
     }
 
     fixed_kwargs = {"predict_func": predict_func}

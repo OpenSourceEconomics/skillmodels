@@ -237,6 +237,7 @@ def _get_labels(
         aug_stagemap=tuple(aug_stagemap),
         aug_stages=tuple(sorted(int(v) for v in np.unique(aug_stagemap))),
         aug_stages_to_stages=MappingProxyType(aug_stages_to_stages),
+        missing_observed_factor_moments=model_spec.missing_observed_factor_moments,
     )
 
 

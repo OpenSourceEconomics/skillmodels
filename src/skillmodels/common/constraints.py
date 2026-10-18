@@ -196,6 +196,43 @@ def reconcile_start_to_equality(
     return out
 
 
+def project_start_to_linear_equalities(
+    params: pd.DataFrame,
+    constraints: Iterable[om.constraints.Constraint],
+) -> pd.DataFrame:
+    """Move the start point onto every linear equality constraint.
+
+    `om.minimize` raises `InvalidParamsError` when a constraint is violated at the
+    starting point. All `om.LinearConstraint`s with a `value` are stacked into one
+    system `A x = b` over the parameters they involve, and those parameters' `value`
+    is replaced by its orthogonal projection onto the solution set (e.g. the
+    least-squares line for second-difference constraints). Other parameters are
+    untouched. Returns a copy; `params` is not modified.
+    """
+    rows = []
+    for c in constraints:
+        if isinstance(c, om.LinearConstraint) and c.value is not None:
+            selected = pd.Series(c.selector(params)).index
+            weights = np.broadcast_to(
+                np.asarray(c.weights, dtype=float), (len(selected),)
+            )
+            rows.append((selected, weights, float(c.value)))
+    if not rows:
+        return params
+    involved = pd.Index(
+        sorted({tup for idx, _, _ in rows for tup in idx}), tupleize_cols=False
+    )
+    a = np.zeros((len(rows), len(involved)))
+    b = np.array([value for _, _, value in rows])
+    for i, (idx, weights, _) in enumerate(rows):
+        a[i, involved.get_indexer(idx)] = weights
+    x = params.loc[list(involved), "value"].to_numpy(dtype=float)
+    projected = x - np.linalg.pinv(a) @ (a @ x - b)
+    out = params.copy()
+    out.loc[list(involved), "value"] = projected
+    return out
+
+
 def collect_fixed_locs(
     constraints: Iterable[om.constraints.Constraint],
 ) -> set[tuple[Any, ...]]:

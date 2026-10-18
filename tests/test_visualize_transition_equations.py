@@ -11,6 +11,8 @@ from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.config import TEST_DATA_DIR
 from skillmodels.common.individual_states import get_individual_states_from_params
 from skillmodels.common.visualize_transition_equations import (
+    _get_state_ranges,
+    _prepare_data_for_one_plot_average_2d,
     combine_transition_plots,
     get_transition_plots,
 )
@@ -35,7 +37,7 @@ def test_visualize_transition_equations_runs() -> None:
     params["value"] = params["value"].fillna(0)
 
     states = get_individual_states_from_params(
-        model_spec=model, data=data, params=params
+        model_spec=model, data=data, params=params, chs_options=MODEL2_CHS_OPTIONS
     )["anchored_states"]["states"]
 
     subplots = get_transition_plots(
@@ -143,7 +145,10 @@ def test_get_transition_plots_runs_for_correction_model() -> None:
     assert not template["value"].isna().any()
 
     states = get_individual_states_from_params(
-        model_spec=model, data=panel, params=template
+        model_spec=model,
+        data=panel,
+        params=template,
+        chs_options=CHSEstimationOptions(),
     )["anchored_states"]["states"]
 
     plots = get_transition_plots(
@@ -156,3 +161,41 @@ def test_get_transition_plots_runs_for_correction_model() -> None:
     )
     # A target factor's plot exists -> its cf-corrected transition evaluated.
     assert ("inv", "fac1") in plots
+
+
+def test_get_state_ranges_adds_factors_missing_from_given_ranges() -> None:
+    # Callers pass ranges of the latent factors; observed factors are inputs too.
+    states = pd.DataFrame(
+        {"aug_period": [0, 0, 1, 1], "fac1": [0.0, 1.0, 2.0, 3.0], "obs": [5, 7, 6, 9]}
+    )
+    given = {"fac1": pd.DataFrame({"minimum": [-1.0], "maximum": [1.0]})}
+    ranges = _get_state_ranges(
+        state_ranges=given, states_data=states, all_factors=("fac1", "obs")
+    )
+    assert ranges["fac1"] is given["fac1"]
+    assert ranges["obs"]["maximum"].tolist() == [7, 9]
+
+
+def test_average_over_draws_skips_persons_with_a_missing_factor() -> None:
+    # Observed factors can be missing; a draw with a NaN would make every mean NaN.
+    states = pd.DataFrame(
+        {
+            "aug_period": [0] * 4,
+            "fac1": [0.0, 1.0, 2.0, 3.0],
+            "obs": [1.0, np.nan, 1.0, 1.0],
+        }
+    )
+    ranges = {"fac1": pd.DataFrame({"minimum": [0.0], "maximum": [1.0]})}
+    out = _prepare_data_for_one_plot_average_2d(
+        states_data=states,
+        state_ranges=ranges,
+        aug_period=0,
+        input_factor="fac1",
+        output_factor="fac1",
+        n_points=3,
+        n_draws=10,
+        transition_function=lambda _params, x: x.sum(axis=1),
+        transition_params={},
+        all_factors=("fac1", "obs"),
+    )
+    assert out["output_fac1"].tolist() == [1.0, 1.5, 2.0]

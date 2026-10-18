@@ -2,9 +2,10 @@
 
 One JAX-compatible kernel evaluates the log density/probability contribution of a
 single measurement given its linear predictor ``eta = c + x'beta + lambda'theta``,
-its scale, and a `MeasurementFamily` code. AF estimation, CHS, simulation and
-posterior-state reweighting all route their measurement contributions through this
-kernel, so the measurement system is defined in exactly one place.
+its scale, and a `MeasurementFamily` code. AF estimation, simulation and
+posterior-state reweighting route their measurement contributions through this
+kernel. CHS (a Gaussian Kalman update) and AMN do not, and reject non-Gaussian
+measurements.
 
 The three families:
 

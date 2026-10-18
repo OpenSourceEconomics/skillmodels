@@ -22,6 +22,7 @@ from skillmodels.common.constraints import (
     _get_transition_constraints,
     add_bounds,
     get_constraints,
+    project_start_to_linear_equalities,
     reconcile_start_to_equality,
 )
 from skillmodels.common.process_model import process_model
@@ -787,3 +788,26 @@ def test_get_constraints_for_augmented_periods(simplest_augmented_model) -> None
         {"loc": ("shock_sds", 1, "fac2", "-"), "type": "fixed", "value": 0.00000001},
     ]
     assert_list_equal_except_for_order(as_dicts, expected)
+
+
+def test_project_start_to_linear_equalities_fits_a_line() -> None:
+    """Second-difference equalities make the start the least-squares line."""
+    index = pd.MultiIndex.from_tuples(
+        [("meas_sds", t, "alive", "-") for t in range(5)] + [("loadings", 0, "y", "f")],
+        names=["category", "aug_period", "name1", "name2"],
+    )
+    values = np.array([0.2, 0.25, 0.2, 0.35, 0.5, 7.0])
+    params = pd.DataFrame({"value": values}, index=index)
+    sds = list(index[:5])
+    constraints = [
+        om.LinearConstraint(
+            selector=functools.partial(select_by_loc, loc=sds[t : t + 3]),
+            weights=np.array([1.0, -2.0, 1.0]),
+            value=0.0,
+        )
+        for t in range(3)
+    ]
+    slope, intercept = np.polyfit(np.arange(5), values[:5], deg=1)
+    expected = np.append(intercept + slope * np.arange(5), 7.0)
+    projected = project_start_to_linear_equalities(params, constraints)
+    np.testing.assert_allclose(projected["value"].to_numpy(), expected, atol=1e-12)

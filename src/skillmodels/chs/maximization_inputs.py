@@ -40,6 +40,7 @@ from skillmodels.common.constraints import (
     get_constraints,
     project_to_probability_constraints,
 )
+from skillmodels.common.measurement_models import GaussianMeasurement
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.params_index import get_params_index
 from skillmodels.common.parse_params import create_parsing_info
@@ -54,9 +55,8 @@ jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 def get_maximization_inputs(  # noqa: C901, PLR0915
     model_spec: ModelSpec,
     data: pd.DataFrame,
-    split_dataset: int = 1,
     *,
-    chs_options: CHSEstimationOptions | None = None,
+    chs_options: CHSEstimationOptions,
     fixed_params: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Create inputs for optimagic's maximize function.
@@ -64,10 +64,11 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     Args:
         model_spec: The model specification. See: :ref:`model_specs`
         data: Dataset in long format.
-        split_dataset: Controls into how many slices to split the dataset
-            during the gradient computation.
-        chs_options: CHS-specific tuning parameters. Defaults to
-            ``CHSEstimationOptions()`` when not provided.
+        chs_options: CHS-specific tuning parameters. Its `start_params_strategy`
+            decides how the `params_template` values are seeded; pass
+            `CHSEstimationOptions(start_params_strategy="none")` when only the
+            likelihood functions or the bare template are needed, since the
+            `"amn"` strategy runs a full AMN estimation.
         fixed_params: Optional DataFrame with a ``"value"`` column pinning
             specified parameters to fixed values. Uses the same 4-level
             MultiIndex as the returned ``params_template``. Each matching
@@ -101,7 +102,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             endogenous factors, we double up the number of periods in order to add
 
     """
-    chs_options = chs_options or CHSEstimationOptions()
+    _fail_if_non_gaussian_measurements(model_spec)
     processed_model = process_model(model_spec)
     p_index = get_params_index(
         update_info=processed_model.update_info,
@@ -127,8 +128,26 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         purpose="estimation",
     )
 
+    # A physical observed input is repeated in both endogenous half-steps.
+    # Marginalizing it separately in each half drops its posterior/cross-covariance.
+    # Until it is carried jointly, reject uncertain inputs in prediction periods.
+    # The final two augmented rows have no outgoing transition.
+    if processed_model.endogenous_factors_info.has_endogenous_factors and np.any(
+        np.asarray(processed_data["observed_factor_vars"][:-2]) > 0
+    ):
+        msg = (
+            "CHS endogenous half-steps require a "
+            "persistent joint missing-observed-factor state for "
+            "positive-variance missing inputs. "
+            "This combination is not yet supported; zero-variance fills and "
+            "complete observed factors remain supported."
+        )
+        raise NotImplementedError(msg)
+
+    # Possibly-missing observed factors augment the sigma-point input.
     sigma_scaling_factor, sigma_weights = calculate_sigma_scaling_factor_and_weights(
-        n_states=processed_model.dimensions.n_latent_factors,
+        n_states=processed_model.dimensions.n_latent_factors
+        + len(processed_data["missing_observed_factors"]),
         kappa=chs_options.sigma_points_scale,
     )
 
@@ -149,6 +168,8 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             measurements=processed_data["measurements"],
             controls=processed_data["controls"],
             observed_factors=processed_data["observed_factors"],
+            observed_factor_vars=processed_data["observed_factor_vars"],
+            missing_observed_factors=processed_data["missing_observed_factors"],
             model=processed_model,
             sigma_weights=sigma_weights,
             sigma_scaling_factor=sigma_scaling_factor,
@@ -175,6 +196,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         n_obs = processed_data["measurements"].shape[1]
         _grad = jnp.zeros_like(params_vec)
         start = 0
+        split_dataset = chs_options.split_dataset
         stop = int(n_obs / split_dataset)
         step = int(n_obs / split_dataset)
         for i in range(split_dataset):
@@ -189,10 +211,21 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
                 measurements=measurements_slice,
                 controls=controls_slice,
                 observed_factors=observed_factors_slice,
+                observed_factor_vars=processed_data["observed_factor_vars"][
+                    :, start:stop, :
+                ],
             )
             start += step
             stop += step
         grad = _to_numpy(_grad)
+        if not (np.isfinite(crit) and np.isfinite(grad).all()):
+            # Raise rather than return, so `error_handling="continue"` can replace
+            # the point by a penalty that rejects the step.
+            msg = (
+                f"The log-likelihood ({crit}) or its gradient "
+                f"({int((~np.isfinite(grad)).sum())} entries) is non-finite."
+            )
+            raise FloatingPointError(msg)
         return crit, grad
 
     def debug_loglike(params: pd.DataFrame) -> dict[str, Any]:
@@ -260,6 +293,27 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         "constraints": constraints,
         "params_template": params_template,
     }
+
+
+def _fail_if_non_gaussian_measurements(model_spec: ModelSpec) -> None:
+    """Reject probit/Tobit measures: the CHS update is a Gaussian Kalman update.
+
+    Such a measure would otherwise be silently estimated as a continuous Gaussian one.
+    """
+    non_gaussian = sorted(
+        name
+        for name, model in model_spec.measurement_models.items()
+        if not isinstance(model, GaussianMeasurement)
+    )
+    if non_gaussian:
+        msg = (
+            f"CHS supports only Gaussian measurements, but {non_gaussian} are "
+            "non-Gaussian (probit/Tobit). The CHS likelihood runs a Gaussian Kalman "
+            "update for every measurement. Declare them Gaussian (a linear "
+            "probability / linear working model) or use estimate_af, which honours "
+            "probit/Tobit families in the initial period."
+        )
+        raise NotImplementedError(msg)
 
 
 def _estimate_amn_for_chs_seeding(
@@ -378,6 +432,8 @@ def _partial_some_log_likelihood(
     measurements: Array,
     controls: Array,
     observed_factors: Array,
+    observed_factor_vars: Array,
+    missing_observed_factors: tuple[str, ...],
     model: ProcessedModel,
     sigma_weights: Array,
     sigma_scaling_factor: Array,
@@ -415,6 +471,9 @@ def _partial_some_log_likelihood(
     # states (cf is a non-linear function of the latent states), so the linear
     # fast-path would silently bypass the cf DAG node. Force the unscented path.
     has_control_function = model.endogenous_factors_info.control_function is not None
+    missing_observed_indices = tuple(
+        model.labels.observed_factors.index(f) for f in missing_observed_factors
+    )
     if is_all_linear(model.transition_info.function_names) and not has_control_function:
         constant_factor_indices = frozenset(
             i
@@ -427,9 +486,14 @@ def _partial_some_log_likelihood(
             latent_factors=model.labels.latent_factors,
             constant_factor_indices=constant_factor_indices,
             n_all_factors=model.dimensions.n_all_factors,
+            missing_observed_indices=missing_observed_indices,
         )
     else:
-        predict_func = functools.partial(kalman_predict, model.transition_info.func)
+        predict_func = functools.partial(
+            kalman_predict,
+            model.transition_info.func,
+            missing_observed_indices=missing_observed_indices,
+        )
 
     return functools.partial(
         fun,
@@ -446,6 +510,7 @@ def _partial_some_log_likelihood(
         is_predict_iteration=is_predict_iteration,
         iteration_to_period=iteration_to_period,
         observed_factors=observed_factors,
+        observed_factor_vars=observed_factor_vars,
     )
 
 

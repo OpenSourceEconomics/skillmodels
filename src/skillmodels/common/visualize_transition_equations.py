@@ -193,7 +193,8 @@ def get_transition_plots(
         aggregation_method: How to handle factors not being varied in a plot.
             - "quantiles": Fix other factors at specified quantiles (default).
             - "median": Fix other factors at their median (0.5 quantile).
-            - "average": Average over random draws of other factors.
+            - "average": Average over random draws of other factors, from the
+              persons with all other factors observed.
         n_points: Number of grid points per input. Default 50.
         n_draws: Number of randomly drawn values of the factors that are averaged
             out. Only relevant if aggregation_method is "average". Default 50.
@@ -546,14 +547,19 @@ def _get_state_ranges(
     all_factors: tuple[str, ...],
     quantile_cutoff: float | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """Create state ranges if none is given."""
-    if state_ranges is None:
-        state_ranges = create_state_ranges(
+    """Complete the given state ranges with those of the other factors in the data."""
+    given = state_ranges or {}
+    missing = [factor for factor in all_factors if factor not in given]
+    if not missing:
+        return given
+    return {
+        **given,
+        **create_state_ranges(
             filtered_states=states_data,
-            factors=list(all_factors),
+            factors=missing,
             quantile_cutoff=quantile_cutoff,
-        )
-    return state_ranges
+        ),
+    }
 
 
 def _get_parsed_params(
@@ -760,7 +766,14 @@ def _prepare_data_for_one_plot_average_2d(
     period_data = states_data.query(f"aug_period == {aug_period}")
 
     sampled_factors = [factor for factor in all_factors if factor != input_factor]
-    draws = period_data[sampled_factors].sample(n=n_draws)
+    # Persons with a missing factor (e.g. an observed input) would make every mean
+    # NaN; draw from the complete rows, with a fixed seed for reproducible figures.
+    complete = period_data[sampled_factors].dropna()
+    draws = complete.sample(
+        n=n_draws,
+        replace=len(complete) < n_draws,
+        random_state=np.random.default_rng(0),
+    )
     input_min = state_ranges[input_factor].loc[aug_period]["minimum"]
     input_max = state_ranges[input_factor].loc[aug_period]["maximum"]
 

@@ -9,6 +9,7 @@ from skillmodels.common.model_spec import (
     ModelSpec,
     Normalizations,
 )
+from skillmodels.exceptions import ModelSpecInitializationError
 
 
 def _minimal_dict():
@@ -79,6 +80,28 @@ def test_from_dict_with_stagemap() -> None:
     d["stagemap"] = [0]
     spec = ModelSpec.from_dict(d)
     assert spec.stagemap == (0,)
+
+
+def test_from_dict_rejects_unknown_keys() -> None:
+    """An unrecognized top-level key raises instead of being silently dropped."""
+    d = _minimal_dict()
+    d["estimation_options"] = {"n_mixtures": 2, "bounds_distance": 0.001}
+    with pytest.raises(ModelSpecInitializationError, match="estimation_options"):
+        ModelSpec.from_dict(d)
+
+
+def test_from_dict_accepts_every_key_it_reads() -> None:
+    d = _minimal_dict()
+    d |= {
+        "observed_factors": ["x"],
+        "controls": ["c"],
+        "stagemap": [0],
+        "n_mixtures": 1,
+        "measurement_models": {},
+        "missing_observed_factor_moments": {"x": ("x_mean", "x_var")},
+    }
+    spec = ModelSpec.from_dict(d)
+    assert spec.observed_factors == ("x",)
 
 
 def test_correction_spec_defaults() -> None:

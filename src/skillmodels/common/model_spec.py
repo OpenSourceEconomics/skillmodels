@@ -22,6 +22,20 @@ from skillmodels.common.types import (
     Normalizations,
     ensure_containers_are_immutable,
 )
+from skillmodels.exceptions import ModelSpecInitializationError
+
+_ALLOWED_MODEL_SPEC_KEYS = frozenset(
+    {
+        "factors",
+        "observed_factors",
+        "controls",
+        "stagemap",
+        "anchoring",
+        "n_mixtures",
+        "measurement_models",
+        "missing_observed_factor_moments",
+    }
+)
 
 
 def _parse_measurement_models(
@@ -211,6 +225,24 @@ class ModelSpec:
     )
     """Per-variable observation model (probit / Tobit / Gaussian). A measurement
     omitted from this mapping is Gaussian, so existing specs are unchanged."""
+    missing_observed_factor_moments: MappingProxyType[str, tuple[str, str]] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    """Map an observed factor that may be missing to its `(mean, variance)` columns.
+
+    Where the factor is missing for a person-period, the CHS filter treats it as
+    `N(mean, variance)`, independent of the latent states, with both moments read
+    from that person-period's row of the data, and integrates it out in the
+    predict step. Where the factor is observed, the moment columns are ignored.
+    An observed factor not listed here must never be missing. Only the CHS
+    likelihood (and the filtered states built on it) integrates missing values
+    out; simulation and transition plots still require complete observed
+    factors. In CHS models with endogenous factors, positive-variance missing
+    inputs in a physical period with an outgoing transition are not yet
+    supported: both half-steps would need to carry the same missing input's
+    joint posterior. Such inputs raise `NotImplementedError`; zero-variance
+    fills, complete inputs, and terminal-only missing inputs remain supported.
+    """
 
     def __init__(
         self,
@@ -221,6 +253,7 @@ class ModelSpec:
         anchoring: AnchoringSpec | None = None,
         n_mixtures: int = 1,
         measurement_models: Mapping[str, MeasurementModel] | None = None,
+        missing_observed_factor_moments: Mapping[str, tuple[str, str]] | None = None,
     ) -> None:
         """Create ModelSpec, wrapping factors dict in MappingProxyType."""
         object.__setattr__(self, "_factors", ensure_containers_are_immutable(factors))
@@ -230,6 +263,17 @@ class ModelSpec:
         object.__setattr__(self, "anchoring", anchoring)
         object.__setattr__(self, "n_mixtures", n_mixtures)
         self._set_measurement_models(measurement_models)
+        moments = dict(missing_observed_factor_moments or {})
+        unknown = sorted(name for name in moments if name not in observed_factors)
+        if unknown:
+            msg = (
+                f"missing_observed_factor_moments references {unknown}, which is not "
+                f"an observed factor. Observed factors: {list(observed_factors)}."
+            )
+            raise ValueError(msg)
+        object.__setattr__(
+            self, "missing_observed_factor_moments", MappingProxyType(moments)
+        )
 
     def _set_measurement_models(
         self, measurement_models: Mapping[str, MeasurementModel] | None
@@ -272,7 +316,21 @@ class ModelSpec:
         Returns:
             A ModelSpec instance.
 
+        Raises:
+            ModelSpecInitializationError: If `d` contains an unrecognized top-level
+                key. Silently dropping unknown keys hides typos and stale config
+                blocks (e.g. an `estimation_options` mapping whose settings never
+                take effect).
+
         """
+        unknown = set(d) - _ALLOWED_MODEL_SPEC_KEYS
+        if unknown:
+            msg = (
+                f"Unrecognized ModelSpec keys: {sorted(unknown)}. "
+                f"Allowed keys: {sorted(_ALLOWED_MODEL_SPEC_KEYS)}."
+            )
+            raise ModelSpecInitializationError(msg)
+
         factors = {}
         auto_instruments: list[str] = []
         for name, spec in d["factors"].items():
@@ -324,6 +382,12 @@ class ModelSpec:
         observed += tuple(i for i in auto_instruments if i not in observed)
 
         measurement_models = _parse_measurement_models(d.get("measurement_models"))
+        moments = {
+            name: (mean_col, var_col)
+            for name, (mean_col, var_col) in d.get(
+                "missing_observed_factor_moments", {}
+            ).items()
+        }
 
         return cls(
             factors=factors,
@@ -333,6 +397,7 @@ class ModelSpec:
             anchoring=anchoring,
             n_mixtures=d.get("n_mixtures", 1),
             measurement_models=measurement_models,
+            missing_observed_factor_moments=moments,
         )
 
     @property
@@ -351,6 +416,10 @@ class ModelSpec:
             n_mixtures=changes.get("n_mixtures", self.n_mixtures),
             measurement_models=changes.get(
                 "measurement_models", self.measurement_models
+            ),
+            missing_observed_factor_moments=changes.get(
+                "missing_observed_factor_moments",
+                self.missing_observed_factor_moments,
             ),
         )
 

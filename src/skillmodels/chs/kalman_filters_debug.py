@@ -6,6 +6,8 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+from skillmodels.chs.kalman_filters import reset_negligible_mixture_components
+
 array_qr_jax = jax.vmap(jax.vmap(jnp.linalg.qr))
 
 
@@ -117,6 +119,13 @@ def kalman_update(
         _new_log_mixture_weights,
         log_mixture_weights,
     )
+
+    if n_mixtures >= 2:
+        new_states, new_upper_chols = reset_negligible_mixture_components(
+            states=new_states,
+            upper_chols=new_upper_chols,
+            log_mixture_weights=new_log_mixture_weights,
+        )
 
     debug_info = {}
     residuals = jnp.where(not_missing.reshape(n_obs, 1), _residuals, jnp.nan)

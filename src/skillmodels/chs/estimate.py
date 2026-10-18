@@ -11,6 +11,7 @@ inputs. `get_maximization_inputs` stays public as the power-user escape
 hatch for callers who want to drive the optimiser themselves.
 """
 
+import numpy as np
 import optimagic as om
 import pandas as pd
 from beartype import beartype
@@ -22,6 +23,7 @@ from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.chs.types import CHSEstimationResult
 from skillmodels.common.constraints import (
     enforce_fixed_constraints,
+    project_start_to_linear_equalities,
     reconcile_start_to_equality,
 )
 from skillmodels.common.identification import (
@@ -40,6 +42,8 @@ def estimate_chs(
     start_params: pd.DataFrame | None = None,
     fixed_params: pd.DataFrame | None = None,
     constraints: list[om.constraints.Constraint] | None = None,
+    lower_bounds: pd.Series | None = None,
+    upper_bounds: pd.Series | None = None,
     *,
     require_initial_anchors: bool = True,
 ) -> CHSEstimationResult:
@@ -64,6 +68,15 @@ def estimate_chs(
             fixed.
         constraints: Optional extra `optimagic` constraints, appended to the
             model-implied constraints from `get_maximization_inputs`.
+        lower_bounds: Optional lower bounds, indexed like the `params_template`,
+            that replace the template's bounds for those parameters: a floor on
+            a measurement SD that would otherwise collapse, or `-inf` to drop a
+            bound (optimagic counts each bound on a parameter in a
+            `LinearConstraint` as one more linear constraint). Start values
+            below them are raised onto them.
+        upper_bounds: Optional upper bounds, the counterpart of `lower_bounds`
+            (e.g. `0` to restrict a loading's sign). Start values above them
+            are lowered onto them.
         require_initial_anchors: When True (the default), run the
             estimator-agnostic period-0 anchor check
             (`fail_if_initial_state_unanchored`) and raise `ValueError` if the
@@ -101,6 +114,22 @@ def estimate_chs(
         overlay = start_params["value"].reindex(start.index)
         start.loc[overlay.notna(), "value"] = overlay[overlay.notna()]
 
+    if lower_bounds is not None:
+        replacement = lower_bounds.reindex(start.index)
+        locs = replacement.dropna().index
+        start.loc[locs, "lower_bound"] = replacement[locs]
+        start.loc[locs, "value"] = np.maximum(
+            start.loc[locs, "value"], start.loc[locs, "lower_bound"]
+        )
+
+    if upper_bounds is not None:
+        replacement = upper_bounds.reindex(start.index)
+        locs = replacement.dropna().index
+        start.loc[locs, "upper_bound"] = replacement[locs]
+        start.loc[locs, "value"] = np.minimum(
+            start.loc[locs, "value"], start.loc[locs, "upper_bound"]
+        )
+
     all_constraints = [*max_inputs["constraints"], *(constraints or [])]
 
     # Write every `FixedConstraintWithValue`'s target into the start vector.
@@ -118,11 +147,13 @@ def estimate_chs(
     # group's seeded value onto the constraint surface -- honouring any fixed
     # member's enforced value so the line above is not averaged away.
     start = reconcile_start_to_equality(start, all_constraints)
+    start = project_start_to_linear_equalities(start, all_constraints)
 
     optimize_options = {
         "algorithm": options.optimizer_algorithm,
         "algo_options": to_plain_dict(options.optimizer_options) or None,
         "fun_and_jac": max_inputs["loglike_and_gradient"],
+        "error_handling": options.error_handling,
     }
 
     # Default to OPG/jacobian-based inference (`hessian=False`): the numerical
