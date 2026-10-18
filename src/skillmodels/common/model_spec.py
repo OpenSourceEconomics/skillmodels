@@ -22,6 +22,20 @@ from skillmodels.common.types import (
     Normalizations,
     ensure_containers_are_immutable,
 )
+from skillmodels.exceptions import ModelSpecInitializationError
+
+_ALLOWED_MODEL_SPEC_KEYS = frozenset(
+    {
+        "factors",
+        "observed_factors",
+        "controls",
+        "stagemap",
+        "anchoring",
+        "n_mixtures",
+        "measurement_models",
+        "missing_observed_factor_moments",
+    }
+)
 
 
 def _parse_measurement_models(
@@ -302,7 +316,21 @@ class ModelSpec:
         Returns:
             A ModelSpec instance.
 
+        Raises:
+            ModelSpecInitializationError: If `d` contains an unrecognized top-level
+                key. Silently dropping unknown keys hides typos and stale config
+                blocks (e.g. an `estimation_options` mapping whose settings never
+                take effect).
+
         """
+        unknown = set(d) - _ALLOWED_MODEL_SPEC_KEYS
+        if unknown:
+            msg = (
+                f"Unrecognized ModelSpec keys: {sorted(unknown)}. "
+                f"Allowed keys: {sorted(_ALLOWED_MODEL_SPEC_KEYS)}."
+            )
+            raise ModelSpecInitializationError(msg)
+
         factors = {}
         auto_instruments: list[str] = []
         for name, spec in d["factors"].items():
