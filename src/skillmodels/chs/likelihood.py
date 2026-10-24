@@ -180,6 +180,7 @@ def log_likelihood_obs(
         "measurements": measurements,
         "is_measurement_iteration": is_measurement_iteration,
         "is_predict_iteration": is_predict_iteration,
+        "observed_later": get_observation_masks(measurements, iteration_to_period)[0],
     }
 
     _body = functools.partial(
@@ -204,6 +205,90 @@ def log_likelihood_obs(
         lower_hardness=chs_estimation_options.clipping_lower_hardness,
         upper_hardness=chs_estimation_options.clipping_upper_hardness,
     ).sum(axis=0)
+
+
+def get_observation_masks(
+    measurements: Array | np.ndarray,
+    iteration_to_period: Array | np.ndarray,
+) -> tuple[Array, Array]:
+    """Return masks of persons with an observed measurement after each update.
+
+    Args:
+        measurements: Array of shape (n_updates, n_obs). NaN if not observed.
+        iteration_to_period: Array of length n_updates mapping each update to its
+            period. Updates of one period are contiguous.
+
+    Returns:
+        - observed_later: Array of shape (n_updates, n_obs). True if the person has
+          an observed measurement in a later update. Only these persons are
+          predicted after the update.
+        - observed_from_period: Array of shape (n_updates, n_obs). True if the
+          person has an observed measurement in the period of the update or in a
+          later period. Filtered states are reported only for these persons.
+
+    """
+    observed = jnp.isfinite(measurements)
+    observed_from = jnp.flip(jnp.cumsum(jnp.flip(observed, axis=0), axis=0) > 0, axis=0)
+    observed_later = jnp.concatenate(
+        [observed_from[1:], jnp.zeros_like(observed_from[:1])], axis=0
+    )
+    periods = jnp.asarray(iteration_to_period)
+    is_period_start = jnp.concatenate([jnp.array([True]), periods[1:] != periods[:-1]])
+    period_start = jax.lax.cummax(
+        jnp.where(is_period_start, jnp.arange(len(periods)), 0), axis=0
+    )
+    return observed_later, observed_from[period_start]
+
+
+def predict_if_observed_later(
+    *,
+    predict_kwargs: dict[str, Any],
+    observed_later: Array | np.ndarray,
+    is_predict_iteration: Array | np.ndarray,
+    predict_func: Callable,
+) -> tuple[Array, Array]:
+    """Predict the persons with a later observation; keep all others unchanged.
+
+    After the last observed measurement of a person, states and covariances stay at
+    their last filtered values. The predict step runs on placeholder inputs (zero
+    states, identity covariance) for these persons and its result is discarded.
+    The placeholders keep the predict step and its derivatives finite, which a
+    covariance that is predicted over many unobserved periods does not do.
+
+    Args:
+        predict_kwargs: Keyword arguments of `predict_func`, with `states` of shape
+            (n_obs, n_mixtures, n_states) and `upper_chols` of shape
+            (n_obs, n_mixtures, n_states, n_states).
+        observed_later: Boolean array of length n_obs.
+        is_predict_iteration: Whether a predict step follows this update.
+        predict_func: The predict function.
+
+    Returns:
+        new_states: Same shape as `predict_kwargs["states"]`.
+        new_upper_chols: Same shape as `predict_kwargs["upper_chols"]`.
+
+    """
+    states = predict_kwargs["states"]
+    upper_chols = predict_kwargs["upper_chols"]
+    keep_states = observed_later.reshape(-1, 1, 1)
+    keep_chols = observed_later.reshape(-1, 1, 1, 1)
+    safe_kwargs = {
+        **predict_kwargs,
+        "states": jnp.where(keep_states, states, 0.0),
+        "upper_chols": jnp.where(
+            keep_chols, upper_chols, jnp.eye(states.shape[-1], dtype=upper_chols.dtype)
+        ),
+    }
+    new_states, new_upper_chols = jax.lax.cond(
+        is_predict_iteration,
+        lambda kwargs: predict_func(**kwargs),
+        lambda kwargs: (kwargs["states"], kwargs["upper_chols"]),
+        safe_kwargs,
+    )
+    return (
+        jnp.where(keep_states, new_states, states),
+        jnp.where(keep_chols, new_upper_chols, upper_chols),
+    )
 
 
 def _scan_body(
@@ -264,16 +349,15 @@ def _scan_body(
         "observed_factor_vars": observed_factor_vars[t],
     }
 
-    fixed_kwargs = {"predict_func": predict_func}
-
     # ==================================================================================
-    # Do a predict step or a do-nothing fake predict step
+    # Do a predict step for persons observed later; freeze all others
     # ==================================================================================
-    states, upper_chols, filtered_states = jax.lax.cond(
-        loop_args["is_predict_iteration"],
-        functools.partial(_one_arg_predict, **fixed_kwargs),
-        functools.partial(_one_arg_no_predict, **fixed_kwargs),
-        predict_kwargs,
+    filtered_states = states
+    states, upper_chols = predict_if_observed_later(
+        predict_kwargs=predict_kwargs,
+        observed_later=loop_args["observed_later"],
+        is_predict_iteration=loop_args["is_predict_iteration"],
+        predict_func=predict_func,
     )
 
     new_state = {
@@ -302,20 +386,3 @@ def _one_arg_anchoring_update(
         new_log_mixture_weights,
         new_loglikes,
     )
-
-
-def _one_arg_no_predict(
-    kwargs: dict[str, Any],
-    predict_func: Callable,  # noqa: ARG001
-) -> tuple[Array, Array, Array]:
-    """Just return the states cond chols without any changes."""
-    return kwargs["states"], kwargs["upper_chols"], kwargs["states"]
-
-
-def _one_arg_predict(
-    kwargs: dict[str, Any],
-    predict_func: Callable,
-) -> tuple[Array, Array, Array]:
-    """Do a predict step but also return the input states as filtered states."""
-    new_states, new_upper_chols = predict_func(**kwargs)
-    return new_states, new_upper_chols, kwargs["states"]
