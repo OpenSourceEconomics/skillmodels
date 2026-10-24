@@ -86,12 +86,19 @@ def kalman_update(
     )
 
     _residuals = _safe_measurements.reshape(n_obs, 1) - _safe_expected_measurements
-    _f_stars = jnp.dot(upper_chols, loadings.reshape(n_states, 1))
+    # An identity covariance for missing measurements keeps the QR decomposition and
+    # its derivative well defined; the updated covariance is discarded below.
+    _safe_upper_chols = jnp.where(
+        not_missing.reshape(n_obs, 1, 1, 1),
+        upper_chols,
+        jnp.eye(n_states, dtype=upper_chols.dtype),
+    )
+    _f_stars = jnp.dot(_safe_upper_chols, loadings.reshape(n_states, 1))
 
     _m = jnp.zeros((n_obs, n_mixtures, n_states + 1, n_states + 1))
     _m = _m.at[..., 0, 0].set(meas_sd)
     _m = _m.at[..., 1:, :1].set(_f_stars)
-    _m = _m.at[..., 1:, 1:].set(upper_chols)
+    _m = _m.at[..., 1:, 1:].set(_safe_upper_chols)
 
     _r = array_qr_jax(_m)[1]
 

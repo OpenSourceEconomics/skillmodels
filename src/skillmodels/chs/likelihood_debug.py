@@ -11,6 +11,7 @@ from jax import Array
 
 from skillmodels.chs.clipping import soft_clipping
 from skillmodels.chs.kalman_filters_debug import kalman_update
+from skillmodels.chs.likelihood import get_observation_masks, predict_if_observed_later
 from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.parse_params import parse_params
 from skillmodels.common.types import (
@@ -90,6 +91,9 @@ def log_likelihood(
         "log_mixture_weights": log_mixture_weights,
     }
 
+    observed_later, observed_from_period = get_observation_masks(
+        measurements, iteration_to_period
+    )
     loop_args = {
         "period": iteration_to_period,
         "loadings": parsed_params.loadings,
@@ -98,6 +102,7 @@ def log_likelihood(
         "measurements": measurements,
         "is_measurement_iteration": is_measurement_iteration,
         "is_predict_iteration": is_predict_iteration,
+        "observed_later": observed_later,
     }
 
     _body = functools.partial(
@@ -146,7 +151,9 @@ def log_likelihood(
     out["initial_states"] = initial_states
     out["initial_log_mixture_weights"] = initial_log_mixture_weights
 
-    out["filtered_states"] = static_out["states"]
+    out["filtered_states"] = jnp.where(
+        observed_from_period[..., None, None], static_out["states"], jnp.nan
+    )
     out["log_mixture_weights"] = static_out["log_mixture_weights"]
 
     return out
@@ -210,16 +217,15 @@ def _scan_body(
         "observed_factor_vars": observed_factor_vars[t],
     }
 
-    fixed_kwargs = {"predict_func": predict_func}
-
     # ==================================================================================
-    # Do a predict step or a do-nothing fake predict step
+    # Do a predict step for persons observed later; freeze all others
     # ==================================================================================
-    states, upper_chols, filtered_states = jax.lax.cond(
-        loop_args["is_predict_iteration"],
-        functools.partial(_one_arg_predict, **fixed_kwargs),
-        functools.partial(_one_arg_no_predict, **fixed_kwargs),
-        predict_kwargs,
+    filtered_states = states
+    states, upper_chols = predict_if_observed_later(
+        predict_kwargs=predict_kwargs,
+        observed_later=loop_args["observed_later"],
+        is_predict_iteration=loop_args["is_predict_iteration"],
+        predict_func=predict_func,
     )
 
     new_state = {
@@ -249,20 +255,3 @@ def _one_arg_anchoring_update(
         new_loglikes,
         debug_info,
     )
-
-
-def _one_arg_no_predict(
-    kwargs: dict[str, Any],
-    predict_func: Callable[..., tuple[Array, Array]],  # noqa: ARG001
-) -> tuple[Array, Array, Array]:
-    """Just return the states cond chols without any changes."""
-    return kwargs["states"], kwargs["upper_chols"], kwargs["states"]
-
-
-def _one_arg_predict(
-    kwargs: dict[str, Any],
-    predict_func: Callable[..., tuple[Array, Array]],
-) -> tuple[Array, Array, Array]:
-    """Do a predict step but also return the input states as filtered states."""
-    new_states, new_upper_chols = predict_func(**kwargs)
-    return new_states, new_upper_chols, kwargs["states"]
