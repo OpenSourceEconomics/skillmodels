@@ -43,10 +43,7 @@ from skillmodels.common.constraints import (
     get_probit_scale_constraints,
     project_to_probability_constraints,
 )
-from skillmodels.common.measurement_models import (
-    GaussianMeasurement,
-    ProbitMeasurement,
-)
+from skillmodels.common.measurement_models import GaussianMeasurement
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.params_index import get_params_index
 from skillmodels.common.parse_params import create_parsing_info
@@ -334,39 +331,28 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
 
 
 def _fail_if_unsupported_measurements(model_spec: ModelSpec) -> None:
-    """Reject measurement families and roles the CHS update does not support.
+    """Reject a probit or Tobit outcome used for anchoring.
 
-    - A Tobit measurement.
-    - A probit or Tobit outcome used for anchoring: anchoring maps a factor to the
-      outcome's scale, which a binary or censored outcome does not have.
+    Anchoring maps a factor to the scale of the outcome, which a binary or censored
+    outcome does not have.
     """
-    tobit = sorted(
-        name
-        for name, model in model_spec.measurement_models.items()
-        if not isinstance(model, (GaussianMeasurement, ProbitMeasurement))
+    if model_spec.anchoring is None:
+        return
+    limited_anchors = sorted(
+        {
+            outcome
+            for outcome in model_spec.anchoring.outcomes.values()
+            if not isinstance(
+                model_spec.measurement_model(outcome), GaussianMeasurement
+            )
+        }
     )
-    if tobit:
+    if limited_anchors:
         msg = (
-            f"CHS supports Gaussian and probit measurements, but {tobit} are Tobit. "
-            "Declare them Gaussian (a linear working model) or use estimate_af."
+            f"CHS anchoring requires Gaussian outcomes, but {limited_anchors} are "
+            "probit/Tobit measurements."
         )
         raise NotImplementedError(msg)
-    if model_spec.anchoring is not None:
-        limited_anchors = sorted(
-            {
-                outcome
-                for outcome in model_spec.anchoring.outcomes.values()
-                if not isinstance(
-                    model_spec.measurement_model(outcome), GaussianMeasurement
-                )
-            }
-        )
-        if limited_anchors:
-            msg = (
-                f"CHS anchoring requires Gaussian outcomes, but {limited_anchors} are "
-                "probit/Tobit measurements."
-            )
-            raise NotImplementedError(msg)
 
 
 def _fail_if_probit_scale_is_fixed_elsewhere(

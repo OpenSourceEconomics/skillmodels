@@ -1,10 +1,11 @@
-"""CHS estimation with probit measurements.
+"""CHS estimation with probit and Tobit measurements.
 
 The reference likelihood is a scalar assumed-density filter written directly from
-the update equations for a one-factor linear model: Gaussian measurements use the
-Kalman update, a probit observation contributes `log Phi(t)` and moves the state to the
-exact posterior mean and variance under the Gaussian predicted state. It shares no code
-with the production scan.
+the update equations for a one-factor linear model: Gaussian measurements and Tobit
+values inside their bounds use the Kalman update; a probit observation or a Tobit
+value at a bound contributes `log Phi(t)` and moves the state to the exact posterior
+mean and variance under the Gaussian predicted state. It shares no code with the
+production scan.
 """
 
 import math
@@ -125,8 +126,18 @@ def _params(template: pd.DataFrame, *, probit_sd=1.0) -> pd.DataFrame:
     return params
 
 
-def _scalar_adf_reference(data: pd.DataFrame, probit: frozenset[str]):
-    """Return per-person log likelihoods and filtered means after each period."""
+def _shifted(params: pd.DataFrame, loc: tuple, step: float) -> pd.DataFrame:
+    values = params["value"].to_numpy(dtype=float, copy=True)
+    values[params.index.get_loc(loc)] += step
+    return params.assign(value=values)
+
+
+def _scalar_adf_reference(data: pd.DataFrame, families: dict[str, tuple]):
+    """Return per-person log likelihoods and filtered means after each period.
+
+    `families` maps a measurement to `("probit",)` or `("tobit", lower, upper)`;
+    others are Gaussian.
+    """
     loglikes, filtered = [], []
     for _, person in data.groupby(level="caseid"):
         mean, var = _TRUE["initial_mean"], _TRUE["initial_sd"] ** 2
@@ -149,9 +160,17 @@ def _scalar_adf_reference(data: pd.DataFrame, probit: frozenset[str]):
                 mu = const + loading * mean
                 s2 = sd**2 + loading**2 * var
                 cross = var * loading
-                if name in probit:
-                    direction = 2.0 * y - 1.0
-                    tt = direction * mu / math.sqrt(s2)
+                family = families.get(name, ("gaussian",))
+                if family[0] == "probit":
+                    direction, threshold = 2.0 * y - 1.0, 0.0
+                elif family[0] == "tobit" and y <= family[1]:
+                    direction, threshold = -1.0, family[1]
+                elif family[0] == "tobit" and y >= family[2]:
+                    direction, threshold = 1.0, family[2]
+                else:
+                    direction = None
+                if direction is not None:
+                    tt = direction * (mu - threshold) / math.sqrt(s2)
                     log_p = float(log_ndtr(tt))
                     r = math.exp(-0.5 * tt * tt - 0.5 * math.log(2 * math.pi) - log_p)
                     total += log_p
@@ -183,7 +202,7 @@ def test_probit_loglikeobs_equals_scalar_assumed_density_reference(
     probit_inputs,
 ) -> None:
     data, inputs, params = probit_inputs
-    expected, _ = _scalar_adf_reference(data, frozenset({"p1"}))
+    expected, _ = _scalar_adf_reference(data, {"p1": ("probit",)})
     np.testing.assert_allclose(inputs["loglikeobs"](params), expected, atol=1e-10)
 
 
@@ -234,9 +253,7 @@ def test_gradient_matches_step_swept_finite_differences(probit_inputs) -> None:
     for loc, pos in zip(locs, positions, strict=True):
         errors = []
         for step in (1e-3, 1e-4, 1e-5, 1e-6):
-            up, down = params.copy(), params.copy()
-            up.loc[loc, "value"] += step
-            down.loc[loc, "value"] -= step
+            up, down = _shifted(params, loc, step), _shifted(params, loc, -step)
             fd = (inputs["loglike"](up) - inputs["loglike"](down)) / (2 * step)
             errors.append(abs(fd - grad[pos]) / max(1.0, abs(grad[pos])))
         assert min(errors) < 1e-5, loc
@@ -261,7 +278,7 @@ def test_split_dataset_gradient_equals_unsplit_gradient(probit_inputs) -> None:
 
 def test_filtered_states_use_the_probit_update(probit_inputs) -> None:
     data, _, params = probit_inputs
-    _, expected_means = _scalar_adf_reference(data, frozenset({"p1"}))
+    _, expected_means = _scalar_adf_reference(data, {"p1": ("probit",)})
     states = get_individual_states_from_params(
         model_spec=_model(_PROBIT),
         data=data,
@@ -283,7 +300,7 @@ def test_constant_probit_sample_is_a_valid_likelihood_input() -> None:
         data=data,
         chs_options=CHSEstimationOptions(start_params_strategy="none"),
     )
-    expected, _ = _scalar_adf_reference(data, frozenset({"p1"}))
+    expected, _ = _scalar_adf_reference(data, {"p1": ("probit",)})
     params = _params(inputs["params_template"])
     np.testing.assert_allclose(inputs["loglikeobs"](params), expected, atol=1e-10)
 
@@ -302,7 +319,7 @@ def test_gaussian_seeding_keeps_the_probit_model(strategy) -> None:
     assert (
         template.query("category == 'meas_sds' and name1 == 'p1'")["value"] == 1
     ).all()
-    expected, _ = _scalar_adf_reference(data, frozenset({"p1"}))
+    expected, _ = _scalar_adf_reference(data, {"p1": ("probit",)})
     np.testing.assert_allclose(
         inputs["loglikeobs"](_params(template)), expected, atol=1e-10
     )
@@ -337,13 +354,98 @@ def test_limited_anchoring_outcome_is_rejected() -> None:
         )
 
 
-def test_tobit_measurements_are_rejected() -> None:
-    with pytest.raises(NotImplementedError, match="Tobit"):
-        get_maximization_inputs(
-            model_spec=_model({"g2": TobitMeasurement(lower=0.0)}),
-            data=_data(),
-            chs_options=CHSEstimationOptions(start_params_strategy="none"),
-        )
+_LOWER, _UPPER = 0.1, 0.7
+
+
+def _tobit_data(lower, upper) -> pd.DataFrame:
+    """Censor g2 at the bounds and place float64 boundary witnesses.
+
+    Persons 10-13 observe g2 exactly at a bound or at the adjacent float inside it in
+    period 0; float32 rounding would swap the mass and density events of these values.
+    """
+    data = _data()
+    data["g2"] = data["g2"].clip(lower, upper)
+    witnesses = {
+        10: lower,
+        11: math.nextafter(lower, math.inf),
+        12: upper,
+        13: math.nextafter(upper, -math.inf),
+    }
+    for person, value in witnesses.items():
+        if math.isfinite(value):
+            data.loc[(person, 0), "g2"] = value
+    return data
+
+
+@pytest.mark.parametrize(
+    ("lower", "upper"), [(_LOWER, _UPPER), (_LOWER, math.inf), (-math.inf, _UPPER)]
+)
+def test_tobit_loglikeobs_equals_scalar_assumed_density_reference(lower, upper) -> None:
+    data = _tobit_data(lower, upper)
+    tobit = TobitMeasurement(
+        lower=lower if math.isfinite(lower) else None,
+        upper=upper if math.isfinite(upper) else None,
+    )
+    inputs = get_maximization_inputs(
+        model_spec=_model({**_PROBIT, "g2": tobit}),
+        data=data,
+        chs_options=CHSEstimationOptions(start_params_strategy="none"),
+    )
+    expected, _ = _scalar_adf_reference(
+        data, {"p1": ("probit",), "g2": ("tobit", lower, upper)}
+    )
+    params = _params(inputs["params_template"])
+    np.testing.assert_allclose(inputs["loglikeobs"](params), expected, atol=1e-10)
+
+
+def test_tobit_gradient_matches_finite_differences() -> None:
+    data = _tobit_data(_LOWER, _UPPER)
+    inputs = get_maximization_inputs(
+        model_spec=_model({**_PROBIT, "g2": TobitMeasurement(_LOWER, _UPPER)}),
+        data=data,
+        chs_options=CHSEstimationOptions(start_params_strategy="none"),
+    )
+    params = _params(inputs["params_template"])
+    _, grad = inputs["loglike_and_gradient"](params)
+    locs = [
+        ("meas_sds", 0, "g2", "-"),
+        ("loadings", 1, "g2", "skills"),
+        ("controls", 2, "g2", "constant"),
+    ]
+    for loc in locs:
+        pos = params.index.get_loc(loc)
+        errors = []
+        for step in (1e-3, 1e-4, 1e-5, 1e-6):
+            up, down = _shifted(params, loc, step), _shifted(params, loc, -step)
+            fd = (inputs["loglike"](up) - inputs["loglike"](down)) / (2 * step)
+            errors.append(abs(fd - grad[pos]) / max(1.0, abs(grad[pos])))
+        assert grad[pos] != 0.0
+        assert min(errors) < 1e-5, loc
+
+
+def test_tobit_without_censored_values_equals_the_gaussian_model() -> None:
+    """Interior Tobit values are Gaussian observations, through either scan."""
+    data = _data().astype(np.float32).astype(np.float64)
+    gaussian = get_maximization_inputs(
+        model_spec=_model(),
+        data=data,
+        chs_options=CHSEstimationOptions(start_params_strategy="none"),
+    )
+    tobit = get_maximization_inputs(
+        model_spec=_model({"g2": TobitMeasurement(lower=-100.0, upper=100.0)}),
+        data=data,
+        chs_options=CHSEstimationOptions(start_params_strategy="none"),
+    )
+    params = _params(gaussian["params_template"], probit_sd=0.9)
+    np.testing.assert_allclose(
+        tobit["loglikeobs"](params), gaussian["loglikeobs"](params), rtol=1e-12
+    )
+    np.testing.assert_allclose(
+        tobit["loglike_and_gradient"](params)[1],
+        gaussian["loglike_and_gradient"](params)[1],
+        rtol=1e-10,
+        atol=1e-12,
+    )
 
 
 def test_user_bounds_excluding_the_probit_scale_raise() -> None:

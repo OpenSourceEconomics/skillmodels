@@ -4,6 +4,12 @@ This is a record of all past skillmodels releases and what went into them in rev
 chronological order. We follow [semantic versioning](https://semver.org/) and all
 releases are available on [PyPI](https://pypi.org/project/skillmodels/).
 
+## Unreleased
+
+- Support probit and Tobit measurements (`ModelSpec.measurement_models`) in the CHS
+  estimator in every period, via an exact half-line update under the Gaussian
+  predicted state with moment-matched filtered states.
+
 ## 0.1.1
 
 - Drop the unused `jaxopt` dependency.
