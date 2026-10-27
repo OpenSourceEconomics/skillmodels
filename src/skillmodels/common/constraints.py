@@ -11,6 +11,10 @@ import pandas as pd
 
 import skillmodels.common.transition_functions as t_f_module
 from skillmodels.common.fixed_constraint import FixedConstraintWithValue
+from skillmodels.common.measurement_models import (
+    MeasurementModel,
+    ProbitMeasurement,
+)
 from skillmodels.common.selector import align_index_names, select_by_loc
 from skillmodels.common.types import (
     Anchoring,
@@ -379,6 +383,32 @@ def get_constraints(
         )
 
     return constraints
+
+
+def get_probit_scale_constraints(
+    update_info: pd.DataFrame,
+    measurement_models: Mapping[str, MeasurementModel],
+) -> list[FixedConstraintWithValue]:
+    """Fix the measurement-error SD of every probit measurement update to 1.
+
+    A probit measurement keeps its `meas_sds` row so the parameter index stays
+    aligned with the update rows; the row is a fixed parameter, and the CHS
+    likelihood uses a unit error SD for probit updates regardless of its value.
+
+    Args:
+        update_info: DataFrame with one row per Kalman update, indexed by
+            `(aug_period, variable)`.
+        measurement_models: Per-variable observation models.
+
+    Return:
+        One `FixedConstraintWithValue` per probit update row.
+
+    """
+    return [
+        FixedConstraintWithValue(loc=("meas_sds", aug_period, var, "-"), value=1.0)
+        for aug_period, var in update_info.index
+        if isinstance(measurement_models.get(var), ProbitMeasurement)
+    ]
 
 
 def add_bounds(params: pd.DataFrame, bounds_distance: float) -> pd.DataFrame:
