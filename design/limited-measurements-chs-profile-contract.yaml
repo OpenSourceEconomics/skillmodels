@@ -1,7 +1,7 @@
 ---
-# Profile contract for the design of probit measurements in CHS.
+# Profile contract for the design of probit and Tobit measurements in CHS.
 contract_version: '1'
-target: Probit measurements in the CHS estimator on top of skillmodels PR 104
+target: Probit and Tobit measurements in the CHS estimator on top of skillmodels PR 104
 environment:
   hardware: 'tests: Linux CPU; application: one NVIDIA A100'
   backend: jax with XLA:CPU and XLA:CUDA
@@ -19,7 +19,7 @@ metric_definitions:
     of the total log-likelihood, small test models
   full_likelihood_gap: >-
     absolute difference per person of the CHS log-likelihood with probit
-    updates from exact integration over the latent path, small model
+    and Tobit updates from exact integration over the latent path, small model
   gaussian_path_regression: >-
     relative change of the log-likelihood of an all-Gaussian model vs. ccbf9b5
   warm_seconds: median wall time of loglike_and_gradient after compilation
@@ -33,8 +33,8 @@ profiles:
       update_moment_error: 1.0e-8
       gradient_error: 1.0e-5
       full_likelihood_gap: >-
-        reported, not bounded; the test shows it shrinks as the probit
-        loading goes to 0
+        reported, not bounded; the test shows it shrinks as the loading
+        of the limited measure goes to 0
       gaussian_path_regression: 1.0e-12
     resource:
       ci: the new tests add at most 60 s to the CPU suite
