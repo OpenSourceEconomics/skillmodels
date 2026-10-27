@@ -464,3 +464,43 @@ def test_user_bounds_excluding_the_probit_scale_raise() -> None:
             options=CHSEstimationOptions(start_params_strategy="none"),
             lower_bounds=bounds,
         )
+
+
+@pytest.mark.parametrize("transition", ["translog", "asymmetric_translog"])
+def test_probit_and_tobit_with_nonlinear_transitions(transition) -> None:
+    """The limited update consumes the unscented prediction like a Gaussian one."""
+    model = ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(_MEASURES,) * _N_PERIODS,
+                normalizations=Normalizations(
+                    loadings=({"g1": 1},) * _N_PERIODS,
+                    intercepts=({"g1": 0},) * _N_PERIODS,
+                ),
+                transition_function=transition,
+            ),
+        },
+        measurement_models={**_PROBIT, "g2": TobitMeasurement(_LOWER, _UPPER)},
+    )
+    data = _tobit_data(_LOWER, _UPPER)
+    inputs = get_maximization_inputs(
+        model_spec=model,
+        data=data,
+        chs_options=CHSEstimationOptions(start_params_strategy="none"),
+    )
+    params = inputs["params_template"].copy()
+    linear = _params(
+        get_maximization_inputs(
+            model_spec=_model({**_PROBIT, "g2": TobitMeasurement(_LOWER, _UPPER)}),
+            data=data,
+            chs_options=CHSEstimationOptions(start_params_strategy="none"),
+        )["params_template"]
+    )
+    shared = params.index.intersection(linear.index)
+    params.loc[shared, "value"] = linear.loc[shared, "value"]
+    params["value"] = params["value"].fillna(0.05)
+    value, grad = inputs["loglike_and_gradient"](params)
+    assert np.isfinite(grad).all()
+    np.testing.assert_allclose(
+        inputs["debug_loglike"](params)["value"], value, rtol=1e-12
+    )
