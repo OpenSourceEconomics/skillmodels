@@ -1,6 +1,7 @@
 """Functions to process and prepare data for model estimation."""
 
 import warnings
+from collections.abc import Mapping
 from typing import Any, Literal
 
 import jax.numpy as jnp
@@ -8,6 +9,12 @@ import numpy as np
 import pandas as pd
 from jax import Array
 
+from skillmodels.common.measurement_models import (
+    MeasurementFamily,
+    MeasurementModel,
+    classify_observations,
+    measurement_family_arrays,
+)
 from skillmodels.common.types import Anchoring, Labels
 
 
@@ -19,6 +26,7 @@ def process_data(
     update_info: pd.DataFrame,
     anchoring_info: Anchoring,
     purpose: Literal["estimation", "anything", "simulation"] = "estimation",
+    measurement_models: Mapping[str, MeasurementModel] | None = None,
 ) -> dict[str, Any]:
     """Process the data for estimation.
 
@@ -33,11 +41,18 @@ def process_data(
         anchoring_info: Information about anchoring. See :ref:`anchoring`
         purpose: Whether the data is used for
             estimation (default, includes measurement data) or not.
+        measurement_models: Per-variable observation models. If any update row is
+            a probit or Tobit measurement, the measurements stay in float64 and an
+            `events` array is returned.
 
     Returns a dictionary with keys:
         measurements: Array of shape (n_updates, n_obs) with data on
             observed measurements. NaN if the measurement was not observed. Only
-            returned if estimation==True
+            returned if estimation==True. float64 if a measurement is limited,
+            else float32.
+        events: Array of shape (n_updates, n_obs) with the int8
+            `ObservationEvent` of each measurement, decided from the float64 data
+            and bounds. Only returned for estimation with a limited measurement.
         controls: Array of shape (n_periods, n_obs, n_controls) with
             observed control variables for the measurement equations.
         observed_factors: Array of shape
@@ -63,8 +78,32 @@ def process_data(
     else:
         df.index = df.index.set_names(["id", "aug_period"])
 
-    _check_data(df=df, update_info=update_info, labels=labels, purpose=purpose)
+    families, lowers, uppers = measurement_family_arrays(
+        measurement_models or {}, tuple(update_info.index.get_level_values("variable"))
+    )
+    is_limited = families != int(MeasurementFamily.GAUSSIAN)
+    has_limited = purpose == "estimation" and bool(is_limited.any())
+    _check_data(
+        df=df,
+        update_info=update_info,
+        labels=labels,
+        purpose=purpose,
+        limited_measurements=frozenset(
+            update_info.index.get_level_values("variable")[is_limited]
+        ),
+    )
     n_obs = int(len(df) / len(labels.aug_periods))
+    if has_limited:
+        # Validate the support of every submitted value, including rows that are
+        # set to missing below because of missing controls.
+        _generate_events_array(
+            measurements=_generate_measurements_array_np(
+                df=df, update_info=update_info, n_obs=n_obs
+            ),
+            families=families,
+            lowers=lowers,
+            uppers=uppers,
+        )
     df = _handle_controls_with_missings(
         df=df, controls=labels.controls, update_info=update_info
     )
@@ -88,9 +127,21 @@ def process_data(
     )
 
     if purpose == "estimation":
-        out["measurements"] = _generate_measurements_array(
+        measurements = _generate_measurements_array_np(
             df=df, update_info=update_info, n_obs=n_obs
         )
+        if has_limited:
+            out["events"] = jnp.asarray(
+                _generate_events_array(
+                    measurements=measurements,
+                    families=families,
+                    lowers=lowers,
+                    uppers=uppers,
+                )
+            )
+            out["measurements"] = jnp.asarray(measurements, dtype="float64")
+        else:
+            out["measurements"] = jnp.array(measurements, dtype="float32")
     return out
 
 
@@ -216,7 +267,12 @@ def _check_data(  # noqa: C901
     update_info: pd.DataFrame,
     labels: Labels,
     purpose: Literal["estimation", "anything", "simulation"],
+    limited_measurements: frozenset[str] = frozenset(),
 ) -> None:
+    """Raise if variables are missing or Gaussian measurements have no variance.
+
+    A constant probit or Tobit sample (all ones, all censored) is valid data.
+    """
     var_report = pd.DataFrame(index=update_info.index[:0], columns=["problem"])
     for aug_period in labels.aug_periods:
         period_data = df.query(f"aug_period == {aug_period}")
@@ -232,7 +288,10 @@ def _check_data(  # noqa: C901
                     var_report.loc[(aug_period, meas), "problem"] = (
                         "Variable is missing"
                     )
-                elif len(period_data[meas].dropna().unique()) == 1:
+                elif (
+                    meas not in limited_measurements
+                    and len(period_data[meas].dropna().unique()) == 1
+                ):
                     var_report.loc[(aug_period, meas), "problem"] = (
                         "Variable has no variance"
                     )
@@ -320,10 +379,40 @@ def _generate_measurements_array(
     update_info: pd.DataFrame,
     n_obs: int,
 ) -> Array:
+    return jnp.array(
+        _generate_measurements_array_np(df=df, update_info=update_info, n_obs=n_obs),
+        dtype="float32",
+    )
+
+
+def _generate_measurements_array_np(
+    df: pd.DataFrame,
+    update_info: pd.DataFrame,
+    n_obs: int,
+) -> np.ndarray:
     arr = np.zeros((len(update_info), n_obs))
     for k, (aug_period, var) in enumerate(update_info.index):
-        arr[k] = df.query(f"aug_period == {aug_period}")[var].to_numpy()
-    return jnp.array(arr, dtype="float32")
+        arr[k] = df.query(f"aug_period == {aug_period}")[var].to_numpy(dtype=float)
+    return arr
+
+
+def _generate_events_array(
+    measurements: np.ndarray,
+    families: np.ndarray,
+    lowers: np.ndarray,
+    uppers: np.ndarray,
+) -> np.ndarray:
+    """Classify each float64 measurement of each update row into its event."""
+    return np.stack(
+        [
+            classify_observations(
+                row, MeasurementFamily(int(family)), float(lower), float(upper)
+            )
+            for row, family, lower, upper in zip(
+                measurements, families, lowers, uppers, strict=True
+            )
+        ]
+    )
 
 
 def _generate_controls_array(

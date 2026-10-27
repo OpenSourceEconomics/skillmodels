@@ -4,8 +4,9 @@ One JAX-compatible kernel evaluates the log density/probability contribution of 
 single measurement given its linear predictor ``eta = c + x'beta + lambda'theta``,
 its scale, and a `MeasurementFamily` code. AF estimation, simulation and
 posterior-state reweighting route their measurement contributions through this
-kernel. CHS (a Gaussian Kalman update) and AMN do not, and reject non-Gaussian
-measurements.
+kernel. CHS conditions a Gaussian predicted state on each observation instead
+(`skillmodels.chs.halfline`), using the same families and bounds; AMN rejects
+non-Gaussian measurements.
 
 The three families:
 
@@ -124,6 +125,76 @@ def measurement_family_arrays(
     lowers = np.array([lo for _f, lo, _hi in resolved], dtype=np.float64)
     uppers = np.array([hi for _f, _lo, hi in resolved], dtype=np.float64)
     return codes, lowers, uppers
+
+
+class ObservationEvent(enum.IntEnum):
+    """Event of one observed value of a measurement.
+
+    Decided once on the host from the submitted float64 value and the declared
+    float64 censoring bounds, so later dtype choices cannot change it:
+
+    - `MISSING` -- the value is NaN.
+    - `DENSITY` -- a continuous value: Gaussian, or Tobit strictly inside its bounds.
+    - `LOWER_TAIL` -- the latent index lies below a threshold: probit `y = 0`
+      (threshold 0) or Tobit `y <= lower`.
+    - `UPPER_TAIL` -- the latent index lies above a threshold: probit `y = 1`
+      (threshold 0) or Tobit `y >= upper`.
+    """
+
+    MISSING = 0
+    DENSITY = 1
+    LOWER_TAIL = 2
+    UPPER_TAIL = 3
+
+
+def classify_observations(
+    values: np.ndarray,
+    family: MeasurementFamily,
+    lower: float,
+    upper: float,
+) -> np.ndarray:
+    """Return the `ObservationEvent` code of each value of one measurement.
+
+    Bounds are compared exactly, without tolerance, as in `measurement_loglik`:
+    a Tobit value at or beyond a finite bound is censored there.
+
+    Args:
+        values: 1d float64 array of submitted values; NaN marks a missing value.
+        family: The measurement's family.
+        lower: Tobit lower censoring bound (`-inf` if none).
+        upper: Tobit upper censoring bound (`+inf` if none).
+
+    Return:
+        1d int8 array of `ObservationEvent` codes.
+
+    Raises:
+        ValueError: If a probit value is not 0 or 1, or a limited-family value is
+            infinite.
+
+    """
+    values = np.asarray(values, dtype=np.float64)
+    missing = np.isnan(values)
+    events = np.where(missing, ObservationEvent.MISSING, ObservationEvent.DENSITY)
+    if family == MeasurementFamily.GAUSSIAN:
+        events = np.where(np.isfinite(values), events, ObservationEvent.MISSING)
+        return events.astype(np.int8)
+    observed = values[~missing]
+    if not np.isfinite(observed).all():
+        msg = f"Observed {family.name.lower()} measurements must be finite."
+        raise ValueError(msg)
+    if family == MeasurementFamily.PROBIT:
+        invalid = sorted(set(observed[(observed != 0.0) & (observed != 1.0)].tolist()))
+        if invalid:
+            msg = f"A probit measurement must be 0, 1, or missing; found {invalid[:5]}."
+            raise ValueError(msg)
+        lower_tail = values == 0.0
+        upper_tail = values == 1.0
+    else:
+        lower_tail = values <= lower
+        upper_tail = values >= upper
+    events = np.where(lower_tail, ObservationEvent.LOWER_TAIL, events)
+    events = np.where(upper_tail, ObservationEvent.UPPER_TAIL, events)
+    return events.astype(np.int8)
 
 
 def measurement_loglik(
