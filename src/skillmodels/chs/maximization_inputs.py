@@ -284,8 +284,9 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     )
     if not params_template.index.equals(p_index):
         raise ValueError("params_template index is not equal to p_index")
+    # The generic SD lower bound does not apply to the fixed probit scale.
     probit_locs = [c.loc for c in probit_scale_constraints]
-    params_template.loc[probit_locs, ["lower_bound", "upper_bound"]] = 1.0
+    params_template.loc[probit_locs, "lower_bound"] = -np.inf
 
     # The seeding heuristics are Gaussian; they see a working model in which the
     # limited measurements are Gaussian. Their values are start values only.

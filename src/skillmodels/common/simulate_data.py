@@ -57,10 +57,14 @@ def simulate_dataset(
             state.
 
     Returns:
-        observed_data: Dataset with measurements and control variables
-            in long format
+        Dict with entries
 
-        latent_data: Dataset with latent factors in long format
+        - `"unanchored_states"` / `"anchored_states"`: `{"states", "state_ranges"}`
+          with the latent factors by `period`.
+        - `"aug_unanchored_states"`: The same by `aug_period`.
+        - `"aug_observed_data"`: DataFrame with one row per `id` and `aug_period`
+          and one column per measurement, drawn according to each measurement's
+          family; NaN where the measurement is not part of that period.
 
     """
     rng = np.random.default_rng(seed)
@@ -139,7 +143,7 @@ def simulate_dataset(
             endogenous_factors_info=processed_model.endogenous_factors_info,
         )
 
-    _aug_measurements, aug_latent_data = _simulate_dataset(
+    aug_observed_data, aug_latent_data = _simulate_dataset(
         latent_states=states,
         covs=covs,
         log_weights=log_weights,
@@ -198,6 +202,7 @@ def simulate_dataset(
                 factors=processed_model.labels.latent_factors,
             ),
         },
+        "aug_observed_data": aug_observed_data,
     }
 
 

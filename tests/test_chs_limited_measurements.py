@@ -228,7 +228,8 @@ def test_probit_meas_sd_is_fixed_to_one_and_does_not_enter_the_likelihood(
     _, inputs, params = probit_inputs
     template = inputs["params_template"]
     probit_rows = template.query("category == 'meas_sds' and name1 == 'p1'")
-    assert (probit_rows[["value", "lower_bound", "upper_bound"]] == 1.0).all().all()
+    assert (probit_rows["value"] == 1.0).all()
+    assert np.isneginf(probit_rows["lower_bound"]).all()
     fixed = {
         c.loc
         for c in inputs["constraints"]
