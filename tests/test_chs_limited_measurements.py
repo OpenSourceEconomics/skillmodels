@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 from scipy.special import log_ndtr
 
+from skillmodels.chs.estimate import estimate_chs
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.individual_states import get_individual_states_from_params
@@ -342,4 +343,21 @@ def test_tobit_measurements_are_rejected() -> None:
             model_spec=_model({"g2": TobitMeasurement(lower=0.0)}),
             data=_data(),
             chs_options=CHSEstimationOptions(start_params_strategy="none"),
+        )
+
+
+def test_user_bounds_excluding_the_probit_scale_raise() -> None:
+    bounds = pd.Series(
+        [2.0],
+        index=pd.MultiIndex.from_tuples(
+            [("meas_sds", 1, "p1", "-")],
+            names=["category", "aug_period", "name1", "name2"],
+        ),
+    )
+    with pytest.raises(ValueError, match="probit"):
+        estimate_chs(
+            model_spec=_model(_PROBIT),
+            data=_data(),
+            options=CHSEstimationOptions(start_params_strategy="none"),
+            lower_bounds=bounds,
         )

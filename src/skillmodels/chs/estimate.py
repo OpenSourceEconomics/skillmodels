@@ -23,6 +23,7 @@ from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.chs.types import CHSEstimationResult
 from skillmodels.common.constraints import (
     enforce_fixed_constraints,
+    get_probit_scale_constraints,
     project_start_to_linear_equalities,
     reconcile_start_to_equality,
 )
@@ -31,6 +32,7 @@ from skillmodels.common.identification import (
     warn_if_overrestricted,
 )
 from skillmodels.common.model_spec import ModelSpec
+from skillmodels.common.process_model import process_model
 from skillmodels.common.types import to_plain_dict
 
 
@@ -130,6 +132,7 @@ def estimate_chs(
             start.loc[locs, "value"], start.loc[locs, "upper_bound"]
         )
 
+    _fail_if_bounds_exclude_probit_scale(start, model_spec)
     all_constraints = [*max_inputs["constraints"], *(constraints or [])]
 
     # Write every `FixedConstraintWithValue`'s target into the start vector.
@@ -183,3 +186,24 @@ def estimate_chs(
         optimize_result=res.optimize_result,
         likelihood_result=res,
     )
+
+
+def _fail_if_bounds_exclude_probit_scale(
+    start: pd.DataFrame, model_spec: ModelSpec
+) -> None:
+    """Raise if user bounds exclude the unit error SD of a probit measurement."""
+    locs = [
+        c.loc
+        for c in get_probit_scale_constraints(
+            update_info=process_model(model_spec).update_info,
+            measurement_models=model_spec.measurement_models,
+        )
+    ]
+    bounds = start.loc[locs, ["lower_bound", "upper_bound"]]
+    bad = bounds[(bounds["lower_bound"] > 1.0) | (bounds["upper_bound"] < 1.0)]
+    if len(bad) > 0:
+        msg = (
+            "The measurement-error SD of a probit measurement is fixed to 1, but the "
+            f"bounds exclude 1 for {list(bad.index)}."
+        )
+        raise ValueError(msg)

@@ -5,12 +5,14 @@ noise (measurement error) components following Cunha, Heckman, Schennach (2010),
 Section 4.2.2.
 """
 
+import warnings
 from collections.abc import Mapping
 
 import pandas as pd
 from beartype import beartype
 
 from skillmodels._beartype_conf import DIAGNOSTICS_CONF
+from skillmodels.common.measurement_models import GaussianMeasurement
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
@@ -29,6 +31,9 @@ def decompose_measurement_variance(
 
     For each measurement y with loading L on factor F and measurement error sd:
         Var(y) = L^2 * Var(F) + sd^2
+
+    Probit and Tobit measurements are left out, with a warning: the variance of a
+    binary or censored observation does not decompose this way.
 
     This function computes:
         - fraction_signal = L^2 * Var(F) / Var(y)
@@ -62,11 +67,26 @@ def decompose_measurement_variance(
 
     """
     processed_model = process_model(model_spec)
-    return _compute_variance_decomposition(
+    decomposition = _compute_variance_decomposition(
         filtered_states=filtered_states,
         params=params,
         aug_periods_to_periods=processed_model.labels.aug_periods_to_periods,
     )
+    limited = sorted(
+        name
+        for name, model in model_spec.measurement_models.items()
+        if not isinstance(model, GaussianMeasurement)
+    )
+    if limited:
+        warnings.warn(
+            f"The variance decomposition leaves out the probit/Tobit measurements "
+            f"{limited}: their observed variance is not L^2 * Var(F) + sd^2.",
+            UserWarning,
+            stacklevel=2,
+        )
+        measurements = decomposition.index.get_level_values("measurement")
+        decomposition = decomposition[~measurements.isin(limited)]
+    return decomposition
 
 
 def _compute_variance_decomposition(
