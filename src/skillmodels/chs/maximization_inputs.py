@@ -9,6 +9,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optimagic as om
 import pandas as pd
 from beartype import beartype
 from jax import Array
@@ -24,6 +25,7 @@ from skillmodels.amn.start_values import (
     get_spearman_start_params,
 )
 from skillmodels.amn.types import AMNEstimationOptions, AMNEstimationResult
+from skillmodels.chs.halfline import LimitedUpdates, get_limited_updates
 from skillmodels.chs.kalman_filters import (
     calculate_sigma_scaling_factor_and_weights,
     is_all_linear,
@@ -38,9 +40,13 @@ from skillmodels.common.constraints import (
     align_index_names,
     enforce_fixed_constraints,
     get_constraints,
+    get_probit_scale_constraints,
     project_to_probability_constraints,
 )
-from skillmodels.common.measurement_models import GaussianMeasurement
+from skillmodels.common.measurement_models import (
+    GaussianMeasurement,
+    ProbitMeasurement,
+)
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.params_index import get_params_index
 from skillmodels.common.parse_params import create_parsing_info
@@ -102,7 +108,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             endogenous factors, we double up the number of periods in order to add
 
     """
-    _fail_if_non_gaussian_measurements(model_spec)
+    _fail_if_unsupported_measurements(model_spec)
     processed_model = process_model(model_spec)
     p_index = get_params_index(
         update_info=processed_model.update_info,
@@ -126,7 +132,13 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         update_info=processed_model.update_info,
         anchoring_info=processed_model.anchoring,
         purpose="estimation",
+        measurement_models=model_spec.measurement_models,
     )
+    limited_updates = get_limited_updates(
+        update_info=processed_model.update_info,
+        measurement_models=model_spec.measurement_models,
+    )
+    events = processed_data.get("events")
 
     # A physical observed input is repeated in both endogenous half-steps.
     # Marginalizing it separately in each half drops its posterior/cross-covariance.
@@ -174,6 +186,8 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             sigma_weights=sigma_weights,
             sigma_scaling_factor=sigma_scaling_factor,
             chs_options=chs_options,
+            events=events,
+            limited_updates=limited_updates,
         )
 
     _jitted_loglike = jax.jit(partialed_loglikes["ll"])
@@ -201,6 +215,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         step = int(n_obs / split_dataset)
         for i in range(split_dataset):
             stop = n_obs if i == split_dataset - 1 else stop
+            events_slice = {} if events is None else {"events": events[:, start:stop]}
             measurements_slice = processed_data["measurements"][:, start:stop]
             controls_slice = processed_data["controls"][:, start:stop, :]
             observed_factors_slice = processed_data["observed_factors"][
@@ -214,6 +229,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
                 observed_factor_vars=processed_data["observed_factor_vars"][
                     :, start:stop, :
                 ],
+                **events_slice,
             )
             start += step
             stop += step
@@ -245,9 +261,18 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         bounds_distance=chs_options.bounds_distance,
     )
 
+    probit_scale_constraints = get_probit_scale_constraints(
+        update_info=processed_model.update_info,
+        measurement_models=model_spec.measurement_models,
+    )
+    constraints = list(constraints) + probit_scale_constraints
+
     if fixed_params is not None:
         fixed_constraints = _build_fixed_constraints_from_params(
             fixed_params, params_index=p_index
+        )
+        _fail_if_probit_scale_is_fixed_elsewhere(
+            fixed_constraints, probit_scale_constraints
         )
         constraints = list(constraints) + fixed_constraints
 
@@ -262,22 +287,35 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     )
     if not params_template.index.equals(p_index):
         raise ValueError("params_template index is not equal to p_index")
+    probit_locs = [c.loc for c in probit_scale_constraints]
+    params_template.loc[probit_locs, ["lower_bound", "upper_bound"]] = 1.0
 
+    # The seeding heuristics are Gaussian; they see a working model in which the
+    # limited measurements are Gaussian. Their values are start values only.
+    seed_spec = (
+        model_spec
+        if limited_updates is None
+        else model_spec._replace(measurement_models={})
+    )
     strategy = chs_options.start_params_strategy
     if strategy == "spearman":
         params_template = get_spearman_start_params(
-            model_spec=model_spec,
+            model_spec=seed_spec,
             data=data,
             params_template=params_template,
         )
     elif strategy == "amn":
-        amn_result = _estimate_amn_for_chs_seeding(model_spec=model_spec, data=data)
+        amn_result = _estimate_amn_for_chs_seeding(model_spec=seed_spec, data=data)
         params_template = get_amn_start_params(
-            model_spec=model_spec,
+            model_spec=seed_spec,
             data=data,
             params_template=params_template,
             amn_params=amn_result.params,
         )
+    scale_constraints: list[om.constraints.Constraint] = [*probit_scale_constraints]
+    params_template = enforce_fixed_constraints(
+        params_template=params_template, constraints=scale_constraints
+    )
 
     params_template = project_to_probability_constraints(
         params_template=params_template, constraints=constraints
@@ -295,25 +333,59 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     }
 
 
-def _fail_if_non_gaussian_measurements(model_spec: ModelSpec) -> None:
-    """Reject probit/Tobit measures: the CHS update is a Gaussian Kalman update.
+def _fail_if_unsupported_measurements(model_spec: ModelSpec) -> None:
+    """Reject measurement families and roles the CHS update does not support.
 
-    Such a measure would otherwise be silently estimated as a continuous Gaussian one.
+    - A Tobit measurement.
+    - A probit or Tobit outcome used for anchoring: anchoring maps a factor to the
+      outcome's scale, which a binary or censored outcome does not have.
     """
-    non_gaussian = sorted(
+    tobit = sorted(
         name
         for name, model in model_spec.measurement_models.items()
-        if not isinstance(model, GaussianMeasurement)
+        if not isinstance(model, (GaussianMeasurement, ProbitMeasurement))
     )
-    if non_gaussian:
+    if tobit:
         msg = (
-            f"CHS supports only Gaussian measurements, but {non_gaussian} are "
-            "non-Gaussian (probit/Tobit). The CHS likelihood runs a Gaussian Kalman "
-            "update for every measurement. Declare them Gaussian (a linear "
-            "probability / linear working model) or use estimate_af, which honours "
-            "probit/Tobit families in the initial period."
+            f"CHS supports Gaussian and probit measurements, but {tobit} are Tobit. "
+            "Declare them Gaussian (a linear working model) or use estimate_af."
         )
         raise NotImplementedError(msg)
+    if model_spec.anchoring is not None:
+        limited_anchors = sorted(
+            {
+                outcome
+                for outcome in model_spec.anchoring.outcomes.values()
+                if not isinstance(
+                    model_spec.measurement_model(outcome), GaussianMeasurement
+                )
+            }
+        )
+        if limited_anchors:
+            msg = (
+                f"CHS anchoring requires Gaussian outcomes, but {limited_anchors} are "
+                "probit/Tobit measurements."
+            )
+            raise NotImplementedError(msg)
+
+
+def _fail_if_probit_scale_is_fixed_elsewhere(
+    fixed_constraints: list[FixedConstraintWithValue],
+    probit_scale_constraints: list[FixedConstraintWithValue],
+) -> None:
+    """Raise if `fixed_params` pins a probit measurement-error SD to a value != 1."""
+    probit_locs = {c.loc for c in probit_scale_constraints}
+    conflicts = [
+        (c.loc, c.value)
+        for c in fixed_constraints
+        if c.loc in probit_locs and c.value != 1.0
+    ]
+    if conflicts:
+        msg = (
+            "The measurement-error SD of a probit measurement is fixed to 1, but "
+            f"fixed_params pins {conflicts}."
+        )
+        raise ValueError(msg)
 
 
 def _estimate_amn_for_chs_seeding(
@@ -438,6 +510,8 @@ def _partial_some_log_likelihood(
     sigma_weights: Array,
     sigma_scaling_factor: Array,
     chs_options: CHSEstimationOptions,
+    events: Array | None,
+    limited_updates: LimitedUpdates | None,
 ) -> Callable:
     update_info = model.update_info
     is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
@@ -511,6 +585,8 @@ def _partial_some_log_likelihood(
         iteration_to_period=iteration_to_period,
         observed_factors=observed_factors,
         observed_factor_vars=observed_factor_vars,
+        events=events,
+        limited_updates=limited_updates,
     )
 
 

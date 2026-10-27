@@ -27,17 +27,69 @@ posterior covariance. No step divides by `d`, takes `sqrt(d)`, or divides by
 is certain or the loadings are zero.
 """
 
+from collections.abc import Mapping
+from dataclasses import dataclass
+
 import jax
 import jax.numpy as jnp
+import numpy as np
+import pandas as pd
 from jax import Array
 
 from skillmodels.chs.kalman_filters import reset_negligible_mixture_components
-from skillmodels.common.measurement_models import ObservationEvent
+from skillmodels.common.measurement_models import (
+    MeasurementFamily,
+    MeasurementModel,
+    ObservationEvent,
+    measurement_family_arrays,
+)
 
 _LOG_SQRT_2PI = 0.91893853320467274178
 _TAIL_SWITCH = -8.0
 _CENTRAL_CAP = 40.0
 _CONTINUED_FRACTION_DEPTH = 24
+
+# Scan inputs that only the limited-measurement update consumes.
+LIMITED_LOOP_KEYS = ("events", "is_limited", "thresholds")
+
+
+@dataclass(frozen=True)
+class LimitedUpdates:
+    """Per-update family information of a model with limited measurements."""
+
+    is_limited: np.ndarray
+    """Boolean array of length n_updates; True for probit and Tobit updates."""
+    is_probit: np.ndarray
+    """Boolean array of length n_updates; True for probit updates."""
+    thresholds: np.ndarray
+    """Array of shape (n_updates, 2) with the thresholds of the lower and upper
+    half-line events: 0 for probit, the finite Tobit bounds, 0 elsewhere."""
+
+
+def get_limited_updates(
+    update_info: pd.DataFrame,
+    measurement_models: Mapping[str, MeasurementModel],
+) -> LimitedUpdates | None:
+    """Resolve the measurement family of every update row, in update order.
+
+    Return None if every update is Gaussian. Anchoring rows carry generated names
+    and are Gaussian.
+    """
+    families, lowers, uppers = measurement_family_arrays(
+        measurement_models, tuple(update_info.index.get_level_values("variable"))
+    )
+    is_limited = families != int(MeasurementFamily.GAUSSIAN)
+    if not is_limited.any():
+        return None
+    is_tobit = families == int(MeasurementFamily.TOBIT)
+    thresholds = np.zeros((len(families), 2))
+    thresholds[:, 0] = np.where(is_tobit & np.isfinite(lowers), lowers, 0.0)
+    thresholds[:, 1] = np.where(is_tobit & np.isfinite(uppers), uppers, 0.0)
+    return LimitedUpdates(
+        is_limited=is_limited,
+        is_probit=families == int(MeasurementFamily.PROBIT),
+        thresholds=thresholds,
+    )
 
 
 def kalman_update_limited(

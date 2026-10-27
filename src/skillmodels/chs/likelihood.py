@@ -10,6 +10,11 @@ import numpy as np
 from jax import Array
 
 from skillmodels.chs.clipping import soft_clipping
+from skillmodels.chs.halfline import (
+    LIMITED_LOOP_KEYS,
+    LimitedUpdates,
+    kalman_update_limited,
+)
 from skillmodels.chs.kalman_filters import kalman_update
 from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.parse_params import parse_params
@@ -37,6 +42,8 @@ def log_likelihood(
     iteration_to_period: Array | np.ndarray,
     observed_factors: Array | np.ndarray,
     observed_factor_vars: Array | np.ndarray,
+    events: Array | None = None,
+    limited_updates: LimitedUpdates | None = None,
 ) -> Array:
     """Aggregated log likelihood of a skill formation model.
 
@@ -70,6 +77,10 @@ def log_likelihood(
         observed_factor_vars: Array of shape (n_periods, n_obs, n_missing) with
             the variance of each possibly-missing observed factor (0 where it is
             observed).
+        events: Array of shape (n_updates, n_obs) with the `ObservationEvent` of
+            each measurement, or None if all measurements are Gaussian.
+        limited_updates: Per-update families and thresholds, or None if all
+            measurements are Gaussian.
 
     Returns:
         Scalar aggregated log likelihood.
@@ -91,6 +102,8 @@ def log_likelihood(
         iteration_to_period=iteration_to_period,
         observed_factors=observed_factors,
         observed_factor_vars=observed_factor_vars,
+        events=events,
+        limited_updates=limited_updates,
     ).sum()
 
 
@@ -110,6 +123,8 @@ def log_likelihood_obs(
     iteration_to_period: Array | np.ndarray,
     observed_factors: Array | np.ndarray,
     observed_factor_vars: Array | np.ndarray,
+    events: Array | None = None,
+    limited_updates: LimitedUpdates | None = None,
 ) -> Array:
     """Log likelihood of a skill formation model.
 
@@ -152,6 +167,10 @@ def log_likelihood_obs(
         observed_factor_vars: Array of shape (n_periods, n_obs, n_missing) with
             the variance of each possibly-missing observed factor (0 where it is
             observed).
+        events: Array of shape (n_updates, n_obs) with the `ObservationEvent` of
+            each measurement, or None if all measurements are Gaussian.
+        limited_updates: Per-update families and thresholds, or None if all
+            measurements are Gaussian.
 
     Returns:
         jnp.array: 1d array of length N, the aggregated log likelihood.
@@ -181,6 +200,11 @@ def log_likelihood_obs(
         "is_measurement_iteration": is_measurement_iteration,
         "is_predict_iteration": is_predict_iteration,
         "observed_later": get_observation_masks(measurements, iteration_to_period)[0],
+        **get_limited_loop_args(
+            events=events,
+            limited_updates=limited_updates,
+            meas_sds=parsed_params.meas_sds,
+        ),
     }
 
     _body = functools.partial(
@@ -319,6 +343,7 @@ def _scan_body(
         "measurements": loop_args["measurements"],
         "controls": controls[t],
         "log_mixture_weights": log_mixture_weights,
+        **{k: loop_args[k] for k in LIMITED_LOOP_KEYS if k in loop_args},
     }
 
     # ==================================================================================
@@ -370,19 +395,55 @@ def _scan_body(
     return new_state, static_out
 
 
+def get_limited_loop_args(
+    events: Array | None,
+    limited_updates: LimitedUpdates | None,
+    meas_sds: Array,
+) -> dict[str, Array]:
+    """Return the per-update scan inputs of limited measurements.
+
+    Empty without limited measurements, so an all-Gaussian model runs the plain
+    Gaussian scan. Otherwise the `meas_sds` entry replaces the parsed one with a
+    unit error SD for probit updates.
+    """
+    if events is None or limited_updates is None:
+        return {}
+    return {
+        "events": events,
+        "is_limited": jnp.asarray(limited_updates.is_limited),
+        "thresholds": jnp.asarray(limited_updates.thresholds),
+        "meas_sds": jnp.where(jnp.asarray(limited_updates.is_probit), 1.0, meas_sds),
+    }
+
+
 def _one_arg_measurement_update(
     kwargs: dict[str, Array],
 ) -> tuple[Array, Array, Array, Array]:
-    return kalman_update(**kwargs)
+    if "events" not in kwargs:
+        return kalman_update(**kwargs)
+    gaussian_kwargs = gaussian_update_kwargs(kwargs)
+    limited_kwargs = {k: v for k, v in kwargs.items() if k != "is_limited"}
+    return jax.lax.cond(
+        kwargs["is_limited"],
+        lambda: kalman_update_limited(**limited_kwargs)[:4],
+        lambda: kalman_update(**gaussian_kwargs),
+    )
 
 
 def _one_arg_anchoring_update(
     kwargs: dict[str, Array],
 ) -> tuple[Array, Array, Array, Array]:
-    _, _, new_log_mixture_weights, new_loglikes = kalman_update(**kwargs)
+    _, _, new_log_mixture_weights, new_loglikes = kalman_update(
+        **gaussian_update_kwargs(kwargs)
+    )
     return (
         kwargs["states"],
         kwargs["upper_chols"],
         new_log_mixture_weights,
         new_loglikes,
     )
+
+
+def gaussian_update_kwargs(kwargs: dict[str, Array]) -> dict[str, Array]:
+    """Return the update arguments without the limited-measurement inputs."""
+    return {k: v for k, v in kwargs.items() if k not in LIMITED_LOOP_KEYS}

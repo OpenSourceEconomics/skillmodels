@@ -10,8 +10,18 @@ import numpy as np
 from jax import Array
 
 from skillmodels.chs.clipping import soft_clipping
+from skillmodels.chs.halfline import (
+    LIMITED_LOOP_KEYS,
+    LimitedUpdates,
+    kalman_update_limited,
+)
 from skillmodels.chs.kalman_filters_debug import kalman_update
-from skillmodels.chs.likelihood import get_observation_masks, predict_if_observed_later
+from skillmodels.chs.likelihood import (
+    gaussian_update_kwargs,
+    get_limited_loop_args,
+    get_observation_masks,
+    predict_if_observed_later,
+)
 from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.parse_params import parse_params
 from skillmodels.common.types import (
@@ -38,6 +48,8 @@ def log_likelihood(
     iteration_to_period: Array | np.ndarray,
     observed_factors: Array | np.ndarray,
     observed_factor_vars: Array | np.ndarray,
+    events: Array | None = None,
+    limited_updates: LimitedUpdates | None = None,
 ) -> dict[str, Any]:
     """Log likelihood of a skill formation model, returning debug data on top.
 
@@ -70,6 +82,10 @@ def log_likelihood(
         observed_factor_vars: Array of shape (n_periods, n_obs, n_missing) with
             the variance of each possibly-missing observed factor (0 where it is
             observed).
+        events: Array of shape (n_updates, n_obs) with the `ObservationEvent` of
+            each measurement, or None if all measurements are Gaussian.
+        limited_updates: Per-update families and thresholds, or None if all
+            measurements are Gaussian.
 
     Returns:
         All data relevant for debugging, e.g. the log likelihood contribution of
@@ -103,6 +119,11 @@ def log_likelihood(
         "is_measurement_iteration": is_measurement_iteration,
         "is_predict_iteration": is_predict_iteration,
         "observed_later": observed_later,
+        **get_limited_loop_args(
+            events=events,
+            limited_updates=limited_updates,
+            meas_sds=parsed_params.meas_sds,
+        ),
     }
 
     _body = functools.partial(
@@ -187,6 +208,7 @@ def _scan_body(
         "measurements": loop_args["measurements"],
         "controls": controls[t],
         "log_mixture_weights": log_mixture_weights,
+        **{k: loop_args[k] for k in LIMITED_LOOP_KEYS if k in loop_args},
     }
 
     # ==================================================================================
@@ -241,13 +263,23 @@ def _scan_body(
 def _one_arg_measurement_update(
     kwargs: dict[str, Any],
 ) -> tuple[Array, Array, Array, Array, dict[str, Any]]:
-    return kalman_update(**kwargs)
+    if "events" not in kwargs:
+        return kalman_update(**kwargs)
+    gaussian_kwargs = gaussian_update_kwargs(kwargs)
+    limited_kwargs = {k: v for k, v in kwargs.items() if k != "is_limited"}
+    return jax.lax.cond(
+        kwargs["is_limited"],
+        lambda: kalman_update_limited(**limited_kwargs),
+        lambda: kalman_update(**gaussian_kwargs),
+    )
 
 
 def _one_arg_anchoring_update(
     kwargs: dict[str, Any],
 ) -> tuple[Array, Array, Array, Array, dict[str, Any]]:
-    _, _, new_log_mixture_weights, new_loglikes, debug_info = kalman_update(**kwargs)
+    _, _, new_log_mixture_weights, new_loglikes, debug_info = kalman_update(
+        **gaussian_update_kwargs(kwargs)
+    )
     return (
         kwargs["states"],
         kwargs["upper_chols"],
