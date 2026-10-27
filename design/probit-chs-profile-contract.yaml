@@ -1,0 +1,51 @@
+---
+# Profile contract for the design of probit measurements in CHS.
+contract_version: '1'
+target: Probit measurements in the CHS estimator on top of skillmodels PR 104
+environment:
+  hardware: 'tests: Linux CPU; application: one NVIDIA A100'
+  backend: jax with XLA:CPU and XLA:CUDA
+  dtype: float64
+  jax_flags: jax_enable_x64=True
+metric_definitions:
+  update_loglik_error: >-
+    absolute difference of the per-update log-likelihood term from a
+    quadrature oracle over the Gaussian predicted state
+  update_moment_error: >-
+    max absolute difference of posterior mean and covariance entries from
+    the quadrature oracle, relative to the prior SD of the state
+  gradient_error: >-
+    max relative difference of AD and step-swept central finite differences
+    of the total log-likelihood, small test models
+  full_likelihood_gap: >-
+    absolute difference per person of the CHS log-likelihood with probit
+    updates from exact integration over the latent path, small model
+  gaussian_path_regression: >-
+    relative change of the log-likelihood of an all-Gaussian model vs. ccbf9b5
+  warm_seconds: median wall time of loglike_and_gradient after compilation
+  compile_seconds: wall time of the first call minus warm_seconds
+  peak_device_gib: device allocator high-water mark over one call
+profiles:
+  certified:
+    description: unit and integration tests, CPU, float64
+    numerical:
+      update_loglik_error: 1.0e-10
+      update_moment_error: 1.0e-8
+      gradient_error: 1.0e-5
+      full_likelihood_gap: >-
+        reported, not bounded; the test shows it shrinks as the probit
+        loading goes to 0
+      gaussian_path_regression: 1.0e-12
+    resource:
+      ci: the new tests add at most 60 s to the CPU suite
+  application:
+    description: health-cognition with alive as probit, one A100, float64
+    numerical:
+      gaussian_path_regression: 1.0e-12
+    resource:
+      warm_seconds: at most +10% vs. the same model with alive Gaussian
+      compile_seconds: at most +20%
+      peak_device_gib: at most +10%
+measurement_protocol:
+  repetitions: 5
+  warmup: 1
