@@ -22,9 +22,15 @@ from skillmodels.common.constraints import (
     _get_transition_constraints,
     add_bounds,
     get_constraints,
+    get_probit_scale_constraints,
     project_start_to_linear_equalities,
     reconcile_start_to_equality,
 )
+from skillmodels.common.measurement_models import (
+    ProbitMeasurement,
+    TobitMeasurement,
+)
+from skillmodels.common.model_spec import FactorSpec, ModelSpec
 from skillmodels.common.process_model import process_model
 from skillmodels.common.selector import select_by_loc
 from skillmodels.common.types import (
@@ -811,3 +817,29 @@ def test_project_start_to_linear_equalities_fits_a_line() -> None:
     expected = np.append(intercept + slope * np.arange(5), 7.0)
     projected = project_start_to_linear_equalities(params, constraints)
     np.testing.assert_allclose(projected["value"].to_numpy(), expected, atol=1e-12)
+
+
+def test_probit_scale_constraints_fix_every_probit_meas_sd_to_one() -> None:
+    model = ModelSpec(
+        factors={
+            "skills": FactorSpec(
+                measurements=(("y1", "alive", "hours"),) * 2,
+                normalizations=Normalizations(
+                    loadings=({"y1": 1},) * 2, intercepts=({"y1": 0},) * 2
+                ),
+                transition_function="linear",
+            ),
+        },
+        measurement_models={
+            "alive": ProbitMeasurement(),
+            "hours": TobitMeasurement(lower=0.0),
+        },
+    )
+    update_info = process_model(model).update_info
+    constraints = get_probit_scale_constraints(
+        update_info=update_info, measurement_models=model.measurement_models
+    )
+    assert [(c.loc, c.value) for c in constraints] == [
+        (("meas_sds", 0, "alive", "-"), 1.0),
+        (("meas_sds", 1, "alive", "-"), 1.0),
+    ]

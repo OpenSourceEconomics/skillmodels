@@ -37,6 +37,7 @@ from skillmodels.common.individual_states import (  # noqa: E402
 )
 from skillmodels.common.measurement_models import (  # noqa: E402
     GaussianMeasurement,
+    OrderedProbitMeasurement,
     ProbitMeasurement,
     TobitMeasurement,
 )
@@ -63,6 +64,7 @@ __all__ = [
     "GaussianMeasurement",
     "ModelSpec",
     "Normalizations",
+    "OrderedProbitMeasurement",
     "ProbitMeasurement",
     "TobitMeasurement",
     "estimate_af",

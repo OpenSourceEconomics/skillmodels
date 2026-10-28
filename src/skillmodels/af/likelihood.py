@@ -16,6 +16,7 @@ from skillmodels.af.types import ChainLink
 from skillmodels.common.measurement_models import (
     MeasurementFamily,
     measurement_loglik_vec,
+    ordered_interval_ends,
 )
 
 
@@ -51,14 +52,21 @@ def _measurement_log_density(
     families: Array,
     lowers: Array,
     uppers: Array,
+    cut_tables: Array | None = None,
 ) -> Array:
     """Per-measurement log density/probability through the shared family kernel.
 
     `residual = y - eta` is the Gaussian residual, so `eta = y_meas - residual`.
     For the Gaussian family this reduces exactly to `N(residual; 0, meas_sds)`, so
     swapping `_log_normal_pdf(residual, 0, sd)` for this call is parity-preserving.
+    `cut_tables` (shape `(n_measures, n_columns)`) holds `[-inf, c_1, ..., +inf]`
+    for each ordered-probit measure; the observed category selects its interval.
     """
     eta = y_meas - residual
+    if cut_tables is not None:
+        lowers, uppers = jax.vmap(ordered_interval_ends)(
+            y_meas, families, lowers, uppers, cut_tables
+        )
     return measurement_loglik_vec(y_meas, eta, meas_sds, families, lowers, uppers)
 
 
@@ -81,6 +89,7 @@ def af_per_obs_loglike_initial(
     measurement_families: Array | None = None,
     measurement_lowers: Array | None = None,
     measurement_uppers: Array | None = None,
+    measurement_cut_tables: Array | None = None,
 ) -> Array:
     """Per-observation log-likelihood for the initial period (Step 0).
 
@@ -117,6 +126,7 @@ def af_per_obs_loglike_initial(
             measurement_families=measurement_families,
             measurement_lowers=measurement_lowers,
             measurement_uppers=measurement_uppers,
+            measurement_cut_tables=measurement_cut_tables,
         )
     assert observed_factor_values is not None  # noqa: S101
     return _initial_loglike_per_obs_conditional(
@@ -138,6 +148,7 @@ def af_per_obs_loglike_initial(
         measurement_families=measurement_families,
         measurement_lowers=measurement_lowers,
         measurement_uppers=measurement_uppers,
+        measurement_cut_tables=measurement_cut_tables,
     )
 
 
@@ -160,6 +171,7 @@ def af_loglike_initial(
     measurement_families: Array | None = None,
     measurement_lowers: Array | None = None,
     measurement_uppers: Array | None = None,
+    measurement_cut_tables: Array | None = None,
 ) -> Array:
     """Negative log-likelihood for the initial period (Step 0).
 
@@ -240,6 +252,9 @@ def af_loglike_initial(
             (``-inf`` where not Tobit / not censored below).
         measurement_uppers: Optional shape-``(n_measures,)`` Tobit upper bounds
             (``+inf`` where not Tobit / not censored above).
+        measurement_cut_tables: Optional shape-``(n_measures, n_columns)`` tables
+            ``[-inf, c_1, ..., c_{K-1}, +inf, ...]`` of ordered-probit measures
+            (rows of other measures are not read).
 
     Return:
         Scalar negative log-likelihood.
@@ -263,6 +278,7 @@ def af_loglike_initial(
         measurement_families=measurement_families,
         measurement_lowers=measurement_lowers,
         measurement_uppers=measurement_uppers,
+        measurement_cut_tables=measurement_cut_tables,
     )
     return -jnp.mean(log_likes)
 
@@ -362,6 +378,7 @@ def _initial_loglike_per_obs(
     measurement_families: Array | None = None,
     measurement_lowers: Array | None = None,
     measurement_uppers: Array | None = None,
+    measurement_cut_tables: Array | None = None,
 ) -> Array:
     """Compute log-likelihood for each observation at the initial period.
 
@@ -410,6 +427,7 @@ def _initial_loglike_per_obs(
             measurement_families=families,
             measurement_lowers=lowers,
             measurement_uppers=uppers,
+            measurement_cut_tables=measurement_cut_tables,
             mixture_weights=mixture_weights,
             mixture_means=mixture_means,
             mixture_chol_covs=mixture_chol_covs,
@@ -447,6 +465,7 @@ def _initial_loglike_per_obs_conditional(
     measurement_families: Array | None = None,
     measurement_lowers: Array | None = None,
     measurement_uppers: Array | None = None,
+    measurement_cut_tables: Array | None = None,
 ) -> Array:
     """Per-observation log-likelihood with Schur-complement conditioning.
 
@@ -499,6 +518,7 @@ def _initial_loglike_per_obs_conditional(
             measurement_families=families,
             measurement_lowers=lowers,
             measurement_uppers=uppers,
+            measurement_cut_tables=measurement_cut_tables,
             mixture_weights=mixture_weights,
             mixture_means=mixture_means,
             mixture_chol_covs=mixture_chol_covs,
@@ -529,6 +549,7 @@ def _integrate_initial_single_obs_conditional(
     measurement_families: Array,
     measurement_lowers: Array,
     measurement_uppers: Array,
+    measurement_cut_tables: Array | None = None,
     mixture_weights: Array,
     mixture_means: Array,
     mixture_chol_covs: Array,
@@ -589,6 +610,7 @@ def _integrate_initial_single_obs_conditional(
                 measurement_families,
                 measurement_lowers,
                 measurement_uppers,
+                measurement_cut_tables,
             )
             return jnp.sum(jnp.where(meas_mask, log_pdf, 0.0))
 
@@ -624,6 +646,7 @@ def _integrate_initial_single_obs(
     measurement_families: Array,
     measurement_lowers: Array,
     measurement_uppers: Array,
+    measurement_cut_tables: Array | None = None,
     mixture_weights: Array,
     mixture_means: Array,
     mixture_chol_covs: Array,
@@ -678,6 +701,7 @@ def _integrate_initial_single_obs(
                 measurement_families,
                 measurement_lowers,
                 measurement_uppers,
+                measurement_cut_tables,
             )
             log_meas_density = jnp.sum(jnp.where(meas_mask, log_pdf, 0.0))
 

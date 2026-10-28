@@ -4,8 +4,11 @@ import pandas as pd
 import pytest
 from numpy.testing import assert_array_almost_equal as aaae
 
+from skillmodels.common.measurement_models import ProbitMeasurement
+from skillmodels.common.model_spec import FactorSpec, ModelSpec
 from skillmodels.common.variance_decomposition import (
     _compute_variance_decomposition,
+    decompose_measurement_variance,
     summarize_measurement_reliability,
 )
 
@@ -144,3 +147,26 @@ def test_compute_variance_decomposition_with_period_level_params(
     """
     result = _compute_variance_decomposition(**af_format_variance_decomposition)
     aaae(result.values, expected_variance_decomposition.values)
+
+
+def test_decomposition_leaves_out_limited_measurements(
+    setup_variance_decomposition, expected_variance_decomposition
+):
+    """A probit or Tobit measurement has no observed-scale Gaussian decomposition."""
+    model_spec = ModelSpec(
+        factors={
+            fac: FactorSpec(
+                measurements=((meas,), (meas,)), transition_function="linear"
+            )
+            for fac, meas in (("fac1", "y1"), ("fac2", "y2"), ("fac3", "y3"))
+        },
+        measurement_models={"y2": ProbitMeasurement()},
+    )
+    with pytest.warns(UserWarning, match="y2"):
+        result = decompose_measurement_variance(
+            model_spec,
+            setup_variance_decomposition["params"],
+            filtered_states=setup_variance_decomposition["filtered_states"],
+        )
+    expected = expected_variance_decomposition.drop(index="y2", level="measurement")
+    pd.testing.assert_frame_equal(result, expected, check_exact=False)

@@ -11,6 +11,11 @@ import pandas as pd
 
 import skillmodels.common.transition_functions as t_f_module
 from skillmodels.common.fixed_constraint import FixedConstraintWithValue
+from skillmodels.common.measurement_models import (
+    MeasurementModel,
+    OrderedProbitMeasurement,
+    ProbitMeasurement,
+)
 from skillmodels.common.selector import align_index_names, select_by_loc
 from skillmodels.common.types import (
     Anchoring,
@@ -378,6 +383,79 @@ def get_constraints(
             bounds_distance=bounds_distance,
         )
 
+    return constraints
+
+
+def get_probit_scale_constraints(
+    update_info: pd.DataFrame,
+    measurement_models: Mapping[str, MeasurementModel],
+) -> list[FixedConstraintWithValue]:
+    """Fix the measurement-error SD of every (ordered) probit measurement update to 1.
+
+    A probit or ordered-probit measurement keeps its `meas_sds` row so the
+    parameter index stays aligned with the update rows; the row is a fixed
+    parameter, and the CHS likelihood uses a unit error SD for these updates
+    regardless of its value.
+
+    Args:
+        update_info: DataFrame with one row per Kalman update, indexed by
+            `(aug_period, variable)`.
+        measurement_models: Per-variable observation models.
+
+    Return:
+        One `FixedConstraintWithValue` per probit or ordered-probit update row.
+
+    """
+    return [
+        FixedConstraintWithValue(loc=("meas_sds", aug_period, var, "-"), value=1.0)
+        for aug_period, var in update_info.index
+        if isinstance(
+            measurement_models.get(var), ProbitMeasurement | OrderedProbitMeasurement
+        )
+    ]
+
+
+def get_cutpoint_constraints(
+    update_info: pd.DataFrame,
+    measurement_models: Mapping[str, MeasurementModel],
+) -> list[om.constraints.Constraint]:
+    """Fix the first cutpoint of every ordered-probit update to 0 and order the rest.
+
+    Per update row `(aug_period, var)` with `K` categories:
+
+    - `("cutpoints", aug_period, var, "cutpoint_1")` is fixed to 0, which
+      normalizes the location of the latent index against the free intercept;
+    - for `K >= 3`, the cutpoints `cutpoint_1, ..., cutpoint_{K-1}` are weakly
+      increasing. Equal neighbours give an empty category, whose observations have
+      zero likelihood, so an interior optimum is strictly increasing.
+
+    Ties across periods are not imposed; add them as equality constraints.
+
+    Args:
+        update_info: DataFrame with one row per Kalman update, indexed by
+            `(aug_period, variable)`.
+        measurement_models: Per-variable observation models.
+
+    Return:
+        The fixed and increasing constraints of all ordered-probit update rows.
+
+    """
+    constraints: list[om.constraints.Constraint] = []
+    for aug_period, var in update_info.index:
+        model = measurement_models.get(var)
+        if not isinstance(model, OrderedProbitMeasurement):
+            continue
+        locs = [
+            ("cutpoints", aug_period, var, f"cutpoint_{k}")
+            for k in range(1, model.n_categories)
+        ]
+        constraints.append(FixedConstraintWithValue(loc=locs[0], value=0.0))
+        if len(locs) > 1:
+            constraints.append(
+                om.IncreasingConstraint(
+                    selector=functools.partial(select_by_loc, loc=locs)
+                )
+            )
     return constraints
 
 

@@ -1,0 +1,30 @@
+{
+  "checked_at_utc": "2026-10-28T15:48:32.466719+00:00",
+  "lean_version": "Lean (version 4.35.0, x86_64-unknown-linux-gnu, commit eb6cafb7290e8bd5f2937522d8d804f58f02bafc, Release)",
+  "mathlib_commit": "56a005855ea17e0b0958f73ec801ae140b0a1679",
+  "theorem_declarations": 82,
+  "probability_measure_instance_audited": true,
+  "audited_declarations": 83,
+  "axioms": [
+    "Classical.choice",
+    "Quot.sound",
+    "propext"
+  ],
+  "build": {
+    "command": "lake build",
+    "exit_code": 0,
+    "record": "build.log"
+  },
+  "axioms_audit": {
+    "command": "lake env lean ProofAudit.lean",
+    "exit_code": 0,
+    "record": "axioms.log"
+  },
+  "source_scan": {
+    "sorry": false,
+    "admit": false,
+    "custom_axiom": false,
+    "native_decide": false,
+    "unsafe": false
+  }
+}

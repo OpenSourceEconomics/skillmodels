@@ -10,6 +10,12 @@ import numpy as np
 from jax import Array
 
 from skillmodels.chs.clipping import soft_clipping
+from skillmodels.chs.halfline import (
+    LIMITED_LOOP_KEYS,
+    LimitedUpdates,
+    get_cut_table,
+    limited_update_from_loop_kwargs,
+)
 from skillmodels.chs.kalman_filters import kalman_update
 from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.parse_params import parse_params
@@ -37,6 +43,8 @@ def log_likelihood(
     iteration_to_period: Array | np.ndarray,
     observed_factors: Array | np.ndarray,
     observed_factor_vars: Array | np.ndarray,
+    events: Array | None = None,
+    limited_updates: LimitedUpdates | None = None,
 ) -> Array:
     """Aggregated log likelihood of a skill formation model.
 
@@ -70,6 +78,10 @@ def log_likelihood(
         observed_factor_vars: Array of shape (n_periods, n_obs, n_missing) with
             the variance of each possibly-missing observed factor (0 where it is
             observed).
+        events: Array of shape (n_updates, n_obs) with the `ObservationEvent` of
+            each measurement, or None if all measurements are Gaussian.
+        limited_updates: Per-update families and thresholds, or None if all
+            measurements are Gaussian.
 
     Returns:
         Scalar aggregated log likelihood.
@@ -91,6 +103,8 @@ def log_likelihood(
         iteration_to_period=iteration_to_period,
         observed_factors=observed_factors,
         observed_factor_vars=observed_factor_vars,
+        events=events,
+        limited_updates=limited_updates,
     ).sum()
 
 
@@ -110,6 +124,8 @@ def log_likelihood_obs(
     iteration_to_period: Array | np.ndarray,
     observed_factors: Array | np.ndarray,
     observed_factor_vars: Array | np.ndarray,
+    events: Array | None = None,
+    limited_updates: LimitedUpdates | None = None,
 ) -> Array:
     """Log likelihood of a skill formation model.
 
@@ -152,6 +168,10 @@ def log_likelihood_obs(
         observed_factor_vars: Array of shape (n_periods, n_obs, n_missing) with
             the variance of each possibly-missing observed factor (0 where it is
             observed).
+        events: Array of shape (n_updates, n_obs) with the `ObservationEvent` of
+            each measurement, or None if all measurements are Gaussian.
+        limited_updates: Per-update families and thresholds, or None if all
+            measurements are Gaussian.
 
     Returns:
         jnp.array: 1d array of length N, the aggregated log likelihood.
@@ -181,10 +201,17 @@ def log_likelihood_obs(
         "is_measurement_iteration": is_measurement_iteration,
         "is_predict_iteration": is_predict_iteration,
         "observed_later": get_observation_masks(measurements, iteration_to_period)[0],
+        **get_limited_loop_args(
+            events=events,
+            limited_updates=limited_updates,
+            meas_sds=parsed_params.meas_sds,
+            params=params,
+        ),
     }
 
     _body = functools.partial(
         _scan_body,
+        has_intervals=limited_updates is not None and limited_updates.has_intervals,
         controls=controls,
         parsed_params=parsed_params,
         sigma_scaling_factor=sigma_scaling_factor,
@@ -301,6 +328,8 @@ def _scan_body(
     predict_func: Callable,
     observed_factors: Array | np.ndarray,
     observed_factor_vars: Array | np.ndarray,
+    *,
+    has_intervals: bool = False,
 ) -> tuple[dict[str, Array], dict[str, Array]]:
     # ==================================================================================
     # create arguments needed for update
@@ -319,17 +348,25 @@ def _scan_body(
         "measurements": loop_args["measurements"],
         "controls": controls[t],
         "log_mixture_weights": log_mixture_weights,
+        **{k: loop_args[k] for k in LIMITED_LOOP_KEYS if k in loop_args},
     }
 
     # ==================================================================================
     # do a measurement or anchoring update
     # ==================================================================================
-    states, upper_chols, log_mixture_weights, loglikes = jax.lax.cond(
-        loop_args["is_measurement_iteration"],
-        functools.partial(_one_arg_measurement_update),
-        functools.partial(_one_arg_anchoring_update),
-        update_kwargs,
-    )
+    if "is_limited" in loop_args:
+        states, upper_chols, log_mixture_weights, loglikes = _mixed_model_update(
+            update_kwargs,
+            is_measurement_iteration=loop_args["is_measurement_iteration"],
+            has_intervals=has_intervals,
+        )
+    else:
+        states, upper_chols, log_mixture_weights, loglikes = jax.lax.cond(
+            loop_args["is_measurement_iteration"],
+            kalman_update_from_kwargs,
+            _one_arg_anchoring_update,
+            update_kwargs,
+        )
 
     # ==================================================================================
     # create arguments needed for predict step
@@ -370,19 +407,87 @@ def _scan_body(
     return new_state, static_out
 
 
-def _one_arg_measurement_update(
+def get_limited_loop_args(
+    events: Array | None,
+    limited_updates: LimitedUpdates | None,
+    meas_sds: Array,
+    params: Array,
+) -> dict[str, Array]:
+    """Return the per-update scan inputs of limited measurements.
+
+    Empty without limited measurements, so an all-Gaussian model runs the plain
+    Gaussian scan. Otherwise the `meas_sds` entry replaces the parsed one with a
+    unit error SD for probit and ordered-probit updates, and `cut_table` holds the
+    cut values of each update row with the current cutpoints.
+    """
+    if events is None or limited_updates is None:
+        return {}
+    return {
+        "events": events,
+        "is_limited": jnp.asarray(limited_updates.is_limited),
+        "cut_table": get_cut_table(limited_updates, params),
+        "codes_from_values": jnp.asarray(limited_updates.codes_from_values),
+        "meas_sds": jnp.where(
+            jnp.asarray(limited_updates.is_unit_scale), 1.0, meas_sds
+        ),
+    }
+
+
+def _mixed_model_update(
+    kwargs: dict[str, Array],
+    *,
+    is_measurement_iteration: Array,
+    has_intervals: bool,
+) -> tuple[Array, Array, Array, Array]:
+    """Run the anchoring, Gaussian, or limited update of a model with limited measures.
+
+    One three-way `lax.switch` selects the update; the limited branch is
+    rematerialized (`jax.checkpoint`). Under reverse-mode differentiation inside the
+    scan, the residuals of all branches are merged and the branches not taken are
+    zero-filled at every iteration; rematerializing the limited branch reduces its
+    residuals to its inputs, so a Gaussian update pays almost nothing for the
+    limited branch.
+    """
+
+    def limited(kw: dict[str, Array]) -> tuple[Array, Array, Array, Array]:
+        update = limited_update_from_loop_kwargs(kw, has_intervals=has_intervals)
+        return update[0], update[1], update[2], update[3]
+
+    index = jnp.where(
+        is_measurement_iteration, 1 + kwargs["is_limited"].astype(jnp.int32), 0
+    )
+    return jax.lax.switch(
+        index,
+        [
+            _one_arg_anchoring_update,
+            kalman_update_from_kwargs,
+            jax.checkpoint(limited),
+        ],
+        kwargs,
+    )
+
+
+def kalman_update_from_kwargs(
     kwargs: dict[str, Array],
 ) -> tuple[Array, Array, Array, Array]:
-    return kalman_update(**kwargs)
+    """Run the Gaussian Kalman update on update arguments of one scan iteration."""
+    return kalman_update(**gaussian_update_kwargs(kwargs))
 
 
 def _one_arg_anchoring_update(
     kwargs: dict[str, Array],
 ) -> tuple[Array, Array, Array, Array]:
-    _, _, new_log_mixture_weights, new_loglikes = kalman_update(**kwargs)
+    _, _, new_log_mixture_weights, new_loglikes = kalman_update(
+        **gaussian_update_kwargs(kwargs)
+    )
     return (
         kwargs["states"],
         kwargs["upper_chols"],
         new_log_mixture_weights,
         new_loglikes,
     )
+
+
+def gaussian_update_kwargs(kwargs: dict[str, Array]) -> dict[str, Array]:
+    """Return the update arguments without the limited-measurement inputs."""
+    return {k: v for k, v in kwargs.items() if k not in LIMITED_LOOP_KEYS}

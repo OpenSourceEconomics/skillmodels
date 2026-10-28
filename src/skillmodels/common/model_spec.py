@@ -15,6 +15,7 @@ from skillmodels._beartype_conf import MODEL_SPEC_CONF, beartype_init
 from skillmodels.common.measurement_models import (
     GaussianMeasurement,
     MeasurementModel,
+    OrderedProbitMeasurement,
     ProbitMeasurement,
     TobitMeasurement,
 )
@@ -43,7 +44,9 @@ def _parse_measurement_models(
 ) -> dict[str, MeasurementModel]:
     """Build `MeasurementModel` instances from a `from_dict` measurement_models map.
 
-    Each entry is `{family: "gaussian" | "probit" | "tobit", lower?, upper?}`.
+    Each entry is `{family: "gaussian" | "probit" | "tobit" | "ordered_probit",
+    lower?, upper?, n_categories?}`; `n_categories` is required for
+    `"ordered_probit"`.
     """
     if not spec:
         return {}
@@ -58,10 +61,18 @@ def _parse_measurement_models(
             models[name] = TobitMeasurement(
                 lower=cfg.get("lower", 0.0), upper=cfg.get("upper")
             )
+        elif family == "ordered_probit":
+            if "n_categories" not in cfg:
+                msg = (
+                    f"measurement_models['{name}'] has family 'ordered_probit' and "
+                    "needs 'n_categories'."
+                )
+                raise ValueError(msg)
+            models[name] = OrderedProbitMeasurement(n_categories=cfg["n_categories"])
         else:
             msg = (
                 f"measurement_models['{name}'] has unknown family '{family}'; "
-                "expected 'gaussian', 'probit', or 'tobit'."
+                "expected 'gaussian', 'probit', 'tobit', or 'ordered_probit'."
             )
             raise ValueError(msg)
     return models
