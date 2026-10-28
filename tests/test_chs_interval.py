@@ -161,6 +161,9 @@ def test_interval_term_derivatives_match_identities(a, b) -> None:
         )
 
 
+# The compiled, vectorized terms are also checked against the decimal reference through
+# `log_normal_interval_mass` in `test_normal_interval_mass.py`.
+@pytest.mark.long_running
 def test_interval_terms_agree_under_jit_and_vmap() -> None:
     a = jnp.array([x for x, _ in _INTERVALS])
     b = jnp.array([y for _, y in _INTERVALS])

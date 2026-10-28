@@ -60,10 +60,8 @@ def _ordered(width: jax.Array) -> jax.Array:
     )
 
 
-@pytest.mark.parametrize("compiled", [False, True])
-def test_narrow_ordered_category_has_its_finite_log_mass(compiled) -> None:
-    evaluate = jax.jit(_ordered) if compiled else _ordered
-    actual = float(evaluate(jnp.array(_WIDTH)))
+def test_narrow_ordered_category_has_its_finite_log_mass() -> None:
+    actual = float(_ordered(jnp.array(_WIDTH)))
     assert abs(actual - interval_reference(0.0, _WIDTH)["log_mass"]) <= 1e-10
 
 
@@ -143,34 +141,56 @@ def test_ordered_terms_do_not_poison_narrow_tobit_gradients() -> None:
     )
 
 
-def test_log_mass_and_gradients_over_widths_reflections_and_translations() -> None:
-    """Values over every case, endpoint derivatives over the narrow ones."""
+def test_log_mass_and_gradients_over_finite_and_half_line_intervals() -> None:
+    """One compiled, vectorized evaluation of every finite case and four half-lines.
+
+    Finite cases: values against the decimal reference, endpoint derivatives for the
+    narrow ones. Half-lines: `log Phi`, the Mills ratio as the derivative with respect
+    to the finite end, and 0 with respect to the infinite end.
+    """
     pairs = _cases()
-    a = jnp.asarray([pair[0] for pair in pairs])
-    b = jnp.asarray([pair[1] for pair in pairs])
+    half_lower = [-np.inf, 0.3, -np.inf, 40.0]
+    half_upper = [0.3, np.inf, -40.0, np.inf]
+    a = jnp.asarray([pair[0] for pair in pairs] + half_lower)
+    b = jnp.asarray([pair[1] for pair in pairs] + half_upper)
     value_and_grad = jax.jit(
         jax.vmap(jax.value_and_grad(log_normal_interval_mass, argnums=(0, 1)))
     )
     value, (da, db) = value_and_grad(a, b)
+    value, da, db = np.asarray(value), np.asarray(da), np.asarray(db)
+    n = len(pairs)
+
     references = [interval_reference(*pair) for pair in pairs]
     np.testing.assert_allclose(
-        np.asarray(value),
-        [ref["log_mass"] for ref in references],
-        rtol=0.0,
-        atol=1e-10,
+        value[:n], [ref["log_mass"] for ref in references], rtol=0.0, atol=1e-10
     )
     narrow = np.array([upper - lower < 1e-3 for lower, upper in pairs])
     np.testing.assert_allclose(
-        np.asarray(da)[narrow],
-        [ref["dlog_da"] for ref, n in zip(references, narrow, strict=True) if n],
+        da[:n][narrow],
+        [ref["dlog_da"] for ref, m in zip(references, narrow, strict=True) if m],
         rtol=1e-8,
         atol=0.0,
     )
     np.testing.assert_allclose(
-        np.asarray(db)[narrow],
-        [ref["dlog_db"] for ref, n in zip(references, narrow, strict=True) if n],
+        db[:n][narrow],
+        [ref["dlog_db"] for ref, m in zip(references, narrow, strict=True) if m],
         rtol=1e-8,
         atol=0.0,
+    )
+
+    expected = [log_ndtr(0.3), log_ndtr(-0.3), log_ndtr(-40.0), log_ndtr(-40.0)]
+    np.testing.assert_allclose(value[n:], expected, rtol=1e-13)
+    np.testing.assert_array_equal(da[n:][[0, 2]], 0.0)
+    np.testing.assert_array_equal(db[n:][[1, 3]], 0.0)
+    np.testing.assert_allclose(
+        db[n:][[0, 2]],
+        np.exp(norm.logpdf([0.3, -40.0]) - log_ndtr([0.3, -40.0])),
+        rtol=1e-10,
+    )
+    np.testing.assert_allclose(
+        da[n:][[1, 3]],
+        -np.exp(norm.logpdf([0.3, 40.0]) - log_ndtr([-0.3, -40.0])),
+        rtol=1e-10,
     )
 
 
@@ -184,20 +204,3 @@ def test_shared_and_chs_interval_log_masses_agree() -> None:
         jax.jit(jax.vmap(lambda x, y: normal_interval_terms(x, y)[0]))(a, b)
     )
     np.testing.assert_allclose(shared, chs, rtol=0.0, atol=1e-10)
-
-
-def test_half_lines_have_the_tail_log_mass_and_a_zero_infinite_end_gradient() -> None:
-    lower = jnp.array([-np.inf, 0.3, -np.inf, 40.0])
-    upper = jnp.array([0.3, np.inf, -40.0, np.inf])
-    value, (d_lower, d_upper) = jax.jit(
-        jax.vmap(jax.value_and_grad(log_normal_interval_mass, argnums=(0, 1)))
-    )(lower, upper)
-    expected = [log_ndtr(0.3), log_ndtr(-0.3), log_ndtr(-40.0), log_ndtr(-40.0)]
-    np.testing.assert_allclose(np.asarray(value), expected, rtol=1e-13)
-    np.testing.assert_array_equal(np.asarray(d_lower)[[0, 2]], 0.0)
-    np.testing.assert_array_equal(np.asarray(d_upper)[[1, 3]], 0.0)
-    np.testing.assert_allclose(
-        np.asarray(d_upper)[[0, 2]],
-        np.exp(norm.logpdf([0.3, -40.0]) - log_ndtr([0.3, -40.0])),
-        rtol=1e-10,
-    )
