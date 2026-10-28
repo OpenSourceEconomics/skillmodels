@@ -1,6 +1,7 @@
 ---
 # Profile contract for probit, Tobit and ordered-probit measurements in CHS.
-contract_version: '2'
+# Second revision: ordered probit added to the target; CPU test budget split.
+contract_version: '1'
 target: >-
   Probit, Tobit and ordered-probit measurements in the CHS estimator on top of
   skillmodels PR 104
