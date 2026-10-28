@@ -21,7 +21,10 @@ The families:
 - ``ORDERED_PROBIT`` -- ``y in {0, ..., K-1}`` with latent ``y* = eta + e``,
   ``e ~ N(0, 1)``, and ``y = k`` iff ``c_k < y* <= c_{k+1}``, where ``c_0 = -inf``,
   ``c_K = +inf`` and ``c_1 = 0``. The free cutpoints ``c_2 < ... < c_{K-1}`` are
-  parameters of the measurement (category `"cutpoints"`).
+  parameters of the measurement (category `"cutpoints"`). The category log
+  probability ``log(Phi(c_{k+1} - eta) - Phi(c_k - eta))`` comes from
+  `skillmodels.common.normal_terms.log_normal_interval_mass`, which stays finite and
+  accurate for arbitrarily narrow categories.
 """
 
 import enum
@@ -37,6 +40,7 @@ from jax.scipy.special import log_ndtr
 from jax.scipy.stats import norm
 
 from skillmodels._beartype_conf import MODEL_SPEC_CONF, beartype_init
+from skillmodels.common.normal_terms import log_normal_interval_mass
 
 
 @dataclass(frozen=True)
@@ -298,16 +302,20 @@ def measurement_loglik(
     gaussian = norm.logpdf(y, loc=eta, scale=sigma)
     probit = log_ndtr((2.0 * y - 1.0) * eta)
     tobit = _tobit_loglik(y, eta, sigma, lower, upper)
-    ordered = _log_normal_interval_mass(lower - eta, upper - eta)
+    # Placeholder ends off ordered rows keep the unused term finite, so it cannot
+    # poison the gradient of the selected family.
+    is_ordered = family == int(MeasurementFamily.ORDERED_PROBIT)
+    ordered = log_normal_interval_mass(
+        jnp.where(is_ordered, lower - eta, -1.0),
+        jnp.where(is_ordered, upper - eta, 1.0),
+    )
     return jnp.where(
         family == int(MeasurementFamily.PROBIT),
         probit,
         jnp.where(
             family == int(MeasurementFamily.TOBIT),
             tobit,
-            jnp.where(
-                family == int(MeasurementFamily.ORDERED_PROBIT), ordered, gaussian
-            ),
+            jnp.where(is_ordered, ordered, gaussian),
         ),
     )
 
@@ -327,26 +335,6 @@ def ordered_interval_ends(
         jnp.where(is_ordered, cut_table[code], lower),
         jnp.where(is_ordered, cut_table[code + 1], upper),
     )
-
-
-def _log_normal_interval_mass(a: Array, b: Array) -> Array:
-    """Return `log(Phi(b) - Phi(a))` for `a < b`, either end possibly infinite.
-
-    The interval is reflected to `(-b, -a]` when `a + b > 0`, so that the upper
-    end `b` is finite and `Phi(b)` is not close to 1; then
-    `log(Phi(b) - Phi(a)) = log Phi(b) + log(-expm1(log Phi(a) - log Phi(b)))`.
-    An infinite lower end is replaced by a finite placeholder whose term is masked,
-    which keeps the gradient finite (and 0 with respect to that end).
-    """
-    flip = a + b > 0.0
-    lo = jnp.where(flip, -b, a)
-    hi = jnp.where(flip, -a, b)
-    lo_finite = jnp.isfinite(lo)
-    hi_safe = jnp.where(jnp.isfinite(hi), hi, 0.0)
-    log_cdf_hi = log_ndtr(hi_safe)
-    safe_lo = jnp.where(lo_finite, lo, hi_safe - 1.0)
-    log_ratio = jnp.where(lo_finite, log_ndtr(safe_lo) - log_cdf_hi, -jnp.inf)
-    return log_cdf_hi + jnp.log(-jnp.expm1(log_ratio))
 
 
 def _tobit_loglik(

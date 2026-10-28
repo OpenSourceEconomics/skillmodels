@@ -121,6 +121,17 @@ def test_interval_terms_match_high_precision_reference(a, b) -> None:
     assert 0 < float(got["var"]) <= min(1.0, width**2 / 4)
 
 
+@jax.jit
+def _term_gradients(a, b):
+    """Return the derivatives of `log Z`, `E[z]` and `Var[z]` w.r.t. both ends."""
+
+    def stacked(x, y):
+        log_z, mean, _, var = normal_interval_terms(x, y)
+        return jnp.stack([log_z, mean, var])
+
+    return jax.jacrev(stacked, argnums=(0, 1))(a, b)
+
+
 # One case per regime runs by default: central, narrow series, wide far tail, and
 # both sides of the series/tail switch.
 _FAST_DERIVATIVE_CASES = {(-1.0, 0.5), (-1e-6, 1e-6), (-45.0, -40.0), (40.0, 45.0)}
@@ -137,8 +148,9 @@ _FAST_DERIVATIVE_CASES = {(-1.0, 0.5), (-1e-6, 1e-6), (-45.0, -40.0), (40.0, 45.
 )
 def test_interval_term_derivatives_match_identities(a, b) -> None:
     expected = _decimal_interval(a, b)
-    for name in ("log_z", "mean", "var"):
-        da, db = jax.grad(lambda x, y, n=name: _terms(x, y)[n], argnums=(0, 1))(a, b)
+    gradients_a, gradients_b = _term_gradients(jnp.asarray(a), jnp.asarray(b))
+    for i, name in enumerate(("log_z", "mean", "var")):
+        da, db = float(gradients_a[i]), float(gradients_b[i])
         scale = max(1.0, abs(expected[f"d{name.replace('_', '')}_da"]))
         np.testing.assert_allclose(
             da, expected[f"d{name.replace('_', '')}_da"], rtol=1e-7, atol=1e-9 * scale
@@ -225,41 +237,48 @@ def test_interval_update_matches_prior_quadrature(dim, lo, hi, offset) -> None:
     _assert_update_close(actual, expected, cov)
 
 
-def test_square_root_interval_update_equals_dense_covariance_formula() -> None:
+@pytest.mark.parametrize(
+    "dim",
+    [
+        pytest.param(1, marks=pytest.mark.long_running),
+        3,
+        pytest.param(5, marks=pytest.mark.long_running),
+    ],
+)
+def test_square_root_interval_update_equals_dense_covariance_formula(dim) -> None:
     """`B'B = P - d P lambda lambda' P / s^2` with `d` from the decimal reference."""
-    rng = np.random.default_rng(321)
+    rng = np.random.default_rng(321 + dim)
     for scale in (1e-6, 1.0, 1e3):
-        for dim in (1, 3, 5):
-            for _ in range(2):
-                upper = np.linalg.qr(rng.normal(size=(dim, dim)))[1] * scale
-                mean = rng.normal(size=dim) * scale
-                loading = rng.normal(size=dim)
-                cov = upper.T @ upper
-                s = math.sqrt(1.0 + loading @ cov @ loading)
-                a = float(rng.normal() * 3)
-                b = a + float(rng.exponential())
-                mu = float(rng.normal())
-                offset = mu - loading @ mean
-                actual = _run_interval_update(
-                    mean=mean,
-                    upper=upper,
-                    loading=loading,
-                    offset=offset,
-                    lo=mu + a * s,
-                    hi=mu + b * s,
-                    event=E.INTERVAL,
-                )
-                ref = _decimal_interval(a, b)
-                pl = cov @ loading
-                dense_cov = cov - np.outer(pl, pl) * ref["d"] / s**2
-                dense_mean = mean + pl * ref["mean"] / s
-                np.testing.assert_allclose(
-                    actual["cov"], dense_cov, rtol=1e-8, atol=1e-11 * scale**2
-                )
-                np.testing.assert_allclose(
-                    actual["mean"], dense_mean, rtol=1e-8, atol=1e-11 * scale
-                )
-                np.testing.assert_allclose(actual["loglike"], ref["log_z"], rtol=1e-11)
+        for _ in range(2):
+            upper = np.linalg.qr(rng.normal(size=(dim, dim)))[1] * scale
+            mean = rng.normal(size=dim) * scale
+            loading = rng.normal(size=dim)
+            cov = upper.T @ upper
+            s = math.sqrt(1.0 + loading @ cov @ loading)
+            a = float(rng.normal() * 3)
+            b = a + float(rng.exponential())
+            mu = float(rng.normal())
+            offset = mu - loading @ mean
+            actual = _run_interval_update(
+                mean=mean,
+                upper=upper,
+                loading=loading,
+                offset=offset,
+                lo=mu + a * s,
+                hi=mu + b * s,
+                event=E.INTERVAL,
+            )
+            ref = _decimal_interval(a, b)
+            pl = cov @ loading
+            dense_cov = cov - np.outer(pl, pl) * ref["d"] / s**2
+            dense_mean = mean + pl * ref["mean"] / s
+            np.testing.assert_allclose(
+                actual["cov"], dense_cov, rtol=1e-8, atol=1e-11 * scale**2
+            )
+            np.testing.assert_allclose(
+                actual["mean"], dense_mean, rtol=1e-8, atol=1e-11 * scale
+            )
+            np.testing.assert_allclose(actual["loglike"], ref["log_z"], rtol=1e-11)
 
 
 @pytest.mark.parametrize(("event", "far"), [(E.UPPER_TAIL, 1e4), (E.LOWER_TAIL, -1e4)])

@@ -12,6 +12,9 @@ releases are available on [PyPI](https://pypi.org/project/skillmodels/).
 - Support ordered-probit measurements (`OrderedProbitMeasurement`) in the CHS
   estimator, the shared measurement kernel and `simulate_dataset`, with per-period
   cutpoint parameters.
+- The shared measurement kernel evaluates the log probability of an ordered-probit
+  category with `skillmodels.common.normal_terms.log_normal_interval_mass`, which keeps
+  the finite mass and derivatives of arbitrarily narrow categories.
 
 ## 0.1.1
 

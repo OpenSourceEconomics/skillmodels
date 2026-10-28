@@ -136,7 +136,13 @@ c_k < y* ≤ c_{k+1}, with c_0 = −∞, c_K = +∞ and c_1 = 0 (the intercept a
   (`normal_interval_terms`: a Hermite series around the midpoint for narrow intervals,
   else the difference of the two half-lines with the tail machinery).
   K = 2 reproduces the probit model bitwise.
-- Shared kernel: `measurement_loglik` evaluates log(Φ(c_{k+1} − η) − Φ(c_k − η)); AF's
+- Shared kernel: `measurement_loglik` evaluates log(Φ(c_{k+1} − η) − Φ(c_k − η)) with
+  `log_normal_interval_mass` (`skillmodels.common.normal_terms`), which uses the log mass
+  of `normal_interval_terms` for two finite ends and log Φ for a half-line. A difference
+  of rounded endpoint log-CDFs is not used: for a category (0, 1e-17] both endpoint
+  log-CDFs round to the same binary64 value, while the series keeps the finite log mass
+  −40.0628851141 and its endpoint derivatives. Rows of other families pass finite
+  placeholder ends, so the unused ordered term cannot poison their gradients. AF's
   initial-period likelihood accepts per-measure cut tables. AF estimation itself has no
   cutpoint parameters and rejects ordered measures.
 - `simulate_dataset` draws the number of cutpoints below η + N(0, 1).
@@ -151,3 +157,26 @@ derivatives, the cutpoint parametrization and constraints (including the composi
 the ordering with user ties across periods), the K = 2 equivalence, the AF kernel, and
 whether the switch-plus-remat dispatch keeps the Gaussian updates of a mixed model at
 Gaussian cost.
+
+## 6. Candidate-set error
+
+The profile protocol asks for `eps_candidate`, the error from candidates that a
+discretization never represents (omitted grid points, unrepresented choice islands). Its
+value for this target is 0 by construction, in both profiles:
+
+- The likelihood has no candidate set. Each update evaluates the probability or density
+  of the one observed event (a Gaussian value, a half-line, an interval) under the
+  Gaussian predicted state in closed form: `log N`, `log Φ(t)`, or the log interval mass
+  of `normal_interval_terms`. No maximum, argmax or selection over represented
+  alternatives occurs in the likelihood, the update or the shared kernel.
+- The only finite representations are the evaluation of these closed forms (series,
+  continued fraction, `log_ndtr`), whose errors are the `update_loglik_error`,
+  `interval_moment_error` and `shared_interval_mass_error` of the profile contract, and
+  the assumed-density projection of each posterior, whose effect is the reported
+  `full_likelihood_gap`.
+- The maximization over parameters is done by the user's optimizer on this likelihood;
+  it is not part of the target.
+
+Assumptions: the measurement families and update order are those of the model
+specification; the bound applies to the CHS likelihood, the shared measurement kernel
+and the AF initial-period likelihood with supplied cut tables.

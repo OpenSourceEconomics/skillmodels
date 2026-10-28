@@ -1,6 +1,7 @@
 ---
 # Profile contract for probit, Tobit and ordered-probit measurements in CHS.
-# Second revision: ordered probit added to the target; CPU test budget split.
+# Revisions: ordered probit added to the target and the CPU test budget split; the
+# shared interval log mass and the candidate-set error added after closure round 1.
 contract_version: '1'
 target: >-
   Probit, Tobit and ordered-probit measurements in the CHS estimator on top of
@@ -19,6 +20,12 @@ metric_definitions:
     interval against a 200-to-600-digit decimal oracle (log Z and Var[z]
     relative, E[z] absolute in units of max(1, |a|, |b|)), over narrow, wide,
     central and far-tail intervals
+  shared_interval_mass_error: >-
+    absolute error of log(Phi(b) - Phi(a)) and relative error of its derivatives
+    with respect to a and b in the shared measurement kernel, against a 220-digit
+    decimal integral at the exact binary64 ends, for every representable interval
+    with finite ends of absolute value at most 12 (widths down to 1e-17,
+    reflections and translations)
   update_moment_error: >-
     max absolute difference of posterior mean and covariance entries from
     the quadrature oracle, relative to the prior SD of the state
@@ -39,23 +46,48 @@ profiles:
     numerical:
       update_loglik_error: 1.0e-10
       interval_moment_error: log Z 1e-12, E[z] 1e-12, Var[z] 1e-8
+      shared_interval_mass_error: log mass 1e-10, derivatives 1e-8
       update_moment_error: 1.0e-8
       gradient_error: 1.0e-5
       full_likelihood_gap: >-
         reported, not bounded; the test shows it shrinks as the loading
         of the limited measure goes to 0
       gaussian_path_regression: 1.0e-12
+      candidate_set_error:
+        assessed_by: structural_bound
+        on_unavailable: inherit_structural_bound
+        source: design/limited-measurements-chs.md, section 6
+        structural_bound:
+          value: 0
+          source_digest: sha256:91f0ff73213c2cb43583c9feb3e7016a26f6200caf17fcbd5333ba677c5fc616
+          assumptions: >-
+            the likelihood evaluates the probability or density of each observed
+            event in closed form under the Gaussian predicted state; no maximum,
+            argmax or selection over represented alternatives occurs
+          applies_to: CHS likelihood, shared measurement kernel, AF initial period
     resource:
       ci: >-
         the probit and Tobit tests add at most 60 s and the ordered-probit tests at
         most 40 s to the CPU suite (summed serial test time, long_running excluded)
   application:
     description: >-
-      health-cognition with alive as probit (and, once migrated, its ordered
-      measures as ordered probits), one A100, float64; the Gaussian twin is the
-      same model with every measure Gaussian
+      health-cognition with its limited measures (alive as probit; Tobit and
+      ordered-probit measures as migrated), one A100, float64; the Gaussian twin
+      is the same model with every measure Gaussian
     numerical:
       gaussian_path_regression: 1.0e-12
+      candidate_set_error:
+        assessed_by: structural_bound
+        on_unavailable: inherit_structural_bound
+        source: design/limited-measurements-chs.md, section 6
+        structural_bound:
+          value: 0
+          source_digest: sha256:91f0ff73213c2cb43583c9feb3e7016a26f6200caf17fcbd5333ba677c5fc616
+          assumptions: >-
+            the likelihood evaluates the probability or density of each observed
+            event in closed form under the Gaussian predicted state; no maximum,
+            argmax or selection over represented alternatives occurs
+          applies_to: CHS likelihood, shared measurement kernel, AF initial period
     resource:
       warm_seconds: at most +10% vs. the same model with all measures Gaussian
       compile_seconds: at most +20%
