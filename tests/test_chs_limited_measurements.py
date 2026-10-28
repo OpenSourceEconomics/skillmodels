@@ -306,7 +306,9 @@ def test_constant_probit_sample_is_a_valid_likelihood_input() -> None:
     np.testing.assert_allclose(inputs["loglikeobs"](params), expected, atol=1e-10)
 
 
-@pytest.mark.parametrize("strategy", ["spearman", "amn"])
+@pytest.mark.parametrize(
+    "strategy", ["spearman", pytest.param("amn", marks=pytest.mark.long_running)]
+)
 def test_gaussian_seeding_keeps_the_probit_model(strategy) -> None:
     """Seeds come from a Gaussian working model; the likelihood stays probit."""
     data = _data(n_obs=200)
@@ -379,7 +381,12 @@ def _tobit_data(lower, upper) -> pd.DataFrame:
 
 
 @pytest.mark.parametrize(
-    ("lower", "upper"), [(_LOWER, _UPPER), (_LOWER, math.inf), (-math.inf, _UPPER)]
+    ("lower", "upper"),
+    [
+        (_LOWER, _UPPER),
+        pytest.param(_LOWER, math.inf, marks=pytest.mark.long_running),
+        pytest.param(-math.inf, _UPPER, marks=pytest.mark.long_running),
+    ],
 )
 def test_tobit_loglikeobs_equals_scalar_assumed_density_reference(lower, upper) -> None:
     data = _tobit_data(lower, upper)
@@ -424,6 +431,7 @@ def test_tobit_gradient_matches_finite_differences() -> None:
         assert min(errors) < 1e-5, loc
 
 
+@pytest.mark.long_running
 def test_tobit_without_censored_values_equals_the_gaussian_model() -> None:
     """Interior Tobit values are Gaussian observations, through either scan."""
     data = _data().astype(np.float32).astype(np.float64)
@@ -466,7 +474,10 @@ def test_user_bounds_excluding_the_probit_scale_raise() -> None:
         )
 
 
-@pytest.mark.parametrize("transition", ["translog", "asymmetric_translog"])
+@pytest.mark.parametrize(
+    "transition",
+    ["translog", pytest.param("asymmetric_translog", marks=pytest.mark.long_running)],
+)
 def test_probit_and_tobit_with_nonlinear_transitions(transition) -> None:
     """The limited update consumes the unscented prediction like a Gaussian one."""
     model = ModelSpec(

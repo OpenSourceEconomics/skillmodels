@@ -267,7 +267,14 @@ _TAIL_CASES = [
 ]
 
 
-@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize(
+    "dim",
+    [
+        pytest.param(1, marks=pytest.mark.long_running),
+        2,
+        pytest.param(3, marks=pytest.mark.long_running),
+    ],
+)
 @pytest.mark.parametrize(
     ("threshold", "direction", "sigma", "t", "event", "thresholds"), _TAIL_CASES
 )
@@ -439,6 +446,7 @@ _EVENTS = [E.LOWER_TAIL, E.UPPER_TAIL, E.DENSITY, E.MISSING, E.LOWER_TAIL]
 _VALUES = [-0.3, 1.2, 0.4, np.nan, -0.3]
 
 
+@pytest.mark.long_running
 @pytest.mark.parametrize("loading_scale", [0.0, 1.0])
 def test_gradient_matches_step_swept_finite_differences(loading_scale) -> None:
     args = (

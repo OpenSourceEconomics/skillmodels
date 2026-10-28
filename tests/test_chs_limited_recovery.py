@@ -9,6 +9,7 @@ the small assumed-density approximation.
 import numpy as np
 import optimagic as om
 import pandas as pd
+import pytest
 
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.chs.options import CHSEstimationOptions
@@ -63,6 +64,7 @@ def _true_params(template: pd.DataFrame) -> pd.DataFrame:
     return params
 
 
+@pytest.mark.long_running
 def test_simulated_probit_and_tobit_parameters_are_recovered() -> None:
     template = get_maximization_inputs(
         model_spec=_MODEL,
