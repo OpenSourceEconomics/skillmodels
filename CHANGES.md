@@ -9,6 +9,9 @@ releases are available on [PyPI](https://pypi.org/project/skillmodels/).
 - Support probit and Tobit measurements (`ModelSpec.measurement_models`) in the CHS
   estimator in every period, via an exact half-line update under the Gaussian
   predicted state with moment-matched filtered states.
+- Support ordered-probit measurements (`OrderedProbitMeasurement`) in the CHS
+  estimator, the shared measurement kernel and `simulate_dataset`, with per-period
+  cutpoint parameters.
 
 ## 0.1.1
 

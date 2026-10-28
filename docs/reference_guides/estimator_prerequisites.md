@@ -39,6 +39,13 @@ three estimators.
   `meas_sds` entry stays in the parameter index, fixed to 1; a Tobit measurement keeps a
   free `meas_sds`. CHS start values (`"amn"`, `"spearman"`) come from a Gaussian working
   copy of the model.
+- **Ordered probit** (`OrderedProbitMeasurement(n_categories=K)`, integer codes
+  `0..K-1`) is supported by CHS in every period: the first and last categories are
+  probit half-line events, an interior category conditions the state on the interval
+  between two cutpoints. Its `meas_sds` is fixed to 1; the cutpoints are parameters
+  `("cutpoints", period, measure, "cutpoint_k")`, `k = 1..K-1`, with `cutpoint_1` fixed
+  to 0 and the cutpoints of a period constrained to increase. Tie cutpoints across
+  periods with equality constraints. AF and AMN estimation reject ordered measures.
 - **Endogeneity corrections** flow through `FactorSpec.correction` (a `CorrectionSpec`).
   CHS reads the full polynomial `kappa` basis; AMN keeps only the linear term; AF
   rejects the correction entirely (its endogenous-investment handling is the

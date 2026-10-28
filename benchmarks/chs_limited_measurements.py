@@ -15,7 +15,11 @@ under new ids to reach application-sized samples. Variants:
 - `gaussian`: MODEL2 on its data;
 - `twin`: MODEL2 on the data of `limited`;
 - `limited`: `y5` as a probit (dichotomized at its median) and `y6` as a Tobit
-  (censored below at its 20% quantile).
+  (censored below at its 20% quantile);
+- `mixed_twin`: MODEL2 on the data of `mixed`;
+- `mixed`: five of the nine measurements limited, as in an application with about
+  half of its updates limited: `y2`, `y5` and `y8` as four-category ordered probits
+  (quartile codes, cutpoints 0, 0.67, 1.35), `y3` as a probit and `y6` as a Tobit.
 
 The script imports whichever `skillmodels` is first on the path, so the same file
 measures a baseline checkout through `PYTHONPATH`. Each result is appended to
@@ -35,16 +39,23 @@ import pandas as pd
 import skillmodels
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.config import TEST_DATA_DIR
-from skillmodels.common.measurement_models import ProbitMeasurement, TobitMeasurement
+from skillmodels.common.measurement_models import (
+    OrderedProbitMeasurement,
+    ProbitMeasurement,
+    TobitMeasurement,
+)
 from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
 
 _N_WARM = 5
+_CUTPOINTS = (0.0, 0.67, 1.35)
 
 
 def main() -> None:
     """Measure one configuration and append the result to `--output`."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--variant", choices=["gaussian", "twin", "limited"])
+    parser.add_argument(
+        "--variant", choices=["gaussian", "twin", "limited", "mixed_twin", "mixed"]
+    )
     parser.add_argument("--copies", type=int, default=1)
     parser.add_argument("--params", type=Path, help="one_stage_anchoring.csv")
     parser.add_argument("--label", default="")
@@ -57,7 +68,10 @@ def main() -> None:
     params = pd.read_csv(args.params).set_index(
         ["category", "period", "name1", "name2"]
     )
-    params = params.loc[inputs["params_template"].index]
+    params = params.reindex(inputs["params_template"].index)
+    for k, cut in enumerate(_CUTPOINTS, start=1):
+        is_cut = params.index.get_level_values("name2") == f"cutpoint_{k}"
+        params.loc[is_cut, "value"] = cut
     is_sd = params.index.get_level_values("category") == "meas_sds"
     params.loc[is_sd, "value"] = params.loc[is_sd, "value"].clip(lower=0.3)
 
@@ -101,18 +115,19 @@ def _model_and_data(variant: str, *, copies: int) -> tuple:
     if variant == "gaussian":
         return MODEL2, data
     lower = float(data["y6"].quantile(0.2))
-    data["y5"] = (
-        (data["y5"] > data["y5"].median()).astype(float).where(data["y5"].notna())
-    )
     data["y6"] = data["y6"].clip(lower=lower)
-    if variant == "twin":
+    probit = "y5" if variant in ("twin", "limited") else "y3"
+    data[probit] = (
+        (data[probit] > data[probit].median()).astype(float).where(data[probit].notna())
+    )
+    models = {probit: ProbitMeasurement(), "y6": TobitMeasurement(lower=lower)}
+    if variant in ("mixed_twin", "mixed"):
+        for name in ("y2", "y5", "y8"):
+            data[name] = pd.qcut(data[name], 4, labels=False).astype(float)
+            models[name] = OrderedProbitMeasurement(n_categories=4)
+    if variant in ("twin", "mixed_twin"):
         return MODEL2, data
-    return MODEL2._replace(
-        measurement_models={
-            "y5": ProbitMeasurement(),
-            "y6": TobitMeasurement(lower=lower),
-        }
-    ), data
+    return MODEL2._replace(measurement_models=models), data
 
 
 if __name__ == "__main__":

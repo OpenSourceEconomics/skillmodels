@@ -1,6 +1,7 @@
 # Probit and Tobit measurements in the CHS estimator — design brief
 
-Status: design request. No production code changed yet. Base: branch
+Status: implemented on branch `limited-measurements` (PR #105); §5 adds ordered probit
+to the scope. The text up to §4 is the original design request. Base: branch
 `probit-measurements` (probit and Tobit) on top of the open PR chain
 
 - `main` ← #103 `missing-observed-factors` (integrate out missing observed factors)
@@ -115,3 +116,38 @@ y* = a + λᵀθ + ε, ε ~ N(0, σ²), y = min(max(y*, L), U).
 @pro: Cost: the extra operations per update and whether compile time or memory change measurably for a model like the application (16 periods, about 50 measurements per period, 5 latent states plus 3 investments, 17,776 persons, one A100, float64). Name any choice that would make the Gaussian path slower.
 
 @pro: Out of scope unless it falls out for free: ordered probit, probit and Tobit in AMN. Say whether the family dispatch should be designed so that these can be added later without touching the probit and Tobit code, but do not design them.
+
+## 5. Ordered probit (added scope)
+
+An ordered measure y ∈ {0, …, K−1} (K ≥ 2): y* = a + λᵀθ + ε, ε ~ N(0, 1), y = k iff
+c_k < y* ≤ c_{k+1}, with c_0 = −∞, c_K = +∞ and c_1 = 0 (the intercept a stays free).
+
+- API (`OrderedProbitMeasurement(n_categories)`, `from_dict` family `"ordered_probit"`):
+  data are integer codes 0..K−1 (anything else raises in `process_data`), NaN is missing;
+  `meas_sds` is fixed to 1; the parameters `("cutpoints", aug_period, y, "cutpoint_k")`,
+  k = 1..K−1, are per period, `cutpoint_1` is fixed to 0 and the cutpoints of a period are
+  weakly increasing (optimagic `IncreasingConstraint`; an empty category has zero
+  likelihood, so an interior optimum is strictly increasing). Ties across periods are
+  the application's equality constraints.
+- CHS update: y = 0 and y = K−1 are the probit half-line events below c_1 and above
+  c_{K−1}. An interior category conditions on the interval (α, β] =
+  ((c_k − μ)/s, (c_{k+1} − μ)/s]: ℓ = log(Φ(β) − Φ(α)), mean shift E[z]·Pλ/s,
+  P⁺ = P − Pλλᵀ P (1 − Var[z]) / s², with the moments of the truncated standard normal
+  (`normal_interval_terms`: a Hermite series around the midpoint for narrow intervals,
+  else the difference of the two half-lines with the tail machinery).
+  K = 2 reproduces the probit model bitwise.
+- Shared kernel: `measurement_loglik` evaluates log(Φ(c_{k+1} − η) − Φ(c_k − η)); AF's
+  initial-period likelihood accepts per-measure cut tables. AF estimation itself has no
+  cutpoint parameters and rejects ordered measures.
+- `simulate_dataset` draws the number of cutpoints below η + N(0, 1).
+- Dispatch: in a model with limited measures one `lax.switch` selects the anchoring,
+  Gaussian or limited update and the limited branch is rematerialized
+  (`jax.checkpoint`), so a Gaussian update does not carry the limited branch's
+  zero-filled residuals; all-Gaussian models keep the previous scan.
+
+@pro: Verify the interval update (likelihood, posterior mean and covariance), the
+stability of `normal_interval_terms` for narrow, wide and far-tail intervals and of its
+derivatives, the cutpoint parametrization and constraints (including the composition of
+the ordering with user ties across periods), the K = 2 equivalence, the AF kernel, and
+whether the switch-plus-remat dispatch keeps the Gaussian updates of a mixed model at
+Gaussian cost.
