@@ -354,12 +354,19 @@ def _scan_body(
     # ==================================================================================
     # do a measurement or anchoring update
     # ==================================================================================
-    states, upper_chols, log_mixture_weights, loglikes = jax.lax.cond(
-        loop_args["is_measurement_iteration"],
-        functools.partial(_one_arg_measurement_update, has_intervals=has_intervals),
-        functools.partial(_one_arg_anchoring_update),
-        update_kwargs,
-    )
+    if "is_limited" in loop_args:
+        states, upper_chols, log_mixture_weights, loglikes = _mixed_model_update(
+            update_kwargs,
+            is_measurement_iteration=loop_args["is_measurement_iteration"],
+            has_intervals=has_intervals,
+        )
+    else:
+        states, upper_chols, log_mixture_weights, loglikes = jax.lax.cond(
+            loop_args["is_measurement_iteration"],
+            kalman_update_from_kwargs,
+            _one_arg_anchoring_update,
+            update_kwargs,
+        )
 
     # ==================================================================================
     # create arguments needed for predict step
@@ -426,21 +433,45 @@ def get_limited_loop_args(
     }
 
 
-def _one_arg_measurement_update(
+def _mixed_model_update(
     kwargs: dict[str, Array],
     *,
+    is_measurement_iteration: Array,
     has_intervals: bool,
 ) -> tuple[Array, Array, Array, Array]:
-    if "events" not in kwargs:
-        return kalman_update(**kwargs)
-    gaussian_kwargs = gaussian_update_kwargs(kwargs)
-    return jax.lax.cond(
-        kwargs["is_limited"],
-        lambda: limited_update_from_loop_kwargs(kwargs, has_intervals=has_intervals)[
-            :4
-        ],
-        lambda: kalman_update(**gaussian_kwargs),
+    """Run the anchoring, Gaussian, or limited update of a model with limited measures.
+
+    One three-way `lax.switch` selects the update; the limited branch is
+    rematerialized (`jax.checkpoint`). Under reverse-mode differentiation inside the
+    scan, the residuals of all branches are merged and the branches not taken are
+    zero-filled at every iteration; rematerializing the limited branch reduces its
+    residuals to its inputs, so a Gaussian update pays almost nothing for the
+    limited branch.
+    """
+
+    def limited(kw: dict[str, Array]) -> tuple[Array, Array, Array, Array]:
+        update = limited_update_from_loop_kwargs(kw, has_intervals=has_intervals)
+        return update[0], update[1], update[2], update[3]
+
+    index = jnp.where(
+        is_measurement_iteration, 1 + kwargs["is_limited"].astype(jnp.int32), 0
     )
+    return jax.lax.switch(
+        index,
+        [
+            _one_arg_anchoring_update,
+            kalman_update_from_kwargs,
+            jax.checkpoint(limited),
+        ],
+        kwargs,
+    )
+
+
+def kalman_update_from_kwargs(
+    kwargs: dict[str, Array],
+) -> tuple[Array, Array, Array, Array]:
+    """Run the Gaussian Kalman update on update arguments of one scan iteration."""
+    return kalman_update(**gaussian_update_kwargs(kwargs))
 
 
 def _one_arg_anchoring_update(
