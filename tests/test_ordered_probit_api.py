@@ -283,12 +283,6 @@ def test_ordered_probit_anchoring_outcome_is_rejected() -> None:
         )
 
 
-def test_chs_likelihood_of_ordered_probit_is_not_available_yet() -> None:
-    inputs = _inputs(strategy="spearman")
-    with pytest.raises(NotImplementedError, match="ordered-probit"):
-        inputs["loglike"](inputs["params_template"])
-
-
 def test_af_rejects_ordered_probit_until_supported() -> None:
     with pytest.raises(NotImplementedError, match="ordered-probit"):
         skillmodels.estimate_af(model_spec=_model(), data=_data())

@@ -18,6 +18,7 @@ adaptive quadrature over the Gaussian prior for the update.
 
 import math
 from decimal import Decimal, getcontext
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -162,6 +163,7 @@ def _quadrature_update(
     threshold=0.0,
     direction=1.0,
     observed_value=0.0,
+    upper_threshold=None,
 ):
     """Integrate the observation model over the Gaussian prior projected on `lambda`.
 
@@ -179,13 +181,18 @@ def _quadrature_update(
         index = mu + sqrt_q * z
         if kind == "tail":
             return float(log_ndtr(direction * (index - threshold) / error_sd))
+        if kind == "interval":
+            # P(threshold < y* <= upper_threshold) given the index.
+            lo = log_ndtr((threshold - index) / error_sd)
+            hi = log_ndtr((upper_threshold - index) / error_sd)
+            return float(hi + np.log(-np.expm1(lo - hi)))
         u = (observed_value - index) / error_sd
         return -0.5 * u * u - 0.5 * math.log(2 * math.pi) - math.log(error_sd)
 
     def log_integrand(z):
         return -0.5 * z * z - 0.5 * math.log(2 * math.pi) + log_observation(z)
 
-    centre = threshold if kind == "tail" else observed_value
+    centre = observed_value if kind == "density" else threshold
     radius = 12.0 + abs((centre - mu) / sqrt_q)
     mode = float(
         minimize_scalar(
@@ -491,7 +498,7 @@ def test_interior_and_gaussian_updates_agree_including_mixtures_and_missing() ->
     )
     measurements = rng.normal(size=n_obs)
     measurements[2] = np.nan
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "states": states,
         "upper_chols": chols,
         "loadings": jnp.array([0.4, 0.9, -0.3]),

@@ -13,7 +13,7 @@ from skillmodels.chs.clipping import soft_clipping
 from skillmodels.chs.halfline import (
     LIMITED_LOOP_KEYS,
     LimitedUpdates,
-    kalman_update_limited,
+    limited_update_from_loop_kwargs,
 )
 from skillmodels.chs.kalman_filters_debug import kalman_update
 from skillmodels.chs.likelihood import (
@@ -123,11 +123,13 @@ def log_likelihood(
             events=events,
             limited_updates=limited_updates,
             meas_sds=parsed_params.meas_sds,
+            params=params,
         ),
     }
 
     _body = functools.partial(
         _scan_body,
+        has_intervals=limited_updates is not None and limited_updates.has_intervals,
         controls=controls,
         parsed_params=parsed_params,
         sigma_scaling_factor=sigma_scaling_factor,
@@ -190,6 +192,8 @@ def _scan_body(
     predict_func: Callable[..., tuple[Array, Array]],
     observed_factors: Array | np.ndarray,
     observed_factor_vars: Array | np.ndarray,
+    *,
+    has_intervals: bool = False,
 ) -> tuple[dict[str, Array], dict[str, Any]]:
     # ==================================================================================
     # create arguments needed for update
@@ -216,7 +220,7 @@ def _scan_body(
     # ==================================================================================
     states, upper_chols, log_mixture_weights, loglikes, info = jax.lax.cond(
         loop_args["is_measurement_iteration"],
-        functools.partial(_one_arg_measurement_update),
+        functools.partial(_one_arg_measurement_update, has_intervals=has_intervals),
         functools.partial(_one_arg_anchoring_update),
         update_kwargs,
     )
@@ -262,14 +266,15 @@ def _scan_body(
 
 def _one_arg_measurement_update(
     kwargs: dict[str, Any],
+    *,
+    has_intervals: bool,
 ) -> tuple[Array, Array, Array, Array, dict[str, Any]]:
     if "events" not in kwargs:
         return kalman_update(**kwargs)
     gaussian_kwargs = gaussian_update_kwargs(kwargs)
-    limited_kwargs = {k: v for k, v in kwargs.items() if k != "is_limited"}
     return jax.lax.cond(
         kwargs["is_limited"],
-        lambda: kalman_update_limited(**limited_kwargs),
+        lambda: limited_update_from_loop_kwargs(kwargs, has_intervals=has_intervals),
         lambda: kalman_update(**gaussian_kwargs),
     )
 

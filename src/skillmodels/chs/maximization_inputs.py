@@ -141,6 +141,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     limited_updates = get_limited_updates(
         update_info=processed_model.update_info,
         measurement_models=model_spec.measurement_models,
+        params_index=p_index,
     )
     events = processed_data.get("events")
 
@@ -343,7 +344,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     if strategy in ("spearman", "amn"):
         _fail_if_start_params_incomplete(params_template)
 
-    out = {
+    return {
         "loglike": loglike,
         "loglikeobs": loglikeobs,
         "debug_loglike": debug_loglike,
@@ -351,21 +352,6 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         "constraints": constraints,
         "params_template": params_template,
     }
-    if cutpoint_constraints:
-        out |= dict.fromkeys(
-            ("loglike", "loglikeobs", "debug_loglike", "loglike_and_gradient"),
-            _ordered_probit_likelihood_not_implemented,
-        )
-    return out
-
-
-def _ordered_probit_likelihood_not_implemented(params: pd.DataFrame) -> None:
-    """Raise: the CHS interval update of ordered-probit measurements is missing."""
-    msg = (
-        "The CHS likelihood of ordered-probit measurements is not implemented yet; "
-        f"only the parameter template and constraints are ({len(params)} params)."
-    )
-    raise NotImplementedError(msg)
 
 
 def _seed_ordered_probit_start_values(

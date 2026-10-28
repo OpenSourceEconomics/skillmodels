@@ -13,7 +13,8 @@ from skillmodels.chs.clipping import soft_clipping
 from skillmodels.chs.halfline import (
     LIMITED_LOOP_KEYS,
     LimitedUpdates,
-    kalman_update_limited,
+    get_cut_table,
+    limited_update_from_loop_kwargs,
 )
 from skillmodels.chs.kalman_filters import kalman_update
 from skillmodels.chs.options import CHSEstimationOptions
@@ -204,11 +205,13 @@ def log_likelihood_obs(
             events=events,
             limited_updates=limited_updates,
             meas_sds=parsed_params.meas_sds,
+            params=params,
         ),
     }
 
     _body = functools.partial(
         _scan_body,
+        has_intervals=limited_updates is not None and limited_updates.has_intervals,
         controls=controls,
         parsed_params=parsed_params,
         sigma_scaling_factor=sigma_scaling_factor,
@@ -325,6 +328,8 @@ def _scan_body(
     predict_func: Callable,
     observed_factors: Array | np.ndarray,
     observed_factor_vars: Array | np.ndarray,
+    *,
+    has_intervals: bool = False,
 ) -> tuple[dict[str, Array], dict[str, Array]]:
     # ==================================================================================
     # create arguments needed for update
@@ -351,7 +356,7 @@ def _scan_body(
     # ==================================================================================
     states, upper_chols, log_mixture_weights, loglikes = jax.lax.cond(
         loop_args["is_measurement_iteration"],
-        functools.partial(_one_arg_measurement_update),
+        functools.partial(_one_arg_measurement_update, has_intervals=has_intervals),
         functools.partial(_one_arg_anchoring_update),
         update_kwargs,
     )
@@ -399,33 +404,41 @@ def get_limited_loop_args(
     events: Array | None,
     limited_updates: LimitedUpdates | None,
     meas_sds: Array,
+    params: Array,
 ) -> dict[str, Array]:
     """Return the per-update scan inputs of limited measurements.
 
     Empty without limited measurements, so an all-Gaussian model runs the plain
     Gaussian scan. Otherwise the `meas_sds` entry replaces the parsed one with a
-    unit error SD for probit updates.
+    unit error SD for probit and ordered-probit updates, and `cut_table` holds the
+    cut values of each update row with the current cutpoints.
     """
     if events is None or limited_updates is None:
         return {}
     return {
         "events": events,
         "is_limited": jnp.asarray(limited_updates.is_limited),
-        "thresholds": jnp.asarray(limited_updates.thresholds),
-        "meas_sds": jnp.where(jnp.asarray(limited_updates.is_probit), 1.0, meas_sds),
+        "cut_table": get_cut_table(limited_updates, params),
+        "codes_from_values": jnp.asarray(limited_updates.codes_from_values),
+        "meas_sds": jnp.where(
+            jnp.asarray(limited_updates.is_unit_scale), 1.0, meas_sds
+        ),
     }
 
 
 def _one_arg_measurement_update(
     kwargs: dict[str, Array],
+    *,
+    has_intervals: bool,
 ) -> tuple[Array, Array, Array, Array]:
     if "events" not in kwargs:
         return kalman_update(**kwargs)
     gaussian_kwargs = gaussian_update_kwargs(kwargs)
-    limited_kwargs = {k: v for k, v in kwargs.items() if k != "is_limited"}
     return jax.lax.cond(
         kwargs["is_limited"],
-        lambda: kalman_update_limited(**limited_kwargs)[:4],
+        lambda: limited_update_from_loop_kwargs(kwargs, has_intervals=has_intervals)[
+            :4
+        ],
         lambda: kalman_update(**gaussian_kwargs),
     )
 
