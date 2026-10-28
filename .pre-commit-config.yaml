@@ -1,4 +1,6 @@
 ---
+# Verbatim Lean proof archive; its files are covered by verification/SHA256SUMS.
+exclude: ^design/chs-limited-proof/
 repos:
   - repo: meta
     hooks:
