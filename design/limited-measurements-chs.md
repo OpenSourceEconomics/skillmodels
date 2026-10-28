@@ -195,6 +195,13 @@ predicted state `N(m, P)`, with `μ = a + λ'm`, `s² = σ² + λ'Pλ`:
   `P − Pλλ'P (1 − Var[z])/s²` with the moments of `z ~ N(0,1)` truncated to `(α, β]`
   (`normal_interval_terms`, narrow-safe);
 - `lo = −∞` / `hi = ∞`: the half-line update of §3 with threshold `hi` / `lo`.
+- The width of `(α, β]` is `(hi − lo)/s`, passed to `normal_interval_terms` next to
+  `α` and `β`, because rounding `α` and `β` separately can collapse or distort a
+  narrow interval: `(0, 1e-17]` with `μ = 1`, `s = 1` gives `α = β = −1` in float64
+  while `ℓ = −40.5629`. The narrow series takes the width from `(hi − lo)/s`; wide
+  intervals (span above `s`) keep the endpoint formula, whose rounding error is of
+  the order of the formula's own error at the rounded ends. Models without interval
+  columns keep the difference of the standardized cutpoints.
 
 This is the ordered-probit interval update of §5 with a free `σ` in `s` and the ends
 taken from the data instead of the cutpoint parameters; the square-root update

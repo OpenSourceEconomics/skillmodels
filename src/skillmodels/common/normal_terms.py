@@ -49,7 +49,7 @@ def log_normal_interval_mass(lower: Array, upper: Array) -> Array:
 
 
 def normal_interval_terms(
-    lower: Array, upper: Array
+    lower: Array, upper: Array, *, width: Array | None = None
 ) -> tuple[Array, Array, Array, Array]:
     """Return `log Z`, `E[z]`, `d = 1 - Var[z]` and `Var[z]` of a truncated normal.
 
@@ -68,6 +68,13 @@ def normal_interval_terms(
       `Var[z] = (V_b - q V_a) / (1 - q) - q (r_b - r_a)^2 / (1 - q)^2`, where `r_x`
       and `V_x = 1 - d(x)` are the Mills ratio and the variance below `x`. All
       terms stay finite and accurate far in the tails.
+
+    `width`, if given, is `upper - lower` computed without the standardized ends, for
+    example `(hi - lo) / s` for ends standardized as `(hi - mu) / s` and
+    `(lo - mu) / s`. It replaces `b - a` as the width of the narrow series, so a
+    narrow interval keeps its mass when rounding the standardized ends shrinks or
+    removes their difference. Only `width <= 0.5` can select the narrow series;
+    larger values may be passed capped.
     """
     lower = jnp.asarray(lower, dtype=jnp.float64)
     upper = jnp.asarray(upper, dtype=jnp.float64)
@@ -75,7 +82,9 @@ def normal_interval_terms(
     a = jnp.where(flip, -upper, lower)
     b = jnp.where(flip, -lower, upper)
     centre = 0.5 * (a + b)
-    half = 0.5 * (b - a)
+    half = (
+        0.5 * (b - a) if width is None else 0.5 * jnp.asarray(width, dtype=jnp.float64)
+    )
     narrow = half * jnp.maximum(1.0, -centre) <= _NARROW_SWITCH
 
     log_z_n, mean_n, var_n = _narrow_interval_moments(

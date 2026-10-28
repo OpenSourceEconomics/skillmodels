@@ -25,7 +25,9 @@ cutpoints, or a Tobit observation known only by an interval with two finite ends
 the same update with the moments of `z = (y* - mu) / s` truncated to
 `(alpha, beta] = ((lo - mu) / s, (hi - mu) / s]`: probability
 `Z = Phi(beta) - Phi(alpha)`, `E[z]` in place of `direction * r`, and
-`d = 1 - Var[z]` (`normal_interval_terms`).
+`d = 1 - Var[z]` (`normal_interval_terms`). For an observed interval the width of
+`(alpha, beta]` is evaluated as `(hi - lo) / s`, not as `beta - alpha`: separately
+rounded standardized ends can lose the width of a narrow interval.
 
 The covariance factor is updated as the R factor of `U - b w (w'U)` with
 `b = d / (1 + c)` and `c = sqrt((sigma / s)^2 + (1 - d) w'w)`, which squares to the
@@ -219,7 +221,10 @@ def limited_update_from_loop_kwargs(
         interval_bounds=kwargs.get("interval_bounds"),
     )
     return kalman_update_limited(
-        **update_kwargs, thresholds=thresholds, has_intervals=has_intervals
+        **update_kwargs,
+        thresholds=thresholds,
+        has_intervals=has_intervals,
+        source_widths="interval_bounds" in kwargs,
     )
 
 
@@ -236,6 +241,7 @@ def kalman_update_limited(
     log_mixture_weights: Array,
     *,
     has_intervals: bool = False,
+    source_widths: bool = False,
 ) -> tuple[Array, Array, Array, Array, dict[str, Array]]:
     """Condition each person's Gaussian mixture on one limited measurement.
 
@@ -258,6 +264,10 @@ def kalman_update_limited(
         log_mixture_weights: Array of shape (n_obs, n_mixtures).
         has_intervals: Whether `INTERVAL` events can occur. Static; without them
             the interval moments are not evaluated.
+        source_widths: Whether the standardized width of an `INTERVAL` event is
+            `(hi - lo) / s` from its ends `lo`, `hi` instead of the difference of
+            the standardized ends. Static; True for models with observed intervals,
+            False keeps the fixed-threshold update unchanged.
 
     Return:
         - new_states: Same shape as `states`.
@@ -317,6 +327,7 @@ def kalman_update_limited(
             upper_end=upper_end,
             mu=mu,
             s=s,
+            source_widths=source_widths,
         )
 
     _new_states = (
@@ -373,16 +384,27 @@ def _with_interval_events(
     upper_end: Array,
     mu: Array,
     s: Array,
+    *,
+    source_widths: bool,
 ) -> tuple[Array, Array, Array, Array]:
     """Replace the update terms of `INTERVAL` observations by their interval moments.
 
     `terms` are the mean coefficient, `d`, `1 - d` and the log likelihood of each
-    observation and component.
+    observation and component. With `source_widths`, the standardized width is
+    `(upper_end - lower_end) / s`. Only standardized widths up to 0.5 can select the
+    narrow series of `normal_interval_terms`, so spans above `s` are passed as width
+    1, which keeps the width finite for any finite ends.
     """
     # Placeholder ends keep both standardized ends finite off the interval rows.
     lower_std = (jnp.where(is_interval, lower_end, mu - s) - mu) / s
     upper_std = (jnp.where(is_interval, upper_end, mu + s) - mu) / s
-    log_z, mean_z, contraction_z, var_z = normal_interval_terms(lower_std, upper_std)
+    width = None
+    if source_widths:
+        span = upper_end - lower_end
+        width = jnp.where(is_interval & (span <= s), span, s) / s
+    log_z, mean_z, contraction_z, var_z = normal_interval_terms(
+        lower_std, upper_std, width=width
+    )
     coefficient, d, one_minus_d, loglikes = terms
     return (
         jnp.where(is_interval, mean_z, coefficient),

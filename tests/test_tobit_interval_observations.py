@@ -345,7 +345,9 @@ def test_interval_observations_with_missing_controls_are_dropped() -> None:
 def test_loglikeobs_equals_scalar_assumed_density_reference(interval_inputs) -> None:
     data, inputs, params = interval_inputs
     expected, _ = _scalar_adf_reference(data)
-    np.testing.assert_allclose(inputs["loglikeobs"](params), expected, atol=1e-10)
+    np.testing.assert_allclose(
+        inputs["loglikeobs"](params), expected, atol=1e-10, rtol=0
+    )
 
 
 def test_filtered_states_use_the_interval_update(interval_inputs) -> None:
@@ -359,7 +361,7 @@ def test_filtered_states_use_the_interval_update(interval_inputs) -> None:
     )["unanchored_states"]["states"]
     got = states.pivot_table(index="id", columns="period", values="skills")
     assert not np.isnan(got.to_numpy()).any()
-    np.testing.assert_allclose(got.to_numpy(), expected_means, atol=1e-10)
+    np.testing.assert_allclose(got.to_numpy(), expected_means, atol=1e-10, rtol=0)
 
 
 def test_debug_contributions_equal_the_jitted_objective(interval_inputs) -> None:
