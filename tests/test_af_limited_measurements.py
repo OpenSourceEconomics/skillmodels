@@ -140,3 +140,69 @@ def test_initial_all_gaussian_families_match_default_path() -> None:
         jnp.array([_INF] * n_measures),
     )
     np.testing.assert_allclose(default, explicit, rtol=1e-12, atol=1e-12)
+
+
+def test_initial_ordered_probit_measure_matches_node_weighted_reference() -> None:
+    """An ordered measure at period 0 equals a hand node-weighted likelihood.
+
+    One Gaussian measure plus one four-category ordered measure with cutpoints
+    `(0, 0.6, 1.4)`; category `k` contributes `log(Phi(c_{k+1} - eta) -
+    Phi(c_k - eta))` at each Halton node.
+    """
+    mu, chol = 0.5, 1.1
+    control_params = [0.1, -0.2]
+    loadings = [1.0, 0.8]
+    meas_sds = [0.5, 1.0]
+    params = jnp.array([1.0, mu, chol, *control_params, *loadings, *meas_sds])
+    cuts = np.array([-_INF, 0.0, 0.6, 1.4, _INF])
+
+    n_obs = 6
+    rng = np.random.default_rng(11)
+    y_gauss = rng.normal(0, 1, n_obs)
+    y_ordered = np.array([0.0, 1.0, 2.0, 3.0, 1.0, 3.0])
+    measurements = jnp.asarray(np.column_stack([y_gauss, y_ordered]))
+    controls = jnp.asarray(rng.normal(0, 1, (n_obs, 1)))
+    raw_nodes = np.array([-1.5, -0.5, 0.5, 1.5])
+    node_w = np.exp(-0.5 * raw_nodes**2)
+    node_w = node_w / node_w.sum()
+
+    per_obs = np.asarray(
+        af_per_obs_loglike_initial(
+            params,
+            n_factors=1,
+            n_mixture_components=1,
+            n_measures=2,
+            n_controls=1,
+            measurements=measurements,
+            controls=controls,
+            loading_mask=jnp.array([[True], [True]]),
+            nodes=jnp.asarray(raw_nodes.reshape(-1, 1)),
+            weights=jnp.asarray(node_w),
+            stability_floor=0.0,
+            n_latent_factors=1,
+            measurement_families=jnp.array(
+                [
+                    int(MeasurementFamily.GAUSSIAN),
+                    int(MeasurementFamily.ORDERED_PROBIT),
+                ]
+            ),
+            measurement_lowers=jnp.array([-_INF, -_INF]),
+            measurement_uppers=jnp.array([_INF, _INF]),
+            measurement_cut_tables=jnp.asarray(np.vstack([np.zeros_like(cuts), cuts])),
+        )
+    )
+
+    control_arr = np.array(control_params).reshape(2, 1)
+    expected = np.empty(n_obs)
+    for i in range(n_obs):
+        eta_const = control_arr @ np.asarray(controls[i])
+        node_contrib = np.empty(len(raw_nodes))
+        for q, z in enumerate(raw_nodes):
+            eta = eta_const + np.array(loadings) * (mu + chol * z)
+            k = int(y_ordered[i])
+            logp_g = norm.logpdf(y_gauss[i], loc=eta[0], scale=meas_sds[0])
+            p_o = norm.cdf(cuts[k + 1] - eta[1]) - norm.cdf(cuts[k] - eta[1])
+            node_contrib[q] = np.exp(logp_g) * p_o
+        expected[i] = np.log(np.dot(node_w, node_contrib))
+
+    np.testing.assert_allclose(per_obs, expected, rtol=1e-6, atol=1e-9)

@@ -14,6 +14,7 @@ import numpy as np
 import optimagic as om
 import pandas as pd
 import pytest
+from scipy.special import ndtr
 
 import skillmodels
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
@@ -288,7 +289,19 @@ def test_af_rejects_ordered_probit_until_supported() -> None:
         skillmodels.estimate_af(model_spec=_model(), data=_data())
 
 
-def test_simulation_rejects_ordered_probit_until_supported() -> None:
-    params = _inputs(strategy="spearman")["params_template"]
-    with pytest.raises(NotImplementedError, match="ordered-probit"):
-        simulate_dataset(model_spec=_model(), params=params, n_obs=10)
+def test_simulated_categories_follow_the_cutpoints() -> None:
+    """With zero loadings, `P(y = k) = Phi(c_{k+1} - a) - Phi(c_k - a)`."""
+    params = _inputs(strategy="spearman")["params_template"].copy()
+    cuts = np.array([0.0, 0.5, 1.2])
+    for p in range(3):
+        params.loc[("loadings", p, "y3", "skills"), "value"] = 0.0
+        params.loc[("controls", p, "y3", "constant"), "value"] = 0.3
+        params.loc[_cutpoint_locs(p), "value"] = cuts
+    data = simulate_dataset(model_spec=_model(), params=params, n_obs=40_000, seed=3)
+    observed = data["aug_observed_data"]
+    shares = observed.query("aug_period == 0")["y3"].value_counts(normalize=True)
+    shares = shares.sort_index()
+    edges = np.concatenate([[-np.inf], cuts, [np.inf]]) - 0.3
+    expected = np.diff(ndtr(edges))
+    assert list(shares.index) == [0.0, 1.0, 2.0, 3.0]
+    np.testing.assert_allclose(shares.to_numpy(), expected, atol=0.01)

@@ -282,24 +282,71 @@ def measurement_loglik(
     Args:
         y: Observed measurement value (0/1 for probit; a censored value for Tobit).
         eta: Linear predictor `c + x'beta + lambda'theta`.
-        sigma: Measurement scale (ignored for probit, which fixes it to 1).
+        sigma: Measurement scale (ignored for (ordered) probit, which fixes it
+            to 1).
         family: A `MeasurementFamily` integer code.
-        lower: Tobit lower censoring bound (`-inf` to disable).
-        upper: Tobit upper censoring bound (`+inf` to disable).
+        lower: Tobit lower censoring bound (`-inf` to disable); for ordered probit
+            the lower cutpoint `c_y` of the observed category (`-inf` for `y = 0`).
+        upper: Tobit upper censoring bound (`+inf` to disable); for ordered probit
+            the upper cutpoint `c_{y+1}` (`+inf` for the last category).
 
     Return:
         The scalar log density (Gaussian/Tobit interior) or log probability
-        (probit, Tobit tail) of the measurement.
+        (probit, Tobit tail, ordered probit) of the measurement.
 
     """
     gaussian = norm.logpdf(y, loc=eta, scale=sigma)
     probit = log_ndtr((2.0 * y - 1.0) * eta)
     tobit = _tobit_loglik(y, eta, sigma, lower, upper)
+    ordered = _log_normal_interval_mass(lower - eta, upper - eta)
     return jnp.where(
         family == int(MeasurementFamily.PROBIT),
         probit,
-        jnp.where(family == int(MeasurementFamily.TOBIT), tobit, gaussian),
+        jnp.where(
+            family == int(MeasurementFamily.TOBIT),
+            tobit,
+            jnp.where(
+                family == int(MeasurementFamily.ORDERED_PROBIT), ordered, gaussian
+            ),
+        ),
     )
+
+
+def ordered_interval_ends(
+    y: Array, family: Array, lower: Array, upper: Array, cut_table: Array
+) -> tuple[Array, Array]:
+    """Return the `(lower, upper)` arguments of `measurement_loglik` for code `y`.
+
+    For an ordered-probit measurement the ends are `cut_table[y]` and
+    `cut_table[y + 1]` of its table `[-inf, c_1, ..., c_{K-1}, +inf, ...]`; other
+    families keep their bounds. A missing `y` reads category 0.
+    """
+    is_ordered = family == int(MeasurementFamily.ORDERED_PROBIT)
+    code = jnp.where(is_ordered & jnp.isfinite(y), y, 0.0).astype(jnp.int32)
+    return (
+        jnp.where(is_ordered, cut_table[code], lower),
+        jnp.where(is_ordered, cut_table[code + 1], upper),
+    )
+
+
+def _log_normal_interval_mass(a: Array, b: Array) -> Array:
+    """Return `log(Phi(b) - Phi(a))` for `a < b`, either end possibly infinite.
+
+    The interval is reflected to `(-b, -a]` when `a + b > 0`, so that the upper
+    end `b` is finite and `Phi(b)` is not close to 1; then
+    `log(Phi(b) - Phi(a)) = log Phi(b) + log(-expm1(log Phi(a) - log Phi(b)))`.
+    An infinite lower end is replaced by a finite placeholder whose term is masked,
+    which keeps the gradient finite (and 0 with respect to that end).
+    """
+    flip = a + b > 0.0
+    lo = jnp.where(flip, -b, a)
+    hi = jnp.where(flip, -a, b)
+    lo_finite = jnp.isfinite(lo)
+    hi_safe = jnp.where(jnp.isfinite(hi), hi, 0.0)
+    log_cdf_hi = log_ndtr(hi_safe)
+    safe_lo = jnp.where(lo_finite, lo, hi_safe - 1.0)
+    log_ratio = jnp.where(lo_finite, log_ndtr(safe_lo) - log_cdf_hi, -jnp.inf)
+    return log_cdf_hi + jnp.log(-jnp.expm1(log_ratio))
 
 
 def _tobit_loglik(
