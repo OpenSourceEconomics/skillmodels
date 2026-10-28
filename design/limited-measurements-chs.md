@@ -99,23 +99,10 @@ y* = a + λᵀθ + ε, ε ~ N(0, σ²), y = min(max(y*, L), U).
 - σ enters the censored contributions through s and the interior ones through the
   density; it stays a free parameter (`meas_sds`).
 
-@pro: Verify the formulas in §3 for probit and for both Tobit tails, with the signs written out (likelihood, posterior mean and covariance, the κ bounds and the pseudo-measurement equivalence including the residual), give a numerically stable evaluation of r = φ(t)/Φ(t) and r(r + t) for t → −∞ and t → +∞ in float64 with JAX (values and first derivatives), and state whether reverse-mode AD through the QR with σ̃ = (1/κ − λᵀPλ)^{1/2} is stable or whether a direct rank-one Cholesky downdate is preferable.
-
-@pro: The update is an assumed-density approximation of the exact filter. State precisely what is exact (the per-update likelihood given the Gaussian predicted state) and what is approximate, how this compares to the approximation CHS already makes in the unscented predict step, and give a test that bounds the approximation error of the full likelihood on a model small enough for exact integration (e.g. one latent factor, linear transition, three periods, quadrature over the latent path).
-
 ## 4. What has to be decided
 
-@pro: Lay out the exact implementation path on top of #104 as an ordered list of commits, each with the files and functions it touches, the tests written first (red) and what they assert, and the acceptance criterion. Cover at least: family information in `ProcessedModel`/`update_info`; the parameter index and parsing for probit measures (drop `meas_sds` from the index, or keep and fix it — which interacts less with optimagic constraints, `params_template`, `fixed_constraint.py` and downstream code that indexes `meas_sds`), while Tobit keeps its free `meas_sds`; how the Tobit bounds reach the scan (per-update scalars from `measurement_family_arrays`) and how an observation exactly at a bound is classified in float64; dispatch inside the `lax.scan` (per-iteration flag with `lax.cond`, or a branch-free pseudo-measurement computed with `jnp.where` on per-update scalars — which keeps compile time and gradients clean); `kalman_update` and the anchoring update; mixtures; the debug path and `process_debug_data` (what are "residual" and "residual SD" for a probit or a censored Tobit update); `get_filtered_states`; `decompose_measurement_variance`; diagnostic plots; the error in `maximization_inputs.py` (lift it for probit and Tobit); AMN seeding (AMN rejects both — seed from a Gaussian twin of the model, or exclude the limited measures from the AMN moment map). Say whether probit and Tobit go into one PR or two consecutive ones, and in which order.
-
-@pro: Identification and normalizations: with ε's SD fixed at 1, the probit intercept and loadings are on the latent-index scale; a Tobit measure keeps the scale of y. State the restrictions this imposes: whether a probit or a Tobit measure can be a factor's normalizing measurement; what changes for time-varying loadings, constraints that tie a probit measure's parameters across periods, and anchoring. Say whether any existing constraint generator in `common/constraints.py` produces invalid constraints when a measure is probit.
-
-@pro: Interplay with the open PRs: #104's observation masks (does a probit or censored Tobit observation count as an observed measurement for the freeze — it should); #103's handling of missing observed factors (do observed factors ever enter a measurement update, so that the pseudo-measurement has to account for their variance); #102's asymmetric translog (no expected interaction — confirm). Name any place where the chain's code assumes Gaussian measurements.
-
-@pro: Test plan, written as tests: independent oracles for one update (Gauss–Hermite or adaptive quadrature over θ for the likelihood and posterior moments, any number of factors up to 3, probit with both y, Tobit at the lower bound, the upper bound and in between, extreme t), the pseudo-measurement equivalence, mixtures, missing values, AD gradients vs. finite differences, JIT vs. eager, a synthetic DGP from `simulate_dataset` with a probit and a Tobit measure whose parameters are recovered, and the small-model full-likelihood bound from §3. Give tolerances.
-
-@pro: Cost: the extra operations per update and whether compile time or memory change measurably for a model like the application (16 periods, about 50 measurements per period, 5 latent states plus 3 investments, 17,776 persons, one A100, float64). Name any choice that would make the Gaussian path slower.
-
-@pro: Out of scope unless it falls out for free: ordered probit, probit and Tobit in AMN. Say whether the family dispatch should be designed so that these can be added later without touching the probit and Tobit code, but do not design them.
+The questions this section listed were answered in the review of PR 105 and are not
+repeated here.
 
 ## 5. Ordered probit (added scope)
 
@@ -150,13 +137,6 @@ c_k < y* ≤ c_{k+1}, with c_0 = −∞, c_K = +∞ and c_1 = 0 (the intercept a
   Gaussian or limited update and the limited branch is rematerialized
   (`jax.checkpoint`), so a Gaussian update does not carry the limited branch's
   zero-filled residuals; all-Gaussian models keep the previous scan.
-
-@pro: Verify the interval update (likelihood, posterior mean and covariance), the
-stability of `normal_interval_terms` for narrow, wide and far-tail intervals and of its
-derivatives, the cutpoint parametrization and constraints (including the composition of
-the ordering with user ties across periods), the K = 2 equivalence, the AF kernel, and
-whether the switch-plus-remat dispatch keeps the Gaussian updates of a mixed model at
-Gaussian cost.
 
 ## 6. Candidate-set error
 
