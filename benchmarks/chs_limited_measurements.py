@@ -39,11 +39,7 @@ import pandas as pd
 import skillmodels
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.common.config import TEST_DATA_DIR
-from skillmodels.common.measurement_models import (
-    OrderedProbitMeasurement,
-    ProbitMeasurement,
-    TobitMeasurement,
-)
+from skillmodels.common.measurement_models import ProbitMeasurement, TobitMeasurement
 from skillmodels.test_data.model2 import MODEL2, MODEL2_CHS_OPTIONS
 
 _N_WARM = 5
@@ -122,6 +118,11 @@ def _model_and_data(variant: str, *, copies: int) -> tuple:
     )
     models = {probit: ProbitMeasurement(), "y6": TobitMeasurement(lower=lower)}
     if variant in ("mixed_twin", "mixed"):
+        # Imported here so that the Gaussian variant runs on a baseline checkout.
+        from skillmodels.common.measurement_models import (  # noqa: PLC0415
+            OrderedProbitMeasurement,
+        )
+
         for name in ("y2", "y5", "y8"):
             data[name] = pd.qcut(data[name], 4, labels=False).astype(float)
             models[name] = OrderedProbitMeasurement(n_categories=4)
