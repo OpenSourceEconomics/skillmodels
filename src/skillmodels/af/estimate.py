@@ -29,6 +29,7 @@ from skillmodels.af.validate import (
     validate_af_model,
 )
 from skillmodels.amn.estimate import estimate_amn
+from skillmodels.common.measurement_models import OrderedProbitMeasurement
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
@@ -340,6 +341,16 @@ def _validate_af_inputs(
     af_options: AFEstimationOptions,
 ) -> None:
     """Reject unsupported AF input combinations before any fitting begins."""
+    ordered = sorted(
+        name
+        for name, model in model_spec.measurement_models.items()
+        if isinstance(model, OrderedProbitMeasurement)
+    )
+    if ordered:
+        msg = (
+            f"AF estimation of ordered-probit measurements {ordered} is not supported."
+        )
+        raise NotImplementedError(msg)
     fail_if_spearman_unsupported_on_adapter(
         model_spec, af_options.start_params_strategy
     )

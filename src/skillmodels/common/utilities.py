@@ -423,4 +423,5 @@ def _get_params_index(
         dimensions=mod.dimensions,
         transition_info=mod.transition_info,
         endogenous_factors_info=mod.endogenous_factors_info,
+        measurement_models=model_spec.measurement_models,
     )

@@ -114,6 +114,7 @@ def simulate_dataset(
         dimensions=processed_model.dimensions,
         transition_info=processed_model.transition_info,
         endogenous_factors_info=processed_model.endogenous_factors_info,
+        measurement_models=model_spec.measurement_models,
     )
 
     params = params.reindex(params_index)
@@ -610,6 +611,9 @@ def _draw_by_family(
             lower = -np.inf if lowers is None else lowers[j]
             upper = np.inf if uppers is None else uppers[j]
             out[:, j] = np.clip(latent, lower, upper)
+        elif family == int(MeasurementFamily.ORDERED_PROBIT):
+            msg = "Simulating ordered-probit measurements is not supported."
+            raise NotImplementedError(msg)
         else:
             out[:, j] = eta[:, j] + sds[j] * rng.standard_normal(n_obs)
     return out

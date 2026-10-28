@@ -8,7 +8,7 @@ kernel. CHS conditions a Gaussian predicted state on each observation instead
 (`skillmodels.chs.halfline`), using the same families and bounds; AMN rejects
 non-Gaussian measurements.
 
-The three families:
+The families:
 
 - ``GAUSSIAN`` -- ``log N(y; eta, sigma)``.
 - ``PROBIT`` -- ``log Phi((2y-1) eta)`` for ``y in {0, 1}``; the latent error SD is
@@ -18,6 +18,10 @@ The three families:
   ``L < y < U``, the left tail mass ``Phi((L-eta)/sigma)`` at ``y = L``, and the
   right tail mass ``Phi((eta-U)/sigma)`` at ``y = U``. A non-finite bound disables
   that side (no censoring there).
+- ``ORDERED_PROBIT`` -- ``y in {0, ..., K-1}`` with latent ``y* = eta + e``,
+  ``e ~ N(0, 1)``, and ``y = k`` iff ``c_k < y* <= c_{k+1}``, where ``c_0 = -inf``,
+  ``c_K = +inf`` and ``c_1 = 0``. The free cutpoints ``c_2 < ... < c_{K-1}`` are
+  parameters of the measurement (category `"cutpoints"`).
 """
 
 import enum
@@ -31,6 +35,8 @@ import numpy as np
 from jax import Array
 from jax.scipy.special import log_ndtr
 from jax.scipy.stats import norm
+
+from skillmodels._beartype_conf import MODEL_SPEC_CONF, beartype_init
 
 
 @dataclass(frozen=True)
@@ -73,8 +79,44 @@ class TobitMeasurement:
             raise ValueError(msg)
 
 
+@beartype_init(MODEL_SPEC_CONF)
+@dataclass(frozen=True)
+class OrderedProbitMeasurement:
+    """Ordered categorical measure with integer codes `0, ..., n_categories - 1`.
+
+    The latent index has a standard-normal error (scale fixed to 1). Category `k`
+    is observed iff the index lies in `(c_k, c_{k+1}]`, with `c_0 = -inf`,
+    `c_K = +inf` and the first cutpoint `c_1` fixed to 0, so the intercept stays
+    free. With `n_categories=2` the model equals `ProbitMeasurement`.
+    """
+
+    n_categories: int
+    """Number of categories `K`; at least 2."""
+
+    def __post_init__(self) -> None:  # noqa: D105
+        if isinstance(self.n_categories, bool) or not isinstance(
+            self.n_categories, int
+        ):
+            msg = (
+                "OrderedProbitMeasurement.n_categories must be an int, not "
+                f"{type(self.n_categories).__name__}."
+            )
+            raise TypeError(msg)
+        if self.n_categories < 2:
+            msg = (
+                "OrderedProbitMeasurement needs at least 2 categories, got "
+                f"{self.n_categories}."
+            )
+            raise ValueError(msg)
+
+
 # A measurement's observation model, attached per variable on `ModelSpec`.
-MeasurementModel = GaussianMeasurement | ProbitMeasurement | TobitMeasurement
+MeasurementModel = (
+    GaussianMeasurement
+    | ProbitMeasurement
+    | TobitMeasurement
+    | OrderedProbitMeasurement
+)
 
 
 class MeasurementFamily(enum.IntEnum):
@@ -88,6 +130,7 @@ class MeasurementFamily(enum.IntEnum):
     GAUSSIAN = 0
     PROBIT = 1
     TOBIT = 2
+    ORDERED_PROBIT = 3
 
 
 def resolve_measurement_family(
@@ -104,6 +147,8 @@ def resolve_measurement_family(
         lower = -math.inf if model.lower is None else float(model.lower)
         upper = math.inf if model.upper is None else float(model.upper)
         return MeasurementFamily.TOBIT, lower, upper
+    if isinstance(model, OrderedProbitMeasurement):
+        return MeasurementFamily.ORDERED_PROBIT, -math.inf, math.inf
     return MeasurementFamily.GAUSSIAN, -math.inf, math.inf
 
 
@@ -136,15 +181,19 @@ class ObservationEvent(enum.IntEnum):
     - `MISSING` -- the value is NaN.
     - `DENSITY` -- a continuous value: Gaussian, or Tobit strictly inside its bounds.
     - `LOWER_TAIL` -- the latent index lies below a threshold: probit `y = 0`
-      (threshold 0) or Tobit `y <= lower`.
+      (threshold 0), Tobit `y <= lower`, or ordered probit `y = 0` (below `c_1`).
     - `UPPER_TAIL` -- the latent index lies above a threshold: probit `y = 1`
-      (threshold 0) or Tobit `y >= upper`.
+      (threshold 0), Tobit `y >= upper`, or ordered probit `y = K - 1` (above
+      `c_{K-1}`).
+    - `INTERVAL` -- the latent index lies between two finite cutpoints: ordered
+      probit `0 < y < K - 1`.
     """
 
     MISSING = 0
     DENSITY = 1
     LOWER_TAIL = 2
     UPPER_TAIL = 3
+    INTERVAL = 4
 
 
 def classify_observations(
@@ -152,6 +201,8 @@ def classify_observations(
     family: MeasurementFamily,
     lower: float,
     upper: float,
+    *,
+    n_categories: int | None = None,
 ) -> np.ndarray:
     """Return the `ObservationEvent` code of each value of one measurement.
 
@@ -163,12 +214,14 @@ def classify_observations(
         family: The measurement's family.
         lower: Tobit lower censoring bound (`-inf` if none).
         upper: Tobit upper censoring bound (`+inf` if none).
+        n_categories: Number of categories of an ordered-probit measurement.
 
     Return:
         1d int8 array of `ObservationEvent` codes.
 
     Raises:
-        ValueError: If a probit value is not 0 or 1, or a limited-family value is
+        ValueError: If a probit value is not 0 or 1, an ordered-probit value is not
+            an integer code in `0..n_categories-1`, or a limited-family value is
             infinite.
 
     """
@@ -180,7 +233,8 @@ def classify_observations(
         return events.astype(np.int8)
     observed = values[~missing]
     if not np.isfinite(observed).all():
-        msg = f"Observed {family.name.lower()} measurements must be finite."
+        name = family.name.lower().replace("_", " ")
+        msg = f"Observed {name} measurements must be finite."
         raise ValueError(msg)
     if family == MeasurementFamily.PROBIT:
         invalid = sorted(set(observed[(observed != 0.0) & (observed != 1.0)].tolist()))
@@ -189,6 +243,24 @@ def classify_observations(
             raise ValueError(msg)
         lower_tail = values == 0.0
         upper_tail = values == 1.0
+    elif family == MeasurementFamily.ORDERED_PROBIT:
+        if n_categories is None:
+            msg = "An ordered probit measurement needs its number of categories."
+            raise ValueError(msg)
+        is_code = (observed == np.round(observed)) & (observed >= 0)
+        is_code &= observed <= n_categories - 1
+        invalid = sorted(set(observed[~is_code].tolist()))
+        if invalid:
+            msg = (
+                "An ordered probit measurement must be an integer code in "
+                f"0..{n_categories - 1} or missing; found {invalid[:5]}."
+            )
+            raise ValueError(msg)
+        lower_tail = values == 0.0
+        upper_tail = values == n_categories - 1
+        events = np.where(
+            ~missing & ~lower_tail & ~upper_tail, ObservationEvent.INTERVAL, events
+        )
     else:
         lower_tail = values <= lower
         upper_tail = values >= upper

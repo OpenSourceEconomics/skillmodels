@@ -1,7 +1,14 @@
 """Functions to construct the parameter index for model estimation."""
 
+from collections.abc import Mapping
+from types import MappingProxyType
+
 import pandas as pd
 
+from skillmodels.common.measurement_models import (
+    MeasurementModel,
+    OrderedProbitMeasurement,
+)
 from skillmodels.common.types import (
     ControlFunctionInfo,
     Dimensions,
@@ -17,6 +24,8 @@ def get_params_index(
     dimensions: Dimensions,
     transition_info: TransitionInfo,
     endogenous_factors_info: EndogenousFactorsInfo,
+    *,
+    measurement_models: Mapping[str, MeasurementModel] = MappingProxyType({}),
 ) -> pd.MultiIndex:
     """Generate index for the params_df for optimagic.
 
@@ -32,6 +41,8 @@ def get_params_index(
         dimensions: Dimensional information.
         transition_info: Information about the transition equations.
         endogenous_factors_info: Information about endogenous factors, if any.
+        measurement_models: Per-variable observation models; ordered-probit
+            measurements add their `"cutpoints"` rows.
 
     Returns:
         params_index (pd.MultiIndex)
@@ -44,6 +55,9 @@ def get_params_index(
         factors=labels.latent_factors, update_info=update_info
     )
     ind_tups += get_meas_sds_index_tuples(update_info=update_info)
+    ind_tups += get_cutpoints_index_tuples(
+        update_info=update_info, measurement_models=measurement_models
+    )
     ind_tups += get_shock_sds_index_tuples(
         aug_periods=labels.aug_periods,
         factors=labels.latent_factors,
@@ -132,6 +146,32 @@ def get_meas_sds_index_tuples(
     ind_tups = []
     for aug_period, meas in update_info.index:
         ind_tups.append(("meas_sds", aug_period, meas, "-"))
+    return ind_tups
+
+
+def get_cutpoints_index_tuples(
+    update_info: pd.DataFrame,
+    measurement_models: Mapping[str, MeasurementModel],
+) -> list[tuple[str, int, str, str]]:
+    """Index tuples for the cutpoints of ordered-probit measurements.
+
+    One row `("cutpoints", aug_period, meas, "cutpoint_k")` for `k = 1..K-1` per
+    ordered-probit update. `cutpoint_1` is kept in the index and fixed to 0.
+
+    Args:
+        update_info: DataFrame with one row per Kalman update needed
+            in the likelihood function. See :ref:`update_info`.
+        measurement_models: Per-variable observation models.
+
+    """
+    ind_tups = []
+    for aug_period, meas in update_info.index:
+        model = measurement_models.get(meas)
+        if isinstance(model, OrderedProbitMeasurement):
+            ind_tups += [
+                ("cutpoints", aug_period, meas, f"cutpoint_{k}")
+                for k in range(1, model.n_categories)
+            ]
     return ind_tups
 
 

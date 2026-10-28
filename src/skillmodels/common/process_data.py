@@ -12,6 +12,7 @@ from jax import Array
 from skillmodels.common.measurement_models import (
     MeasurementFamily,
     MeasurementModel,
+    OrderedProbitMeasurement,
     classify_observations,
     measurement_family_arrays,
 )
@@ -78,8 +79,17 @@ def process_data(
     else:
         df.index = df.index.set_names(["id", "aug_period"])
 
+    variables = tuple(update_info.index.get_level_values("variable"))
     families, lowers, uppers = measurement_family_arrays(
-        measurement_models or {}, tuple(update_info.index.get_level_values("variable"))
+        measurement_models or {}, variables
+    )
+    n_categories = tuple(
+        model.n_categories
+        if isinstance(
+            model := (measurement_models or {}).get(var), OrderedProbitMeasurement
+        )
+        else None
+        for var in variables
     )
     is_limited = families != int(MeasurementFamily.GAUSSIAN)
     has_limited = purpose == "estimation" and bool(is_limited.any())
@@ -103,6 +113,7 @@ def process_data(
             families=families,
             lowers=lowers,
             uppers=uppers,
+            n_categories=n_categories,
         )
     df = _handle_controls_with_missings(
         df=df, controls=labels.controls, update_info=update_info
@@ -137,6 +148,7 @@ def process_data(
                     families=families,
                     lowers=lowers,
                     uppers=uppers,
+                    n_categories=n_categories,
                 )
             )
             out["measurements"] = jnp.asarray(measurements, dtype="float64")
@@ -401,15 +413,20 @@ def _generate_events_array(
     families: np.ndarray,
     lowers: np.ndarray,
     uppers: np.ndarray,
+    n_categories: tuple[int | None, ...],
 ) -> np.ndarray:
     """Classify each float64 measurement of each update row into its event."""
     return np.stack(
         [
             classify_observations(
-                row, MeasurementFamily(int(family)), float(lower), float(upper)
+                row,
+                MeasurementFamily(int(family)),
+                float(lower),
+                float(upper),
+                n_categories=n_cat,
             )
-            for row, family, lower, upper in zip(
-                measurements, families, lowers, uppers, strict=True
+            for row, family, lower, upper, n_cat in zip(
+                measurements, families, lowers, uppers, n_categories, strict=True
             )
         ]
     )

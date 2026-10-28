@@ -2,7 +2,7 @@
 
 import functools
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from types import MappingProxyType
 from typing import Any
 
@@ -14,6 +14,7 @@ import pandas as pd
 from beartype import beartype
 from jax import Array
 from numpy.typing import NDArray
+from scipy.special import ndtri
 
 import skillmodels.chs.likelihood as lf
 import skillmodels.chs.likelihood_debug as lfd
@@ -40,10 +41,15 @@ from skillmodels.common.constraints import (
     align_index_names,
     enforce_fixed_constraints,
     get_constraints,
+    get_cutpoint_constraints,
     get_probit_scale_constraints,
     project_to_probability_constraints,
 )
-from skillmodels.common.measurement_models import GaussianMeasurement
+from skillmodels.common.measurement_models import (
+    GaussianMeasurement,
+    MeasurementModel,
+    OrderedProbitMeasurement,
+)
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.params_index import get_params_index
 from skillmodels.common.parse_params import create_parsing_info
@@ -113,6 +119,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         dimensions=processed_model.dimensions,
         transition_info=processed_model.transition_info,
         endogenous_factors_info=processed_model.endogenous_factors_info,
+        measurement_models=model_spec.measurement_models,
     )
 
     parsing_info = create_parsing_info(
@@ -262,7 +269,11 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         update_info=processed_model.update_info,
         measurement_models=model_spec.measurement_models,
     )
-    constraints = list(constraints) + probit_scale_constraints
+    cutpoint_constraints = get_cutpoint_constraints(
+        update_info=processed_model.update_info,
+        measurement_models=model_spec.measurement_models,
+    )
+    constraints = list(constraints) + probit_scale_constraints + cutpoint_constraints
 
     if fixed_params is not None:
         fixed_constraints = _build_fixed_constraints_from_params(
@@ -310,7 +321,18 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             params_template=params_template,
             amn_params=amn_result.params,
         )
-    scale_constraints: list[om.constraints.Constraint] = [*probit_scale_constraints]
+    if strategy in ("spearman", "amn"):
+        params_template = _seed_ordered_probit_start_values(
+            params_template=params_template,
+            measurements=np.asarray(processed_data["measurements"], dtype=float),
+            update_info=processed_model.update_info,
+            measurement_models=model_spec.measurement_models,
+            constraints=constraints,
+        )
+    scale_constraints: list[om.constraints.Constraint] = [
+        *probit_scale_constraints,
+        *cutpoint_constraints,
+    ]
     params_template = enforce_fixed_constraints(
         params_template=params_template, constraints=scale_constraints
     )
@@ -321,7 +343,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     if strategy in ("spearman", "amn"):
         _fail_if_start_params_incomplete(params_template)
 
-    return {
+    out = {
         "loglike": loglike,
         "loglikeobs": loglikeobs,
         "debug_loglike": debug_loglike,
@@ -329,6 +351,62 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         "constraints": constraints,
         "params_template": params_template,
     }
+    if cutpoint_constraints:
+        out |= dict.fromkeys(
+            ("loglike", "loglikeobs", "debug_loglike", "loglike_and_gradient"),
+            _ordered_probit_likelihood_not_implemented,
+        )
+    return out
+
+
+def _ordered_probit_likelihood_not_implemented(params: pd.DataFrame) -> None:
+    """Raise: the CHS interval update of ordered-probit measurements is missing."""
+    msg = (
+        "The CHS likelihood of ordered-probit measurements is not implemented yet; "
+        f"only the parameter template and constraints are ({len(params)} params)."
+    )
+    raise NotImplementedError(msg)
+
+
+def _seed_ordered_probit_start_values(
+    params_template: pd.DataFrame,
+    measurements: np.ndarray,
+    update_info: pd.DataFrame,
+    measurement_models: Mapping[str, MeasurementModel],
+    constraints: list[om.constraints.Constraint],
+) -> pd.DataFrame:
+    """Seed cutpoints and intercepts of ordered-probit updates from category shares.
+
+    With a unit-variance latent index around the intercept `mu` and `c_1 = 0`,
+    `P(y <= k - 1) = Phi(c_k - mu)` gives `mu = -Phi^{-1}(F_0)` and
+    `c_k = Phi^{-1}(F_{k-1}) - Phi^{-1}(F_0)`, where `F_j` is the observed share of
+    codes `<= j`. Shares are clipped away from 0 and 1 and the cutpoints are kept
+    strictly increasing, so empty categories still give a feasible start. Fixed
+    parameters, such as a normalized intercept, keep their fixed values.
+    """
+    out = params_template.copy()
+    has_ordered = False
+    for row, (aug_period, var) in enumerate(update_info.index):
+        model = measurement_models.get(var)
+        if not isinstance(model, OrderedProbitMeasurement):
+            continue
+        has_ordered = True
+        values = measurements[row][~np.isnan(measurements[row])]
+        n_cat = model.n_categories
+        half_obs = 0.5 / max(len(values), 1)
+        shares = np.array([np.mean(values <= j) for j in range(n_cat - 1)])
+        quantiles = ndtri(np.clip(shares, half_obs, 1 - half_obs))
+        cutpoints = quantiles - quantiles[0]
+        for k in range(1, n_cat - 1):
+            cutpoints[k] = max(cutpoints[k], cutpoints[k - 1] + 0.05)
+        locs = [
+            ("cutpoints", aug_period, var, f"cutpoint_{k}") for k in range(1, n_cat)
+        ]
+        out.loc[locs, "value"] = cutpoints
+        out.loc[("controls", aug_period, var, "constant"), "value"] = -quantiles[0]
+    if not has_ordered:
+        return params_template
+    return enforce_fixed_constraints(params_template=out, constraints=constraints)
 
 
 def _fail_if_unsupported_measurements(model_spec: ModelSpec) -> None:
@@ -351,7 +429,7 @@ def _fail_if_unsupported_measurements(model_spec: ModelSpec) -> None:
     if limited_anchors:
         msg = (
             f"CHS anchoring requires Gaussian outcomes, but {limited_anchors} are "
-            "probit/Tobit measurements."
+            "probit, Tobit, or ordered-probit measurements."
         )
         raise NotImplementedError(msg)
 
@@ -360,7 +438,7 @@ def _fail_if_probit_scale_is_fixed_elsewhere(
     fixed_constraints: list[FixedConstraintWithValue],
     probit_scale_constraints: list[FixedConstraintWithValue],
 ) -> None:
-    """Raise if `fixed_params` pins a probit measurement-error SD to a value != 1."""
+    """Raise if `fixed_params` pins a unit-scale error SD to a value != 1."""
     probit_locs = {c.loc for c in probit_scale_constraints}
     conflicts = [
         (c.loc, c.value)
@@ -369,8 +447,8 @@ def _fail_if_probit_scale_is_fixed_elsewhere(
     ]
     if conflicts:
         msg = (
-            "The measurement-error SD of a probit measurement is fixed to 1, but "
-            f"fixed_params pins {conflicts}."
+            "The measurement-error SD of a probit or ordered-probit measurement is "
+            f"fixed to 1, but fixed_params pins {conflicts}."
         )
         raise ValueError(msg)
 
