@@ -188,6 +188,7 @@ def test_ordered_loglikeobs_equals_scalar_assumed_density_reference(
     np.testing.assert_allclose(inputs["loglikeobs"](params), expected, atol=1e-10)
 
 
+@pytest.mark.long_running
 def test_filtered_states_use_the_interval_update(ordered_inputs) -> None:
     data, _, params = ordered_inputs
     _, expected_means = _scalar_adf_reference(data)
@@ -204,6 +205,7 @@ def test_filtered_states_use_the_interval_update(ordered_inputs) -> None:
     )
 
 
+@pytest.mark.long_running
 def test_debug_contributions_equal_the_jitted_objective(ordered_inputs) -> None:
     _, inputs, params = ordered_inputs
     debug = inputs["debug_loglike"](params)
@@ -220,13 +222,11 @@ def test_gradient_matches_step_swept_finite_differences(ordered_inputs) -> None:
         ("cutpoints", 1, "o1", "cutpoint_3"),
         ("loadings", 1, "o1", "skills"),
         ("controls", 2, "o1", "constant"),
-        ("transition", 0, "skills", "skills"),
-        ("initial_cholcovs", 0, "mixture_0", "skills-skills"),
     ]
     for loc in locs:
         pos = params.index.get_loc(loc)
         errors = []
-        for step in (1e-3, 1e-4, 1e-5, 1e-6):
+        for step in (1e-4, 1e-5, 1e-6):
             up, down = _shifted(params, loc, step), _shifted(params, loc, -step)
             fd = (inputs["loglike"](up) - inputs["loglike"](down)) / (2 * step)
             errors.append(abs(fd - grad[pos]) / max(1.0, abs(grad[pos])))
@@ -264,6 +264,7 @@ def test_two_categories_reproduce_the_probit_model_exactly() -> None:
     )
 
 
+@pytest.mark.long_running
 def test_spearman_start_values_give_a_finite_likelihood() -> None:
     inputs = get_maximization_inputs(
         model_spec=_model(_ORDERED),

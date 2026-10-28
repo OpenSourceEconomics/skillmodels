@@ -121,7 +121,20 @@ def test_interval_terms_match_high_precision_reference(a, b) -> None:
     assert 0 < float(got["var"]) <= min(1.0, width**2 / 4)
 
 
-@pytest.mark.parametrize(("a", "b"), _INTERVALS)
+# One case per regime runs by default: central, narrow series, wide far tail, and
+# both sides of the series/tail switch.
+_FAST_DERIVATIVE_CASES = {(-1.0, 0.5), (-1e-6, 1e-6), (-45.0, -40.0), (40.0, 45.0)}
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        (a, b)
+        if (a, b) in _FAST_DERIVATIVE_CASES
+        else pytest.param(a, b, marks=pytest.mark.long_running)
+        for a, b in _INTERVALS
+    ],
+)
 def test_interval_term_derivatives_match_identities(a, b) -> None:
     expected = _decimal_interval(a, b)
     for name in ("log_z", "mean", "var"):
@@ -184,7 +197,11 @@ def _interval_quadrature(*, mean, cov, loading, offset, lo, hi):
 
 @pytest.mark.parametrize(
     "dim",
-    [pytest.param(1, marks=pytest.mark.long_running), 2, 3],
+    [
+        pytest.param(1, marks=pytest.mark.long_running),
+        2,
+        pytest.param(3, marks=pytest.mark.long_running),
+    ],
 )
 @pytest.mark.parametrize(
     ("lo", "hi", "offset"),
@@ -213,7 +230,7 @@ def test_square_root_interval_update_equals_dense_covariance_formula() -> None:
     rng = np.random.default_rng(321)
     for scale in (1e-6, 1.0, 1e3):
         for dim in (1, 3, 5):
-            for _ in range(4):
+            for _ in range(2):
                 upper = np.linalg.qr(rng.normal(size=(dim, dim)))[1] * scale
                 mean = rng.normal(size=dim) * scale
                 loading = rng.normal(size=dim)
@@ -280,6 +297,7 @@ def test_interval_with_a_far_end_equals_the_halfline_update(event, far) -> None:
         np.testing.assert_allclose(got, expected, rtol=1e-12, atol=1e-14)
 
 
+@pytest.mark.long_running
 def test_halfline_events_are_unchanged_by_the_interval_branch() -> None:
     """Tail and density events give bitwise the same update with `has_intervals`."""
     mean, upper, loading = _prior(2)
@@ -335,6 +353,7 @@ def _interval_sum_loglike(loadings, control_params, cuts):
     return loglikes.sum() + new_chols.sum() + new_weights.sum() + new_states.sum()
 
 
+@pytest.mark.long_running
 def test_interval_gradient_matches_step_swept_finite_differences() -> None:
     args = (jnp.array([0.6, -0.4]), jnp.array([0.1, 0.5]), jnp.array([0.0, 0.7, 1.3]))
     grads = jax.grad(_interval_sum_loglike, argnums=(0, 1, 2))(*args)

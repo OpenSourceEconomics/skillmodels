@@ -45,7 +45,9 @@ profiles:
         of the limited measure goes to 0
       gaussian_path_regression: 1.0e-12
     resource:
-      ci: the new tests add at most 60 s to the CPU suite (long_running excluded)
+      ci: >-
+        the probit and Tobit tests add at most 60 s and the ordered-probit tests at
+        most 40 s to the CPU suite (summed serial test time, long_running excluded)
   application:
     description: >-
       health-cognition with alive as probit (and, once migrated, its ordered
