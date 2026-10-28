@@ -5,6 +5,12 @@ latent index, Tobit: the latent response clipped to its bounds, ordered probit: 
 number of cutpoints below the latent index). CHS estimation
 from the true parameters' neighbourhood must recover them up to sampling noise and
 the small assumed-density approximation.
+
+In the interval test, persons with a low anchor measure `g1` are more likely to
+report the Tobit measure `t1` only by the class interval of its latent value and to
+miss `g2`. Shared measurement parameters put both kinds of report on one scale.
+Selection depends on observed data only, so the mean filtered skills of each group
+equal its mean true skills up to sampling noise and the assumed-density approximation.
 """
 
 import numpy as np
@@ -14,6 +20,7 @@ import pytest
 
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.chs.options import CHSEstimationOptions
+from skillmodels.common.individual_states import get_individual_states_from_params
 from skillmodels.common.measurement_models import (
     OrderedProbitMeasurement,
     ProbitMeasurement,
@@ -119,7 +126,74 @@ def test_simulated_ordered_probit_parameters_are_recovered() -> None:
         np.testing.assert_allclose(got["value"], value, atol=0.12)
 
 
-def _estimate_from_simulated_data(model, true):
+_INTERVAL_MODEL = ModelSpec(
+    factors={
+        "skills": FactorSpec(
+            measurements=(("g1", "g2", "t1"),) * 2,
+            normalizations=Normalizations(
+                loadings=({"g1": 1},) * 2, intercepts=({"g1": 0},) * 2
+            ),
+            transition_function="linear",
+        ),
+    },
+    measurement_models={
+        "t1": TobitMeasurement(
+            lower=-1.0, upper=None, interval_columns=("t1_lo", "t1_hi")
+        ),
+    },
+)
+_INTERVAL_TRUE = {
+    ("loadings", "g2"): 0.8,
+    ("loadings", "t1"): 0.9,
+    ("controls", "g2"): 0.3,
+    ("controls", "t1"): 0.1,
+    ("meas_sds", "g1"): 0.5,
+    ("meas_sds", "g2"): 0.6,
+    ("meas_sds", "t1"): 0.5,
+}
+_INTERVAL_CLASSES = ((-np.inf, -0.3), (-0.3, 0.6), (0.6, np.inf))
+
+
+def _report_intervals(data: pd.DataFrame) -> pd.DataFrame:
+    """Replace `t1` and `g2` by the class interval of `t1`, mostly for low `g1`."""
+    rng = np.random.default_rng(5)
+    proxy = rng.random(len(data)) < np.where(data["g1"].to_numpy() < 0.0, 0.7, 0.1)
+    t1 = data["t1"].to_numpy()
+    lows = np.select([t1 <= c[1] for c in _INTERVAL_CLASSES], [-np.inf, -0.3, 0.6])
+    highs = np.select([t1 <= c[1] for c in _INTERVAL_CLASSES], [-0.3, 0.6, np.inf])
+    return data.assign(
+        t1=np.where(proxy, np.nan, t1),
+        t1_lo=np.where(proxy, lows, np.nan),
+        t1_hi=np.where(proxy, highs, np.nan),
+        g2=np.where(proxy, np.nan, data["g2"]),
+        proxy=proxy,
+    )
+
+
+@pytest.mark.long_running
+def test_interval_reports_recover_parameters_and_the_skill_level() -> None:
+    estimate, truth, inputs, data, skills = _estimate_from_simulated_data(
+        _INTERVAL_MODEL, _INTERVAL_TRUE, interval_reports=True
+    )
+    assert inputs["loglike"](estimate) >= inputs["loglike"](truth)
+    for (category, name1), value in _INTERVAL_TRUE.items():
+        got = estimate.query(f"category == '{category}' and name1 == '{name1}'")
+        np.testing.assert_allclose(got["value"], value, atol=0.12)
+    filtered = get_individual_states_from_params(
+        model_spec=_INTERVAL_MODEL,
+        data=data.drop(columns="proxy"),
+        params=estimate,
+        chs_options=CHSEstimationOptions(start_params_strategy="none"),
+    )["unanchored_states"]["states"]
+    proxy = data["proxy"].to_numpy()
+    filtered_skills = filtered.sort_values(["id", "period"])["skills"].to_numpy()
+    true_gap = skills[proxy].mean() - skills[~proxy].mean()
+    filtered_gap = filtered_skills[proxy].mean() - filtered_skills[~proxy].mean()
+    assert true_gap < -0.5
+    np.testing.assert_allclose(filtered_gap, true_gap, atol=0.05)
+
+
+def _estimate_from_simulated_data(model, true, *, interval_reports=False):
     template = get_maximization_inputs(
         model_spec=model,
         data=_simulated_data(model, n_obs=20, params=None),
@@ -127,9 +201,18 @@ def _estimate_from_simulated_data(model, true):
     )["params_template"]
     truth = _true_params(template, true)
     data = _simulated_data(model, n_obs=3000, params=truth)
+    if interval_reports:
+        skills = (
+            simulate_dataset(model_spec=model, params=truth, n_obs=3000, seed=42)[
+                "unanchored_states"
+            ]["states"]
+            .sort_values(["id", "period"])["skills"]
+            .to_numpy()
+        )
+        data = _report_intervals(data.sort_index())
     inputs = get_maximization_inputs(
         model_spec=model,
-        data=data,
+        data=data.drop(columns="proxy", errors="ignore"),
         chs_options=CHSEstimationOptions(start_params_strategy="none"),
     )
     rng = np.random.default_rng(1)
@@ -138,7 +221,11 @@ def _estimate_from_simulated_data(model, true):
         for c in inputs["constraints"]
         if isinstance(getattr(c, "loc", None), tuple)
     }
-    free = np.array([loc not in fixed for loc in truth.index])
+    # The weight of the single mixture component is 1 by its probability
+    # constraint; a perturbed start would scale the reported filtered states.
+    free = np.array(
+        [loc not in fixed and loc[0] != "mixture_weights" for loc in truth.index]
+    )
     start = truth.copy()
     start.loc[free, "value"] += rng.uniform(-0.15, 0.15, size=int(free.sum()))
     start["value"] = np.maximum(start["value"], start["lower_bound"] + 0.05)
@@ -150,6 +237,8 @@ def _estimate_from_simulated_data(model, true):
         constraints=inputs["constraints"],
         bounds=om.Bounds(lower=start["lower_bound"], upper=start["upper_bound"]),
     )
+    if interval_reports:
+        return res.params, truth, inputs, data, skills
     return res.params, truth, inputs
 
 
@@ -164,9 +253,11 @@ def _simulated_data(
             "g2": rng.normal,
             "p1": lambda: float(rng.random() < 0.5),
             "t1": lambda: max(rng.normal(), 0.0),
+            "t1_lo": lambda: np.nan,
+            "t1_hi": lambda: np.nan,
             "o1": lambda: float(rng.integers(4)),
         }
-        names = model.factors["skills"].measurements[0]
+        names = (*model.factors["skills"].measurements[0], "t1_lo", "t1_hi")
         rows = [
             {"caseid": i, "period": t} | {n: placeholders[n]() for n in names}
             for i in range(n_obs)

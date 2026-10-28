@@ -180,3 +180,84 @@ value for this target is 0 by construction, in both profiles:
 Assumptions: the measurement families and update order are those of the model
 specification; the bound applies to the CHS likelihood, the shared measurement kernel
 and the AF initial-period likelihood with supplied cut tables.
+
+## 7. Tobit measurements with observation-specific intervals
+
+Motivation (health-cognition, HRS): self-respondents report a 27-point cognition score;
+proxy respondents report only the Langa–Weir class (dementia / CIND / normal), which is
+an interval of the same score. A shared intercept, loadings and error SD for both kinds
+of report put them on one scale.
+
+### API
+
+`TobitMeasurement(lower, upper, interval_columns=(lo_column, hi_column))`; in
+`ModelSpec.from_dict`: `{"family": "tobit", "lower": ..., "upper": ...,
+"interval_columns": [lo_column, hi_column]}`.
+
+- The measurement's own column holds the exact values; an exact value is censored at
+  a fixed bound as before.
+- The two named columns hold, for a person whose value is missing, the ends
+  `lo < y* <= hi` of the latent interval; NaN where no interval is observed; `-inf` /
+  `inf` for an open end. `lower` and `upper` may both be `None` with interval columns.
+- Invalid rows raise in `process_data`: a value together with an interval, one NaN end,
+  `lo >= hi`, or two infinite ends.
+- An integer score treated as continuous maps the observed scores `k_lo, ..., k_hi` to
+  the latent interval `(k_lo - 0.5, k_hi + 0.5]`, with an infinite end where the range
+  reaches a censoring bound. This is the application's choice, documented on the class.
+
+### Mathematics
+
+The latent response is `y* = a + λ'θ + ε`, `ε ~ N(0, σ²)`, `σ` free. Under the Gaussian
+predicted state `N(m, P)`, with `μ = a + λ'm`, `s² = σ² + λ'Pλ`:
+
+- interval with two finite ends: `ℓ = log(Φ(β) − Φ(α))`, `α = (lo − μ)/s`,
+  `β = (hi − μ)/s`; posterior mean `m + Pλ E[z]/s` and covariance
+  `P − Pλλ'P (1 − Var[z])/s²` with the moments of `z ~ N(0,1)` truncated to `(α, β]`
+  (`normal_interval_terms`, narrow-safe);
+- `lo = −∞` / `hi = ∞`: the half-line update of §3 with threshold `hi` / `lo`.
+
+This is the ordered-probit interval update of §5 with a free `σ` in `s` and the ends
+taken from the data instead of the cutpoint parameters; the square-root update
+(`kalman_update_limited`) already takes `σ` and per-observation ends. Likelihood exact
+given the Gaussian predicted state; the filtered state is the moment-matched Gaussian.
+
+### Data flow
+
+- `process_data` reads the two columns of each update row of such a measurement into
+  `interval_bounds`, float64, shape `(n_updates, n_obs, 2)`, NaN elsewhere, and
+  classifies the events (`classify_observations(..., interval_bounds=...)`). The
+  columns are carried through the endogenous-factor augmentation, required by
+  `_check_data`, and set to NaN with the measurements when controls are missing.
+- The scan receives `interval_bounds` as one more per-update input
+  (`LIMITED_LOOP_KEYS`); `get_event_thresholds` returns the interval ends for the
+  observations that have them and the cut-table thresholds otherwise.
+- Observed-ness for the freeze after the last observation (`get_observation_masks`) is
+  `events != MISSING` in models with limited measurements, so a person whose last
+  report is an interval is still predicted up to it. For all other observations this
+  equals the previous `isfinite(measurements)`.
+- Models without interval columns pass no `interval_bounds`; their scan inputs and
+  results are unchanged (all-Gaussian models run the untouched Gaussian scan).
+- `interval_bounds` costs two float64 per update row and person; rows of other
+  measurements hold NaN. A compact per-measurement table with a row map is the upgrade
+  if memory ever binds.
+- AF rejects interval columns (`NotImplementedError`); AMN rejects all non-Gaussian
+  measurements; the Gaussian twin used for start values ignores the interval columns
+  (interval-only persons count as missing there); `simulate_dataset` draws the censored
+  value of every observation.
+
+### Alternatives considered and rejected
+
+- A new `IntervalMeasurement` class and family code: duplicates the Tobit handling of
+  exact and censored values, and every family switch (kernel, simulation, events,
+  update tables, AF/AMN guards) grows a branch. Interval censoring is the general case
+  of Tobit censoring, so one optional field on `TobitMeasurement` is the smaller
+  interface.
+- Ordered probit with fixed known cutpoints and a free SD plus a class-code column:
+  limits the intervals to one finite set per measurement and needs a second column
+  anyway; per-observation ends are as simple and more general.
+- The two-column `intreg` convention (equal ends = exact value) in place of the
+  measurement column: breaks the rule that a measurement's name is its data column,
+  which update tables, debug residuals, filtered-state masks and the Gaussian twin
+  rely on.
+- A finite placeholder in the measurement column for interval observations: code that
+  reads the column (start values, residuals, plots) would see invented values.

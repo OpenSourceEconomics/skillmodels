@@ -57,19 +57,48 @@ class ProbitMeasurement:
 class TobitMeasurement:
     """Censored-normal measure (not truncated, selected, or zero-inflated).
 
-    `lower` / `upper` are the known censoring bounds; `None` disables that side.
-    At least one bound must be finite. Observations equal to a bound are treated as
-    censored (tail mass); interior observations use the normal density.
+    The latent response is `y* = c + x'beta + lambda'theta + eps`,
+    `eps ~ N(0, sigma^2)` with a free `sigma`. Each observation is one of:
+
+    - a value strictly inside the bounds: the normal density of `y*`;
+    - a value at or beyond a bound: censored there (`y* <= lower` or
+      `y* >= upper`, a tail mass);
+    - with `interval_columns`, a missing value with an interval
+      `lo < y* <= hi` from the two named data columns (an interval mass; an
+      infinite end makes it a half-line).
+
+    All observations share the intercept, loadings and `sigma`, so exact and
+    interval observations measure the latent response on one scale. A score that
+    takes integer values but is treated as continuous maps an observed range of
+    scores `k_lo, ..., k_hi` to the latent interval `(k_lo - 0.5, k_hi + 0.5]`
+    (with an infinite end at a censoring bound). Simulation draws the censored value
+    for every observation.
     """
 
     lower: float | None = 0.0
     """Lower censoring bound, or `None` for no lower censoring."""
     upper: float | None = None
     """Upper censoring bound, or `None` for no upper censoring."""
+    interval_columns: tuple[str, str] | None = None
+    """Names of the data columns with the lower and the upper end of the latent
+    interval of each observation whose value is missing, or `None`. Both ends are
+    NaN where no interval is observed; `-inf` / `inf` mark an open end."""
 
     def __post_init__(self) -> None:  # noqa: D105
-        if self.lower is None and self.upper is None:
-            msg = "TobitMeasurement needs at least one finite censoring bound."
+        if self.interval_columns is not None:
+            columns = tuple(self.interval_columns)
+            if len(columns) != 2 or columns[0] == columns[1]:
+                msg = (
+                    "TobitMeasurement.interval_columns must name two distinct data "
+                    f"columns (lower end, upper end), got {columns}."
+                )
+                raise ValueError(msg)
+            object.__setattr__(self, "interval_columns", columns)
+        elif self.lower is None and self.upper is None:
+            msg = (
+                "TobitMeasurement needs at least one finite censoring bound or "
+                "interval_columns."
+            )
             raise ValueError(msg)
         if (
             self.lower is not None
@@ -185,12 +214,13 @@ class ObservationEvent(enum.IntEnum):
     - `MISSING` -- the value is NaN.
     - `DENSITY` -- a continuous value: Gaussian, or Tobit strictly inside its bounds.
     - `LOWER_TAIL` -- the latent index lies below a threshold: probit `y = 0`
-      (threshold 0), Tobit `y <= lower`, or ordered probit `y = 0` (below `c_1`).
+      (threshold 0), Tobit `y <= lower`, a Tobit interval `(-inf, hi]`, or
+      ordered probit `y = 0` (below `c_1`).
     - `UPPER_TAIL` -- the latent index lies above a threshold: probit `y = 1`
-      (threshold 0), Tobit `y >= upper`, or ordered probit `y = K - 1` (above
-      `c_{K-1}`).
-    - `INTERVAL` -- the latent index lies between two finite cutpoints: ordered
-      probit `0 < y < K - 1`.
+      (threshold 0), Tobit `y >= upper`, a Tobit interval `(lo, inf)`, or
+      ordered probit `y = K - 1` (above `c_{K-1}`).
+    - `INTERVAL` -- the latent index lies between two finite ends: ordered
+      probit `0 < y < K - 1`, or a Tobit interval `(lo, hi]`.
     """
 
     MISSING = 0
@@ -207,11 +237,14 @@ def classify_observations(
     upper: float,
     *,
     n_categories: int | None = None,
+    interval_bounds: np.ndarray | None = None,
 ) -> np.ndarray:
     """Return the `ObservationEvent` code of each value of one measurement.
 
     Bounds are compared exactly, without tolerance, as in `measurement_loglik`:
-    a Tobit value at or beyond a finite bound is censored there.
+    a Tobit value at or beyond a finite bound is censored there. A Tobit
+    observation with a missing value and an interval `(lo, hi]` is `LOWER_TAIL`
+    if `lo = -inf`, `UPPER_TAIL` if `hi = inf`, and `INTERVAL` otherwise.
 
     Args:
         values: 1d float64 array of submitted values; NaN marks a missing value.
@@ -219,14 +252,17 @@ def classify_observations(
         lower: Tobit lower censoring bound (`-inf` if none).
         upper: Tobit upper censoring bound (`+inf` if none).
         n_categories: Number of categories of an ordered-probit measurement.
+        interval_bounds: Array of shape (n_obs, 2) with the lower and the upper
+            end of the latent interval of each Tobit observation that is known
+            only by an interval; NaN where none is.
 
     Return:
         1d int8 array of `ObservationEvent` codes.
 
     Raises:
         ValueError: If a probit value is not 0 or 1, an ordered-probit value is not
-            an integer code in `0..n_categories-1`, or a limited-family value is
-            infinite.
+            an integer code in `0..n_categories-1`, a limited-family value is
+            infinite, or an interval is invalid or accompanies a value.
 
     """
     values = np.asarray(values, dtype=np.float64)
@@ -270,7 +306,42 @@ def classify_observations(
         upper_tail = values >= upper
     events = np.where(lower_tail, ObservationEvent.LOWER_TAIL, events)
     events = np.where(upper_tail, ObservationEvent.UPPER_TAIL, events)
+    if interval_bounds is not None:
+        events = _with_interval_events(events, missing, interval_bounds)
     return events.astype(np.int8)
+
+
+def _with_interval_events(
+    events: np.ndarray, missing: np.ndarray, interval_bounds: np.ndarray
+) -> np.ndarray:
+    """Set the events of observations known only by an interval."""
+    lows = np.asarray(interval_bounds[:, 0], dtype=np.float64)
+    highs = np.asarray(interval_bounds[:, 1], dtype=np.float64)
+    given = ~np.isnan(lows) | ~np.isnan(highs)
+    if (given & ~missing).any():
+        msg = "A Tobit observation has both a value and an interval."
+        raise ValueError(msg)
+    if (np.isnan(lows) != np.isnan(highs)).any():
+        msg = (
+            "A Tobit interval needs both ends; mark an open end by -inf or inf, "
+            "not NaN."
+        )
+        raise ValueError(msg)
+    lo, hi = lows[given], highs[given]
+    if not (lo < hi).all():
+        msg = "The lower end of a Tobit interval must be below its upper end."
+        raise ValueError(msg)
+    if (np.isinf(lo) & np.isinf(hi)).any():
+        msg = "A Tobit interval needs at least one finite end."
+        raise ValueError(msg)
+    interval_events = np.where(
+        np.isneginf(lows),
+        ObservationEvent.LOWER_TAIL,
+        np.where(
+            np.isposinf(highs), ObservationEvent.UPPER_TAIL, ObservationEvent.INTERVAL
+        ),
+    )
+    return np.where(given, interval_events, events)
 
 
 def measurement_loglik(

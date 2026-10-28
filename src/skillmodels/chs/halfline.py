@@ -21,7 +21,8 @@ observation, which is the same update with `d = 1` and the standardized innovati
 `(y - mu) / s` in place of `direction * r`.
 
 An interval event `lo < y* <= hi` -- an ordered-probit category between two finite
-cutpoints -- is the same update with the moments of `z = (y* - mu) / s` truncated to
+cutpoints, or a Tobit observation known only by an interval with two finite ends -- is
+the same update with the moments of `z = (y* - mu) / s` truncated to
 `(alpha, beta] = ((lo - mu) / s, (hi - mu) / s]`: probability
 `Z = Phi(beta) - Phi(alpha)`, `E[z]` in place of `direction * r`, and
 `d = 1 - Var[z]` (`normal_interval_terms`).
@@ -48,6 +49,7 @@ from skillmodels.common.measurement_models import (
     MeasurementModel,
     ObservationEvent,
     OrderedProbitMeasurement,
+    TobitMeasurement,
     measurement_family_arrays,
 )
 from skillmodels.common.normal_terms import (
@@ -57,7 +59,13 @@ from skillmodels.common.normal_terms import (
 )
 
 # Scan inputs that only the limited-measurement update consumes.
-LIMITED_LOOP_KEYS = ("events", "is_limited", "cut_table", "codes_from_values")
+LIMITED_LOOP_KEYS = (
+    "events",
+    "is_limited",
+    "cut_table",
+    "codes_from_values",
+    "interval_bounds",
+)
 
 
 @dataclass(frozen=True)
@@ -90,8 +98,8 @@ class LimitedUpdates:
     """Integer array like `base_table` with the position of each cutpoint in the
     parameter vector, -1 for fixed entries."""
     has_intervals: bool
-    """Whether an ordered-probit measurement has more than two categories, so that
-    `INTERVAL` events can occur."""
+    """Whether `INTERVAL` events can occur: an ordered-probit measurement has more
+    than two categories, or a Tobit measurement has `interval_columns`."""
 
 
 def get_limited_updates(
@@ -113,6 +121,10 @@ def get_limited_updates(
     is_tobit = families == int(MeasurementFamily.TOBIT)
     is_ordered = families == int(MeasurementFamily.ORDERED_PROBIT)
     models = [measurement_models.get(var) for var in variables]
+    has_tobit_intervals = any(
+        isinstance(m, TobitMeasurement) and m.interval_columns is not None
+        for m in models
+    )
     n_categories = [
         m.n_categories if isinstance(m, OrderedProbitMeasurement) else 2 for m in models
     ]
@@ -138,7 +150,8 @@ def get_limited_updates(
         codes_from_values=(families == int(MeasurementFamily.PROBIT)) | is_ordered,
         base_table=base_table,
         cut_positions=cut_positions,
-        has_intervals=bool(np.any(is_ordered & (np.array(n_categories) > 2))),
+        has_intervals=has_tobit_intervals
+        or bool(np.any(is_ordered & (np.array(n_categories) > 2))),
     )
 
 
@@ -157,6 +170,7 @@ def get_event_thresholds(
     events: Array,
     cut_table: Array,
     codes_from_values: Array,
+    interval_bounds: Array | None = None,
 ) -> Array:
     """Return the `[upper, lower]` latent ends of each observation's event.
 
@@ -165,15 +179,23 @@ def get_event_thresholds(
         events: 1d int8 array of length n_obs with `ObservationEvent` codes.
         cut_table: 1d cut-value table `T` of the update row.
         codes_from_values: Whether the observed value is the code.
+        interval_bounds: Array of shape (n_obs, 2) with the `[lower, upper]` ends of
+            the observations known only by an interval, NaN elsewhere; None if the
+            model has no such observations.
 
     Return:
-        Array of shape (n_obs, 2) with `T[k + 1]` and `T[k]` for code `k`.
+        Array of shape (n_obs, 2) with `T[k + 1]` and `T[k]` for code `k`, or the
+        reversed interval ends of an observation known only by an interval.
 
     """
     value_codes = jnp.where(events == ObservationEvent.MISSING, 0.0, measurements)
     tail_codes = jnp.where(events == ObservationEvent.UPPER_TAIL, 2, 0)
     codes = jnp.where(codes_from_values, value_codes.astype(jnp.int32), tail_codes)
-    return jnp.stack([cut_table[codes + 1], cut_table[codes]], axis=1)
+    thresholds = jnp.stack([cut_table[codes + 1], cut_table[codes]], axis=1)
+    if interval_bounds is None:
+        return thresholds
+    given = ~jnp.isnan(interval_bounds[:, :1])
+    return jnp.where(given, interval_bounds[:, ::-1], thresholds)
 
 
 def limited_update_from_loop_kwargs(
@@ -187,13 +209,14 @@ def limited_update_from_loop_kwargs(
     update_kwargs = {
         k: v
         for k, v in kwargs.items()
-        if k not in ("is_limited", "cut_table", "codes_from_values")
+        if k not in ("is_limited", "cut_table", "codes_from_values", "interval_bounds")
     }
     thresholds = get_event_thresholds(
         measurements=kwargs["measurements"],
         events=kwargs["events"],
         cut_table=kwargs["cut_table"],
         codes_from_values=kwargs["codes_from_values"],
+        interval_bounds=kwargs.get("interval_bounds"),
     )
     return kalman_update_limited(
         **update_kwargs, thresholds=thresholds, has_intervals=has_intervals
@@ -228,9 +251,9 @@ def kalman_update_limited(
         thresholds: Array of shape (2,) or (n_obs, 2) with the upper and the lower
             end of the latent interval of the event: `LOWER_TAIL` (`y* <= upper`)
             reads the first, `UPPER_TAIL` (`y* > lower`) the second and `INTERVAL`
-            both. Probit uses `[0, 0]`, Tobit its bounds `[lower, upper]`, ordered
-            probit the cutpoints around each observed category. Unread entries may
-            be infinite.
+            both. Probit uses `[0, 0]`, Tobit its bounds `[lower, upper]` or the
+            reversed ends of an observed interval, ordered probit the cutpoints
+            around each observed category. Unread entries may be infinite.
         controls: Array of shape (n_obs, n_controls).
         log_mixture_weights: Array of shape (n_obs, n_mixtures).
         has_intervals: Whether `INTERVAL` events can occur. Static; without them
