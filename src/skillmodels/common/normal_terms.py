@@ -17,6 +17,12 @@ _HALF_RANGE = 2.0**1023
 _CONTINUED_FRACTION_DEPTH = 24
 _NARROW_SWITCH = 0.25
 _SERIES_ORDER = 21
+# `source_interval_terms` selects its branches from `log(w max(1, |c|))`: the narrow
+# series up to `log(2 * _NARROW_SWITCH)`; beyond `log(760)` the ratio `Phi(a) / Phi(b)`
+# is below `exp(-760)` (if `|c| >= 1`, `c w < -760`; else `a < -380`), which is 0 in
+# float64, so the interval is the half-line below `b`.
+_LOG_NARROW_SWITCH = -0.69314718055994530942
+_LOG_FAR_SWITCH = 6.63331843328037917
 
 
 def log_normal_interval_mass(lower: Array, upper: Array) -> Array:
@@ -129,9 +135,17 @@ def source_interval_terms(
       source interval when the two rounded standardized ends coincide (there a
       difference of their log-CDFs would be 0).
 
-    The two branches agree to rounding at their boundary. Values and derivatives are
-    finite whenever the correctly rounded log mass is a finite float, that is for
-    `|c|` up to about `2^512`; beyond, `log Z` is `-inf`.
+    Standardized quantities may leave the float range while the log mass is a
+    finite float: a standardized end beyond `2^1023` (replaced by the infinity of
+    its sign before any division), a width beyond `exp(709)`, or a tilt `c w` beyond
+    the largest float. Then the ratio `q = Phi(a) / Phi(b)` is 0 in float64 -- also
+    whenever `w max(1, |c|) > 760`, since then `c w < -760` or `a < -380` -- and the
+    interval is the half-line below `b`: `log q` is set to `-inf` and the arguments
+    of every other operation of that branch are replaced by finite placeholders, so
+    that no `0 * inf` arises in a value or in a derivative of a discarded branch.
+    The branches agree to rounding at their boundaries. Values and derivatives are
+    finite floats whenever the correctly rounded log mass and the derivatives are
+    (`|c|` up to about `2^512`; beyond, `log Z` is `-inf`).
     """
     lower = jnp.asarray(lower, dtype=jnp.float64)
     upper = jnp.asarray(upper, dtype=jnp.float64)
@@ -144,9 +158,17 @@ def source_interval_terms(
     flip = midpoint > 0.0
     a, b = jnp.where(flip, -b, a), jnp.where(flip, -a, b)
     centre = jnp.where(flip, -midpoint, midpoint)
-    width = jnp.exp(log_width)
+    # The branch is selected from log(w max(1, |c|)); an infinite standardized end
+    # (a, b or c beyond the float range) makes the interval a half-line below b.
+    ends_finite = jnp.isfinite(a) & jnp.isfinite(b)
+    log_tilt = log_width + jnp.log(
+        jnp.maximum(1.0, -jnp.where(ends_finite, centre, 0.0))
+    )
+    narrow = ends_finite & (log_tilt <= _LOG_NARROW_SWITCH)
+    far = ~ends_finite | (log_tilt > _LOG_FAR_SWITCH)
+    moderate = ~narrow & ~far
+    width = jnp.exp(jnp.where(far, 0.0, log_width))
     half = 0.5 * width
-    narrow = half * jnp.maximum(1.0, -centre) <= _NARROW_SWITCH
 
     log_z_n, mean_n, var_n = _narrow_interval_moments(
         jnp.where(narrow, centre, 0.0),
@@ -154,14 +176,16 @@ def source_interval_terms(
         log_width=jnp.where(narrow, log_width, 0.0),
     )
 
-    a_w = jnp.where(narrow, -1.0, a)
+    a_w = jnp.where(moderate, a, -1.0)
     b_w = jnp.where(narrow, 1.0, b)
     _, mills_a, log_mills_a, var_a = _tail_terms_with_log_mills(a_w)
     log_cdf_b, mills_b, log_mills_b, var_b = _tail_terms_with_log_mills(b_w)
-    log_q = (
-        jnp.where(narrow, 0.0, centre) * jnp.where(narrow, 2.0, width)
+    log_q = jnp.where(
+        far,
+        -jnp.inf,
+        jnp.where(moderate, centre, 0.0) * jnp.where(moderate, width, 2.0)
         + log_mills_b
-        - log_mills_a
+        - log_mills_a,
     )
     one_minus_q = -jnp.expm1(log_q)
     q = jnp.exp(log_q)
@@ -193,10 +217,38 @@ def _scaled_difference(minuend: Array, subtrahend: Array, scale: Array) -> Array
     Where no operand reaches `2^1023` the operations are literally
     `(minuend - subtrahend) / scale`; elsewhere the operands are halved and the
     quotient is doubled, which rounds once in the subtraction and once in the
-    division, like the plain form. A quotient that is not a finite float is `inf`.
+    division, like the plain form. A quotient beyond `2^1023` in magnitude is the
+    infinity of its sign, decided before the division.
     """
     factor = _halving_factor(minuend, subtrahend)
-    return (minuend * factor - subtrahend * factor) / scale / factor
+    difference = minuend * factor - subtrahend * factor
+    # A quotient beyond 2^1023 is replaced by the infinity of its sign before the
+    # division, so no division or derivative of one forms an infinite value.
+    overflow = jnp.abs(difference) > scale * (factor * _HALF_RANGE)
+    quotient = _divide(difference, jnp.where(overflow, 1.0, scale)) / factor
+    return jnp.where(overflow, jnp.where(difference < 0.0, -jnp.inf, jnp.inf), quotient)
+
+
+def _divide_impl(numerator: Array, denominator: Array) -> Array:
+    """Return `numerator / denominator` with the derivative `-quotient / denominator`.
+
+    The default derivative in the denominator forms `denominator^-2`, which
+    overflows below `1e-154` although the derivative itself is representable.
+    """
+    return numerator / denominator
+
+
+def _divide_jvp(
+    primals: tuple[Array, Array], tangents: tuple[Array, Array]
+) -> tuple[Array, Array]:
+    numerator, denominator = primals
+    numerator_dot, denominator_dot = tangents
+    quotient = numerator / denominator
+    return quotient, (numerator_dot - quotient * denominator_dot) / denominator
+
+
+_divide = jax.custom_jvp(_divide_impl)
+_divide.defjvp(_divide_jvp)
 
 
 def _log_difference(upper: Array, lower: Array) -> Array:

@@ -53,6 +53,7 @@ from skillmodels.chs.maximization_inputs import get_maximization_inputs
 from skillmodels.chs.options import CHSEstimationOptions
 from skillmodels.common.measurement_models import ObservationEvent, TobitMeasurement
 from skillmodels.common.model_spec import FactorSpec, ModelSpec, Normalizations
+from skillmodels.common.normal_terms import source_interval_terms
 
 jax.config.update("jax_enable_x64", True)
 
@@ -463,7 +464,7 @@ def _update_references(rows):
     references = []
     for lower, upper, location, sigma, loading in rows:
         sd = math.hypot(sigma, loading)
-        ref = _reference(lower, upper, location, sd)
+        ref = _extreme_reference(lower, upper, location, sd)
         references.append(
             [
                 ref["log_mass"],
@@ -510,11 +511,146 @@ def test_source_intervals_match_the_oracle_in_the_update() -> None:
         (2.0**1022, 2.0**1023, -(2.0**1023), 2.0**1023, 0.0),
         (*WIDE_COLLAPSE_WITNESS, 0.0),
         (-(2.0**-30), 0.0, -(2.0**30), 1.0, 2.0**-30),
+        *[(*witness, 0.0) for witness in EXTREME_WITNESSES],
     ]
     got = np.asarray(jax.jit(jax.vmap(_scan_update))(jnp.asarray(rows)))
     expected = _update_references(rows)
     _assert_log_masses_close(got[:, 0], expected[:, 0])
     np.testing.assert_allclose(got[:, 1:], expected[:, 1:], rtol=0, atol=1e-8)
+
+
+# `(lo, hi, location, scale)` whose standardized geometry leaves the float range
+# while the log mass is a finite float: the span of the whole float range (mass 1);
+# `c w` beyond the largest float (mass `Phi(0)`); a standardized end beyond the
+# largest float (mass `Phi(0)`).
+EXTREME_WITNESSES = (
+    (-1e308, 1e308, 0.0, 1.0),
+    (-1e200, 0.0, 0.0, 1e-110),
+    (-1e300, 0.0, 0.0, 1e-10),
+)
+
+
+def _extreme_rows() -> list[tuple[float, float, float, float, float]]:
+    """Source intervals whose standardized ends, centre, width or tilt overflow.
+
+    Half-lines in effect (one end beyond `2^1024` standardized, or the other end
+    moderate), the whole line, and moderate standardized intervals at source scales
+    from `2^-1000` to `2^1000`; with both reflections and loadings 0 and `sigma / 2`.
+    """
+    rows = []
+    for sigma in (1e-110, 1e-10, 1.0, 1e10, 1e100):
+        for end in (-8.0, -1.0, 0.0, 1.0, 8.0):
+            for mu in (0.0, 3.0 * sigma):
+                hi = mu + end * sigma
+                rows.append((-1e308, hi, mu, sigma))
+                rows.append((-hi, 1e308, -mu, sigma))
+        rows.append((-1e308, 1e308, 0.0, sigma))
+        rows.append((-1e308, 1e308, 2.0 * sigma, sigma))
+    for exponent in (-1000, -500, 0, 500, 1000):
+        unit = math.ldexp(1.0, exponent)
+        for lower, upper in ((-2.0, -1.5), (-0.3, 0.2), (-40.0, -39.9), (1.0, 9.0)):
+            mu = 3.0 * unit
+            rows.append((mu + lower * unit, mu + upper * unit, mu, unit))
+            rows.append((-mu - upper * unit, -mu - lower * unit, -mu, unit))
+    return [
+        (lo, hi, mu, sigma, loading)
+        for lo, hi, mu, sigma in rows
+        for loading in (0.0, 0.5 * sigma)
+    ]
+
+
+def _extreme_reference(lo: float, hi: float, mu: float, sd: float) -> dict:
+    """Return the oracle or the closed form of an interval that is a half-line.
+
+    With exact standardized ends `a < b`: if `a <= -40` the mass below `a` is below
+    `2^-53` of any `Phi(b)` with `b >= -8`, so the interval is the half-line below
+    `b` (`log Phi(b)`, mean `-r(b)`, variance `1 - r(b) (r(b) + b)`), and the whole
+    line if also `b >= 40`. Reflected intervals use the mirrored closed form.
+    """
+    with localcontext() as context:
+        context.prec = 250
+        lower, upper, mean, scale = map(Decimal.from_float, (lo, hi, mu, sd))
+        a, b = float((lower - mean) / scale), float((upper - mean) / scale)
+    if a > -40.0 or b < -8.0:
+        if b < 40.0 or a > 8.0:
+            return _reference(lo, hi, mu, sd)
+        mirrored = _extreme_reference(-hi, -lo, -mu, sd)
+        return {
+            **mirrored,
+            "z_mean": -mirrored["z_mean"],
+            "d_location": -mirrored["d_location"],
+        }
+    if b >= 40.0:
+        return {
+            "log_mass": 0.0,
+            "z_mean": 0.0,
+            "z_var": 1.0,
+            "d_location": 0.0,
+            "d_log_scale": 0.0,
+        }
+    mass = 0.5 * math.erfc(-b / math.sqrt(2))
+    mills = math.exp(-0.5 * b * b) / (math.sqrt(2 * math.pi) * mass)
+    return {
+        "log_mass": math.log(mass),
+        "z_mean": -mills,
+        "z_var": 1 - mills * (mills + b),
+        "d_location": -mills / sd,
+        "d_log_scale": -mills * b,
+    }
+
+
+def _physical_scores(row: jax.Array) -> jax.Array:
+    """Scores of the log mass in the source location, `sigma` and the loading."""
+    return jax.grad(lambda r: _scan_update(r)[0])(row)[2:]
+
+
+def _kernel_scores(row: jax.Array) -> jax.Array:
+    """Scores of `source_interval_terms` in the location and the log scale."""
+    lower, upper, location, sigma, loading = row
+    scale = jnp.hypot(sigma, loading)
+    scores = jax.grad(
+        lambda theta, ell: source_interval_terms(
+            lower, upper, theta, scale * jnp.exp(ell)
+        )[0],
+        argnums=(0, 1),
+    )(location, 0.0)
+    return jnp.stack(scores)
+
+
+@pytest.mark.long_running
+def test_extreme_source_geometries_keep_finite_values_moments_and_scores() -> None:
+    rows = _extreme_rows()
+    array = jnp.asarray(rows, dtype=jnp.float64)
+    got = np.asarray(jax.jit(jax.vmap(_scan_update))(array))
+    kernel_scores = np.asarray(jax.jit(jax.vmap(_kernel_scores))(array))
+    scores = np.asarray(jax.jit(jax.vmap(_physical_scores))(array))
+    expected, expected_kernel, expected_scores = [], [], []
+    for lo, hi, mu, sigma, loading in rows:
+        sd = math.hypot(sigma, loading)
+        ref = _extreme_reference(lo, hi, mu, sd)
+        ratio = loading / sd
+        expected.append(
+            [ref["log_mass"], ratio * ref["z_mean"], 1 - ratio**2 * (1 - ref["z_var"])]
+        )
+        expected_kernel.append([ref["d_location"], ref["d_log_scale"]])
+        d_scale = ref["d_log_scale"] / sd
+        expected_scores.append(
+            [ref["d_location"], d_scale * sigma / sd, d_scale * loading / sd]
+        )
+    expected, expected_scores = np.asarray(expected), np.asarray(expected_scores)
+    assert np.isfinite(got).all(), rows
+    assert np.isfinite(kernel_scores).all(), rows
+    _assert_log_masses_close(got[:, 0], expected[:, 0])
+    np.testing.assert_allclose(got[:, 1:], expected[:, 1:], rtol=0, atol=1e-8)
+    np.testing.assert_allclose(kernel_scores, expected_kernel, rtol=1e-5, atol=1e-8)
+    # The update divides the loading direction by `s` (`w = v / s`), whose default
+    # derivative in `s` forms `s^-2`; below `s = 1e-154` that overflows, in every
+    # measurement family. The scores through the update are checked above it.
+    regular = array[:, 3] >= 1e-154
+    assert np.isfinite(scores[regular]).all(), rows
+    np.testing.assert_allclose(
+        scores[regular], expected_scores[regular], rtol=1e-5, atol=1e-8
+    )
 
 
 def _source_geometry_rows() -> list[tuple[float, float, float, float, float]]:
@@ -589,6 +725,10 @@ def test_source_geometry_location_and_log_scale_scores() -> None:
         ]
     )
     coordinates = np.array([[2.0, 0.0], [-2.0, 0.0], [1.0, 0.0], [-1.0, 0.0]])
+    sources = np.concatenate(
+        [sources, [[lo, hi, 1.0, scale] for lo, hi, _, scale in EXTREME_WITNESSES]]
+    )
+    coordinates = np.concatenate([coordinates, np.zeros((len(EXTREME_WITNESSES), 2))])
     got = np.asarray(
         jax.jit(jax.vmap(jax.grad(_dimensionless_loglike, argnums=1)))(
             jnp.asarray(sources), jnp.asarray(coordinates)
@@ -598,7 +738,9 @@ def test_source_geometry_location_and_log_scale_scores() -> None:
     for (lo, upper, location_unit, scale_unit), (theta, ell) in zip(
         sources, coordinates, strict=True
     ):
-        ref = _reference(lo, upper, theta * location_unit, scale_unit * math.exp(ell))
+        ref = _extreme_reference(
+            lo, upper, theta * location_unit, scale_unit * math.exp(ell)
+        )
         expected.append([ref["d_location"] * location_unit, ref["d_log_scale"]])
     assert np.isfinite(got).all()
     np.testing.assert_allclose(got, expected, rtol=1e-5, atol=1e-8)

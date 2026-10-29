@@ -240,6 +240,25 @@ predicted state `N(m, P)`, with `μ = a + λ'm`, `s² = σ² + λ'Pλ`:
   arguments before any arithmetic, so their discarded values and derivatives are
   finite. Models without interval columns keep the difference of the standardized
   cutpoints (`normal_interval_terms`), literally unchanged.
+- Standardized intermediates beyond the float range with a finite `ℓ`: `α` or `β`
+  beyond `2^1023` (e.g. `lo = −10^300`, `s = 10^-10`), `w` beyond `e^709` (a span of
+  the whole float range), or `c w` beyond the largest float. The division that
+  would overflow is not performed: the end is replaced by the infinity of its sign
+  before the division (`_scaled_difference`), which also keeps the derivative of
+  the division finite (and its derivative in `s` is `−quotient/s` by a custom rule,
+  not `−num·s^-2`, whose `s^-2` overflows below `s = 10^-154`). The branch is then
+  chosen from `log(w·max(1,|c|))`, which is finite or `+∞`: at most `log(1/2)` the
+  narrow series; above `log 760` — or with an infinite end — `q = Φ(α)/Φ(β)` is 0
+  in float64 (if `|c| ≥ 1`, `c w < −760`; else `α < −380`), and the interval is
+  evaluated as the half-line below `β`: `log q = −∞` exactly, and the arguments of
+  the tilt, the exponential of the log width and the lower-end tail terms are
+  replaced by finite placeholders before those operations, so that neither a value
+  nor the derivative of a discarded branch contains `0·∞`. The far branch changes
+  no value: on its rows the moderate formula gives `q = 0` as well. Derivatives are
+  therefore finite floats wherever `ℓ` and the true derivatives are; the one
+  remaining non-finite derivative in the *update* is shared by every measurement
+  family: `w = v/s` in `kalman_update_limited` differentiates in `s` through
+  `s^-2`, which overflows for `s < 10^-154`.
 
 This is the ordered-probit interval update of §5 with a free `σ` in `s` and the ends
 taken from the data instead of the cutpoint parameters; the square-root update
