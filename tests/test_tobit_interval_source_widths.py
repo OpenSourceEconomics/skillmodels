@@ -1,31 +1,44 @@
-"""Observed Tobit intervals keep their source width under standardization.
+"""Observed Tobit intervals keep their source geometry under standardization.
 
 An observed interval `lo < y* <= hi` enters the CHS update standardized by the
-predicted location `mu` and scale `s`. Rounding `(lo - mu) / s` and `(hi - mu) / s`
-separately can shrink the width of a narrow interval or remove it: at
-`(lo, hi, mu, s) = (0, 1e-17, 1, 1)` both ends round to -1, although the interval has
-the finite log mass -40.5629. The update takes the log width as
-`log(hi - lo) - log(s)` instead, which also stays finite when the standardized width
-or its half underflows: at `(lo, hi, mu, s) = (0, 2^-600, 2^500, 2^500)` the
-standardized width `2^-1100` is below the smallest binary64 number, although the
-interval has the finite log mass -763.8808.
+predicted location `mu` and scale `s`. The update evaluates the original interval,
+not the interval between two separately rounded standardized ends:
 
-The reference is `interval_reference`, a 250-digit decimal integral of the normal
-density in source coordinates: the binary64 inputs are converted exactly before
-centering and scaling, and the integral is a global antiderivative series, not the
-production Hermite or endpoint-CDF formulas. It imports neither the project, JAX,
-NumPy nor SciPy. Its domain is `|standardized end| <= 12` and standardized width
-`>= 1e-40`. Below that, `underflow_reference` bounds the density on the interval:
-`log P = log w - log sqrt(2 pi) - c^2 / 2 + e` with `|e| <= |c| w / 2 + w^2 / 8` for
-standardized centre `c` and width `w`, again from the exact source values. The
-oracles, the public reproducers and the mutation cases are adapted from the external
-review of observed Tobit intervals (`filter_interval_oracle.py`,
+- rounding `(lo - mu) / s` and `(hi - mu) / s` separately can shrink the width of a
+  narrow interval or remove it: at `(lo, hi, mu, s) = (0, 1e-17, 1, 1)` both ends
+  round to -1, although the interval has the finite log mass -40.5629;
+- the standardized width or its half can underflow: at `(0, 2^-600, 2^500, 2^500)`
+  the width `2^-1100` is below the smallest binary64 number, although the log mass
+  is the finite -763.8808;
+- the difference `lo - mu` can overflow although the standardized interval is
+  moderate: at `(-2^1023, -2^1022, 2^1023, 2^1023)` it is `(-2, -1.5]` with log mass
+  -3.1223, while `lo - mu` rounds to `-inf`;
+- two collapsed standardized ends can belong to an interval whose mass is not a
+  narrow-density integral: at `(0, 2^-30, 2^30, 1)` both ends round to `-2^30`,
+  while the density changes by the factor `e` across the interval and the log mass
+  is `-2^59` (a difference of endpoint log-CDFs gives `log 0`).
+
+Three independent references, all 250-digit decimal integrals in source coordinates
+(the binary64 inputs are converted exactly before centering and scaling; none of
+them imports the project, JAX, NumPy or SciPy), cover the tested domain:
+
+- `interval_reference`: a global antiderivative series of the normal density, for
+  `|standardized end| <= 12` and standardized width `>= 1e-40`;
+- `underflow_reference`: the density enclosure `log P = log w - log sqrt(2 pi)
+  - c^2 / 2 + e`, `|e| <= |c| w / 2 + w^2 / 8`, for widths `w <= 2^-1000`;
+- `source_reference`: the integral over the unit coordinate `z = a + w u` with
+  bounded tilt `A = -a w` and curvature `B = w^2`, which covers the far tails.
+
+The oracles, the public reproducers and the mutation cases are adapted from the
+external review of observed Tobit intervals (`filter_interval_oracle.py`,
 `filter_public_witness.py`, `test_source_intervals.py`,
 `source_width_underflow_oracle.py`, `source_width_underflow_witness.py`,
-`test_source_width_underflow.py`).
+`test_source_width_underflow.py`, `source_geometry_reference.py`,
+`source_geometry_witness.py`, `test_source_geometry.py`).
 """
 
 import math
+from dataclasses import dataclass
 from decimal import Decimal, localcontext
 from functools import cache
 
@@ -108,6 +121,7 @@ def interval_reference(
             "z_var": float(z_second - z_mean * z_mean),
             "d_location": float(z_mean / sd),
             "d_scale": float((z_second - 1) / sd),
+            "d_log_scale": float(z_second - 1),
         }
 
 
@@ -149,16 +163,88 @@ def underflow_reference(
         }
 
 
+@cache
+def source_reference(
+    lo: float, hi: float, location: float, scale: float
+) -> dict[str, float]:
+    """Return log mass, standardized moments and scores by a unit-interval integral.
+
+    With `z = a + w u`, `u` in `[0, 1]`, `a = (lo - location) / scale` and
+    `w = (hi - lo) / scale`, the mass is `phi(a) w I_0` with
+    `I_r = int_0^1 u^r exp(A u - B u^2 / 2) du`, `A = -a w`, `B = w^2`. The Taylor
+    coefficients of the integrand follow `n c_n = A c_{n-1} - B c_{n-2}`, so
+    `I_r = sum_n c_n / (n + r + 1)`; the series stops when the exponential majorant
+    of the omitted terms is below `1e-200 exp(-T)`, `T = |A| + B / 2`, a lower bound
+    of `I_0`. The domain is `|A| <= 16` and `B <= 16`, which reaches arbitrarily far
+    into the tails for narrow enough intervals. `d_log_scale` is the derivative of
+    the log mass with respect to `log(scale)`.
+    """
+    values = tuple(float(x) for x in (lo, hi, location, scale))
+    if not all(math.isfinite(x) for x in values):
+        raise ValueError("The oracle requires finite inputs")
+    if not values[0] < values[1] or not values[3] > 0:
+        raise ValueError("Require lo < hi and scale > 0")
+    with localcontext() as context:
+        context.prec = 250
+        lower, upper, mean, sd = map(Decimal.from_float, values)
+        width = (upper - lower) / sd
+        a = (lower - mean) / sd
+        tilt, curvature = -a * width, width * width
+        if abs(tilt) > 16 or curvature > 16:
+            raise ValueError("Outside the oracle domain |A| <= 16, B <= 16")
+        total = abs(tilt) + curvature / 2
+        goal = Decimal("1e-200") * (-total).exp()
+        integrals = [Decimal(1), Decimal(1) / 2, Decimal(1) / 3]
+        previous_two, previous = Decimal(0), Decimal(1)
+        majorant = total
+        for n in range(1, 4097):
+            coefficient = (tilt * previous - curvature * previous_two) / n
+            for r in range(3):
+                integrals[r] += coefficient / (n + r + 1)
+            previous_two, previous = previous, coefficient
+            if n % 2 == 0:
+                half_degree = n // 2
+                majorant *= total / (half_degree + 1)
+                ratio = total / (half_degree + 2)
+                if ratio < 1 and majorant / (1 - ratio) <= goal:
+                    break
+        else:
+            raise ArithmeticError("Oracle series failed to converge")
+        i0, i1, i2 = integrals
+        u_mean, u_second = i1 / i0, i2 / i0
+        z_mean = a + width * u_mean
+        z_second = a * a + 2 * a * width * u_mean + curvature * u_second
+        log_mass = -a * a / 2 - (2 * _pi()).sqrt().ln() + width.ln() + i0.ln()
+        return {
+            "log_mass": float(log_mass),
+            "z_mean": float(z_mean),
+            "z_var": float(curvature * (u_second - u_mean * u_mean)),
+            "d_location": float(z_mean / sd),
+            "d_scale": float((z_second - 1) / sd),
+            "d_log_scale": float(z_second - 1),
+        }
+
+
 def _reference(lo: float, hi: float, location: float, scale: float) -> dict:
-    """Return the oracle whose domain contains the standardized width."""
-    width = (Decimal(hi) - Decimal(lo)) / Decimal(scale)
-    if width < Decimal("1e-40"):
-        return underflow_reference(lo, hi, location, scale)
-    return interval_reference(lo, hi, location, scale)
+    """Return the oracle whose domain contains the standardized geometry."""
+    sd = Decimal(scale)
+    width = (Decimal(hi) - Decimal(lo)) / sd
+    a = (Decimal(lo) - Decimal(location)) / sd
+    if max(abs(a), abs(a + width)) <= 12:
+        if width >= Decimal("1e-40"):
+            return interval_reference(lo, hi, location, scale)
+        if width <= Decimal(2) ** -1000:
+            return underflow_reference(lo, hi, location, scale)
+    return source_reference(lo, hi, location, scale)
 
 
 # `(lo, hi, location, scale)` with standardized width `2^-1100`.
 UNDERFLOW_WITNESS = (0.0, 2.0**-600, 2.0**500, 2.0**500)
+# `lo - location` overflows to -inf; the standardized interval is `(-2, -1.5]`.
+AFFINE_OVERFLOW_WITNESS = (-(2.0**1023), -(2.0**1022), 2.0**1023, 2.0**1023)
+# Both standardized ends round to `-2^30`; the standardized width times the centre
+# is 1, so the interval is not a narrow-density integral. Log mass `-2^59`.
+WIDE_COLLAPSE_WITNESS = (0.0, 2.0**-30, 2.0**30, 1.0)
 
 
 def source_cases() -> list[tuple[float, float, float, float]]:
@@ -204,8 +290,41 @@ def test_standardized_ends_lose_the_width_of_source_intervals() -> None:
     assert abs(witness["d_location"] + 1.0) < 1e-15
 
 
-def _build_inputs(lo=0.0, hi=1e-17, location=1.0, scale=1.0, loading=0.0, split=1):
-    """Two persons, two periods, a normalized anchor and one interval-only Tobit."""
+def test_standardized_ends_lose_the_location_and_span_of_source_intervals() -> None:
+    """The class beyond widths: affine overflow and collapsed ends of a tilted mass."""
+    lo, hi, location, scale = AFFINE_OVERFLOW_WITNESS
+    assert lo - location == -math.inf
+    assert (hi - location) / scale == -1.5
+    overflow = interval_reference(*AFFINE_OVERFLOW_WITNESS)
+    assert abs(overflow["log_mass"] + 3.122269455465259) < 1e-14
+    assert (
+        abs(
+            overflow["log_mass"]
+            - source_reference(*AFFINE_OVERFLOW_WITNESS)["log_mass"]
+        )
+        < 1e-14
+    )
+    lo, hi, location, scale = WIDE_COLLAPSE_WITNESS
+    lower, upper = (lo - location) / scale, (hi - location) / scale
+    assert lower == upper == -(2.0**30)
+    assert 0.5 * (hi - lo) / scale * abs(lower) == 0.5
+    assert source_reference(*WIDE_COLLAPSE_WITNESS)["log_mass"] == -(2.0**59)
+
+
+def _build_inputs(
+    lo=0.0,
+    hi=1e-17,
+    location=1.0,
+    scale=1.0,
+    loading=0.0,
+    split=1,
+    interval_period=0,
+):
+    """Two persons, two periods, a normalized anchor and one interval-only Tobit.
+
+    The interval is observed in `interval_period`; `_expected_contributions` assumes
+    period 0 unless the loading is 0.
+    """
     spec = ModelSpec(
         factors={
             "skills": FactorSpec(
@@ -229,8 +348,8 @@ def _build_inputs(lo=0.0, hi=1e-17, location=1.0, scale=1.0, loading=0.0, split=
             "period": period,
             "anchor": float(2 * person - 1),
             "y": np.nan,
-            "y_lo": lo if period == 0 else np.nan,
-            "y_hi": hi if period == 0 else np.nan,
+            "y_lo": lo if period == interval_period else np.nan,
+            "y_hi": hi if period == interval_period else np.nan,
         }
         for person in range(2)
         for period in range(2)
@@ -355,8 +474,29 @@ def _update_references(rows):
     return np.asarray(references)
 
 
-def test_narrow_source_intervals_match_the_oracle_in_the_update() -> None:
-    """Collapsed, distorted, adjacent-float, reflected, scaled, underflowing."""
+def _assert_log_masses_close(actual, expected) -> None:
+    """Require finite values within `max(1e-10, 4 ulp(expected))` of the reference.
+
+    Moderate log masses keep the absolute budget `1e-10` with `rtol=0`. Far in the
+    tails the correctly rounded log mass can be of the order `-2^59`, whose ulp is
+    128, so no real-number guarantee below the float spacing exists; four ulps allow
+    for the rounding of the leading `-c^2 / 2` term and the final sums. Neither an
+    infinite value nor the public clipping floor can pass.
+    """
+    actual, expected = np.asarray(actual), np.asarray(expected)
+    assert np.isfinite(actual).all(), actual
+    assert np.isfinite(expected).all(), expected
+    tolerance = np.maximum(1e-10, 4 * np.abs(np.spacing(expected)))
+    difference = np.abs(actual - expected)
+    assert np.all(difference <= tolerance), (actual, expected, difference, tolerance)
+
+
+def test_source_intervals_match_the_oracle_in_the_update() -> None:
+    """One jitted batch over the source-geometry classes.
+
+    Collapsed, distorted, adjacent-float, reflected, scaled, underflowing,
+    affine-overflowing and collapsed-wide intervals.
+    """
     rows = [
         (0.0, 1e-17, 1.0, 1.0, 0.0),
         (0.0, 1e-9, -1.0, 1.0, 0.5),
@@ -364,13 +504,155 @@ def test_narrow_source_intervals_match_the_oracle_in_the_update() -> None:
         (0.25, math.nextafter(0.25, math.inf), 4.0, 1.0, 0.5),
         (0.0, 2.0**20 * 1e-17, 2.0**20, 2.0**20, 2.0**19),
         (0.0, 0.3, 0.1, 1.0, 0.5),
-        (*UNDERFLOW_WITNESS[:3], UNDERFLOW_WITNESS[3], 0.0),
+        (*UNDERFLOW_WITNESS, 0.0),
         (-(2.0**-600), 0.0, -(2.0**500), 2.0**500, 2.0**499),
+        (*AFFINE_OVERFLOW_WITNESS, 0.0),
+        (2.0**1022, 2.0**1023, -(2.0**1023), 2.0**1023, 0.0),
+        (*WIDE_COLLAPSE_WITNESS, 0.0),
+        (-(2.0**-30), 0.0, -(2.0**30), 1.0, 2.0**-30),
     ]
     got = np.asarray(jax.jit(jax.vmap(_scan_update))(jnp.asarray(rows)))
     expected = _update_references(rows)
-    np.testing.assert_allclose(got[:, 0], expected[:, 0], rtol=0, atol=1e-10)
+    _assert_log_masses_close(got[:, 0], expected[:, 0])
     np.testing.assert_allclose(got[:, 1:], expected[:, 1:], rtol=0, atol=1e-8)
+
+
+def _source_geometry_rows() -> list[tuple[float, float, float, float, float]]:
+    """Affine-overflow, collapsed-wide and branch-boundary families with loadings."""
+    rows = []
+    # The same standardized `(-2, -1.5]` across the overflow boundary of `lo - mu`.
+    for power in (0, -1, -2, -10):
+        lo, hi, location, sigma = [
+            math.ldexp(x, power) for x in AFFINE_OVERFLOW_WITNESS
+        ]
+        rows.append((lo, hi, location, sigma, 0.0))
+        rows.append((-hi, -lo, -location, sigma, 0.0))
+    # The far-tail tilt `|c| w` decides between the narrow series and the wide
+    # branch at 0.5; at exponent 27 the ends separate for the tilts 2 and 4.
+    for exponent in (27, 30, 40):
+        location = math.ldexp(1.0, exponent)
+        for tilt in (0.25, 0.5 - 2**-10, 0.5, 0.5 + 2**-10, 1.0, 2.0, 4.0):
+            hi = math.ldexp(tilt, -exponent)
+            rows.append((0.0, hi, location, 1.0, 0.0))
+            rows.append((-hi, 0.0, -location, 1.0, 0.0))
+        # A loading of `1 / location` maps the standardized mean to a unit shift.
+        hi = math.ldexp(1.0, -exponent)
+        rows.append((0.0, hi, location, 1.0, 1.0 / location))
+        rows.append((-hi, 0.0, -location, 1.0, 1.0 / location))
+    # Joint power-of-two rescalings keep the far-tail standardized geometry.
+    for exponent in (-8, 100, 400):
+        rows.append(
+            (
+                0.0,
+                math.ldexp(1.0, exponent - 30),
+                math.ldexp(1.0, exponent + 30),
+                math.ldexp(1.0, exponent),
+                0.0,
+            )
+        )
+    return rows
+
+
+@pytest.mark.long_running
+def test_source_geometry_family_values_moments_and_transformed_paths() -> None:
+    rows = _source_geometry_rows()
+    array = jnp.asarray(rows, dtype=jnp.float64)
+    expected = _update_references(rows)
+    compiled = jax.jit(jax.vmap(_scan_update))
+    batched = np.asarray(compiled(array))
+    assert batched.dtype == np.float64
+    assert np.isfinite(batched).all()
+    _assert_log_masses_close(batched[:, 0], expected[:, 0])
+    np.testing.assert_allclose(batched[:, 1:], expected[:, 1:], rtol=0, atol=1e-8)
+    permutation = np.random.default_rng(107).permutation(len(array))
+    permuted = np.asarray(compiled(array[permutation]))
+    _assert_log_masses_close(permuted[:, 0], batched[permutation, 0])
+    np.testing.assert_allclose(
+        permuted[:, 1:], batched[permutation, 1:], rtol=0, atol=1e-12
+    )
+    for index in (0, 8, 16):
+        eager = np.asarray(_scan_update(array[index]))
+        _assert_log_masses_close(eager[0], expected[index, 0])
+        np.testing.assert_allclose(eager[1:], expected[index, 1:], rtol=0, atol=1e-8)
+
+
+@pytest.mark.long_running
+def test_source_geometry_location_and_log_scale_scores() -> None:
+    """Scale-one controls and far collapsed intervals keep informative scores."""
+    far, hi = 2.0**30, 2.0**-30
+    sources = np.array(
+        [
+            [-2.0, -1.0, 1.0, 1.0],
+            [1.0, 2.0, 1.0, 1.0],
+            [0.0, hi, far, 1.0],
+            [-hi, 0.0, far, 1.0],
+        ]
+    )
+    coordinates = np.array([[2.0, 0.0], [-2.0, 0.0], [1.0, 0.0], [-1.0, 0.0]])
+    got = np.asarray(
+        jax.jit(jax.vmap(jax.grad(_dimensionless_loglike, argnums=1)))(
+            jnp.asarray(sources), jnp.asarray(coordinates)
+        )
+    )
+    expected = []
+    for (lo, upper, location_unit, scale_unit), (theta, ell) in zip(
+        sources, coordinates, strict=True
+    ):
+        ref = _reference(lo, upper, theta * location_unit, scale_unit * math.exp(ell))
+        expected.append([ref["d_location"] * location_unit, ref["d_log_scale"]])
+    assert np.isfinite(got).all()
+    np.testing.assert_allclose(got, expected, rtol=1e-5, atol=1e-8)
+
+
+@pytest.mark.long_running
+@pytest.mark.parametrize("split", [1, 2], ids=["unsplit", "split_two"])
+@pytest.mark.parametrize(
+    "witness",
+    [AFFINE_OVERFLOW_WITNESS, WIDE_COLLAPSE_WITNESS],
+    ids=["affine_overflow", "wide_collapse"],
+)
+def test_public_terminal_interval_keeps_its_source_geometry(witness, split) -> None:
+    """An interval at the last update shows a wrong finite value on its own.
+
+    Raw contributions, every public objective, posterior means and scores.
+    """
+    lo, hi, location, scale = witness
+    inputs, params = _build_inputs(
+        lo=lo, hi=hi, location=location, scale=scale, split=split, interval_period=1
+    )
+    ref = _reference(lo, hi, location, scale)
+    anchor = -0.5 * math.log(4 * math.pi) - 0.25
+    debug = inputs["debug_loglike"](params)
+    raw = (
+        debug["all_contributions"]
+        .set_index(["aug_period", "measurement", "id"])
+        .sort_index()["contribution"]
+    )
+    _assert_log_masses_close(
+        raw,
+        [anchor, anchor, 0.0, 0.0, anchor, anchor, ref["log_mass"], ref["log_mass"]],
+    )
+    person = np.full(2, 2 * anchor + ref["log_mass"])
+    for got in (inputs["loglikeobs"](params), debug["contributions"]):
+        _assert_log_masses_close(got, person)
+    value, gradient = inputs["loglike_and_gradient"](params)
+    for got in (inputs["loglike"](params), debug["value"], value):
+        _assert_log_masses_close(got, person.sum())
+    # The zero loading leaves the anchor posteriors `+/- 1/2` unchanged.
+    post = debug["post_update_states"].sort_values(["aug_period", "measurement", "id"])
+    np.testing.assert_allclose(post["skills"], [-0.5, 0.5] * 4, rtol=0, atol=1e-10)
+    assert np.isfinite(gradient).all()
+    if scale == 1.0:
+        positions = [
+            params.index.get_loc(("controls", 1, "y", "constant")),
+            params.index.get_loc(("meas_sds", 1, "y", "-")),
+        ]
+        np.testing.assert_allclose(
+            gradient[positions],
+            2 * np.array([ref["d_location"], ref["d_scale"]]),
+            rtol=1e-5,
+            atol=1e-8,
+        )
 
 
 @pytest.mark.long_running
@@ -630,14 +912,16 @@ def test_underflowing_widths_values_moments_and_transformed_paths() -> None:
 
 
 def _dimensionless_loglike(source: jax.Array, coordinates: jax.Array) -> jax.Array:
-    """Log mass at location `theta * base` and scale `base * exp(ell)`.
+    """Log mass at location `theta * location_unit` and scale `scale_unit * exp(ell)`.
 
     Differentiating in `(theta, ell)` gives O(1) scores, which an absolute tolerance
     cannot pass as zero, unlike the tiny scores in the source location and scale.
     """
-    lower, upper, base = source
+    lower, upper, location_unit, scale_unit = source
     theta, ell = coordinates
-    row = jnp.stack([lower, upper, theta * base, base * jnp.exp(ell), jnp.array(0.0)])
+    row = jnp.stack(
+        [lower, upper, theta * location_unit, scale_unit * jnp.exp(ell), jnp.array(0.0)]
+    )
     return _scan_update(row)[0]
 
 
@@ -646,10 +930,10 @@ def test_underflowing_widths_location_and_log_scale_scores() -> None:
     _, hi, _, sigma = UNDERFLOW_WITNESS
     sources = np.array(
         [
-            [0.0, hi, sigma],
-            [-hi, 0.0, sigma],
-            [0.0, 2.0**-574, sigma],
-            [0.0, 2.0**-575, sigma],
+            [0.0, hi, sigma, sigma],
+            [-hi, 0.0, sigma, sigma],
+            [0.0, 2.0**-574, sigma, sigma],
+            [0.0, 2.0**-575, sigma, sigma],
         ]
     )
     coordinates = np.array([[0.5, 0.0], [-0.5, 0.0], [0.5, 0.0], [0.5, 0.0]])
@@ -659,7 +943,7 @@ def test_underflowing_widths_location_and_log_scale_scores() -> None:
         )
     )
     expected = []
-    for (lo, upper, base), (theta, _) in zip(sources, coordinates, strict=True):
+    for (lo, upper, base, _), (theta, _) in zip(sources, coordinates, strict=True):
         ref = underflow_reference(lo, upper, theta * base, base)
         expected.append([ref["d_location"] * base, ref["d_log_scale"]])
     assert np.isfinite(got).all()
@@ -675,59 +959,109 @@ MIXTURE_EVENTS = (
 )
 MIXTURE_MEANS = (-0.25, 0.25)
 MIXTURE_WEIGHTS = (0.3, 0.7)
-SIGMA = UNDERFLOW_WITNESS[3]
-LOADING = OFFSET = SIGMA / 2
-EXACT, LOWER_END, UPPER_END = SIGMA / 4, SIGMA / 4, 3 * SIGMA / 4
 
 
-def _underflow_mixture_kwargs(events: tuple[ObservationEvent, ...]) -> dict:
-    """One row per event, two mixture components, the underflow witness as interval."""
-    lo, hi = UNDERFLOW_WITNESS[:2]
-    first_bounds = [lo, hi] if events[0] == ObservationEvent.INTERVAL else [jnp.nan] * 2
+@dataclass(frozen=True)
+class _MixtureGeometry:
+    """Source values of a five-event, two-component batch around one interval.
+
+    The loading is `sigma / 2`, the exact value and the lower tail end `sigma / 4`,
+    the upper tail end `3 sigma / 4`, so every standardized term is moderate.
+    """
+
+    interval: tuple[float, float]
+    """The `(lo, hi]` ends of the interval row."""
+    sigma: float
+    """The measurement-error SD and the unit of the other source values."""
+    offset: float
+    """The control part of the latent location."""
+    score_unit: float
+    """Unit by which the batch is rescaled before differentiating. Conditional
+    probabilities, posteriors and the score in `theta = offset / sigma` do not
+    depend on it. A physical score at `sigma` near `2^1022` is below the smallest
+    normal float and XLA's CPU backend flushes it to zero, so that geometry is
+    differentiated in units of `sigma`; the underflowing interval keeps physical
+    units, since its ends would underflow when divided by `sigma`."""
+
+    @property
+    def loading(self) -> float:
+        return self.sigma / 2
+
+    @property
+    def exact(self) -> float:
+        return self.sigma / 4
+
+    @property
+    def lower_end(self) -> float:
+        return self.sigma / 4
+
+    @property
+    def upper_end(self) -> float:
+        return 3 * self.sigma / 4
+
+
+# The standardized width of the interval underflows.
+UNDERFLOW_GEOMETRY = _MixtureGeometry(UNDERFLOW_WITNESS[:2], 2.0**500, 2.0**499, 1.0)
+# `lo - mu` overflows for both components; the standardized ends are moderate.
+OVERFLOW_GEOMETRY = _MixtureGeometry(
+    (-(2.0**1023), -(2.0**1022)), 2.0**1022, 2.0**1023, 2.0**1022
+)
+MIXTURE_GEOMETRIES = [UNDERFLOW_GEOMETRY, OVERFLOW_GEOMETRY]
+MIXTURE_IDS = ["underflow", "overflow"]
+
+
+def _mixture_kwargs(
+    geometry: _MixtureGeometry, events: tuple[ObservationEvent, ...]
+) -> dict:
+    """One row per event, two mixture components, the geometry's interval first."""
+    is_interval = events[0] == ObservationEvent.INTERVAL
+    first_bounds = list(geometry.interval) if is_interval else [jnp.nan] * 2
     return {
         "states": jnp.broadcast_to(
             jnp.asarray(MIXTURE_MEANS)[None, :, None], (5, 2, 1)
         ),
         "upper_chols": jnp.ones((5, 2, 1, 1)),
-        "loadings": jnp.array([LOADING]),
-        "control_params": jnp.array([OFFSET]),
-        "meas_sd": jnp.array(SIGMA),
-        "measurements": jnp.array([jnp.nan, EXACT, jnp.nan, jnp.nan, jnp.nan]),
+        "loadings": jnp.array([geometry.loading]),
+        "control_params": jnp.array([geometry.offset]),
+        "meas_sd": jnp.array(geometry.sigma),
+        "measurements": jnp.array([jnp.nan, geometry.exact, jnp.nan, jnp.nan, jnp.nan]),
         "events": jnp.array(events, dtype=jnp.int8),
         "controls": jnp.array([[1.0], [1.0], [jnp.nan], [1.0], [1.0]]),
         "log_mixture_weights": jnp.broadcast_to(
             jnp.log(jnp.asarray(MIXTURE_WEIGHTS)), (5, 2)
         ),
         "is_limited": jnp.array(True),
-        "cut_table": jnp.array([0.0, LOWER_END, UPPER_END, 0.0]),
+        "cut_table": jnp.array([0.0, geometry.lower_end, geometry.upper_end, 0.0]),
         "codes_from_values": jnp.array(False),
         "interval_bounds": jnp.array(
             [
                 first_bounds,
                 [jnp.nan, jnp.nan],
                 [jnp.nan, jnp.nan],
-                [-jnp.inf, LOWER_END],
-                [UPPER_END, jnp.inf],
+                [-jnp.inf, geometry.lower_end],
+                [geometry.upper_end, jnp.inf],
             ]
         ),
     }
 
 
-def _component_terms(event: ObservationEvent, mean: float) -> tuple:
+def _component_terms(
+    geometry: _MixtureGeometry, event: ObservationEvent, mean: float
+) -> tuple:
     """Log likelihood, standardized mean and variance, and `theta` score."""
-    lo, hi = UNDERFLOW_WITNESS[:2]
-    sd = math.hypot(SIGMA, LOADING)
-    mu = OFFSET + LOADING * mean
+    sigma = geometry.sigma
+    sd = math.hypot(sigma, geometry.loading)
+    mu = geometry.offset + geometry.loading * mean
     if event == ObservationEvent.INTERVAL:
-        ref = underflow_reference(lo, hi, mu, sd)
-        return ref["log_mass"], ref["z_mean"], ref["z_var"], ref["d_location"] * SIGMA
+        ref = _reference(*geometry.interval, mu, sd)
+        return ref["log_mass"], ref["z_mean"], ref["z_var"], ref["d_location"] * sigma
     if event == ObservationEvent.DENSITY:
-        zmean = (EXACT - mu) / sd
+        zmean = (geometry.exact - mu) / sd
         ll = -0.5 * zmean * zmean - math.log(sd * math.sqrt(2 * math.pi))
-        return ll, zmean, 0.0, zmean * SIGMA / sd
+        return ll, zmean, 0.0, zmean * sigma / sd
     if event in (ObservationEvent.LOWER_TAIL, ObservationEvent.UPPER_TAIL):
         sign = -1 if event == ObservationEvent.LOWER_TAIL else 1
-        end = LOWER_END if sign == -1 else UPPER_END
+        end = geometry.lower_end if sign == -1 else geometry.upper_end
         beta = sign * (mu - end) / sd
         mass = 0.5 * math.erfc(-beta / math.sqrt(2))
         mills = math.exp(-0.5 * beta * beta) / (math.sqrt(2 * math.pi) * mass)
@@ -735,7 +1069,7 @@ def _component_terms(event: ObservationEvent, mean: float) -> tuple:
             math.log(mass),
             sign * mills,
             1 - mills * (mills + beta),
-            sign * mills * SIGMA / sd,
+            sign * mills * sigma / sd,
         )
     return 0.0, 0.0, 1.0, 0.0
 
@@ -745,13 +1079,17 @@ def _update(kwargs: dict) -> tuple:
 
 
 @pytest.mark.long_running
-def test_underflowing_width_in_a_mixed_event_mixture_batch() -> None:
+@pytest.mark.parametrize("geometry", MIXTURE_GEOMETRIES, ids=MIXTURE_IDS)
+def test_extreme_interval_in_a_mixed_event_mixture_batch(geometry) -> None:
     """Interval, density, missing and both tails on real person and mixture axes."""
-    ratio = LOADING / math.hypot(SIGMA, LOADING)
+    sigma = geometry.sigma
+    ratio = geometry.loading / math.hypot(sigma, geometry.loading)
     expected_ll, expected_means, expected_vars, expected_weights = [], [], [], []
     expected_score = 0.0
     for event in MIXTURE_EVENTS:
-        terms = np.array([_component_terms(event, mean) for mean in MIXTURE_MEANS])
+        terms = np.array(
+            [_component_terms(geometry, event, mean) for mean in MIXTURE_MEANS]
+        )
         weighted = np.log(MIXTURE_WEIGHTS) + terms[:, 0]
         maximum = weighted.max()
         total = maximum + math.log(np.exp(weighted - maximum).sum())
@@ -760,7 +1098,7 @@ def test_underflowing_width_in_a_mixed_event_mixture_batch() -> None:
         expected_vars.append(1 - ratio**2 * (1 - terms[:, 2]))
         expected_weights.append(weighted - total)
         expected_score += float(np.exp(weighted - total) @ terms[:, 3])
-    kwargs = _underflow_mixture_kwargs(MIXTURE_EVENTS)
+    kwargs = _mixture_kwargs(geometry, MIXTURE_EVENTS)
     result = jax.jit(_update)(kwargs)
     states, chols, logweights, loglikes, _ = result
     assert all(np.isfinite(np.asarray(x)).all() for x in result[:4])
@@ -771,21 +1109,32 @@ def test_underflowing_width_in_a_mixed_event_mixture_batch() -> None:
     # Log weights of magnitude ~766 carry rounding errors of ~ulp(766) = 1.1e-13, so
     # their exponentials sum to 1 only to about that precision.
     np.testing.assert_allclose(np.exp(logweights).sum(axis=1), 1.0, rtol=0, atol=1e-12)
+    unit = geometry.score_unit
+    rescaled = {
+        **kwargs,
+        "loadings": kwargs["loadings"] / unit,
+        "meas_sd": kwargs["meas_sd"] / unit,
+        "measurements": kwargs["measurements"] / unit,
+        "cut_table": kwargs["cut_table"] / unit,
+        "interval_bounds": kwargs["interval_bounds"] / unit,
+    }
     score = jax.jit(
         jax.grad(
             lambda theta: _update(
-                {**kwargs, "control_params": jnp.reshape(theta * SIGMA, (1,))}
+                {**rescaled, "control_params": jnp.reshape(theta * sigma / unit, (1,))}
             )[3].sum()
         )
-    )(jnp.array(0.5))
+    )(jnp.array(geometry.offset / sigma))
+    assert np.isfinite(np.asarray(score)).all()
     np.testing.assert_allclose(score, expected_score, rtol=1e-5, atol=1e-8)
 
 
 @pytest.mark.long_running
-def test_interval_bounds_leave_other_events_unchanged() -> None:
+@pytest.mark.parametrize("geometry", MIXTURE_GEOMETRIES, ids=MIXTURE_IDS)
+def test_interval_bounds_leave_other_events_unchanged(geometry) -> None:
     """Without an interval row, the update is identical with and without bounds."""
-    inactive = _underflow_mixture_kwargs(
-        (ObservationEvent.MISSING, *MIXTURE_EVENTS[1:])
+    inactive = _mixture_kwargs(
+        geometry, (ObservationEvent.MISSING, *MIXTURE_EVENTS[1:])
     )
     legacy = {key: value for key, value in inactive.items() if key != "interval_bounds"}
     update = jax.jit(_update)

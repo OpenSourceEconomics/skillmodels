@@ -195,16 +195,51 @@ predicted state `N(m, P)`, with `μ = a + λ'm`, `s² = σ² + λ'Pλ`:
   `P − Pλλ'P (1 − Var[z])/s²` with the moments of `z ~ N(0,1)` truncated to `(α, β]`
   (`normal_interval_terms`, narrow-safe);
 - `lo = −∞` / `hi = ∞`: the half-line update of §3 with threshold `hi` / `lo`.
-- The log width of `(α, β]` is `log(hi − lo) − log s`, passed to
-  `normal_interval_terms` next to `α` and `β`, because rounding `α` and `β` separately
-  can collapse or distort a narrow interval: `(0, 1e-17]` with `μ = 1`, `s = 1` gives
-  `α = β = −1` in float64 while `ℓ = −40.5629`. The narrow series adds the log width
-  to the log of its integral, so `ℓ` stays finite also when the standardized width,
-  its half or the probability itself underflows: `(0, 2^-600]` with `μ = s = 2^500`
-  has standardized width `2^-1100` and `ℓ = −763.8808`. Wide intervals (span above
-  `s`) keep the endpoint formula, whose rounding error is of the order of the
-  formula's own error at the rounded ends. Models without interval columns keep the
-  difference of the standardized cutpoints.
+- The interval is evaluated from its source geometry (`source_interval_terms`), not
+  from `α` and `β` as two separately rounded floats. Standardizing the ends one by
+  one loses information in four ways, each reachable from accepted finite data:
+  rounding collapses or distorts a narrow interval (`(0, 1e-17]` with `μ = s = 1`
+  gives `α = β = −1` while `ℓ = −40.5629`); the standardized width or its half
+  underflows (`(0, 2^-600]` with `μ = s = 2^500` has width `2^-1100`,
+  `ℓ = −763.8808`); the difference `lo − μ` overflows although the standardized
+  interval is moderate (`(−2^1023, −2^1022]` with `μ = s = 2^1023` is `(−2, −1.5]`,
+  `ℓ = −3.1223`, while `lo − μ` rounds to `−∞`); and two ends that round to the same
+  float enclose a mass that is not a narrow-density integral (`(0, 2^-30]` with
+  `μ = 2^30`, `s = 1`: both ends round to `−2^30`, the density changes by the
+  factor `e` across the interval, `ℓ = −2^59`, and a difference of endpoint
+  log-CDFs gives `log 0`).
+- The representation is the triple `(α, β, log w)` with `w = (hi − lo)/s`, each
+  element formed from the source values with one rounding per operation and no
+  intermediate that can overflow or underflow: `α = (lo − μ)/s` and `β` halve both
+  operands of the subtraction (exactly) when one of them has magnitude `≥ 2^1023`
+  and double the quotient; `log w = log(hi − lo) − log s` with the same halving of
+  the span, and the standardized width itself is never formed. The centre
+  `c = (α + β)/2` and half-width `h = w/2` select the branch (`h max(1, |c|) ≤ 1/4`):
+  the narrow Hermite series around `c` uses `log w` in `ℓ`; the wide branch
+  evaluates `ℓ = log Φ(β) + log(1 − q)` with `log q = log Φ(α) − log Φ(β)` written
+  as `c w + log r(β) − log r(α)`, `r` the Mills ratio. The leading term
+  `(β² − α²)/2 = c w` comes from the centre and the log width, and `log r` varies
+  slowly in its argument (`d log r / dx = −(x + r)`, of order `1/|x|` in the tail),
+  so `log q` keeps the span of the source interval when the two rounded ends
+  coincide; a difference of their log-CDFs would be 0 there. Both branches derive
+  from the same triple, and agree to rounding at their boundary.
+- Why this closes the class on the public finite domain (finite `lo < hi`, finite
+  `μ`, finite `s > 0`): every intermediate is either a correctly rounded function
+  of the source values (the triple), or a slowly varying function of a rounded
+  standardized end (`log Φ`, `r`, `V`), or formed from `c` and `w` without
+  cancellation (`c w`, `−c²/2`, the Hermite series). The remaining errors are the
+  relative rounding of `α`, `β`, `c` (`2^-53`, which enters `ℓ` as `2^-53 c²`, the
+  spacing of the leading term `−c²/2`, hence "a few ulps" where `|ℓ|` is huge and
+  below `1e-15` where it is moderate), and the absolute rounding of `log w` (at most
+  about `1500 · 2^-53 ≈ 2e-13`, entering `ℓ` directly in the narrow branch and
+  through `q/(1 − q) · |c w| · 2e-13 ≲ 1e-13` in the wide branch, since the wide
+  branch needs `|c w| ≥ 1/2` or `w ≥ 1/2` and `q ≤ e^{-1/2}`). No tolerance, cap or
+  `nextafter` is used. Where the correctly rounded `ℓ` itself is not a finite float
+  (`|c| ≳ 2^512`, `ℓ < −2^1023`), `ℓ` is `−∞`, as for a Gaussian density with such
+  an innovation. Rows without an interval get constant finite placeholder
+  arguments before any arithmetic, so their discarded values and derivatives are
+  finite. Models without interval columns keep the difference of the standardized
+  cutpoints (`normal_interval_terms`), literally unchanged.
 
 This is the ordered-probit interval update of §5 with a free `σ` in `s` and the ends
 taken from the data instead of the cutpoint parameters; the square-root update

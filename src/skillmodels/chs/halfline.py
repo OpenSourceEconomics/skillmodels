@@ -25,9 +25,11 @@ cutpoints, or a Tobit observation known only by an interval with two finite ends
 the same update with the moments of `z = (y* - mu) / s` truncated to
 `(alpha, beta] = ((lo - mu) / s, (hi - mu) / s]`: probability
 `Z = Phi(beta) - Phi(alpha)`, `E[z]` in place of `direction * r`, and
-`d = 1 - Var[z]` (`normal_interval_terms`). For an observed interval the width of
-`(alpha, beta]` is evaluated as `(hi - lo) / s`, not as `beta - alpha`: separately
-rounded standardized ends can lose the width of a narrow interval.
+`d = 1 - Var[z]` (`normal_interval_terms`). An observed interval is evaluated from
+its source ends, `mu` and `s` (`source_interval_terms`), not from two separately
+rounded standardized ends, which can lose the location or the span of the interval:
+`lo - mu` can overflow, and two ends that round to the same float can enclose a
+mass that is not a narrow-density integral.
 
 The covariance factor is updated as the R factor of `U - b w (w'U)` with
 `b = d / (1 + c)` and `c = sqrt((sigma / s)^2 + (1 - d) w'w)`, which squares to the
@@ -58,6 +60,7 @@ from skillmodels.common.normal_terms import (
     LOG_SQRT_2PI,
     normal_interval_terms,
     normal_tail_terms,
+    source_interval_terms,
 )
 
 # Scan inputs that only the limited-measurement update consumes.
@@ -224,7 +227,7 @@ def limited_update_from_loop_kwargs(
         **update_kwargs,
         thresholds=thresholds,
         has_intervals=has_intervals,
-        source_widths="interval_bounds" in kwargs,
+        source_intervals="interval_bounds" in kwargs,
     )
 
 
@@ -241,7 +244,7 @@ def kalman_update_limited(
     log_mixture_weights: Array,
     *,
     has_intervals: bool = False,
-    source_widths: bool = False,
+    source_intervals: bool = False,
 ) -> tuple[Array, Array, Array, Array, dict[str, Array]]:
     """Condition each person's Gaussian mixture on one limited measurement.
 
@@ -264,9 +267,9 @@ def kalman_update_limited(
         log_mixture_weights: Array of shape (n_obs, n_mixtures).
         has_intervals: Whether `INTERVAL` events can occur. Static; without them
             the interval moments are not evaluated.
-        source_widths: Whether the standardized width of an `INTERVAL` event is
-            `(hi - lo) / s` from its ends `lo`, `hi` instead of the difference of
-            the standardized ends. Static; True for models with observed intervals,
+        source_intervals: Whether an `INTERVAL` event is evaluated from its source
+            ends, `mu` and `s` (`source_interval_terms`) instead of from the two
+            standardized ends. Static; True for models with observed intervals,
             False keeps the fixed-threshold update unchanged.
 
     Return:
@@ -327,7 +330,7 @@ def kalman_update_limited(
             upper_end=upper_end,
             mu=mu,
             s=s,
-            source_widths=source_widths,
+            source_intervals=source_intervals,
         )
 
     _new_states = (
@@ -385,27 +388,30 @@ def _with_interval_events(
     mu: Array,
     s: Array,
     *,
-    source_widths: bool,
+    source_intervals: bool,
 ) -> tuple[Array, Array, Array, Array]:
     """Replace the update terms of `INTERVAL` observations by their interval moments.
 
     `terms` are the mean coefficient, `d`, `1 - d` and the log likelihood of each
-    observation and component. With `source_widths`, the log standardized width is
-    `log(upper_end - lower_end) - log(s)`, which stays finite when the standardized
-    width underflows. Only standardized widths up to 0.5 can select the narrow series
-    of `normal_interval_terms`, so spans above `s` are passed as width 1, which keeps
-    the log width finite for any finite ends.
+    observation and component. With `source_intervals`, the ends, `mu` and `s` go to
+    `source_interval_terms` as they are; otherwise the standardized ends go to
+    `normal_interval_terms`. Rows without an interval get finite placeholder
+    arguments before any arithmetic, so their discarded terms have finite values
+    and derivatives.
     """
-    # Placeholder ends keep both standardized ends finite off the interval rows.
-    lower_std = (jnp.where(is_interval, lower_end, mu - s) - mu) / s
-    upper_std = (jnp.where(is_interval, upper_end, mu + s) - mu) / s
-    log_width = None
-    if source_widths:
-        span = upper_end - lower_end
-        log_width = jnp.log(jnp.where(is_interval & (span <= s), span, s)) - jnp.log(s)
-    log_z, mean_z, contraction_z, var_z = normal_interval_terms(
-        lower_std, upper_std, log_width=log_width
-    )
+    if source_intervals:
+        log_z, mean_z, contraction_z, var_z = source_interval_terms(
+            lower=jnp.where(is_interval, lower_end, -1.0),
+            upper=jnp.where(is_interval, upper_end, 1.0),
+            location=jnp.where(is_interval, mu, 0.0),
+            scale=jnp.where(is_interval, s, 1.0),
+        )
+    else:
+        lower_std = (jnp.where(is_interval, lower_end, mu - s) - mu) / s
+        upper_std = (jnp.where(is_interval, upper_end, mu + s) - mu) / s
+        log_z, mean_z, contraction_z, var_z = normal_interval_terms(
+            lower_std, upper_std
+        )
     coefficient, d, one_minus_d, loglikes = terms
     return (
         jnp.where(is_interval, mean_z, coefficient),
