@@ -99,7 +99,7 @@ def test_resolve_double_censored_tobit_family() -> None:
 
 
 def test_tobit_rejects_no_bounds() -> None:
-    with pytest.raises(ValueError, match="at least one"):
+    with pytest.raises(ValueError, match="at least one finite censoring bound"):
         TobitMeasurement(lower=None, upper=None)
 
 

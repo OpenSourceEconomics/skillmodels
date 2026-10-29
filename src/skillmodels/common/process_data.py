@@ -13,6 +13,7 @@ from skillmodels.common.measurement_models import (
     MeasurementFamily,
     MeasurementModel,
     OrderedProbitMeasurement,
+    TobitMeasurement,
     classify_observations,
     measurement_family_arrays,
 )
@@ -44,7 +45,8 @@ def process_data(
             estimation (default, includes measurement data) or not.
         measurement_models: Per-variable observation models. If any update row is
             a probit or Tobit measurement, the measurements stay in float64 and an
-            `events` array is returned.
+            `events` array is returned. The `interval_columns` of a Tobit
+            measurement must be columns of `df`.
 
     Returns a dictionary with keys:
         measurements: Array of shape (n_updates, n_obs) with data on
@@ -54,6 +56,10 @@ def process_data(
         events: Array of shape (n_updates, n_obs) with the int8
             `ObservationEvent` of each measurement, decided from the float64 data
             and bounds. Only returned for estimation with a limited measurement.
+        interval_bounds: float64 array of shape (n_updates, n_obs, 2) with the
+            lower and the upper end of the latent interval of each observation
+            known only by an interval, NaN elsewhere. Only returned for estimation
+            with a Tobit measurement that has `interval_columns`.
         controls: Array of shape (n_periods, n_obs, n_controls) with
             observed control variables for the measurement equations.
         observed_factors: Array of shape
@@ -72,9 +78,17 @@ def process_data(
     out = {}
 
     df = _add_copies_of_anchoring_outcome(df=df, anchoring_info=anchoring_info)
+    interval_columns = {
+        name: model.interval_columns
+        for name, model in (measurement_models or {}).items()
+        if isinstance(model, TobitMeasurement) and model.interval_columns is not None
+    }
     if has_endogenous_factors:
         df = _augment_data_for_endogenous_factors(
-            df=df, labels=labels, update_info=update_info
+            df=df,
+            labels=labels,
+            update_info=update_info,
+            interval_columns=interval_columns,
         )
     else:
         df.index = df.index.set_names(["id", "aug_period"])
@@ -101,8 +115,10 @@ def process_data(
         limited_measurements=frozenset(
             update_info.index.get_level_values("variable")[is_limited]
         ),
+        interval_columns=interval_columns,
     )
     n_obs = int(len(df) / len(labels.aug_periods))
+    has_intervals = has_limited and bool(interval_columns)
     if has_limited:
         # Validate the support of every submitted value, including rows that are
         # set to missing below because of missing controls.
@@ -114,9 +130,20 @@ def process_data(
             lowers=lowers,
             uppers=uppers,
             n_categories=n_categories,
+            interval_bounds=_generate_interval_bounds_array(
+                df=df,
+                update_info=update_info,
+                n_obs=n_obs,
+                interval_columns=interval_columns,
+            )
+            if has_intervals
+            else None,
         )
     df = _handle_controls_with_missings(
-        df=df, controls=labels.controls, update_info=update_info
+        df=df,
+        controls=labels.controls,
+        update_info=update_info,
+        interval_columns=interval_columns,
     )
     out["controls"] = _generate_controls_array(df=df, labels=labels, n_obs=n_obs)
     missing = tuple(
@@ -142,6 +169,16 @@ def process_data(
             df=df, update_info=update_info, n_obs=n_obs
         )
         if has_limited:
+            interval_bounds = (
+                _generate_interval_bounds_array(
+                    df=df,
+                    update_info=update_info,
+                    n_obs=n_obs,
+                    interval_columns=interval_columns,
+                )
+                if has_intervals
+                else None
+            )
             out["events"] = jnp.asarray(
                 _generate_events_array(
                     measurements=measurements,
@@ -149,8 +186,11 @@ def process_data(
                     lowers=lowers,
                     uppers=uppers,
                     n_categories=n_categories,
+                    interval_bounds=interval_bounds,
                 )
             )
+            if interval_bounds is not None:
+                out["interval_bounds"] = jnp.asarray(interval_bounds, dtype="float64")
             out["measurements"] = jnp.asarray(measurements, dtype="float64")
         else:
             out["measurements"] = jnp.array(measurements, dtype="float32")
@@ -198,8 +238,10 @@ def _get_period_data_for_endogenous_factors(
     df: pd.DataFrame,
     labels: Labels,
     update_info: pd.DataFrame,
+    interval_columns: Mapping[str, tuple[str, str]] | None = None,
 ) -> pd.DataFrame:
     meas = _get_period_measurements(update_info=update_info, aug_period=aug_period)
+    meas += [col for m in meas for col in (interval_columns or {}).get(m, ())]
     controls = labels.controls
     observed = labels.observed_factors
     moment_cols = [
@@ -231,6 +273,7 @@ def _augment_data_for_endogenous_factors(
     df: pd.DataFrame,
     labels: Labels,
     update_info: pd.DataFrame,
+    interval_columns: Mapping[str, tuple[str, str]] | None = None,
 ) -> pd.DataFrame:
     """Make room for endogenous factors by doubling up the periods.
 
@@ -256,6 +299,7 @@ def _augment_data_for_endogenous_factors(
                 df=df,
                 update_info=update_info,
                 labels=labels,
+                interval_columns=interval_columns,
             )
             for aug_period, period in labels.aug_periods_to_periods.items()
         ]
@@ -280,10 +324,12 @@ def _check_data(  # noqa: C901
     labels: Labels,
     purpose: Literal["estimation", "anything", "simulation"],
     limited_measurements: frozenset[str] = frozenset(),
+    interval_columns: Mapping[str, tuple[str, str]] | None = None,
 ) -> None:
     """Raise if variables are missing or Gaussian measurements have no variance.
 
-    A constant probit or Tobit sample (all ones, all censored) is valid data.
+    A constant probit or Tobit sample (all ones, all censored) is valid data. The
+    interval columns of a measurement are required wherever it is.
     """
     var_report = pd.DataFrame(index=update_info.index[:0], columns=["problem"])
     for aug_period in labels.aug_periods:
@@ -296,6 +342,11 @@ def _check_data(  # noqa: C901
             for meas in _get_period_measurements(
                 update_info=update_info, aug_period=aug_period
             ):
+                for col in (interval_columns or {}).get(meas, ()):
+                    if col not in period_data.columns:
+                        var_report.loc[(aug_period, col), "problem"] = (
+                            "Variable is missing"
+                        )
                 if meas not in period_data.columns:
                     var_report.loc[(aug_period, meas), "problem"] = (
                         "Variable is missing"
@@ -354,14 +405,16 @@ def _handle_controls_with_missings(
     df: pd.DataFrame,
     controls: tuple[str, ...],
     update_info: pd.DataFrame,
+    interval_columns: Mapping[str, tuple[str, str]] | None = None,
 ) -> pd.DataFrame:
     aug_periods = update_info.index.get_level_values(0).unique().tolist()
     problematic_index = df.index[:0]
     for aug_period in aug_periods:
         period_data = df.query(f"aug_period == {aug_period}")
         control_data = period_data[list(controls)]
+        meas = _get_period_measurements(update_info=update_info, aug_period=aug_period)
         meas_data = period_data[
-            _get_period_measurements(update_info=update_info, aug_period=aug_period)
+            meas + [col for m in meas for col in (interval_columns or {}).get(m, ())]
         ]
         problem = control_data.isna().any(axis=1) & meas_data.notna().any(axis=1)
         problematic_index = problematic_index.union(period_data[problem].index)
@@ -408,12 +461,29 @@ def _generate_measurements_array_np(
     return arr
 
 
+def _generate_interval_bounds_array(
+    df: pd.DataFrame,
+    update_info: pd.DataFrame,
+    n_obs: int,
+    interval_columns: Mapping[str, tuple[str, str]],
+) -> np.ndarray:
+    """Return the `(lower, upper)` interval ends of each update row and person."""
+    arr = np.full((len(update_info), n_obs, 2), np.nan)
+    for k, (aug_period, var) in enumerate(update_info.index):
+        if var in interval_columns:
+            arr[k] = df.query(f"aug_period == {aug_period}")[
+                list(interval_columns[var])
+            ].to_numpy(dtype=float)
+    return arr
+
+
 def _generate_events_array(
     measurements: np.ndarray,
     families: np.ndarray,
     lowers: np.ndarray,
     uppers: np.ndarray,
     n_categories: tuple[int | None, ...],
+    interval_bounds: np.ndarray | None = None,
 ) -> np.ndarray:
     """Classify each float64 measurement of each update row into its event."""
     return np.stack(
@@ -424,9 +494,10 @@ def _generate_events_array(
                 float(lower),
                 float(upper),
                 n_categories=n_cat,
+                interval_bounds=None if interval_bounds is None else interval_bounds[k],
             )
-            for row, family, lower, upper, n_cat in zip(
-                measurements, families, lowers, uppers, n_categories, strict=True
+            for k, (row, family, lower, upper, n_cat) in enumerate(
+                zip(measurements, families, lowers, uppers, n_categories, strict=True)
             )
         ]
     )

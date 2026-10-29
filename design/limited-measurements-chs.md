@@ -99,23 +99,10 @@ y* = a + λᵀθ + ε, ε ~ N(0, σ²), y = min(max(y*, L), U).
 - σ enters the censored contributions through s and the interior ones through the
   density; it stays a free parameter (`meas_sds`).
 
-@pro: Verify the formulas in §3 for probit and for both Tobit tails, with the signs written out (likelihood, posterior mean and covariance, the κ bounds and the pseudo-measurement equivalence including the residual), give a numerically stable evaluation of r = φ(t)/Φ(t) and r(r + t) for t → −∞ and t → +∞ in float64 with JAX (values and first derivatives), and state whether reverse-mode AD through the QR with σ̃ = (1/κ − λᵀPλ)^{1/2} is stable or whether a direct rank-one Cholesky downdate is preferable.
-
-@pro: The update is an assumed-density approximation of the exact filter. State precisely what is exact (the per-update likelihood given the Gaussian predicted state) and what is approximate, how this compares to the approximation CHS already makes in the unscented predict step, and give a test that bounds the approximation error of the full likelihood on a model small enough for exact integration (e.g. one latent factor, linear transition, three periods, quadrature over the latent path).
-
 ## 4. What has to be decided
 
-@pro: Lay out the exact implementation path on top of #104 as an ordered list of commits, each with the files and functions it touches, the tests written first (red) and what they assert, and the acceptance criterion. Cover at least: family information in `ProcessedModel`/`update_info`; the parameter index and parsing for probit measures (drop `meas_sds` from the index, or keep and fix it — which interacts less with optimagic constraints, `params_template`, `fixed_constraint.py` and downstream code that indexes `meas_sds`), while Tobit keeps its free `meas_sds`; how the Tobit bounds reach the scan (per-update scalars from `measurement_family_arrays`) and how an observation exactly at a bound is classified in float64; dispatch inside the `lax.scan` (per-iteration flag with `lax.cond`, or a branch-free pseudo-measurement computed with `jnp.where` on per-update scalars — which keeps compile time and gradients clean); `kalman_update` and the anchoring update; mixtures; the debug path and `process_debug_data` (what are "residual" and "residual SD" for a probit or a censored Tobit update); `get_filtered_states`; `decompose_measurement_variance`; diagnostic plots; the error in `maximization_inputs.py` (lift it for probit and Tobit); AMN seeding (AMN rejects both — seed from a Gaussian twin of the model, or exclude the limited measures from the AMN moment map). Say whether probit and Tobit go into one PR or two consecutive ones, and in which order.
-
-@pro: Identification and normalizations: with ε's SD fixed at 1, the probit intercept and loadings are on the latent-index scale; a Tobit measure keeps the scale of y. State the restrictions this imposes: whether a probit or a Tobit measure can be a factor's normalizing measurement; what changes for time-varying loadings, constraints that tie a probit measure's parameters across periods, and anchoring. Say whether any existing constraint generator in `common/constraints.py` produces invalid constraints when a measure is probit.
-
-@pro: Interplay with the open PRs: #104's observation masks (does a probit or censored Tobit observation count as an observed measurement for the freeze — it should); #103's handling of missing observed factors (do observed factors ever enter a measurement update, so that the pseudo-measurement has to account for their variance); #102's asymmetric translog (no expected interaction — confirm). Name any place where the chain's code assumes Gaussian measurements.
-
-@pro: Test plan, written as tests: independent oracles for one update (Gauss–Hermite or adaptive quadrature over θ for the likelihood and posterior moments, any number of factors up to 3, probit with both y, Tobit at the lower bound, the upper bound and in between, extreme t), the pseudo-measurement equivalence, mixtures, missing values, AD gradients vs. finite differences, JIT vs. eager, a synthetic DGP from `simulate_dataset` with a probit and a Tobit measure whose parameters are recovered, and the small-model full-likelihood bound from §3. Give tolerances.
-
-@pro: Cost: the extra operations per update and whether compile time or memory change measurably for a model like the application (16 periods, about 50 measurements per period, 5 latent states plus 3 investments, 17,776 persons, one A100, float64). Name any choice that would make the Gaussian path slower.
-
-@pro: Out of scope unless it falls out for free: ordered probit, probit and Tobit in AMN. Say whether the family dispatch should be designed so that these can be added later without touching the probit and Tobit code, but do not design them.
+The questions this section listed were answered in the review of PR 105 and are not
+repeated here.
 
 ## 5. Ordered probit (added scope)
 
@@ -151,13 +138,6 @@ c_k < y* ≤ c_{k+1}, with c_0 = −∞, c_K = +∞ and c_1 = 0 (the intercept a
   (`jax.checkpoint`), so a Gaussian update does not carry the limited branch's
   zero-filled residuals; all-Gaussian models keep the previous scan.
 
-@pro: Verify the interval update (likelihood, posterior mean and covariance), the
-stability of `normal_interval_terms` for narrow, wide and far-tail intervals and of its
-derivatives, the cutpoint parametrization and constraints (including the composition of
-the ordering with user ties across periods), the K = 2 equivalence, the AF kernel, and
-whether the switch-plus-remat dispatch keeps the Gaussian updates of a mixed model at
-Gaussian cost.
-
 ## 6. Candidate-set error
 
 The profile protocol asks for `eps_candidate`, the error from candidates that a
@@ -180,3 +160,179 @@ value for this target is 0 by construction, in both profiles:
 Assumptions: the measurement families and update order are those of the model
 specification; the bound applies to the CHS likelihood, the shared measurement kernel
 and the AF initial-period likelihood with supplied cut tables.
+
+## 7. Tobit measurements with observation-specific intervals
+
+Motivation (health-cognition, HRS): self-respondents report a 27-point cognition score;
+proxy respondents report only the Langa–Weir class (dementia / CIND / normal), which is
+an interval of the same score. A shared intercept, loadings and error SD for both kinds
+of report put them on one scale.
+
+### API
+
+`TobitMeasurement(lower, upper, interval_columns=(lo_column, hi_column))`; in
+`ModelSpec.from_dict`: `{"family": "tobit", "lower": ..., "upper": ...,
+"interval_columns": [lo_column, hi_column]}`.
+
+- The measurement's own column holds the exact values; an exact value is censored at
+  a fixed bound as before.
+- The two named columns hold, for a person whose value is missing, the ends
+  `lo < y* <= hi` of the latent interval; NaN where no interval is observed; `-inf` /
+  `inf` for an open end. `lower` and `upper` may both be `None` with interval columns.
+- Invalid rows raise in `process_data`: a value together with an interval, one NaN end,
+  `lo >= hi`, or two infinite ends.
+- An integer score treated as continuous maps the observed scores `k_lo, ..., k_hi` to
+  the latent interval `(k_lo - 0.5, k_hi + 0.5]`, with an infinite end where the range
+  reaches a censoring bound. This is the application's choice, documented on the class.
+
+### Mathematics
+
+The latent response is `y* = a + λ'θ + ε`, `ε ~ N(0, σ²)`, `σ` free. Under the Gaussian
+predicted state `N(m, P)`, with `μ = a + λ'm`, `s² = σ² + λ'Pλ`:
+
+- interval with two finite ends: `ℓ = log(Φ(β) − Φ(α))`, `α = (lo − μ)/s`,
+  `β = (hi − μ)/s`; posterior mean `m + Pλ E[z]/s` and covariance
+  `P − Pλλ'P (1 − Var[z])/s²` with the moments of `z ~ N(0,1)` truncated to `(α, β]`
+  (`normal_interval_terms`, narrow-safe);
+- `lo = −∞` / `hi = ∞`: the half-line update of §3 with threshold `hi` / `lo`.
+- The interval is evaluated from its source geometry (`source_interval_terms`), not
+  from `α` and `β` as two separately rounded floats. Standardizing the ends one by
+  one loses information in four ways, each reachable from accepted finite data:
+  rounding collapses or distorts a narrow interval (`(0, 1e-17]` with `μ = s = 1`
+  gives `α = β = −1` while `ℓ = −40.5629`); the standardized width or its half
+  underflows (`(0, 2^-600]` with `μ = s = 2^500` has width `2^-1100`,
+  `ℓ = −763.8808`); the difference `lo − μ` overflows although the standardized
+  interval is moderate (`(−2^1023, −2^1022]` with `μ = s = 2^1023` is `(−2, −1.5]`,
+  `ℓ = −3.1223`, while `lo − μ` rounds to `−∞`); and two ends that round to the same
+  float enclose a mass that is not a narrow-density integral (`(0, 2^-30]` with
+  `μ = 2^30`, `s = 1`: both ends round to `−2^30`, the density changes by the
+  factor `e` across the interval, `ℓ = −2^59`, and a difference of endpoint
+  log-CDFs gives `log 0`).
+- The representation is the triple `(α, β, log w)` with `w = (hi − lo)/s`, each
+  element formed from the source values with one rounding per operation and no
+  intermediate that can overflow or underflow: `α = (lo − μ)/s` and `β` halve both
+  operands of the subtraction (exactly) when one of them has magnitude `≥ 2^1023`
+  and double the quotient; `log w = log(hi − lo) − log s` with the same halving of
+  the span, and the standardized width itself is never formed. The centre
+  `c = (α + β)/2` and half-width `h = w/2` select the branch (`h max(1, |c|) ≤ 1/4`):
+  the narrow Hermite series around `c` uses `log w` in `ℓ`; the wide branch
+  evaluates `ℓ = log Φ(β) + log(1 − q)` with `log q = log Φ(α) − log Φ(β)` written
+  as `c w + log r(β) − log r(α)`, `r` the Mills ratio. The leading term
+  `(β² − α²)/2 = c w` comes from the centre and the log width, and `log r` varies
+  slowly in its argument (`d log r / dx = −(x + r)`, of order `1/|x|` in the tail),
+  so `log q` keeps the span of the source interval when the two rounded ends
+  coincide; a difference of their log-CDFs would be 0 there. Both branches derive
+  from the same triple, and agree to rounding at their boundary.
+- Why this closes the class on the public finite domain (finite `lo < hi`, finite
+  `μ`, finite `s > 0`): every intermediate is either a correctly rounded function
+  of the source values (the triple), or a slowly varying function of a rounded
+  standardized end (`log Φ`, `r`, `V`), or formed from `c` and `w` without
+  cancellation (`c w`, `−c²/2`, the Hermite series). The remaining errors are the
+  relative rounding of `α`, `β`, `c` (`2^-53`, which enters `ℓ` as `2^-53 c²`, the
+  spacing of the leading term `−c²/2`, hence "a few ulps" where `|ℓ|` is huge and
+  below `1e-15` where it is moderate), and the absolute rounding of `log w` (at most
+  about `1500 · 2^-53 ≈ 2e-13`, entering `ℓ` directly in the narrow branch and
+  through `q/(1 − q) · |c w| · 2e-13 ≲ 1e-13` in the wide branch, since the wide
+  branch needs `|c w| ≥ 1/2` or `w ≥ 1/2` and `q ≤ e^{-1/2}`). No tolerance, cap or
+  `nextafter` is used. Where the correctly rounded `ℓ` itself is not a finite float
+  (`|c| ≳ 2^512`, `ℓ < −2^1023`), `ℓ` is `−∞`, as for a Gaussian density with such
+  an innovation. Rows without an interval get constant finite placeholder
+  arguments before any arithmetic, so their discarded values and derivatives are
+  finite. Models without interval columns keep the difference of the standardized
+  cutpoints (`normal_interval_terms`), literally unchanged.
+- Standardized intermediates beyond the float range with a finite `ℓ`: `α` or `β`
+  beyond `2^1023` (e.g. `lo = −10^300`, `s = 10^-10`), `w` beyond `e^709` (a span of
+  the whole float range), or `c w` beyond the largest float. The division that
+  would overflow is not performed: the end is replaced by the infinity of its sign
+  before the division (`_scaled_difference`), which also keeps the derivative of
+  the division finite. The branch is then
+  chosen from `log(w·max(1,|c|))`, which is finite or `+∞`: at most `log(1/2)` the
+  narrow series; above `log 760` — or with an infinite end — `q = Φ(α)/Φ(β)` is 0
+  in float64 (if `|c| ≥ 1`, `c w < −760`; else `α < −380`), and the interval is
+  evaluated as the half-line below `β`: `log q = −∞` exactly, and the arguments of
+  the tilt, the exponential of the log width and the lower-end tail terms are
+  replaced by finite placeholders before those operations, so that neither a value
+  nor the derivative of a discarded branch contains `0·∞`. The far branch changes
+  no value: on its rows the moderate formula gives `q = 0` as well. Where the
+  nearer end `β` is itself `−∞` (both ends beyond `2^1023` on one side) the
+  interval holds no representable mass: `ℓ = −∞`, `E[z] = β`, `Var[z] = 0`, and
+  the tail terms receive a placeholder argument.
+- Intermediates of the narrow series and of the derivatives beyond the float
+  range with a finite result: the Hermite series around `c` multiplies `He_n(c)`,
+  which overflows for `|c| ≳ 10^20` at `n = 16`, by `h^n`, which underflows for
+  tiny `h`, although their product is bounded by `(h max(1,|c|))^n ≤ 4^-n`. The
+  recursion carries the product `t_n = He_n(c) h^n / n!` as one quantity
+  (`t_n = (c h) t_{n−1}/n − h² t_{n−2}/n`), so no term leaves the float range; and
+  `−c²/2` is formed as `(−c/2)·c`, which overflows only where `ℓ` is not a finite
+  float. The derivative in the scale is routed through `log s`: `kalman_update_limited`
+  passes `log s` beside `s`, and the only operation in which `s` enters, the
+  division `(lo − μ)/s`, has the custom rule `d(num/s) = d num / s − (num/s)·d log s`
+  with the tangent of `s` itself ignored (`s` and `log s` are one quantity). The
+  derivative of `ℓ` in `log s` is about `c²`, twice the log mass, and is therefore
+  a finite float whenever `ℓ` is, except where `ℓ < −2^1022`; the derivative in `s`
+  itself, `c²/s`, and the default rule's `s^-2` are not. Values and derivatives are
+  therefore finite floats wherever `ℓ` and the true derivatives are, and `ℓ = −∞`
+  exactly where the correctly rounded log mass is not a finite float (checked on a
+  seeded log-uniform sample of the public domain against an exact classification
+  of each row); the one remaining non-finite derivative in the *update* is shared
+  by every measurement family: `w = v/s` in `kalman_update_limited` differentiates
+  in `s` through `s^-2`, which overflows for `s < 10^-154`.
+- Supported domain for the accuracy of the posterior moments: prior state SD,
+  loading and measurement SD within `[2^-10, 2^10]` in absolute value, and
+  standardized ends within `2^10` of the predicted mean. Values, derivatives and
+  finiteness as above hold on the whole public domain. Outside the supported domain
+  `E[z]` and `Var[z]` may lose the source width: where the two standardized ends
+  round to the same float but the wide branch applies (a tail distance near
+  `2^30`, as in the reviewer's witness with prior SD `2^40`), `Var[z]` is the
+  half-line value. Inside it, 2,000 seeded log-uniform cases against an
+  independent 800-digit integral of the source interval give errors of the
+  posterior covariance and mean, divided by the prior SD, of at most `2.4e-11` and
+  `2.5e-13`, and of `log Z` of at most `1.2e-10` (4 ulps of `|log Z| ≈ 1.5e5`).
+  Applications use a few predictive SDs (health-cognition: a 0–27 score with
+  class cuts at 6.5 and 11.5).
+
+This is the ordered-probit interval update of §5 with a free `σ` in `s` and the ends
+taken from the data instead of the cutpoint parameters; the square-root update
+(`kalman_update_limited`) already takes `σ` and per-observation ends. Likelihood exact
+given the Gaussian predicted state; the filtered state is the moment-matched Gaussian.
+
+### Data flow
+
+- `process_data` reads the two columns of each update row of such a measurement into
+  `interval_bounds`, float64, shape `(n_updates, n_obs, 2)`, NaN elsewhere, and
+  classifies the events (`classify_observations(..., interval_bounds=...)`). The
+  columns are carried through the endogenous-factor augmentation, required by
+  `_check_data`, and set to NaN with the measurements when controls are missing.
+- The scan receives `interval_bounds` as one more per-update input
+  (`LIMITED_LOOP_KEYS`); `get_event_thresholds` returns the interval ends for the
+  observations that have them and the cut-table thresholds otherwise.
+- Observed-ness for the freeze after the last observation (`get_observation_masks`) is
+  `events != MISSING` in models with limited measurements, so a person whose last
+  report is an interval is still predicted up to it. For all other observations this
+  equals the previous `isfinite(measurements)`.
+- Models without interval columns pass no `interval_bounds`; their scan inputs and
+  results are unchanged (all-Gaussian models run the untouched Gaussian scan).
+- `interval_bounds` costs two float64 per update row and person; rows of other
+  measurements hold NaN. A compact per-measurement table with a row map is the upgrade
+  if memory ever binds.
+- AF rejects interval columns (`NotImplementedError`); AMN rejects all non-Gaussian
+  measurements; the Gaussian twin used for start values ignores the interval columns
+  (interval-only persons count as missing there); `simulate_dataset` draws the censored
+  value of every observation.
+
+### Alternatives considered and rejected
+
+- A new `IntervalMeasurement` class and family code: duplicates the Tobit handling of
+  exact and censored values, and every family switch (kernel, simulation, events,
+  update tables, AF/AMN guards) grows a branch. Interval censoring is the general case
+  of Tobit censoring, so one optional field on `TobitMeasurement` is the smaller
+  interface.
+- Ordered probit with fixed known cutpoints and a free SD plus a class-code column:
+  limits the intervals to one finite set per measurement and needs a second column
+  anyway; per-observation ends are as simple and more general.
+- The two-column `intreg` convention (equal ends = exact value) in place of the
+  measurement column: breaks the rule that a measurement's name is its data column,
+  which update tables, debug residuals, filtered-state masks and the Gaussian twin
+  rely on.
+- A finite placeholder in the measurement column for interval observations: code that
+  reads the column (start values, residuals, plots) would see invented values.

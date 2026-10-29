@@ -15,6 +15,9 @@ releases are available on [PyPI](https://pypi.org/project/skillmodels/).
 - The shared measurement kernel evaluates the log probability of an ordered-probit
   category with `skillmodels.common.normal_terms.log_normal_interval_mass`, which keeps
   the finite mass and derivatives of arbitrarily narrow categories.
+- `TobitMeasurement(interval_columns=(lo, hi))` observes a person either exactly or
+  only by an interval of the latent response read from two data columns, with shared
+  intercept, loadings and error SD (CHS; AF raises `NotImplementedError`).
 
 ## 0.1.1
 

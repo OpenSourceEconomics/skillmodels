@@ -29,7 +29,10 @@ from skillmodels.af.validate import (
     validate_af_model,
 )
 from skillmodels.amn.estimate import estimate_amn
-from skillmodels.common.measurement_models import OrderedProbitMeasurement
+from skillmodels.common.measurement_models import (
+    OrderedProbitMeasurement,
+    TobitMeasurement,
+)
 from skillmodels.common.model_spec import ModelSpec
 from skillmodels.common.process_model import process_model
 
@@ -349,6 +352,17 @@ def _validate_af_inputs(
     if ordered:
         msg = (
             f"AF estimation of ordered-probit measurements {ordered} is not supported."
+        )
+        raise NotImplementedError(msg)
+    with_intervals = sorted(
+        name
+        for name, model in model_spec.measurement_models.items()
+        if isinstance(model, TobitMeasurement) and model.interval_columns is not None
+    )
+    if with_intervals:
+        msg = (
+            f"AF estimation of Tobit measurements with interval observations "
+            f"{with_intervals} is not supported."
         )
         raise NotImplementedError(msg)
     fail_if_spearman_unsupported_on_adapter(

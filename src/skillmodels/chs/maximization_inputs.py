@@ -144,6 +144,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         params_index=p_index,
     )
     events = processed_data.get("events")
+    interval_bounds = processed_data.get("interval_bounds")
 
     # A physical observed input is repeated in both endogenous half-steps.
     # Marginalizing it separately in each half drops its posterior/cross-covariance.
@@ -193,6 +194,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             chs_options=chs_options,
             events=events,
             limited_updates=limited_updates,
+            interval_bounds=interval_bounds,
         )
 
     _jitted_loglike = jax.jit(partialed_loglikes["ll"])
@@ -221,6 +223,8 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         for i in range(split_dataset):
             stop = n_obs if i == split_dataset - 1 else stop
             events_slice = {} if events is None else {"events": events[:, start:stop]}
+            if interval_bounds is not None:
+                events_slice["interval_bounds"] = interval_bounds[:, start:stop]
             measurements_slice = processed_data["measurements"][:, start:stop]
             controls_slice = processed_data["controls"][:, start:stop, :]
             observed_factors_slice = processed_data["observed_factors"][
@@ -563,6 +567,7 @@ def _partial_some_log_likelihood(
     chs_options: CHSEstimationOptions,
     events: Array | None,
     limited_updates: LimitedUpdates | None,
+    interval_bounds: Array | None = None,
 ) -> Callable:
     update_info = model.update_info
     is_measurement_iteration = (update_info["purpose"] == "measurement").to_numpy()
@@ -638,6 +643,7 @@ def _partial_some_log_likelihood(
         observed_factor_vars=observed_factor_vars,
         events=events,
         limited_updates=limited_updates,
+        interval_bounds=interval_bounds,
     )
 
 

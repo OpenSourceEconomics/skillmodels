@@ -50,6 +50,7 @@ def log_likelihood(
     observed_factor_vars: Array | np.ndarray,
     events: Array | None = None,
     limited_updates: LimitedUpdates | None = None,
+    interval_bounds: Array | None = None,
 ) -> dict[str, Any]:
     """Log likelihood of a skill formation model, returning debug data on top.
 
@@ -86,6 +87,9 @@ def log_likelihood(
             each measurement, or None if all measurements are Gaussian.
         limited_updates: Per-update families and thresholds, or None if all
             measurements are Gaussian.
+        interval_bounds: Array of shape (n_updates, n_obs, 2) with the ends of the
+            latent interval of each observation known only by an interval (NaN
+            elsewhere), or None if there are none.
 
     Returns:
         All data relevant for debugging, e.g. the log likelihood contribution of
@@ -108,7 +112,7 @@ def log_likelihood(
     }
 
     observed_later, observed_from_period = get_observation_masks(
-        measurements, iteration_to_period
+        measurements, iteration_to_period, events=events
     )
     loop_args = {
         "period": iteration_to_period,
@@ -124,6 +128,7 @@ def log_likelihood(
             limited_updates=limited_updates,
             meas_sds=parsed_params.meas_sds,
             params=params,
+            interval_bounds=interval_bounds,
         ),
     }
 

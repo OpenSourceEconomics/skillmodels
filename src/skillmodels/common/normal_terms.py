@@ -13,9 +13,16 @@ from jax import Array
 LOG_SQRT_2PI = 0.91893853320467274178
 _TAIL_SWITCH = -8.0
 _CENTRAL_CAP = 40.0
+_HALF_RANGE = 2.0**1023
 _CONTINUED_FRACTION_DEPTH = 24
 _NARROW_SWITCH = 0.25
 _SERIES_ORDER = 21
+# `source_interval_terms` selects its branches from `log(w max(1, |c|))`: the narrow
+# series up to `log(2 * _NARROW_SWITCH)`; beyond `log(760)` the ratio `Phi(a) / Phi(b)`
+# is below `exp(-760)` (if `|c| >= 1`, `c w < -760`; else `a < -380`), which is 0 in
+# float64, so the interval is the half-line below `b`.
+_LOG_NARROW_SWITCH = -0.69314718055994530942
+_LOG_FAR_SWITCH = 6.63331843328037917
 
 
 def log_normal_interval_mass(lower: Array, upper: Array) -> Array:
@@ -68,6 +75,9 @@ def normal_interval_terms(
       `Var[z] = (V_b - q V_a) / (1 - q) - q (r_b - r_a)^2 / (1 - q)^2`, where `r_x`
       and `V_x = 1 - d(x)` are the Mills ratio and the variance below `x`. All
       terms stay finite and accurate far in the tails.
+
+    The interval is the one between the two given ends; `source_interval_terms`
+    evaluates an interval given by source values and a location and scale instead.
     """
     lower = jnp.asarray(lower, dtype=jnp.float64)
     upper = jnp.asarray(upper, dtype=jnp.float64)
@@ -99,6 +109,198 @@ def normal_interval_terms(
     return log_z, jnp.where(flip, -mean, mean), 1.0 - var, var
 
 
+def source_interval_terms(
+    lower: Array,
+    upper: Array,
+    location: Array,
+    scale: Array,
+    *,
+    log_scale: Array | None = None,
+) -> tuple[Array, Array, Array, Array]:
+    """Return `log Z`, `E[z]`, `d = 1 - Var[z]` and `Var[z]` of a source interval.
+
+    `y ~ N(location, scale^2)` is truncated to `(lower, upper]` with finite
+    `lower < upper`, finite `location` and finite `scale > 0`; `z = (y - location) /
+    scale`. Elementwise in float64. `log_scale`, if given, is `log(scale)`, and the
+    derivatives in the scale are taken through it: `scale` and `log_scale` are one
+    quantity, the tangent of `scale` itself is ignored. The derivative in the log
+    scale (about `c^2`, twice the log mass) is then a finite float whenever it is
+    representable, while the derivative in `scale` itself, `c^2 / scale`, need not
+    be. Without `log_scale`, `log(scale)` is formed here and the derivative in
+    `scale` follows from it by the chain rule.
+
+    The interval is represented by its standardized ends
+    `a = (lower - location) / scale`, `b = (upper - location) / scale` and its log
+    width `log(upper - lower) - log(scale)`, each formed from the source values
+    with one rounding per operation and without an intermediate that can overflow
+    or underflow (`_scaled_difference`, `_log_difference`); in particular the
+    standardized width itself is never formed. After the reflection of
+    `normal_interval_terms`, with `c = (a + b) / 2` and `h = w / 2` from the log
+    width `log w`:
+
+    - `h max(1, |c|) <= 0.25`: the Hermite series around `c` with its terms carried
+      as the products `He_n(c) h^n / n!` (`_narrow_source_moments`), and the log
+      width in `log Z`;
+    - otherwise: the difference of the half-lines below `b` and `a` as in
+      `normal_interval_terms`, with `log q = log Phi(a) - log Phi(b)` evaluated as
+      `c w + log r(b) - log r(a)` (`r` the Mills ratio): the leading term
+      `(b^2 - a^2) / 2 = c w` comes from the centre and the log width, and the log
+      Mills ratios vary slowly in their arguments, so `log q` keeps the span of the
+      source interval when the two rounded standardized ends coincide (there a
+      difference of their log-CDFs would be 0).
+
+    Standardized quantities may leave the float range while the log mass is a
+    finite float: a standardized end beyond `2^1023` (replaced by the infinity of
+    its sign before any division), a width beyond `exp(709)`, or a tilt `c w` beyond
+    the largest float. Then the ratio `q = Phi(a) / Phi(b)` is 0 in float64 -- also
+    whenever `w max(1, |c|) > 760`, since then `c w < -760` or `a < -380` -- and the
+    interval is the half-line below `b`: `log q` is set to `-inf` and the arguments
+    of every other operation of that branch are replaced by finite placeholders, so
+    that no `0 * inf` arises in a value or in a derivative of a discarded branch.
+    The branches agree to rounding at their boundaries. Where the nearer end `b` is
+    itself `-inf` (both ends beyond `2^1023` on the same side), the interval holds
+    no representable mass: `log Z = -inf`, `E[z] = b`, `Var[z] = 0`.
+
+    `log Z` is a finite float exactly where the correctly rounded log mass is one
+    (`|b|` below about `2^512`), else `-inf`; no output is NaN; and the moments and
+    the derivatives in the location and the log scale are finite floats wherever
+    `log Z` and the true derivative are.
+    """
+    lower = jnp.asarray(lower, dtype=jnp.float64)
+    upper = jnp.asarray(upper, dtype=jnp.float64)
+    location = jnp.asarray(location, dtype=jnp.float64)
+    scale = jnp.asarray(scale, dtype=jnp.float64)
+    if log_scale is None:
+        log_scale = jnp.log(scale)
+    log_scale = jnp.asarray(log_scale, dtype=jnp.float64)
+    a = _scaled_difference(lower, location, scale, log_scale)
+    b = _scaled_difference(upper, location, scale, log_scale)
+    log_width = _log_difference(upper, lower) - log_scale
+    midpoint = 0.5 * a + 0.5 * b
+    flip = midpoint > 0.0
+    a, b = jnp.where(flip, -b, a), jnp.where(flip, -a, b)
+    centre = jnp.where(flip, -midpoint, midpoint)
+    # The branch is selected from log(w max(1, |c|)); an infinite standardized end
+    # (a, b or c beyond the float range) makes the interval a half-line below b.
+    ends_finite = jnp.isfinite(a) & jnp.isfinite(b)
+    log_tilt = log_width + jnp.log(
+        jnp.maximum(1.0, -jnp.where(ends_finite, centre, 0.0))
+    )
+    narrow = ends_finite & (log_tilt <= _LOG_NARROW_SWITCH)
+    far = ~ends_finite | (log_tilt > _LOG_FAR_SWITCH)
+    moderate = ~narrow & ~far
+    width = jnp.exp(jnp.where(far, 0.0, log_width))
+    half = 0.5 * width
+
+    log_z_n, mean_n, var_n = _narrow_source_moments(
+        jnp.where(narrow, centre, 0.0),
+        jnp.where(narrow, half, 0.1),
+        jnp.where(narrow, log_width, 0.0),
+    )
+
+    a_w = jnp.where(moderate, a, -1.0)
+    empty = jnp.isneginf(b)
+    b_w = jnp.where(narrow, 1.0, jnp.where(empty, -1.0, b))
+    _, mills_a, log_mills_a, var_a = _tail_terms_with_log_mills(a_w)
+    log_cdf_b, mills_b, log_mills_b, var_b = _tail_terms_with_log_mills(b_w)
+    log_q = jnp.where(
+        far,
+        -jnp.inf,
+        jnp.where(moderate, centre, 0.0) * jnp.where(moderate, width, 2.0)
+        + log_mills_b
+        - log_mills_a,
+    )
+    one_minus_q = -jnp.expm1(log_q)
+    q = jnp.exp(log_q)
+    log_z_w = log_cdf_b + jnp.log(one_minus_q)
+    mean_w = (q * mills_a - mills_b) / one_minus_q
+    spread = (mills_b - mills_a) / one_minus_q
+    var_w = (var_b - q * var_a) / one_minus_q - q * spread * spread
+
+    log_z = jnp.where(empty, -jnp.inf, jnp.where(narrow, log_z_n, log_z_w))
+    mean = jnp.where(empty, b, jnp.where(narrow, mean_n, mean_w))
+    var = jnp.where(empty, 0.0, jnp.where(narrow, var_n, var_w))
+    return log_z, jnp.where(flip, -mean, mean), 1.0 - var, var
+
+
+def _halving_factor(x: Array, y: Array) -> Array:
+    """Return 0.5 where `x - y` could overflow, else 1.
+
+    The difference of two floats overflows only if one of them has a magnitude of
+    at least `2^1023`. Halving such operands is exact; halving a subnormal operand
+    next to one of that magnitude changes the difference by less than one part in
+    `2^2000`.
+    """
+    return jnp.where(jnp.maximum(jnp.abs(x), jnp.abs(y)) >= _HALF_RANGE, 0.5, 1.0)
+
+
+def _scaled_difference(
+    minuend: Array, subtrahend: Array, scale: Array, log_scale: Array
+) -> Array:
+    """Return `(minuend - subtrahend) / scale` without overflow of the difference.
+
+    Where no operand reaches `2^1023` the operations are literally
+    `(minuend - subtrahend) / scale`; elsewhere the operands are halved and the
+    quotient is doubled, which rounds once in the subtraction and once in the
+    division, like the plain form. A quotient beyond `2^1023` in magnitude is the
+    infinity of its sign, decided before the division. The derivative in the scale
+    is taken through `log_scale` (`_scaled_quotient`).
+    """
+    factor = _halving_factor(minuend, subtrahend)
+    difference = minuend * factor - subtrahend * factor
+    # A quotient beyond 2^1023 is replaced by the infinity of its sign before the
+    # division, so no division or derivative of one forms an infinite value.
+    overflow = jnp.abs(difference) > scale * (factor * _HALF_RANGE)
+    quotient = (
+        _scaled_quotient(
+            difference,
+            jnp.where(overflow, 1.0, scale),
+            jnp.where(overflow, 0.0, log_scale),
+        )
+        / factor
+    )
+    return jnp.where(overflow, jnp.where(difference < 0.0, -jnp.inf, jnp.inf), quotient)
+
+
+def _scaled_quotient_impl(
+    numerator: Array,
+    scale: Array,
+    log_scale: Array,  # noqa: ARG001
+) -> Array:
+    """Return `numerator / scale` with the derivatives taken through `log_scale`.
+
+    The tangent is `numerator_dot / scale - quotient * log_scale_dot`; the tangent
+    of `scale` itself is ignored, since `scale` and `log_scale` are one quantity.
+    The default rule for the denominator would form `scale^-2`, which overflows
+    below `1e-154`, and the cotangent of `scale`, `-quotient^2 / scale`, which can
+    overflow although the cotangent of `log_scale`, `-quotient^2`, is representable.
+    """
+    return numerator / scale
+
+
+def _scaled_quotient_jvp(
+    primals: tuple[Array, Array, Array], tangents: tuple[Array, Array, Array]
+) -> tuple[Array, Array]:
+    numerator, scale, _ = primals
+    numerator_dot, _, log_scale_dot = tangents
+    quotient = numerator / scale
+    return quotient, numerator_dot / scale - quotient * log_scale_dot
+
+
+_scaled_quotient = jax.custom_jvp(_scaled_quotient_impl)
+_scaled_quotient.defjvp(_scaled_quotient_jvp)
+
+
+def _log_difference(upper: Array, lower: Array) -> Array:
+    """Return `log(upper - lower)` for `lower < upper` without overflow.
+
+    The difference of two distinct finite floats is a positive float, so the
+    logarithm is finite; operands that reach `2^1023` are halved first.
+    """
+    factor = _halving_factor(upper, lower)
+    return jnp.log(upper * factor - lower * factor) - jnp.log(factor)
+
+
 def _narrow_interval_moments(centre: Array, half: Array) -> tuple[Array, Array, Array]:
     """Return `log Z`, `E[z]` and `Var[z]` on `(centre - half, centre + half]`.
 
@@ -123,6 +325,39 @@ def _narrow_interval_moments(centre: Array, half: Array) -> tuple[Array, Array, 
         he_prev, he = he, centre * he - n * he_prev
     mean_u = e1 / e0
     log_z = -0.5 * centre * centre - LOG_SQRT_2PI + jnp.log(2.0 * half * e0)
+    return log_z, centre + mean_u, e2 / e0 - mean_u * mean_u
+
+
+def _narrow_source_moments(
+    centre: Array, half: Array, log_width: Array
+) -> tuple[Array, Array, Array]:
+    """Return `log Z`, `E[z]` and `Var[z]` on `(centre - half, centre + half]`.
+
+    The series of `_narrow_interval_moments` with the terms
+    `t_n = He_n(c) h^n / n!` carried as one quantity by the recursion
+    `t_n = (c h) t_{n-1} / n - h^2 t_{n-2} / n`, which stays bounded by `0.25^n`
+    where `h max(1, |c|) <= 0.25`, while `He_n(c)` alone overflows and `h^n` alone
+    underflows for large `|c|` and tiny `h`. `log_width = log(2 h)` replaces the
+    logarithm of `2 h` in `log Z`, so `log Z` is finite when `2 h` underflows, and
+    `-c^2 / 2` is formed as `(-c / 2) c`, which overflows only where the log mass
+    itself is not a finite float.
+    """
+    tilt = centre * half
+    curvature = half * half
+    term_prev = jnp.zeros_like(centre)
+    term = jnp.ones_like(centre)
+    e0 = jnp.ones_like(centre)
+    e1 = jnp.zeros_like(centre)
+    e2 = curvature / 3.0
+    for n in range(1, _SERIES_ORDER + 1):
+        term_prev, term = term, (tilt * term - curvature * term_prev) / n
+        if n % 2:
+            e1 = e1 - term * half / (n + 2)
+        else:
+            e0 = e0 + term / (n + 1)
+            e2 = e2 + term * curvature / (n + 3)
+    mean_u = e1 / e0
+    log_z = (-0.5 * centre) * centre - LOG_SQRT_2PI + log_width + jnp.log(e0)
     return log_z, centre + mean_u, e2 / e0 - mean_u * mean_u
 
 
@@ -162,10 +397,49 @@ normal_tail_terms = jax.custom_jvp(_normal_tail_terms_impl)
 normal_tail_terms.defjvp(_normal_tail_terms_jvp)
 
 
+def _tail_terms_with_log_mills_impl(t: Array) -> tuple[Array, Array, Array, Array]:
+    """Return `log Phi(t)`, `r`, `log r` and `1 - d` of `normal_tail_terms`.
+
+    `log r` is the log Mills ratio with the derivative `-(t + r)`; it is finite also
+    where `r` underflows, which `normal_tail_terms` leaves to the caller. Used by
+    `source_interval_terms`; the half-line update keeps `normal_tail_terms`.
+    """
+    _, mills, _, complement, _, log_mills, _, log_cdf = (
+        _normal_tail_terms_and_derivative(t, with_log_mills=True)
+    )
+    return log_cdf, mills, log_mills, complement
+
+
+def _tail_terms_with_log_mills_jvp(
+    primals: tuple[Array], tangents: tuple[Array]
+) -> tuple[tuple[Array, Array, Array, Array], tuple[Array, Array, Array, Array]]:
+    (t,), (t_dot,) = primals, tangents
+    _, mills, contraction, complement, prime, log_mills, log_mills_prime, log_cdf = (
+        _normal_tail_terms_and_derivative(t, with_log_mills=True)
+    )
+    return (log_cdf, mills, log_mills, complement), (
+        mills * t_dot,
+        -contraction * t_dot,
+        log_mills_prime * t_dot,
+        -prime * t_dot,
+    )
+
+
+_tail_terms_with_log_mills = jax.custom_jvp(_tail_terms_with_log_mills_impl)
+_tail_terms_with_log_mills.defjvp(_tail_terms_with_log_mills_jvp)
+
+
 def _normal_tail_terms_and_derivative(
-    t: Array,
-) -> tuple[Array, Array, Array, Array, Array]:
-    """Evaluate both regions on safe arguments and select per element."""
+    t: Array, *, with_log_mills: bool = False
+) -> tuple[Array, ...]:
+    """Evaluate both regions on safe arguments and select per element.
+
+    With `with_log_mills`, append the log Mills ratio, its derivative and
+    `log Phi(t)` with the tail's `-t^2 / 2` formed as `(-t / 2) t`, which overflows
+    only where `log Phi(t)` is not a finite float: the continued fraction gives `r`
+    directly, and the central region forms `r` as the exponential of `log r`. The
+    operations of the plain call are kept in their order.
+    """
     t = jnp.asarray(t, dtype=jnp.float64)
     in_tail = t <= _TAIL_SWITCH
 
@@ -176,7 +450,8 @@ def _normal_tail_terms_and_derivative(
         jnp.log1p(-jax.scipy.special.ndtr(-tc)),
         jax.scipy.special.log_ndtr(tc),
     )
-    mills_c = jnp.exp(-0.5 * tc * tc - LOG_SQRT_2PI - log_cdf_c)
+    log_mills_c = -0.5 * tc * tc - LOG_SQRT_2PI - log_cdf_c
+    mills_c = jnp.exp(log_mills_c)
     contraction_c = mills_c * (mills_c + tc)
     complement_c = 1.0 - contraction_c
     prime_c = mills_c - contraction_c * (tc + 2.0 * mills_c)
@@ -186,12 +461,23 @@ def _normal_tail_terms_and_derivative(
     log_cdf_n = -0.5 * x * x - LOG_SQRT_2PI - jnp.log(mills_n)
     contraction_n = 1.0 - complement_n
 
-    return (
+    terms = (
         jnp.where(in_tail, log_cdf_n, log_cdf_c),
         jnp.where(in_tail, mills_n, mills_c),
         jnp.where(in_tail, contraction_n, contraction_c),
         jnp.where(in_tail, complement_n, complement_c),
         jnp.where(in_tail, prime_n, prime_c),
+    )
+    if not with_log_mills:
+        return terms
+    # d log r / dt = -d / r = -(t + r); the first form avoids the cancellation of
+    # `t + r` in the tail, the second the underflow of `r` in the central region.
+    log_mills_n = jnp.log(mills_n)
+    return (
+        *terms,
+        jnp.where(in_tail, log_mills_n, log_mills_c),
+        jnp.where(in_tail, -contraction_n / mills_n, -(tc + mills_c)),
+        jnp.where(in_tail, (-0.5 * x) * x - LOG_SQRT_2PI - log_mills_n, log_cdf_c),
     )
 
 

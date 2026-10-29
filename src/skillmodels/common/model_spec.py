@@ -45,8 +45,8 @@ def _parse_measurement_models(
     """Build `MeasurementModel` instances from a `from_dict` measurement_models map.
 
     Each entry is `{family: "gaussian" | "probit" | "tobit" | "ordered_probit",
-    lower?, upper?, n_categories?}`; `n_categories` is required for
-    `"ordered_probit"`.
+    lower?, upper?, interval_columns?, n_categories?}`; `n_categories` is required
+    for `"ordered_probit"`.
     """
     if not spec:
         return {}
@@ -58,8 +58,11 @@ def _parse_measurement_models(
         elif family == "probit":
             models[name] = ProbitMeasurement()
         elif family == "tobit":
+            columns = cfg.get("interval_columns")
             models[name] = TobitMeasurement(
-                lower=cfg.get("lower", 0.0), upper=cfg.get("upper")
+                lower=cfg.get("lower", 0.0),
+                upper=cfg.get("upper"),
+                interval_columns=None if columns is None else tuple(columns),
             )
         elif family == "ordered_probit":
             if "n_categories" not in cfg:

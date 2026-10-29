@@ -18,6 +18,7 @@ from skillmodels.chs.halfline import (
 )
 from skillmodels.chs.kalman_filters import kalman_update
 from skillmodels.chs.options import CHSEstimationOptions
+from skillmodels.common.measurement_models import ObservationEvent
 from skillmodels.common.parse_params import parse_params
 from skillmodels.common.types import (
     Dimensions,
@@ -45,6 +46,7 @@ def log_likelihood(
     observed_factor_vars: Array | np.ndarray,
     events: Array | None = None,
     limited_updates: LimitedUpdates | None = None,
+    interval_bounds: Array | None = None,
 ) -> Array:
     """Aggregated log likelihood of a skill formation model.
 
@@ -82,6 +84,9 @@ def log_likelihood(
             each measurement, or None if all measurements are Gaussian.
         limited_updates: Per-update families and thresholds, or None if all
             measurements are Gaussian.
+        interval_bounds: Array of shape (n_updates, n_obs, 2) with the ends of the
+            latent interval of each observation known only by an interval (NaN
+            elsewhere), or None if there are none.
 
     Returns:
         Scalar aggregated log likelihood.
@@ -105,6 +110,7 @@ def log_likelihood(
         observed_factor_vars=observed_factor_vars,
         events=events,
         limited_updates=limited_updates,
+        interval_bounds=interval_bounds,
     ).sum()
 
 
@@ -126,6 +132,7 @@ def log_likelihood_obs(
     observed_factor_vars: Array | np.ndarray,
     events: Array | None = None,
     limited_updates: LimitedUpdates | None = None,
+    interval_bounds: Array | None = None,
 ) -> Array:
     """Log likelihood of a skill formation model.
 
@@ -172,6 +179,9 @@ def log_likelihood_obs(
             each measurement, or None if all measurements are Gaussian.
         limited_updates: Per-update families and thresholds, or None if all
             measurements are Gaussian.
+        interval_bounds: Array of shape (n_updates, n_obs, 2) with the ends of the
+            latent interval of each observation known only by an interval (NaN
+            elsewhere), or None if there are none.
 
     Returns:
         jnp.array: 1d array of length N, the aggregated log likelihood.
@@ -200,12 +210,15 @@ def log_likelihood_obs(
         "measurements": measurements,
         "is_measurement_iteration": is_measurement_iteration,
         "is_predict_iteration": is_predict_iteration,
-        "observed_later": get_observation_masks(measurements, iteration_to_period)[0],
+        "observed_later": get_observation_masks(
+            measurements, iteration_to_period, events=events
+        )[0],
         **get_limited_loop_args(
             events=events,
             limited_updates=limited_updates,
             meas_sds=parsed_params.meas_sds,
             params=params,
+            interval_bounds=interval_bounds,
         ),
     }
 
@@ -237,6 +250,7 @@ def log_likelihood_obs(
 def get_observation_masks(
     measurements: Array | np.ndarray,
     iteration_to_period: Array | np.ndarray,
+    events: Array | None = None,
 ) -> tuple[Array, Array]:
     """Return masks of persons with an observed measurement after each update.
 
@@ -244,6 +258,10 @@ def get_observation_masks(
         measurements: Array of shape (n_updates, n_obs). NaN if not observed.
         iteration_to_period: Array of length n_updates mapping each update to its
             period. Updates of one period are contiguous.
+        events: Array of shape (n_updates, n_obs) with the `ObservationEvent` of
+            each measurement, or None. If given, an observation is observed unless
+            its event is `MISSING`, which counts observations known only by an
+            interval (whose value is NaN).
 
     Returns:
         - observed_later: Array of shape (n_updates, n_obs). True if the person has
@@ -254,7 +272,11 @@ def get_observation_masks(
           later period. Filtered states are reported only for these persons.
 
     """
-    observed = jnp.isfinite(measurements)
+    observed = (
+        jnp.isfinite(measurements)
+        if events is None
+        else events != ObservationEvent.MISSING
+    )
     observed_from = jnp.flip(jnp.cumsum(jnp.flip(observed, axis=0), axis=0) > 0, axis=0)
     observed_later = jnp.concatenate(
         [observed_from[1:], jnp.zeros_like(observed_from[:1])], axis=0
@@ -412,17 +434,21 @@ def get_limited_loop_args(
     limited_updates: LimitedUpdates | None,
     meas_sds: Array,
     params: Array,
+    interval_bounds: Array | None = None,
 ) -> dict[str, Array]:
     """Return the per-update scan inputs of limited measurements.
 
     Empty without limited measurements, so an all-Gaussian model runs the plain
     Gaussian scan. Otherwise the `meas_sds` entry replaces the parsed one with a
-    unit error SD for probit and ordered-probit updates, and `cut_table` holds the
-    cut values of each update row with the current cutpoints.
+    unit error SD for probit and ordered-probit updates, `cut_table` holds the
+    cut values of each update row with the current cutpoints, and
+    `interval_bounds` (if given) the ends of observed intervals.
     """
     if events is None or limited_updates is None:
         return {}
+    bounds = {} if interval_bounds is None else {"interval_bounds": interval_bounds}
     return {
+        **bounds,
         "events": events,
         "is_limited": jnp.asarray(limited_updates.is_limited),
         "cut_table": get_cut_table(limited_updates, params),
