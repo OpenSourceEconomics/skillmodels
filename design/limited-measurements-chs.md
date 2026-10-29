@@ -277,6 +277,19 @@ predicted state `N(m, P)`, with `μ = a + λ'm`, `s² = σ² + λ'Pλ`:
   of each row); the one remaining non-finite derivative in the *update* is shared
   by every measurement family: `w = v/s` in `kalman_update_limited` differentiates
   in `s` through `s^-2`, which overflows for `s < 10^-154`.
+- Supported domain for the accuracy of the posterior moments: prior state SD,
+  loading and measurement SD within `[2^-10, 2^10]` in absolute value, and
+  standardized ends within `2^10` of the predicted mean. Values, derivatives and
+  finiteness as above hold on the whole public domain. Outside the supported domain
+  `E[z]` and `Var[z]` may lose the source width: where the two standardized ends
+  round to the same float but the wide branch applies (a tail distance near
+  `2^30`, as in the reviewer's witness with prior SD `2^40`), `Var[z]` is the
+  half-line value. Inside it, 2,000 seeded log-uniform cases against an
+  independent 800-digit integral of the source interval give errors of the
+  posterior covariance and mean, divided by the prior SD, of at most `2.4e-11` and
+  `2.5e-13`, and of `log Z` of at most `1.2e-10` (4 ulps of `|log Z| ≈ 1.5e5`).
+  Applications use a few predictive SDs (health-cognition: a 0–27 score with
+  class cuts at 6.5 and 11.5).
 
 This is the ordered-probit interval update of §5 with a free `σ` in `s` and the ends
 taken from the data instead of the cutpoint parameters; the square-root update
