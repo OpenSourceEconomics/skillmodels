@@ -140,10 +140,11 @@ def _narrow_interval_moments(
             e2 = e2 + he * power * half * half / (n + 3)
         he_prev, he = he, centre * he - n * he_prev
     mean_u = e1 / e0
-    log_mass = (
-        jnp.log(2.0 * half * e0) if log_width is None else log_width + jnp.log(e0)
+    log_z = (
+        -0.5 * centre * centre
+        - LOG_SQRT_2PI
+        + (jnp.log(2.0 * half * e0) if log_width is None else log_width + jnp.log(e0))
     )
-    log_z = -0.5 * centre * centre - LOG_SQRT_2PI + log_mass
     return log_z, centre + mean_u, e2 / e0 - mean_u * mean_u
 
 
