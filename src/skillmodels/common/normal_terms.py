@@ -49,7 +49,7 @@ def log_normal_interval_mass(lower: Array, upper: Array) -> Array:
 
 
 def normal_interval_terms(
-    lower: Array, upper: Array, *, width: Array | None = None
+    lower: Array, upper: Array, *, log_width: Array | None = None
 ) -> tuple[Array, Array, Array, Array]:
     """Return `log Z`, `E[z]`, `d = 1 - Var[z]` and `Var[z]` of a truncated normal.
 
@@ -69,12 +69,13 @@ def normal_interval_terms(
       and `V_x = 1 - d(x)` are the Mills ratio and the variance below `x`. All
       terms stay finite and accurate far in the tails.
 
-    `width`, if given, is `upper - lower` computed without the standardized ends, for
-    example `(hi - lo) / s` for ends standardized as `(hi - mu) / s` and
-    `(lo - mu) / s`. It replaces `b - a` as the width of the narrow series, so a
-    narrow interval keeps its mass when rounding the standardized ends shrinks or
-    removes their difference. Only `width <= 0.5` can select the narrow series;
-    larger values may be passed capped.
+    `log_width`, if given, is `log(upper - lower)` computed without the standardized
+    ends, for example `log(hi - lo) - log(s)` for ends standardized as
+    `(hi - mu) / s` and `(lo - mu) / s`. It replaces `b - a` as the width of the
+    narrow series, so a narrow interval keeps its mass when rounding the standardized
+    ends shrinks or removes their difference, and `log Z` stays finite when the
+    width, the half-width or `Z` itself underflows. Only `log_width <= log(0.5)` can
+    select the narrow series; larger values may be passed capped.
     """
     lower = jnp.asarray(lower, dtype=jnp.float64)
     upper = jnp.asarray(upper, dtype=jnp.float64)
@@ -82,13 +83,17 @@ def normal_interval_terms(
     a = jnp.where(flip, -upper, lower)
     b = jnp.where(flip, -lower, upper)
     centre = 0.5 * (a + b)
-    half = (
-        0.5 * (b - a) if width is None else 0.5 * jnp.asarray(width, dtype=jnp.float64)
-    )
+    if log_width is None:
+        half = 0.5 * (b - a)
+    else:
+        log_width = jnp.asarray(log_width, dtype=jnp.float64)
+        half = 0.5 * jnp.exp(log_width)
     narrow = half * jnp.maximum(1.0, -centre) <= _NARROW_SWITCH
 
     log_z_n, mean_n, var_n = _narrow_interval_moments(
-        jnp.where(narrow, centre, 0.0), jnp.where(narrow, half, 0.1)
+        jnp.where(narrow, centre, 0.0),
+        jnp.where(narrow, half, 0.1),
+        log_width=None if log_width is None else jnp.where(narrow, log_width, 0.0),
     )
 
     a_w = jnp.where(narrow, -1.0, a)
@@ -108,13 +113,17 @@ def normal_interval_terms(
     return log_z, jnp.where(flip, -mean, mean), 1.0 - var, var
 
 
-def _narrow_interval_moments(centre: Array, half: Array) -> tuple[Array, Array, Array]:
+def _narrow_interval_moments(
+    centre: Array, half: Array, *, log_width: Array | None = None
+) -> tuple[Array, Array, Array]:
     """Return `log Z`, `E[z]` and `Var[z]` on `(centre - half, centre + half]`.
 
     With `exp(-c u - u^2 / 2) = sum_n He_n(c) (-u)^n / n!` and the uniform moments
     `E_U[u^k] = h^k / (k + 1)` for even `k`, the three integrals are power series in
     `h` with probabilists' Hermite coefficients; for `h max(1, |c|) <= 0.25` the
-    truncation after order 21 is below double precision.
+    truncation after order 21 is below double precision. `log_width`, if given, is
+    `log(2 h)` and replaces the logarithm of `2 h` in `log Z`, which keeps `log Z`
+    finite when `2 h` underflows.
     """
     he_prev = jnp.ones_like(centre)
     he = centre
@@ -131,7 +140,10 @@ def _narrow_interval_moments(centre: Array, half: Array) -> tuple[Array, Array, 
             e2 = e2 + he * power * half * half / (n + 3)
         he_prev, he = he, centre * he - n * he_prev
     mean_u = e1 / e0
-    log_z = -0.5 * centre * centre - LOG_SQRT_2PI + jnp.log(2.0 * half * e0)
+    log_mass = (
+        jnp.log(2.0 * half * e0) if log_width is None else log_width + jnp.log(e0)
+    )
+    log_z = -0.5 * centre * centre - LOG_SQRT_2PI + log_mass
     return log_z, centre + mean_u, e2 / e0 - mean_u * mean_u
 
 

@@ -390,20 +390,21 @@ def _with_interval_events(
     """Replace the update terms of `INTERVAL` observations by their interval moments.
 
     `terms` are the mean coefficient, `d`, `1 - d` and the log likelihood of each
-    observation and component. With `source_widths`, the standardized width is
-    `(upper_end - lower_end) / s`. Only standardized widths up to 0.5 can select the
-    narrow series of `normal_interval_terms`, so spans above `s` are passed as width
-    1, which keeps the width finite for any finite ends.
+    observation and component. With `source_widths`, the log standardized width is
+    `log(upper_end - lower_end) - log(s)`, which stays finite when the standardized
+    width underflows. Only standardized widths up to 0.5 can select the narrow series
+    of `normal_interval_terms`, so spans above `s` are passed as width 1, which keeps
+    the log width finite for any finite ends.
     """
     # Placeholder ends keep both standardized ends finite off the interval rows.
     lower_std = (jnp.where(is_interval, lower_end, mu - s) - mu) / s
     upper_std = (jnp.where(is_interval, upper_end, mu + s) - mu) / s
-    width = None
+    log_width = None
     if source_widths:
         span = upper_end - lower_end
-        width = jnp.where(is_interval & (span <= s), span, s) / s
+        log_width = jnp.log(jnp.where(is_interval & (span <= s), span, s)) - jnp.log(s)
     log_z, mean_z, contraction_z, var_z = normal_interval_terms(
-        lower_std, upper_std, width=width
+        lower_std, upper_std, log_width=log_width
     )
     coefficient, d, one_minus_d, loglikes = terms
     return (
