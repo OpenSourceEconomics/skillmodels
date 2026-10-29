@@ -245,8 +245,7 @@ predicted state `N(m, P)`, with `μ = a + λ'm`, `s² = σ² + λ'Pλ`:
   the whole float range), or `c w` beyond the largest float. The division that
   would overflow is not performed: the end is replaced by the infinity of its sign
   before the division (`_scaled_difference`), which also keeps the derivative of
-  the division finite (and its derivative in `s` is `−quotient/s` by a custom rule,
-  not `−num·s^-2`, whose `s^-2` overflows below `s = 10^-154`). The branch is then
+  the division finite. The branch is then
   chosen from `log(w·max(1,|c|))`, which is finite or `+∞`: at most `log(1/2)` the
   narrow series; above `log 760` — or with an infinite end — `q = Φ(α)/Φ(β)` is 0
   in float64 (if `|c| ≥ 1`, `c w < −760`; else `α < −380`), and the interval is
@@ -254,11 +253,30 @@ predicted state `N(m, P)`, with `μ = a + λ'm`, `s² = σ² + λ'Pλ`:
   the tilt, the exponential of the log width and the lower-end tail terms are
   replaced by finite placeholders before those operations, so that neither a value
   nor the derivative of a discarded branch contains `0·∞`. The far branch changes
-  no value: on its rows the moderate formula gives `q = 0` as well. Derivatives are
-  therefore finite floats wherever `ℓ` and the true derivatives are; the one
-  remaining non-finite derivative in the *update* is shared by every measurement
-  family: `w = v/s` in `kalman_update_limited` differentiates in `s` through
-  `s^-2`, which overflows for `s < 10^-154`.
+  no value: on its rows the moderate formula gives `q = 0` as well. Where the
+  nearer end `β` is itself `−∞` (both ends beyond `2^1023` on one side) the
+  interval holds no representable mass: `ℓ = −∞`, `E[z] = β`, `Var[z] = 0`, and
+  the tail terms receive a placeholder argument.
+- Intermediates of the narrow series and of the derivatives beyond the float
+  range with a finite result: the Hermite series around `c` multiplies `He_n(c)`,
+  which overflows for `|c| ≳ 10^20` at `n = 16`, by `h^n`, which underflows for
+  tiny `h`, although their product is bounded by `(h max(1,|c|))^n ≤ 4^-n`. The
+  recursion carries the product `t_n = He_n(c) h^n / n!` as one quantity
+  (`t_n = (c h) t_{n−1}/n − h² t_{n−2}/n`), so no term leaves the float range; and
+  `−c²/2` is formed as `(−c/2)·c`, which overflows only where `ℓ` is not a finite
+  float. The derivative in the scale is routed through `log s`: `kalman_update_limited`
+  passes `log s` beside `s`, and the only operation in which `s` enters, the
+  division `(lo − μ)/s`, has the custom rule `d(num/s) = d num / s − (num/s)·d log s`
+  with the tangent of `s` itself ignored (`s` and `log s` are one quantity). The
+  derivative of `ℓ` in `log s` is about `c²`, twice the log mass, and is therefore
+  a finite float whenever `ℓ` is, except where `ℓ < −2^1022`; the derivative in `s`
+  itself, `c²/s`, and the default rule's `s^-2` are not. Values and derivatives are
+  therefore finite floats wherever `ℓ` and the true derivatives are, and `ℓ = −∞`
+  exactly where the correctly rounded log mass is not a finite float (checked on a
+  seeded log-uniform sample of the public domain against an exact classification
+  of each row); the one remaining non-finite derivative in the *update* is shared
+  by every measurement family: `w = v/s` in `kalman_update_limited` differentiates
+  in `s` through `s^-2`, which overflows for `s < 10^-154`.
 
 This is the ordered-probit interval update of §5 with a free `σ` in `s` and the ends
 taken from the data instead of the cutpoint parameters; the square-root update

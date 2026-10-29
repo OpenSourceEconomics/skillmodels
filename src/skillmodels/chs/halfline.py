@@ -405,6 +405,7 @@ def _with_interval_events(
             upper=jnp.where(is_interval, upper_end, 1.0),
             location=jnp.where(is_interval, mu, 0.0),
             scale=jnp.where(is_interval, s, 1.0),
+            log_scale=jnp.where(is_interval, jnp.log(s), 0.0),
         )
     else:
         lower_std = (jnp.where(is_interval, lower_end, mu - s) - mu) / s

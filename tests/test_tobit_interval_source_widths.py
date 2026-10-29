@@ -29,6 +29,14 @@ them imports the project, JAX, NumPy or SciPy), cover the tested domain:
 - `source_reference`: the integral over the unit coordinate `z = a + w u` with
   bounded tilt `A = -a w` and curvature `B = w^2`, which covers the far tails.
 
+Beyond their domains, `_extreme_reference` evaluates the closed forms of a half-line
+(`erfc`, or the asymptotic series of the Mills ratio in `Decimal` below `-37`), of
+the whole line, and of a tail interval through the Hermite generating series in
+`Decimal` (`_narrow_tail_reference`). A seeded log-uniform generator over the
+public finite domain (`_log_uniform_sources`) checks, with an exact classification
+of each row, that the log mass is a finite float exactly where the true log mass
+is one, and that the moments and scores are finite wherever representable.
+
 The oracles, the public reproducers and the mutation cases are adapted from the
 external review of observed Tobit intervals (`filter_interval_oracle.py`,
 `filter_public_witness.py`, `test_source_intervals.py`,
@@ -512,6 +520,7 @@ def test_source_intervals_match_the_oracle_in_the_update() -> None:
         (*WIDE_COLLAPSE_WITNESS, 0.0),
         (-(2.0**-30), 0.0, -(2.0**30), 1.0, 2.0**-30),
         *[(*witness, 0.0) for witness in EXTREME_WITNESSES],
+        *[(*witness, 0.0) for witness in SERIES_RANGE_WITNESSES],
     ]
     got = np.asarray(jax.jit(jax.vmap(_scan_update))(jnp.asarray(rows)))
     expected = _update_references(rows)
@@ -527,6 +536,29 @@ EXTREME_WITNESSES = (
     (-1e308, 1e308, 0.0, 1.0),
     (-1e200, 0.0, 0.0, 1e-110),
     (-1e300, 0.0, 0.0, 1e-10),
+)
+# Narrow intervals at a standardized centre of `-6e20` and `-7e14` (the Hermite
+# polynomials alone overflow while the powers of the half-width alone underflow),
+# and a half-line in effect at `-1.9e107` with log mass `-1.75e214`.
+SERIES_RANGE_WITNESSES = (
+    (
+        5.7714221142628916e-297,
+        3.1318011303923943e-34,
+        1.1933194744668855e104,
+        1.997401646612493e83,
+    ),
+    (
+        3.362541451378649e-95,
+        2.5345197561950385e-58,
+        -1.5314579701252063e-14,
+        2.2027572892798978e-29,
+    ),
+    (
+        2.1229330635622634e-89,
+        2.679398552475158e-89,
+        -2.3655559752782682e-20,
+        1.2636665515490494e-127,
+    ),
 )
 
 
@@ -570,16 +602,23 @@ def _extreme_reference(lo: float, hi: float, mu: float, sd: float) -> dict:
     with localcontext() as context:
         context.prec = 250
         lower, upper, mean, scale = map(Decimal.from_float, (lo, hi, mu, sd))
-        a, b = float((lower - mean) / scale), float((upper - mean) / scale)
-    if a > -40.0 or b < -8.0:
-        if b < 40.0 or a > 8.0:
-            return _reference(lo, hi, mu, sd)
+        exact_a, exact_b = (lower - mean) / scale, (upper - mean) / scale
+        a, b = float(exact_a), float(exact_b)
+        width = float((upper - lower) / scale)
+        centre = float((exact_a + exact_b) / 2)
+    if centre > 0.0:
         mirrored = _extreme_reference(-hi, -lo, -mu, sd)
         return {
             **mirrored,
             "z_mean": -mirrored["z_mean"],
             "d_location": -mirrored["d_location"],
         }
+    if b < -8.0:
+        if width * max(1.0, -centre) > 40.0:
+            return _far_tail_reference(b, sd)
+        return _narrow_tail_reference(lo, hi, mu, sd)
+    if a > -40.0:
+        return _reference(lo, hi, mu, sd)
     if b >= 40.0:
         return {
             "log_mass": 0.0,
@@ -599,6 +638,93 @@ def _extreme_reference(lo: float, hi: float, mu: float, sd: float) -> dict:
     }
 
 
+def _narrow_tail_reference(lo: float, hi: float, mu: float, sd: float) -> dict:
+    """Return the exact terms of a tail interval from the Hermite series.
+
+    With `x = -c` the centre and `h` the half-width, `exp(x u - u^2 / 2) = sum_n
+    He_n(x) u^n / n!`, integrated termwise over `[-h, h]` against `1`, `u`, `u^2`.
+    The partial sums cancel down to `exp(-2 (x h + h^2 / 2))` of their largest
+    term, which 250 digits cover up to `w max(1, |c|) <= 40`.
+    """
+    with localcontext() as context:
+        context.prec = 250
+        lower, upper, mean, scale = map(Decimal.from_float, (lo, hi, mu, sd))
+        a, b = (lower - mean) / scale, (upper - mean) / scale
+        half, centre = (upper - lower) / scale / 2, (a + b) / 2
+        x = -centre
+        he_prev, he, power, factorial = Decimal(0), Decimal(1), half, Decimal(1)
+        s0, s1, s2 = Decimal(0), Decimal(0), Decimal(0)
+        for n in range(400):
+            if n:
+                he_prev, he = he, x * he - (n - 1) * he_prev
+                power *= half
+                factorial *= n
+            weight = 2 * he * power / factorial
+            if n % 2:
+                s1 += weight * half / (n + 2)
+            else:
+                s0 += weight / (n + 1)
+                s2 += weight * half * half / (n + 3)
+            if n > 10 and abs(weight) < abs(s0) * Decimal("1e-200"):
+                break
+        mean_u = s1 / s0
+        z_mean = centre + mean_u
+        z_var = s2 / s0 - mean_u * mean_u
+        log_mass = -centre * centre / 2 - Decimal(2 * math.pi).ln() / 2 + s0.ln()
+        d_log_scale = z_var + z_mean * z_mean - 1
+    return {
+        "log_mass": float(log_mass),
+        "z_mean": float(z_mean),
+        "z_var": float(z_var),
+        "d_location": float(z_mean / scale),
+        "d_log_scale": float(d_log_scale),
+    }
+
+
+def _far_tail_reference(b: float, sd: float) -> dict:
+    """Return the half-line below `b <= -8` whose other end carries no mass.
+
+    Below `b = -37`, where `erfc` underflows, `Phi(b) = phi(b) / |b| (1 - y + 3 y^2
+    - 15 y^3 + ...)` with `y = 1 / b^2` is summed in `Decimal` until a term drops
+    below `1e-40 y`; the first omitted term bounds the truncation error, and the
+    700 digits keep `1 - r (r + b)`, which is `y` to leading order, exact for
+    every representable `b`.
+    """
+    if b >= -37.0:
+        mass = 0.5 * math.erfc(-b / math.sqrt(2))
+        mills = math.exp(-0.5 * b * b) / (math.sqrt(2 * math.pi) * mass)
+        return {
+            "log_mass": math.log(mass),
+            "z_mean": -mills,
+            "z_var": 1 - mills * (mills + b),
+            "d_location": -mills / sd,
+            "d_log_scale": -mills * b,
+        }
+    with localcontext() as context:
+        context.prec = 700
+        end = Decimal(b)
+        curvature = 1 / (end * end)
+        series, term, order = Decimal(1), Decimal(1), 0
+        while abs(term) > curvature * Decimal("1e-40"):
+            order += 1
+            term *= -(2 * order - 1) * curvature
+            series += term
+        leading = -end * end / 2
+        log_mass = leading - Decimal(2 * math.pi).ln() / 2 - abs(end).ln() + series.ln()
+        mills = abs(end) / series
+        z_var = 1 - mills * (mills + end)
+        d_location = -mills / Decimal(sd)
+        d_log_scale = -mills * end
+    largest = Decimal(float(np.finfo(np.float64).max))
+    return {
+        "log_mass": float(log_mass) if log_mass > -largest else -math.inf,
+        "z_mean": float(-mills),
+        "z_var": float(z_var),
+        "d_location": float(d_location),
+        "d_log_scale": float(d_log_scale),
+    }
+
+
 def _physical_scores(row: jax.Array) -> jax.Array:
     """Scores of the log mass in the source location, `sigma` and the loading."""
     return jax.grad(lambda r: _scan_update(r)[0])(row)[2:]
@@ -610,7 +736,7 @@ def _kernel_scores(row: jax.Array) -> jax.Array:
     scale = jnp.hypot(sigma, loading)
     scores = jax.grad(
         lambda theta, ell: source_interval_terms(
-            lower, upper, theta, scale * jnp.exp(ell)
+            lower, upper, theta, scale * jnp.exp(ell), log_scale=jnp.log(scale) + ell
         )[0],
         argnums=(0, 1),
     )(location, 0.0)
@@ -651,6 +777,143 @@ def test_extreme_source_geometries_keep_finite_values_moments_and_scores() -> No
     np.testing.assert_allclose(
         scores[regular], expected_scores[regular], rtol=1e-5, atol=1e-8
     )
+
+
+def _log_uniform_sources(n_rows: int, seed: int) -> np.ndarray:
+    """Return `(lo, hi, location, scale)` rows with log-uniform magnitudes.
+
+    Locations in `[1e-300, 1e300]`, scales in `[1e-150, 1e300]`; the lower end is
+    either `location + z scale` with `|z|` in `[1e-20, 1e3]` or an absolute value in
+    `[1e-300, 1e308]`, and the upper end adds a standardized width in
+    `[1e-20, 1e3]`, an absolute span, or the next float plus that width. Rows whose
+    ends are not finite or not ordered are dropped.
+    """
+    rng = np.random.default_rng(seed)
+
+    def log_uniform(low: float, high: float) -> np.ndarray:
+        return rng.choice([-1.0, 1.0], n_rows) * 10.0 ** rng.uniform(low, high, n_rows)
+
+    location = log_uniform(-300, 300)
+    scale = 10.0 ** rng.uniform(-150, 300, n_rows)
+    z_lower = log_uniform(-20, 3)
+    z_width = 10.0 ** rng.uniform(-20, 3, n_rows)
+    mode = rng.integers(0, 3, n_rows)
+    relative = location + z_lower * scale
+    lo = np.where(mode == 1, log_uniform(-300, 308), relative)
+    hi = np.where(
+        mode == 0,
+        lo + z_width * scale,
+        np.where(
+            mode == 1,
+            lo + np.abs(log_uniform(-300, 308)),
+            np.nextafter(lo, np.inf) + z_width * scale,
+        ),
+    )
+    keep = np.isfinite(lo) & np.isfinite(hi) & (lo < hi)
+    return np.column_stack([lo, hi, location, scale])[keep]
+
+
+def _representability(
+    lo: float, hi: float, location: float, scale: float
+) -> tuple[int, float, float]:
+    """Classify whether the log mass is a finite float, from exact source values.
+
+    After reflection the end `b` nearer to the location bounds the log mass:
+    `log Phi(b) + log(1 - q) <= log Z <= log Phi(b)` with `log Phi(b) = -b^2 / 2 +
+    O(log |b|)` and `log(1 - q) >= log w + log max(1, |b|) - O(1)`, so the log mass
+    is representable iff `b^2 / 2` is, up to a margin of 2000 that no sampled row
+    reaches. Return 1 (representable), 0 (not), -1 (in the margin), `|b|`, and
+    `b^2` capped at the largest float.
+    """
+    with localcontext() as context:
+        context.prec = 60
+        lower, upper, mean, sd = map(Decimal, (lo, hi, location, scale))
+        a, b = (lower - mean) / sd, (upper - mean) / sd
+        nearer = min(abs(a), abs(b)) if a * b > 0 else Decimal(0)
+        half_square = nearer * nearer / 2
+        largest = Decimal(float(np.finfo(np.float64).max))
+        if half_square + 2000 < largest:
+            return 1, float(nearer), float(min(nearer * nearer, largest))
+        if half_square - 2000 > largest:
+            return 0, float(nearer), float("inf")
+        return -1, float(nearer), float("inf")
+
+
+@pytest.mark.long_running
+def test_random_source_geometries_are_finite_exactly_where_representable() -> None:
+    """A seeded log-uniform sweep of the kernel over the public finite domain.
+
+    No output is NaN; the log mass is a finite float exactly where the true log
+    mass is representable, else `-inf`; the moments and the scores in the
+    location and the log scale are finite wherever the log mass is and the true
+    score is representable; and values agree with the oracles or closed forms on
+    the rows where one applies.
+    """
+    sources = _log_uniform_sources(40_000, seed=106)
+    lo, hi, location, scale = (jnp.asarray(sources[:, k]) for k in range(4))
+    log_scale = jnp.log(scale)
+    log_z, mean, contraction, var = (
+        np.asarray(x)
+        for x in jax.jit(jax.vmap(source_interval_terms))(
+            lo, hi, location, scale, log_scale=log_scale
+        )
+    )
+    d_location, d_log_scale = (
+        np.asarray(x)
+        for x in jax.jit(
+            jax.vmap(
+                jax.grad(
+                    lambda *args: source_interval_terms(*args[:4], log_scale=args[4])[
+                        0
+                    ],
+                    argnums=(2, 4),
+                )
+            )
+        )(lo, hi, location, scale, log_scale)
+    )
+    outputs = np.column_stack([log_z, mean, contraction, var, d_location, d_log_scale])
+    assert not np.isnan(outputs).any(), sources[np.isnan(outputs).any(axis=1)][:5]
+    classified = np.array([_representability(*row) for row in sources])
+    representable = classified[:, 0] == 1
+    unrepresentable = classified[:, 0] == 0
+    nearer, square = classified[:, 1], classified[:, 2]
+    finite = np.isfinite(log_z)
+    assert finite[representable].all(), sources[(representable) & ~finite][:5]
+    assert np.isneginf(log_z[unrepresentable]).all(), sources[unrepresentable & finite][
+        :5
+    ]
+    assert np.isfinite(outputs[finite, 1:4]).all(), sources[finite][
+        ~np.isfinite(outputs[finite, 1:4]).all(axis=1)
+    ][:5]
+    largest = np.finfo(np.float64).max
+    location_score_fits = finite & ((nearer + 1.0) < largest / 4 * sources[:, 3])
+    log_scale_score_fits = finite & (square < largest / 4)
+    assert np.isfinite(d_location[location_score_fits]).all(), sources[
+        location_score_fits & ~np.isfinite(d_location)
+    ][:5]
+    assert np.isfinite(d_log_scale[log_scale_score_fits]).all(), sources[
+        log_scale_score_fits & ~np.isfinite(d_log_scale)
+    ][:5]
+    checked = 0
+    for index in np.flatnonzero(finite):
+        if checked == 200:
+            break
+        try:
+            ref = _extreme_reference(*sources[index])
+        except ValueError:
+            continue
+        checked += 1
+        _assert_log_masses_close(log_z[index], ref["log_mass"])
+        np.testing.assert_allclose(mean[index], ref["z_mean"], rtol=1e-12, atol=1e-8)
+        np.testing.assert_allclose(var[index], ref["z_var"], rtol=0, atol=1e-8)
+        if location_score_fits[index] and log_scale_score_fits[index]:
+            np.testing.assert_allclose(
+                [d_location[index], d_log_scale[index]],
+                [ref["d_location"], ref["d_log_scale"]],
+                rtol=1e-5,
+                atol=1e-8,
+            )
+    assert checked == 200
 
 
 def _source_geometry_rows() -> list[tuple[float, float, float, float, float]]:
