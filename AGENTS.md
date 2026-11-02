@@ -121,7 +121,7 @@ simulate_dataset() → Simulate states (with optional policy effects)
 
 ### `get_maximization_inputs()` Return Dict
 
-Returns a dict with 6 keys:
+Returns a dict with 7 keys:
 
 - `"loglike"`: `(params: pd.DataFrame) -> float` — jitted scalar log-likelihood
 - `"loglikeobs"`: `(params: pd.DataFrame) -> NDArray` — jitted per-observation
@@ -130,6 +130,8 @@ Returns a dict with 6 keys:
   keys `value`, `contributions`, `residuals`, `residual_sds`, `filtered_states`,
   `state_ranges`, etc.
 - `"loglike_and_gradient"`: `(params: pd.DataFrame) -> tuple[float, NDArray]`
+- `"scores"`: `(params: pd.DataFrame) -> NDArray` — derivatives of the per-observation
+  log-likelihoods (observations x parameters), from a vmapped gradient
 - `"constraints"`: list of optimagic constraint objects
 - `"params_template"`: `pd.DataFrame` with correct MultiIndex and bounds; fixed
   constraints pre-applied

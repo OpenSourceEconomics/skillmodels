@@ -408,6 +408,21 @@ def test_split_dataset_gradient_equals_unsplit_gradient(interval_inputs) -> None
     )
 
 
+def test_split_scores_sum_to_the_gradient(interval_inputs) -> None:
+    data, inputs, params = interval_inputs
+    split = get_maximization_inputs(
+        model_spec=_model(),
+        data=data,
+        chs_options=CHSEstimationOptions(start_params_strategy="none", split_dataset=3),
+    )
+    np.testing.assert_allclose(
+        split["scores"](params).sum(axis=0),
+        inputs["loglike_and_gradient"](params)[1],
+        rtol=1e-11,
+        atol=1e-11,
+    )
+
+
 def test_without_interval_observations_the_model_equals_the_plain_tobit() -> None:
     data = _data().assign(c1_lo=np.nan, c1_hi=np.nan)
     options = CHSEstimationOptions(start_params_strategy="none")
