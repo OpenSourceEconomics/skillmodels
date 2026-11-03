@@ -7,6 +7,7 @@ import numpy as np
 import optimagic as om
 import pandas as pd
 import pytest
+from optimagic.typing import AggregationLevel
 
 from skillmodels.chs.estimate import estimate_chs
 from skillmodels.chs.options import CHSEstimationOptions
@@ -152,6 +153,68 @@ def test_estimate_chs_forwards_error_handling(
             require_initial_anchors=False,
         )
     assert captured["error_handling"] == "continue"
+
+
+def test_estimate_chs_gives_a_likelihood_optimizer_the_scores(
+    model2_data, anchoring_start_params, monkeypatch
+):
+    """BHHH-type optimizers get the per-observation scores as their Jacobian."""
+    captured = {}
+
+    def fake_estimate_ml(**kwargs):
+        captured.update(kwargs)
+        raise StopIteration
+
+    monkeypatch.setattr("skillmodels.chs.estimate.estimate_ml", fake_estimate_ml)
+    with pytest.raises(StopIteration):
+        estimate_chs(
+            MODEL2,
+            model2_data,
+            CHSEstimationOptions(
+                start_params_strategy="none", optimizer_algorithm="bhhh"
+            ),
+            start_params=anchoring_start_params,
+            require_initial_anchors=False,
+        )
+    options = captured["optimize_options"]
+    assert "fun_and_jac" not in options
+    params = captured["params"]
+    assert options["jac"]._problem_type == AggregationLevel.LIKELIHOOD  # noqa: SLF001
+    scores = options["jac"](params)
+    assert scores.shape == (len(model2_data.index.unique("caseid")), len(params))
+
+
+@pytest.mark.parametrize(
+    ("estimate_ml_options", "uses_scores"),
+    [({}, True), ({"jacobian": None}, False)],
+)
+def test_estimate_chs_gives_inference_the_scores(
+    model2_data, anchoring_start_params, monkeypatch, estimate_ml_options, uses_scores
+):
+    """Inference uses the scores unless `estimate_ml_options` asks otherwise."""
+    captured = {}
+
+    def fake_estimate_ml(**kwargs):
+        captured.update(kwargs)
+        raise StopIteration
+
+    monkeypatch.setattr("skillmodels.chs.estimate.estimate_ml", fake_estimate_ml)
+    with pytest.raises(StopIteration):
+        estimate_chs(
+            MODEL2,
+            model2_data,
+            CHSEstimationOptions(
+                start_params_strategy="none", estimate_ml_options=estimate_ml_options
+            ),
+            start_params=anchoring_start_params,
+            require_initial_anchors=False,
+        )
+    if uses_scores:
+        params = captured["params"]
+        scores = captured["jacobian"](params)
+        assert scores.shape == (len(model2_data.index.unique("caseid")), len(params))
+    else:
+        assert captured["jacobian"] is None
 
 
 def test_estimate_chs_applies_lower_bounds_and_clips_start(

@@ -2,7 +2,7 @@
 
 import functools
 import warnings
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from types import MappingProxyType
 from typing import Any
 
@@ -59,6 +59,16 @@ from skillmodels.common.types import ParsingInfo, ProcessedModel
 
 jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 
+# The per-observation data, with the observations on axis 1.
+_SLICED_DATA = (
+    "measurements",
+    "controls",
+    "observed_factors",
+    "observed_factor_vars",
+    "events",
+    "interval_bounds",
+)
+
 
 @beartype(conf=ESTIMATION_CONF)
 def get_maximization_inputs(  # noqa: C901, PLR0915
@@ -102,6 +112,8 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             function with respect to the parameters.
         loglike_and_gradient: Combination of loglike and
             loglike_gradient that is faster than calling the two functions separately.
+        scores: The derivatives of the per-observation log likelihoods, an array
+            with one row per observation and one column per parameter.
         constraints: List of optimagic constraints that are implied by the
             model specification, extended by any user-supplied ``fixed_params``.
         params_template: Parameter DataFrame with correct index and
@@ -201,6 +213,41 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     _jitted_loglikeobs = jax.jit(partialed_loglikes["llo"])
     _gradient = jax.jit(jax.grad(partialed_loglikes["ll"]))
 
+    def _person_loglike(params_vec: Array, *person_data: Array | None) -> Array:
+        # Observations are independent, so the gradient of one observation's
+        # log-likelihood, vmapped over observations, gives all scores in about the
+        # time of one gradient.
+        return partialed_loglikes["llo"](
+            params_vec,
+            **{
+                key: None if value is None else value[:, None]
+                for key, value in zip(_SLICED_DATA, person_data, strict=True)
+            },
+        )[0]
+
+    _person_scores = jax.jit(
+        jax.vmap(jax.grad(_person_loglike), in_axes=(None, *[1] * len(_SLICED_DATA)))
+    )
+
+    def _data_slices() -> Iterator[dict[str, Array | None]]:
+        """Yield the per-observation data in `chs_options.split_dataset` slices."""
+        data = {
+            "measurements": processed_data["measurements"],
+            "controls": processed_data["controls"],
+            "observed_factors": processed_data["observed_factors"],
+            "observed_factor_vars": processed_data["observed_factor_vars"],
+            "events": events,
+            "interval_bounds": interval_bounds,
+        }
+        n_obs = data["measurements"].shape[1]
+        step = int(n_obs / chs_options.split_dataset)
+        for i in range(chs_options.split_dataset):
+            stop = n_obs if i == chs_options.split_dataset - 1 else (i + 1) * step
+            yield {
+                key: None if value is None else value[:, i * step : stop]
+                for key, value in data.items()
+            }
+
     def loglike(params: pd.DataFrame) -> float:
         params_vec = partialed_get_jnp_params_vec(params)
         return float(_jitted_loglike(params_vec))
@@ -214,34 +261,9 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
     ) -> tuple[float, NDArray[np.floating]]:
         params_vec = partialed_get_jnp_params_vec(params)
         crit = float(_jitted_loglike(params_vec))
-        n_obs = processed_data["measurements"].shape[1]
         _grad = jnp.zeros_like(params_vec)
-        start = 0
-        split_dataset = chs_options.split_dataset
-        stop = int(n_obs / split_dataset)
-        step = int(n_obs / split_dataset)
-        for i in range(split_dataset):
-            stop = n_obs if i == split_dataset - 1 else stop
-            events_slice = {} if events is None else {"events": events[:, start:stop]}
-            if interval_bounds is not None:
-                events_slice["interval_bounds"] = interval_bounds[:, start:stop]
-            measurements_slice = processed_data["measurements"][:, start:stop]
-            controls_slice = processed_data["controls"][:, start:stop, :]
-            observed_factors_slice = processed_data["observed_factors"][
-                :, start:stop, :
-            ]
-            _grad += _gradient(
-                params_vec,
-                measurements=measurements_slice,
-                controls=controls_slice,
-                observed_factors=observed_factors_slice,
-                observed_factor_vars=processed_data["observed_factor_vars"][
-                    :, start:stop, :
-                ],
-                **events_slice,
-            )
-            start += step
-            stop += step
+        for data_slice in _data_slices():
+            _grad += _gradient(params_vec, **data_slice)
         grad = _to_numpy(_grad)
         if not (np.isfinite(crit) and np.isfinite(grad).all()):
             # Raise rather than return, so `error_handling="continue"` can replace
@@ -252,6 +274,24 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
             )
             raise FloatingPointError(msg)
         return crit, grad
+
+    def scores(params: pd.DataFrame) -> NDArray[np.floating]:
+        """Return the derivatives of the per-observation log-likelihoods.
+
+        Rows are observations, columns the parameters of `params`.
+
+        """
+        params_vec = partialed_get_jnp_params_vec(params)
+        return np.concatenate(
+            [
+                _to_numpy(
+                    _person_scores(
+                        params_vec, *(data_slice[key] for key in _SLICED_DATA)
+                    )
+                )
+                for data_slice in _data_slices()
+            ]
+        )
 
     def debug_loglike(params: pd.DataFrame) -> dict[str, Any]:
         params_vec = partialed_get_jnp_params_vec(params)
@@ -353,6 +393,7 @@ def get_maximization_inputs(  # noqa: C901, PLR0915
         "loglikeobs": loglikeobs,
         "debug_loglike": debug_loglike,
         "loglike_and_gradient": loglike_and_gradient,
+        "scores": scores,
         "constraints": constraints,
         "params_template": params_template,
     }

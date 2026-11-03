@@ -16,6 +16,8 @@ import optimagic as om
 import pandas as pd
 from beartype import beartype
 from estimagic import estimate_ml
+from optimagic.algorithms import ALL_ALGORITHMS
+from optimagic.typing import AggregationLevel
 
 from skillmodels._beartype_conf import ESTIMATION_CONF
 from skillmodels.chs.maximization_inputs import get_maximization_inputs
@@ -155,15 +157,23 @@ def estimate_chs(
     optimize_options = {
         "algorithm": options.optimizer_algorithm,
         "algo_options": to_plain_dict(options.optimizer_options) or None,
-        "fun_and_jac": max_inputs["loglike_and_gradient"],
         "error_handling": options.error_handling,
     }
+    solver_type = ALL_ALGORITHMS[options.optimizer_algorithm].algo_info.solver_type
+    if solver_type == AggregationLevel.LIKELIHOOD:
+        # BHHH-type optimizers need the derivatives of the contributions.
+        optimize_options["jac"] = om.mark.likelihood(max_inputs["scores"])
+    else:
+        optimize_options["fun_and_jac"] = max_inputs["loglike_and_gradient"]
 
     # Default to OPG/jacobian-based inference (`hessian=False`): the numerical
     # Hessian costs O(n_params**2) Kalman passes and is prohibitive on real
-    # models. Overridable via `options.estimate_ml_options`.
+    # models. The OPG uses the AD scores, which cost about one gradient; a
+    # numerical Jacobian costs about n_params likelihood evaluations. Both are
+    # overridable via `options.estimate_ml_options`.
     estimate_ml_kwargs = {
         "hessian": False,
+        "jacobian": max_inputs["scores"],
         **to_plain_dict(options.estimate_ml_options),
     }
 

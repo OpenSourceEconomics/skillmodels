@@ -117,6 +117,44 @@ def test_splitting_does_not_change_gradient(model2, model2_data) -> None:
     aaae(gradient, gradient_split)
 
 
+def test_scores_are_the_derivatives_of_the_per_observation_loglikes(
+    model2, model2_data
+) -> None:
+    inputs = get_maximization_inputs(
+        model2, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
+    params = inputs["params_template"]
+    params["value"] = 0.1
+
+    scores = inputs["scores"](params)
+
+    _, gradient = inputs["loglike_and_gradient"](params)
+    assert scores.shape == (len(model2_data.index.unique("caseid")), len(params))
+    aaae(scores.sum(axis=0), gradient)
+    step = 1e-5
+    for position in (0, len(params) // 2, len(params) - 1):
+        up, down = params.copy(), params.copy()
+        up.iloc[position, 0] += step
+        down.iloc[position, 0] -= step
+        central = (inputs["loglikeobs"](up) - inputs["loglikeobs"](down)) / (2 * step)
+        np.testing.assert_allclose(scores[:, position], central, rtol=0, atol=1e-5)
+
+
+def test_splitting_does_not_change_scores(model2, model2_data) -> None:
+    inputs = get_maximization_inputs(
+        model2, model2_data, chs_options=MODEL2_CHS_OPTIONS
+    )
+    inputs_split = get_maximization_inputs(
+        model2,
+        model2_data,
+        chs_options=replace(MODEL2_CHS_OPTIONS, split_dataset=13),
+    )
+    params = inputs["params_template"]
+    params["value"] = 0.1
+
+    aaae(inputs["scores"](params), inputs_split["scores"](params))
+
+
 def test_loglike_and_gradient_raises_on_non_finite_value(model2, model2_data) -> None:
     """A non-finite value must raise, so optimagic can penalise and reject the step."""
     inputs = get_maximization_inputs(
