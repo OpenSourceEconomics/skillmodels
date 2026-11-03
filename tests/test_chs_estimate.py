@@ -184,6 +184,39 @@ def test_estimate_chs_gives_a_likelihood_optimizer_the_scores(
     assert scores.shape == (len(model2_data.index.unique("caseid")), len(params))
 
 
+@pytest.mark.parametrize(
+    ("estimate_ml_options", "uses_scores"),
+    [({}, True), ({"jacobian": None}, False)],
+)
+def test_estimate_chs_gives_inference_the_scores(
+    model2_data, anchoring_start_params, monkeypatch, estimate_ml_options, uses_scores
+):
+    """Inference uses the scores unless `estimate_ml_options` asks otherwise."""
+    captured = {}
+
+    def fake_estimate_ml(**kwargs):
+        captured.update(kwargs)
+        raise StopIteration
+
+    monkeypatch.setattr("skillmodels.chs.estimate.estimate_ml", fake_estimate_ml)
+    with pytest.raises(StopIteration):
+        estimate_chs(
+            MODEL2,
+            model2_data,
+            CHSEstimationOptions(
+                start_params_strategy="none", estimate_ml_options=estimate_ml_options
+            ),
+            start_params=anchoring_start_params,
+            require_initial_anchors=False,
+        )
+    if uses_scores:
+        params = captured["params"]
+        scores = captured["jacobian"](params)
+        assert scores.shape == (len(model2_data.index.unique("caseid")), len(params))
+    else:
+        assert captured["jacobian"] is None
+
+
 def test_estimate_chs_applies_lower_bounds_and_clips_start(
     model2_data, anchoring_start_params, monkeypatch
 ):

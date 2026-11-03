@@ -168,9 +168,12 @@ def estimate_chs(
 
     # Default to OPG/jacobian-based inference (`hessian=False`): the numerical
     # Hessian costs O(n_params**2) Kalman passes and is prohibitive on real
-    # models. Overridable via `options.estimate_ml_options`.
+    # models. The OPG uses the AD scores, which cost about one gradient; a
+    # numerical Jacobian costs about n_params likelihood evaluations. Both are
+    # overridable via `options.estimate_ml_options`.
     estimate_ml_kwargs = {
         "hessian": False,
+        "jacobian": max_inputs["scores"],
         **to_plain_dict(options.estimate_ml_options),
     }
 
